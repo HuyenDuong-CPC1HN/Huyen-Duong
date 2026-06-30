@@ -1,0 +1,72 @@
+export const SHEETS = {
+  donC: {
+    id: '1BCMgiS88WUkC1DcZaWqlQBZFdbCv7iDETjq8JhhUt4I',
+    gid: '1043220532',
+    label: 'Giao hàng Đơn C',
+  },
+  donDTP: {
+    id: '17s9y-umcOEfnhdtHNZn8Esjg_aVXB06Ad8ZZ7NV7bmw',
+    gid: '1217258168',
+    label: 'Giao hàng Đơn DTP',
+  },
+}
+
+export const TMDT_STORES = [
+  'Zentokid Vietnam Shopee',
+  'Zentokid Vietnam',
+  'Dược Phẩm CPC1HN',
+  'DTP Sức Khỏe',
+]
+
+// Trạng thái màu sắc
+export const STATUS_COLORS = {
+  'Đang chuyển': 'bg-blue-100 text-blue-700',
+  'Đã giao': 'bg-green-100 text-green-700',
+  'Hoàn hàng': 'bg-red-100 text-red-700',
+  'Chờ xử lý': 'bg-yellow-100 text-yellow-700',
+  'Đã huỷ': 'bg-gray-100 text-gray-500',
+}
+
+export const COLUMNS = [
+  { key: 'Mã Ship',               label: 'Mã Ship',         width: 90  },
+  { key: 'Mã kiện hàng',          label: 'Mã kiện',         width: 100 },
+  { key: 'Ngày tạo kiện',         label: 'Ngày tạo',        width: 130 },
+  { key: 'Trung tâm',             label: 'TT',              width: 60  },
+  { key: 'Thành phố',             label: 'Thành phố',       width: 110 },
+  { key: 'Mã hóa đơn',            label: 'Mã HD',           width: 120 },
+  { key: 'Mã khách hàng',         label: 'Mã KH',           width: 90  },
+  { key: 'Tên khách hàng',        label: 'Khách hàng',      width: 220 },
+  { key: 'Ngày ghi sổ',           label: 'Ngày ghi sổ',     width: 100 },
+  { key: 'Sản phẩm',              label: 'Sản phẩm',        width: 200 },
+  { key: 'Người đặt hàng',        label: 'Người đặt',       width: 180 },
+  { key: 'Số liên hệ',            label: 'SĐT',             width: 130 },
+  { key: 'Địa điểm nhận hàng',    label: 'Địa điểm',        width: 200 },
+  { key: 'Người giao hàng',       label: 'Người giao',      width: 140 },
+  { key: 'Đối tác vận chuyển',    label: 'Đối tác VC',      width: 150 },
+  { key: 'Số liên hệ đối tác',    label: 'SĐT đối tác',     width: 140 },
+  { key: 'Số kiện nguyên',        label: 'K.Nguyên',        width: 80  },
+  { key: 'Số kiện lẻ',            label: 'K.Lẻ',            width: 70  },
+  { key: 'Tổng số kiện',          label: 'Tổng kiện',       width: 80  },
+  { key: 'Số hộp đóng dấu',       label: 'Hộp đóng dấu',   width: 100 },
+  { key: 'Mã vận đơn',            label: 'Mã VĐ',           width: 130 },
+  { key: 'Phí Ship/kiện',         label: 'Phí Ship',        width: 90  },
+  { key: 'Phí khác',              label: 'Phí khác',        width: 90  },
+  { key: 'Bốc hàng',              label: 'Bốc hàng',        width: 160 },
+  { key: 'TG Bốc hàng',           label: 'TG Bốc',          width: 130 },
+  { key: 'Đóng hàng',             label: 'Đóng hàng',       width: 160 },
+  { key: 'TG Đóng hàng',          label: 'TG Đóng',         width: 130 },
+  { key: 'Hóa đơn Ship',          label: 'HĐ Ship',         width: 100 },
+  { key: 'HT thanh toán',         label: 'HT TT',           width: 130 },
+  { key: 'TT Ship',               label: 'TT Ship',         width: 120 },
+  { key: 'Ngày giao hàng',        label: 'Ngày giao',       width: 100 },
+  { key: 'Phương tiện',           label: 'Phương tiện',     width: 100 },
+  { key: 'Lần check gần nhất',    label: 'Check gần nhất',  width: 130 },
+  { key: 'Ghi chú check',         label: 'Ghi chú',         width: 160 },
+  { key: 'Người check',           label: 'Người check',     width: 120 },
+  { key: 'Trạng thái',            label: 'Trạng thái',      width: 120 },
+  { key: 'Người tạo kiện',        label: 'Tạo kiện',        width: 130 },
+  { key: 'Người tạo lệnh',        label: 'Tạo lệnh',        width: 130 },
+  { key: 'Thu hộ',                label: 'COD',             width: 100 },
+  { key: 'TT Thu hộ',             label: 'TT COD',          width: 100 },
+  { key: 'TT Thu hộ (LX)',        label: 'TT COD (LX)',     width: 110 },
+]
