@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, useReducer } from 'react'
 import { Search, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react'
 import { COLUMNS } from '../config'
 import StatusBadge from './StatusBadge'
@@ -76,23 +76,107 @@ function ColumnFilter({ colKey, data, selected, onChange }) {
   )
 }
 
-export default function DataTable({ data, loading, error, refresh, lastRefresh }) {
+function useColWidths() {
+  const init = () => Object.fromEntries(COLUMNS.map(c => [c.key, c.width ?? 120]))
+  const [widths, setWidths] = useState(init)
+  const setWidth = (key, w) => setWidths(prev => ({ ...prev, [key]: Math.max(60, w) }))
+  return [widths, setWidth]
+}
+
+function ResizeHandle({ colKey, setWidth }) {
+  const startX = useRef(null)
+  const startW = useRef(null)
+
+  const onMouseDown = (e) => {
+    e.preventDefault()
+    startX.current = e.clientX
+    startW.current = e.target.closest('th').offsetWidth
+
+    const onMove = (ev) => {
+      const delta = ev.clientX - startX.current
+      setWidth(colKey, startW.current + delta)
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  return (
+    <span
+      onMouseDown={onMouseDown}
+      className="absolute right-0 top-0 h-full w-2 cursor-col-resize select-none z-10 flex items-center justify-center group"
+    >
+      <span className="w-px h-4 bg-gray-300 group-hover:bg-blue-400 transition-colors" />
+    </span>
+  )
+}
+
+const VC_KEY = 'Đối tác vận chuyển'
+
+function EditableVCCell({ value, rowIndex, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(value)
+  const inputRef = useRef()
+
+  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+
+  const commit = () => { onSave(rowIndex, val); setEditing(false) }
+  const cancel = () => { setVal(value); setEditing(false) }
+
+  if (editing) return (
+    <input
+      ref={inputRef}
+      value={val}
+      onChange={e => setVal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }}
+      className="w-full px-1 py-0.5 text-[12px] border border-blue-400 rounded outline-none bg-blue-50"
+      style={{ minWidth: 80 }}
+    />
+  )
+
+  return (
+    <span
+      onDoubleClick={() => { setVal(value); setEditing(true) }}
+      className="block cursor-pointer hover:bg-blue-50 rounded px-1 -mx-1"
+      title="Bấm đúp để sửa"
+    >
+      {value || <span className="text-gray-300">—</span>}
+    </span>
+  )
+}
+
+export default function DataTable({ data, loading, error, refresh, lastRefresh, storageKey = 'vc_edits' }) {
   const [search, setSearch] = useState('')
   const [colFilters, setColFilters] = useState({})
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
+  const [colWidths, setColWidth] = useColWidths()
+  const [edits, setEdits] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(storageKey) || '{}') } catch { return {} }
+  })
+
+  const saveEdit = (key, newVal) => {
+    const next = { ...edits, [key]: newVal }
+    setEdits(next)
+    localStorage.setItem(storageKey, JSON.stringify(next))
+  }
+
+  const getVC = (row) => {
+    const key = row['Mã hóa đơn'] || ''
+    return edits[key] !== undefined ? edits[key] : row[VC_KEY]
+  }
   const topScrollRef = useRef()
   const tableScrollRef = useRef()
-  const [tableScrollWidth, setTableScrollWidth] = useState(2000)
+  const minTableWidthRef = useRef(0)
 
-  useEffect(() => {
-    const el = tableScrollRef.current
-    if (!el) return
-    setTableScrollWidth(el.scrollWidth)
-    const observer = new ResizeObserver(() => setTableScrollWidth(el.scrollWidth))
-    observer.observe(el)
-    return () => observer.disconnect()
-  })
+  const totalTableWidth = 36 + Object.values(colWidths).reduce((a, b) => a + b, 0)
+  // Chỉ tăng, không bao giờ giảm
+  minTableWidthRef.current = Math.max(minTableWidthRef.current, totalTableWidth)
+  const stableWidth = minTableWidthRef.current
 
   const syncFromTop = useCallback(() => {
     if (tableScrollRef.current) tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft
@@ -198,11 +282,12 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh }
         onScroll={syncFromTop}
         style={{ overflowX: 'scroll', overflowY: 'hidden', height: 16, marginBottom: 4 }}
       >
-        <div style={{ height: 1, width: tableScrollWidth }} />
+        <div style={{ height: 1, width: stableWidth }} />
       </div>
 
       {/* Table */}
-      <div ref={tableScrollRef} onScroll={syncFromTable} className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div ref={tableScrollRef} onScroll={syncFromTable} className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div style={{ minWidth: stableWidth }}>
         {loading ? (
           <div className="text-center py-20 text-gray-400">
             <RefreshCw size={28} className="animate-spin mx-auto mb-3" />
@@ -210,23 +295,24 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh }
           </div>
         ) : (
           <>
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">#</th>
+            <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
+              <thead className="sticky top-0 z-20">
+                <tr className="bg-[#1e3a5f] text-white">
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold whitespace-nowrap relative border border-white/20 align-middle" style={{ width: 36, minWidth: 36 }}>#</th>
                   {COLUMNS.map(col => (
                     <th
                       key={col.key}
-                      className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap"
-                      style={{ minWidth: col.width }}
+                      className="px-4 py-3.5 text-left text-xs font-semibold whitespace-nowrap relative border border-white/20 align-middle"
+                      style={{ width: colWidths[col.key], minWidth: 60 }}
                     >
-                      <span className={colFilters[col.key]?.length > 0 ? 'text-blue-600' : ''}>{col.label}</span>
+                      <span className={colFilters[col.key]?.length > 0 ? 'text-yellow-300' : 'text-white'}>{col.label}</span>
                       <ColumnFilter
                         colKey={col.key}
                         data={data}
                         selected={colFilters[col.key] || []}
                         onChange={vals => setColFilter(col.key, vals)}
                       />
+                      <ResizeHandle colKey={col.key} setWidth={setColWidth} />
                     </th>
                   ))}
                 </tr>
@@ -239,15 +325,17 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh }
                     </td>
                   </tr>
                 ) : pageData.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-100 hover:bg-blue-50/30 transition-colors">
-                    <td className="px-3 py-2 text-gray-400 text-xs">{pageSize === 'all' ? i + 1 : (page - 1) * pageSize + i + 1}</td>
+                  <tr key={i} className="border-b border-gray-100 hover:bg-blue-50/40 transition-colors bg-white">
+                    <td className="px-4 py-3.5 text-gray-400 text-[12px] font-medium border border-gray-200 align-middle" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pageSize === 'all' ? i + 1 : (page - 1) * pageSize + i + 1}</td>
                     {COLUMNS.map(col => (
-                      <td key={col.key} className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                      <td key={col.key} className="px-4 py-3.5 text-gray-700 text-[12px] border border-gray-200 align-middle" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {col.key === 'Trạng thái'
                           ? <StatusBadge status={row[col.key]} />
+                          : col.key === VC_KEY
+                            ? <EditableVCCell value={getVC(row)} rowIndex={i} onSave={(_, v) => saveEdit(row['Mã hóa đơn'] || String(i), v)} />
                           : col.key === 'Thu hộ' || col.key === 'TT Thu hộ' || col.key === 'Phí Ship/kiện'
-                            ? <span className="font-medium">{row[col.key] || '—'}</span>
-                            : row[col.key] || '—'
+                            ? <span className="font-semibold text-gray-800">{row[col.key] || '—'}</span>
+                            : row[col.key] || <span className="text-gray-300">—</span>
                         }
                       </td>
                     ))}
@@ -256,7 +344,7 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh }
               </tbody>
             </table>
 
-            {/* Pagination */}
+            {/* End minWidth wrapper */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                 <span className="text-xs text-gray-500">
@@ -294,6 +382,7 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh }
             )}
           </>
         )}
+        </div>
       </div>
     </div>
   )

@@ -79,6 +79,7 @@ export default function SheetTab({ sheetId, gid, type }) {
           error={error}
           refresh={sheet.refresh}
           lastRefresh={activeWeek ? null : sheet.lastRefresh}
+          storageKey={`vc_edits_${type}`}
         />
       )}
       {view === 'stats' && (
