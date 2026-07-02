@@ -1,5 +1,5 @@
 import { useRef, useState, useMemo, useCallback } from 'react'
-import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search } from 'lucide-react'
+import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp } from 'lucide-react'
 import { parseCarrierFile, computeCarrierStats } from '../utils/parseCarrierExport'
 import { ColumnFilter, ResizeHandle } from './DataTable'
 
@@ -7,10 +7,65 @@ const STAT_CARDS = [
   { key: '24h',          label: '≤ 24 giờ',        icon: CheckCircle, cls: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
   { key: '48h',          label: '≤ 48 giờ',        icon: CheckCircle, cls: 'text-teal-600',   bg: 'bg-teal-50 border-teal-200' },
   { key: '72h',          label: '≤ 72 giờ',        icon: Clock,       cls: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200' },
-  { key: 'giaoLai',      label: 'Giao lại lần 2',  icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
-  { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
+  { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', editable: true },
+  { key: 'giaoLai',      label: 'Giao lại lần 2',  icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', editable: true },
+  { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200', editable: true },
 ]
+
+function useStatOverride(storageKey, statKey) {
+  const lsKey = `carrier_statoverride_${storageKey}_${statKey}`
+  const [override, setOverride] = useState(() => localStorage.getItem(lsKey) ?? '')
+  const commit = (v) => {
+    setOverride(v)
+    if (v === '') localStorage.removeItem(lsKey)
+    else localStorage.setItem(lsKey, v)
+  }
+  return [override, commit]
+}
+
+function EditableCarrierStatCard({ col, value, override, onCommit }) {
+  const Icon = col.icon
+  const [editing, setEditing] = useState(false)
+  const inputRef = useRef()
+
+  const displayVal = override !== '' ? override : value
+
+  const startEdit = () => {
+    setEditing(true)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  return (
+    <div className={`rounded-xl border p-3 ${col.bg} text-center relative`}>
+      <Icon size={16} className={`${col.cls} mx-auto mb-1`} />
+      {editing ? (
+        <input
+          ref={inputRef}
+          type="number"
+          min="0"
+          defaultValue={displayVal}
+          onBlur={e => { onCommit(e.target.value); setEditing(false) }}
+          onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditing(false) }}
+          className={`text-xl font-bold ${col.cls} bg-transparent border-b-2 border-current w-16 text-center focus:outline-none`}
+        />
+      ) : (
+        <div onDoubleClick={startEdit} className={`text-xl font-bold ${col.cls} cursor-pointer`} title="Bấm đúp để nhập tay">
+          {displayVal}
+        </div>
+      )}
+      <div className="text-xs text-gray-500 mt-0.5 leading-tight">{col.label}</div>
+      {override !== '' && (
+        <button
+          onClick={() => onCommit('')}
+          className="absolute top-1 right-1 text-[9px] text-gray-400 hover:text-red-500"
+          title="Khôi phục số tự động"
+        >
+          ↺
+        </button>
+      )}
+    </div>
+  )
+}
 
 const TABLE_COLUMNS = ['Mã Vận Đơn', 'Mã đơn hàng', 'Ngày tạo', 'Người nhận', 'Địa chỉ nhận', 'ĐT Nhận', 'Trạng Thái', 'Lý do', 'Đơn chuyển hoàn', 'Ngày chuyển trạng thái']
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 'all']
@@ -36,7 +91,7 @@ function useColWidths(storageKey) {
   return [widths, setWidth]
 }
 
-function CarrierPanel({ carrierKey, label }) {
+export function CarrierPanel({ carrierKey, label }) {
   const lsKey = `carrier_data_${carrierKey}`
   const inputRef = useRef()
   const [dragging, setDragging] = useState(false)
@@ -48,7 +103,12 @@ function CarrierPanel({ carrierKey, label }) {
   })
   const [colFilters, setColFilters] = useState({})
   const [pageSize, setPageSize] = useState(50)
+  const [tableExpanded, setTableExpanded] = useState(false)
   const [colWidths, setColWidth] = useColWidths(carrierKey)
+  const [dangVanChuyenOv, setDangVanChuyenOv] = useStatOverride(carrierKey, 'dangVanChuyen')
+  const [giaoLaiOv, setGiaoLaiOv] = useStatOverride(carrierKey, 'giaoLai')
+  const [hoanHangOv, setHoanHangOv] = useStatOverride(carrierKey, 'hoanHang')
+  const statOverrides = { dangVanChuyen: [dangVanChuyenOv, setDangVanChuyenOv], giaoLai: [giaoLaiOv, setGiaoLaiOv], hoanHang: [hoanHangOv, setHoanHangOv] }
   const minTableWidthRef = useRef(0)
 
   const totalTableWidth = Object.values(colWidths).reduce((a, b) => a + b, 0)
@@ -137,22 +197,19 @@ function CarrierPanel({ carrierKey, label }) {
     )
   }
 
+  const effectiveTotal = stats['24h'] + stats['48h'] + stats['72h']
+    + Number(dangVanChuyenOv !== '' ? dangVanChuyenOv : stats.dangVanChuyen)
+    + Number(giaoLaiOv !== '' ? giaoLaiOv : stats.giaoLai)
+    + Number(hoanHangOv !== '' ? hoanHangOv : stats.hoanHang)
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
-          <FileSpreadsheet size={15} className="text-green-600 flex-shrink-0" />
-          <span className="text-green-700 font-medium truncate max-w-72">{state.fileName}</span>
-          <span className="text-green-500 text-xs">({state.rows.length} đơn)</span>
-          <button onClick={clear} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xóa, upload file khác">
-            <X size={14} />
-          </button>
-        </div>
-        <span className="text-xs text-gray-400">Cập nhật: {new Date(state.uploadedAt).toLocaleString('vi-VN')}</span>
-      </div>
-
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-5">
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-4">
         {STAT_CARDS.map(c => {
+          if (c.editable) {
+            const [ov, setOv] = statOverrides[c.key]
+            return <EditableCarrierStatCard key={c.key} col={c} value={stats[c.key]} override={ov} onCommit={setOv} />
+          }
           const Icon = c.icon
           return (
             <div key={c.key} className={`rounded-xl border p-3 ${c.bg} text-center`}>
@@ -164,71 +221,104 @@ function CarrierPanel({ carrierKey, label }) {
         })}
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-3 items-center">
-        <div className="relative flex-1 min-w-48 max-w-sm">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-            placeholder="Tìm mã vận đơn, người nhận..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
+          <FileSpreadsheet size={15} className="text-green-600 flex-shrink-0" />
+          <span className="text-green-700 font-medium truncate max-w-72">{state.fileName}</span>
+          <span className="text-green-500 text-xs">({effectiveTotal} đơn, {state.rows.length} dòng)</span>
+          <button onClick={clear} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xóa file">
+            <X size={14} />
+          </button>
         </div>
-        <div className="flex items-center gap-1.5 text-sm text-gray-500">
-          <span>Hiển thị</span>
-          <select
-            value={pageSize}
-            onChange={e => setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-          >
-            {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n === 'all' ? 'Tất cả' : `${n} dòng`}</option>)}
-          </select>
-        </div>
+        <button
+          onClick={() => inputRef.current.click()}
+          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors"
+        >
+          <Upload size={14} />
+          Upload file mới
+        </button>
+        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
+        <span className="text-xs text-gray-400">Cập nhật: {new Date(state.uploadedAt).toLocaleString('vi-VN')}</span>
       </div>
 
-      {/* Thanh scroll trên đầu */}
-      <div
-        ref={topScrollRef}
-        onScroll={syncFromTop}
-        style={{ overflowX: 'scroll', overflowY: 'hidden', height: 16, marginBottom: 4 }}
+      <button
+        onClick={() => setTableExpanded(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors text-left"
       >
-        <div style={{ height: 1, width: stableWidth }} />
-      </div>
+        <List size={15} className="text-gray-500" />
+        <span className="font-medium text-gray-700 text-sm">Danh sách chi tiết</span>
+        {tableExpanded ? <ChevronUp size={15} className="text-gray-400 ml-auto" /> : <ChevronDown size={15} className="text-gray-400 ml-auto" />}
+      </button>
 
-      <div ref={tableScrollRef} onScroll={syncFromTable} className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: stableWidth, minWidth: '100%' }}>
-          <thead>
-            <tr className="bg-[#1e3a5f] text-white text-xs">
-              {TABLE_COLUMNS.map(c => (
-                <th key={c} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap border border-white/20 relative" style={{ width: colWidths[c] }}>
-                  <span className={colFilters[c]?.length > 0 ? 'text-yellow-300' : 'text-white'}>{c}</span>
-                  <ColumnFilter
-                    colKey={c}
-                    data={state.rows}
-                    selected={colFilters[c] || []}
-                    onChange={vals => setColFilter(c, vals)}
-                  />
-                  <ResizeHandle colKey={c} setWidth={setColWidth} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRows.length === 0 ? (
-              <tr><td colSpan={TABLE_COLUMNS.length} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
-            ) : (pageSize === 'all' ? filteredRows : filteredRows.slice(0, pageSize)).map((row, i) => (
-              <tr key={i} className="border-b border-gray-100 hover:bg-blue-50/40 text-[12px]">
-                {TABLE_COLUMNS.map(c => (
-                  <td key={c} className="px-3 py-2 border border-gray-200" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row[c] || '—'}</td>
+      {tableExpanded && (
+        <div className="mt-3">
+          <div className="flex flex-wrap gap-2 mb-3 items-center">
+            <div className="relative flex-1 min-w-48 max-w-sm">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                placeholder="Tìm mã vận đơn, người nhận..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
+              <span>Hiển thị</span>
+              <select
+                value={pageSize}
+                onChange={e => setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              >
+                {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n === 'all' ? 'Tất cả' : `${n} dòng`}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Thanh scroll trên đầu */}
+          <div
+            ref={topScrollRef}
+            onScroll={syncFromTop}
+            style={{ overflowX: 'scroll', overflowY: 'hidden', height: 16, marginBottom: 4 }}
+          >
+            <div style={{ height: 1, width: stableWidth }} />
+          </div>
+
+          <div ref={tableScrollRef} onScroll={syncFromTable} className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+            <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: stableWidth, minWidth: '100%' }}>
+              <thead>
+                <tr className="bg-[#1e3a5f] text-white text-xs">
+                  {TABLE_COLUMNS.map(c => (
+                    <th key={c} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap border border-white/20 relative" style={{ width: colWidths[c] }}>
+                      <span className={colFilters[c]?.length > 0 ? 'text-yellow-300' : 'text-white'}>{c}</span>
+                      <ColumnFilter
+                        colKey={c}
+                        data={state.rows}
+                        selected={colFilters[c] || []}
+                        onChange={vals => setColFilter(c, vals)}
+                      />
+                      <ResizeHandle colKey={c} setWidth={setColWidth} />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.length === 0 ? (
+                  <tr><td colSpan={TABLE_COLUMNS.length} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
+                ) : (pageSize === 'all' ? filteredRows : filteredRows.slice(0, pageSize)).map((row, i) => (
+                  <tr key={i} className="border-b border-gray-100 hover:bg-blue-50/40 text-[12px]">
+                    {TABLE_COLUMNS.map(c => (
+                      <td key={c} className="px-3 py-2 border border-gray-200" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row[c] || '—'}</td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {pageSize !== 'all' && filteredRows.length > pageSize && (
-          <div className="text-center py-2 text-xs text-gray-400">Hiển thị {pageSize}/{filteredRows.length} dòng</div>
-        )}
-      </div>
+              </tbody>
+            </table>
+            {pageSize !== 'all' && filteredRows.length > pageSize && (
+              <div className="text-center py-2 text-xs text-gray-400">Hiển thị {pageSize}/{filteredRows.length} dòng</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -38,23 +38,34 @@ function diffDaysBetween(fromStr, toStr) {
   return Math.round((d2 - d1) / (1000 * 60 * 60 * 24))
 }
 
+// Mã đơn hàng có thể chứa nhiều mã ghép cách nhau bởi dấu phẩy — mỗi mã tính 1 đơn
+// Riêng mã chứa "CB" là đơn ghép, tính thêm là 2 đơn
+function orderCount(row) {
+  const parts = row['Mã đơn hàng'].split(',').map(s => s.trim()).filter(Boolean)
+  if (parts.length === 0) return 1
+  return parts.reduce((sum, p) => sum + (p.toUpperCase().includes('CB') ? 2 : 1), 0)
+}
+
 // Thống kê: 24h / 48h / 72h / Đang vận chuyển / Giao lại lần 2 / Hoàn hàng
 export function computeCarrierStats(rows) {
-  const result = { total: rows.length, '24h': 0, '48h': 0, '72h': 0, dangVanChuyen: 0, giaoLai: 0, hoanHang: 0 }
+  const result = { total: 0, '24h': 0, '48h': 0, '72h': 0, dangVanChuyen: 0, giaoLai: 0, hoanHang: 0 }
 
   for (const row of rows) {
+    const count = orderCount(row)
+    result.total += count
+
     const chuyenHoan = row['Đơn chuyển hoàn'].toLowerCase() === 'x'
-    if (chuyenHoan) { result.hoanHang++; continue }
+    if (chuyenHoan) { result.hoanHang += count; continue }
 
     const status = row['Trạng Thái']
-    if (GIAO_LAI_STATUSES.includes(status)) { result.giaoLai++; continue }
+    if (GIAO_LAI_STATUSES.includes(status)) { result.giaoLai += count; continue }
 
-    if (status !== DELIVERED_STATUS) { result.dangVanChuyen++; continue }
+    if (status !== DELIVERED_STATUS) { result.dangVanChuyen += count; continue }
 
     const diff = diffDaysBetween(row['Ngày tạo'], row['Ngày chuyển trạng thái'])
-    if (diff === 0 || diff === 1) result['24h']++
-    else if (diff === 2) result['48h']++
-    else result['72h']++ // >= 3 ngày hoặc không xác định được ngày
+    if (diff === 0 || diff === 1) result['24h'] += count
+    else if (diff === 2) result['48h'] += count
+    else result['72h'] += count // >= 3 ngày hoặc không xác định được ngày
   }
 
   return result

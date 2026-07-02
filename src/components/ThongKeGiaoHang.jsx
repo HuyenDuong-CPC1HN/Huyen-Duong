@@ -2,6 +2,8 @@ import { useMemo, useState, useRef, useEffect } from 'react'
 import { Truck, CheckCircle, Clock, RotateCcw, XCircle, AlertCircle, Package, Users, Pencil, Check, ChevronUp, ChevronDown } from 'lucide-react'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
+import { CarrierPanel } from './CarrierStats'
+import { DetailTable } from './ThongKeDoiTac'
 
 function parseDate(str) {
   if (!str || str === '—') return null
@@ -149,6 +151,70 @@ function EditableStatCard({ col, value, override, onCommit, label }) {
   )
 }
 
+// Bảng chi tiết Giao 24/48/72 giờ kèm Đã giao/Tỷ lệ, click từng dòng để xem danh sách đơn — dời từ tab Đối tác VC vào đây
+function TrucTiepBucketRow({ label, rows }) {
+  const [open, setOpen] = useState(false)
+  if (rows.length === 0) return null
+  const daGiao = rows.filter(r => r['Trạng thái'] === 'Đã giao').length
+  const tyLe = Math.round((daGiao / rows.length) * 100)
+
+  return (
+    <>
+      <tr className="border-t border-gray-50 cursor-pointer hover:bg-blue-50/30" onClick={() => setOpen(o => !o)}>
+        <td className="py-1.5 text-gray-700 flex items-center gap-1.5">
+          {open ? <ChevronUp size={12} className="text-gray-400" /> : <ChevronDown size={12} className="text-gray-400" />}
+          {label}
+        </td>
+        <td className="py-1.5 text-center font-semibold text-[#1e3a5f]">{rows.length}</td>
+        <td className="py-1.5 text-center text-green-700">{daGiao}</td>
+        <td className="py-1.5 text-center text-gray-500">{tyLe}%</td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={4} className="pb-2">
+            <DetailTable rows={rows} />
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+function TrucTiepBucketTable({ rows }) {
+  const buckets = { 24: [], 48: [], 72: [] }
+  for (const row of rows) {
+    const b = deliveryBucket(row)
+    if (b === '24') buckets[24].push(row)
+    else if (b === '48') buckets[48].push(row)
+    else if (b === '72') buckets[72].push(row)
+  }
+  const items = [
+    { label: 'Giao 24 giờ', rows: buckets[24] },
+    { label: 'Giao 48 giờ', rows: buckets[48] },
+    { label: 'Giao 72 giờ', rows: buckets[72] },
+  ].filter(i => i.rows.length > 0)
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-gray-400">
+            <th className="text-left font-medium pb-1">Mốc giao hàng</th>
+            <th className="text-center font-medium pb-1 w-20">Số đơn</th>
+            <th className="text-center font-medium pb-1 w-20">Đã giao</th>
+            <th className="text-center font-medium pb-1 w-20">Tỷ lệ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map(i => <TrucTiepBucketRow key={i.label} label={i.label} rows={i.rows} />)}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function ChuaGiaoBreakdown({ type, storageKey }) {
   const khTypes = KH_TYPES[type] || []
   const lsKey = `chuagiao_kh_${storageKey}`
@@ -203,20 +269,69 @@ const isChanhXe   = row => partnerType(row) === 'chanhxe'
 export const PARTNERS = {
   donC: [
     { key: 'tructIep',    label: 'Giao hàng trực tiếp',    match: isTrucTiep, detailed: true,  cols: COLS_DIRECT,  showKhBreakdown: true },
-    { key: 'chanhXe',     label: 'Giao hàng qua chành xe', match: isChanhXe,  detailed: false, cols: [] },
-    { key: 'viettelPost', label: 'Viettel Post',            match: isViettel,  detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
-    { key: 'spx',         label: 'SPX Express',             match: isSpx,      detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
+    { key: 'chanhXe',     label: 'Giao qua Chành xe',       match: isChanhXe,  detailed: false, cols: [] },
+    { key: 'viettelPost', label: 'Viettel Post',            match: isViettel,  detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER, carrierGroup: true },
+    { key: 'spx',         label: 'SPX Express',             match: isSpx,      detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER, carrierGroup: true },
   ],
   donDTP: [
     { key: 'tructIep',    label: 'Giao hàng trực tiếp',    match: isTrucTiep, detailed: true,  cols: COLS_DIRECT,  showKhBreakdown: true },
-    { key: 'viettelPost', label: 'Viettel Post',            match: isViettel,  detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
+    { key: 'viettelPost', label: 'Viettel Post',            match: isViettel,  detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER, carrierGroup: true },
   ],
+}
+
+const CARRIER_KEY_MAP = { viettelPost: 'viettel', spx: 'spx' }
+
+function OrderBadge({ value }) {
+  return (
+    <span className="ml-auto flex items-baseline gap-2 bg-teal-600 px-[3.75rem] py-8 rounded shadow-sm">
+      <span className="text-base font-bold text-white leading-none">{value.toLocaleString('vi-VN')}</span>
+      <span className="text-xs text-teal-100 leading-none">đơn</span>
+    </span>
+  )
+}
+
+function ChanhXeDetail({ rows }) {
+  const [showDetail, setShowDetail] = useState(false)
+  if (rows.length === 0) return null
+  return (
+    <div>
+      <button
+        onClick={() => setShowDetail(v => !v)}
+        className="text-xs text-blue-600 hover:underline"
+      >
+        {showDetail ? 'Ẩn chi tiết' : `Xem ${rows.length} đơn`}
+      </button>
+      {showDetail && <DetailTable rows={rows} />}
+    </div>
+  )
 }
 
 function GroupCard({ g, type }) {
   const [override, commitOverride] = useChuaGiaoOverride(`${type}_${g.key}`)
   const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${type}_${g.key}_chuagui`)
   const [open, setOpen] = useState(false)
+
+  // Viettel Post / SPX Express: nhúng trực tiếp khung đối soát (upload file xuất, thống kê thật)
+  if (CARRIER_KEY_MAP[g.key]) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div
+          className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer"
+          onClick={() => setOpen(o => !o)}
+        >
+          <Truck size={16} className="text-gray-500" />
+          <span className="font-semibold text-gray-700">{g.label}</span>
+          <OrderBadge value={g.rows.length} />
+          {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
+        </div>
+        {open && (
+          <div className="p-4">
+            <CarrierPanel carrierKey={`${type}_${CARRIER_KEY_MAP[g.key]}`} label={g.label} />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   if (!g.detailed) {
     const chuaGuiVal = chuaGuiChanh !== '' ? Number(chuaGuiChanh) : 0
@@ -228,7 +343,7 @@ function GroupCard({ g, type }) {
         >
           <Truck size={16} className="text-gray-500" />
           <span className="font-semibold text-gray-700">{g.label}</span>
-          <span className="ml-auto bg-[#1e3a5f] text-white text-xs font-bold px-2.5 py-1 rounded-full">{g.rows.length + chuaGuiVal} đơn</span>
+          <OrderBadge value={g.rows.length + chuaGuiVal} />
           {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
         </div>
         {open && (
@@ -251,6 +366,9 @@ function GroupCard({ g, type }) {
                 đơn
               </label>
             </div>
+            <div className="px-5 pb-4">
+              <ChanhXeDetail rows={g.rows} />
+            </div>
           </>
         )}
       </div>
@@ -267,13 +385,17 @@ function GroupCard({ g, type }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
+      <div
+        className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer"
+        onClick={() => setOpen(o => !o)}
+      >
         <Truck size={16} className="text-gray-500" />
         <span className="font-semibold text-gray-700">{g.label}</span>
-        <span className="ml-auto bg-[#1e3a5f] text-white text-xs font-bold px-2.5 py-1 rounded-full">{totalWithOverride} đơn</span>
+        <OrderBadge value={totalWithOverride} />
+        {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
       </div>
 
-      <div className="p-4">
+      {open && <div className="p-4">
         <div style={{ display: 'grid', gap: 8, gridTemplateColumns: `repeat(${g.cols.length}, minmax(0, 1fr))` }}>
           {STAT_COLS.filter(col => g.cols.includes(col.key)).map(col => {
             const Icon = col.icon
@@ -301,6 +423,9 @@ function GroupCard({ g, type }) {
           })}
         </div>
 
+        {/* Chi tiết Giao 24/48/72 giờ — chỉ giao trực tiếp */}
+        {g.key === 'tructIep' && <TrucTiepBucketTable rows={g.rows} />}
+
         {/* Phân loại khách hàng chưa giao — chỉ giao trực tiếp */}
         {g.showKhBreakdown && (
           <ChuaGiaoBreakdown type={type} storageKey={`${type}_${g.key}`} />
@@ -325,7 +450,25 @@ function GroupCard({ g, type }) {
             </div>
           )
         })()}
+      </div>}
+    </div>
+  )
+}
+
+function CarrierParentGroup({ label, children, total }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div
+        className="flex items-center gap-3 px-5 py-3 bg-blue-50/60 border-b border-gray-200 cursor-pointer"
+        onClick={() => setOpen(o => !o)}
+      >
+        <Truck size={16} className="text-[#1e3a5f]" />
+        <span className="font-semibold text-[#1e3a5f]">{label}</span>
+        <OrderBadge value={total} />
+        {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
       </div>
+      {open && <div className="p-3 pl-8 space-y-3 bg-gray-50/50 border-l-4 border-blue-200 ml-4">{children}</div>}
     </div>
   )
 }
@@ -333,21 +476,34 @@ function GroupCard({ g, type }) {
 export default function ThongKeGiaoHang({ data, type }) {
   const partners = PARTNERS[type] || []
 
+  // Chỉ tính đơn có Mã kiện hàng — khớp với cách tính ở tab Đối tác VC
+  const validData = useMemo(() => data.filter(row => String(row['Mã kiện hàng'] ?? '').trim()), [data])
+
   const groups = useMemo(() => {
     return partners.map(p => {
-      const rows = data.filter(r => p.match(r))
+      const rows = validData.filter(r => p.match(r))
       const stats = !p.detailed ? null : p.key === 'tructIep' ? calcStatsTrucTiep(rows) : calcStats(rows)
       return { ...p, rows, stats }
     })
-  }, [data, type])
+  }, [validData, type])
 
   const unmatched = useMemo(() => {
-    return data.filter(row => !partners.some(p => p.match(row)))
-  }, [data, type])
+    return validData.filter(row => !partners.some(p => p.match(row)))
+  }, [validData, type])
+
+  const mainGroups = groups.filter(g => !g.carrierGroup)
+  const carrierGroups = groups.filter(g => g.carrierGroup)
+  const carrierTotal = carrierGroups.reduce((s, g) => s + g.rows.length, 0)
 
   return (
     <div className="space-y-4">
-      {groups.map(g => <GroupCard key={g.key} g={g} type={type} />)}
+      {mainGroups.map(g => <GroupCard key={g.key} g={g} type={type} />)}
+
+      {carrierGroups.length > 0 && (
+        <CarrierParentGroup label="Giao qua đối tác vận chuyển" total={carrierTotal}>
+          {carrierGroups.map(g => <GroupCard key={g.key} g={g} type={type} />)}
+        </CarrierParentGroup>
+      )}
 
       {unmatched.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

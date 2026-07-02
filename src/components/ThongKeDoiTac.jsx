@@ -35,7 +35,7 @@ function buildGroups(data) {
   return groups
 }
 
-function DetailTable({ rows }) {
+export function DetailTable({ rows }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-100 mt-2">
       <table className="w-full text-xs">
@@ -105,7 +105,7 @@ function SubRow({ label, rows, depth = 1 }) {
   )
 }
 
-function GroupRow({ label, rows, children, depth = 0 }) {
+function GroupRow({ label, rows, children, depth = 0, hideDetail = false }) {
   const [open, setOpen] = useState(true)
   const [showDetail, setShowDetail] = useState(false)
   if (rows.length === 0) return null
@@ -131,7 +131,7 @@ function GroupRow({ label, rows, children, depth = 0 }) {
       {open && (
         <>
           {children}
-          {!children && (
+          {!children && !hideDetail && (
             <tr>
               <td colSpan={4} className="px-4 pb-3 bg-gray-50/50" style={{ paddingLeft: depth * 28 + 16 }}>
                 <button
@@ -150,25 +150,49 @@ function GroupRow({ label, rows, children, depth = 0 }) {
   )
 }
 
-function SummaryBar({ data }) {
+function SummaryBar({ data, groups }) {
   const total = data.length
-  const daGiao = data.filter(r => r['Trạng thái'] === 'Đã giao').length
-  const tyLe = total ? Math.round((daGiao / total) * 100) : 0
+  const doitacTotal = groups.doitac.rows.length
+  const viettelCount = groups.doitac.sub.viettel.rows.length
+  const spxCount = groups.doitac.sub.spx.rows.length
+  const viettelPct = doitacTotal ? Math.round((viettelCount / doitacTotal) * 100) : 0
+  const spxPct = doitacTotal ? Math.round((spxCount / doitacTotal) * 100) : 0
+
   return (
-    <div className="grid grid-cols-3 gap-3 mb-5">
+    <div className="grid grid-cols-4 gap-3 mb-5">
       {[
-        { label: 'Tổng đơn',   value: total.toLocaleString('vi-VN'),  icon: Package,     cls: 'text-[#1e3a5f]', bg: 'bg-blue-50 border-blue-200' },
-        { label: 'Đã giao',    value: daGiao.toLocaleString('vi-VN'), icon: CheckCircle, cls: 'text-green-700',  bg: 'bg-green-50 border-green-200' },
-        { label: 'Tỷ lệ giao', value: `${tyLe}%`,                    icon: TrendingUp,  cls: 'text-teal-700',   bg: 'bg-teal-50 border-teal-200' },
-      ].map(c => {
+        { label: 'Tổng đơn',                     value: total,                          icon: Package, cls: 'text-[#1e3a5f]', bg: 'bg-blue-50 border-blue-200' },
+        { label: 'Giao hàng trực tiếp',           value: groups.tructiep.rows.length,   icon: CheckCircle, cls: 'text-green-700', bg: 'bg-green-50 border-green-200' },
+        { label: 'Giao qua Chành xe',             value: groups.chanhxe.rows.length,    icon: TrendingUp, cls: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
+        { label: 'Giao qua đối tác vận chuyển',   value: doitacTotal,                   icon: TrendingUp, cls: 'text-teal-700', bg: 'bg-teal-50 border-teal-200' },
+      ].map((c, i) => {
         const Icon = c.icon
+        const pct = total ? Math.round((c.value / total) * 100) : 0
+        const isDoiTac = c.label === 'Giao qua đối tác vận chuyển'
         return (
-          <div key={c.label} className={`rounded-xl border px-4 py-3 ${c.bg} flex items-center gap-3`}>
-            <Icon size={18} className={c.cls} />
-            <div>
-              <div className={`text-lg font-bold ${c.cls}`}>{c.value}</div>
-              <div className="text-xs text-gray-500">{c.label}</div>
+          <div key={c.label} className={`rounded-xl border px-4 py-3 ${c.bg} flex flex-col gap-2`}>
+            <div className="flex items-center gap-3">
+              <Icon size={18} className={c.cls} />
+              <div>
+                <div className={`text-lg font-bold ${c.cls} flex items-baseline gap-1.5`}>
+                  {c.value.toLocaleString('vi-VN')}
+                  {i > 0 && <span className="text-xs font-medium text-gray-400">({pct}%)</span>}
+                </div>
+                <div className="text-xs text-gray-500">{c.label}</div>
+              </div>
             </div>
+            {isDoiTac && (
+              <div className="pt-2 border-t border-teal-100 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Viettel Post</span>
+                  <span className="font-semibold text-teal-700">{viettelCount.toLocaleString('vi-VN')} <span className="text-gray-400 font-normal">({viettelPct}%)</span></span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">SPX Express</span>
+                  <span className="font-semibold text-teal-700">{spxCount.toLocaleString('vi-VN')} <span className="text-gray-400 font-normal">({spxPct}%)</span></span>
+                </div>
+              </div>
+            )}
           </div>
         )
       })}
@@ -180,52 +204,9 @@ export default function ThongKeDoiTac({ data }) {
   const groups = useMemo(() => buildGroups(data), [data])
   if (!data.length) return <div className="text-center py-20 text-gray-400">Không có dữ liệu</div>
 
-  const { tructiep, chanhxe, doitac } = groups
-  const total = data.length
-  const totalDaGiao = data.filter(r => r['Trạng thái'] === 'Đã giao').length
-
   return (
     <div>
-      <SummaryBar data={data} />
-
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-[#1e3a5f] text-white text-xs font-semibold">
-              <th className="px-4 py-3 text-left">Phương thức giao hàng</th>
-              <th className="px-4 py-3 text-center w-24">Số đơn</th>
-              <th className="px-4 py-3 text-center w-24">Đã giao</th>
-              <th className="px-4 py-3 text-center w-24">Tỷ lệ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* Giao hàng trực tiếp */}
-            <GroupRow label="Giao hàng trực tiếp" rows={tructiep.rows}>
-              <SubRow label="Giao 24 giờ" rows={tructiep.sub[24]} depth={2} />
-              <SubRow label="Giao 48 giờ" rows={tructiep.sub[48]} depth={2} />
-              <SubRow label="Giao 72 giờ" rows={tructiep.sub[72]} depth={2} />
-              {tructiep.sub.khac.length > 0 && <SubRow label="Khác / Chưa xác định" rows={tructiep.sub.khac} depth={2} />}
-            </GroupRow>
-
-            {/* Chành xe */}
-            <GroupRow label="Giao qua Chành xe" rows={chanhxe.rows} />
-
-            {/* Đối tác vận chuyển */}
-            <GroupRow label="Giao qua đối tác vận chuyển" rows={doitac.rows}>
-              <SubRow label="Viettel Post" rows={doitac.sub.viettel.rows} depth={2} />
-              <SubRow label="SPX Express"  rows={doitac.sub.spx.rows}     depth={2} />
-            </GroupRow>
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-gray-700">
-              <td className="px-4 py-3">Tổng cộng</td>
-              <td className="px-4 py-3 text-center text-[#1e3a5f]">{total}</td>
-              <td className="px-4 py-3 text-center text-green-700">{totalDaGiao}</td>
-              <td className="px-4 py-3 text-center text-gray-600">{total ? Math.round(totalDaGiao/total*100) : 0}%</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+      <SummaryBar data={data} groups={groups} />
     </div>
   )
 }
