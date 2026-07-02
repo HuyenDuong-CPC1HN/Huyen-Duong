@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { List, BarChart2, Truck } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { List, BarChart2, Truck, ClipboardCheck } from 'lucide-react'
 import { useSheetData } from '../useSheetData'
 import { useWeeklyData } from '../useWeeklyData'
-import DataTable from './DataTable'
+import DataTable, { VC_KEY } from './DataTable'
 import ThongKeGiaoHang from './ThongKeGiaoHang'
 import ThongKeDoiTac from './ThongKeDoiTac'
+import CarrierStats from './CarrierStats'
 import ExcelUpload from './ExcelUpload'
 import WeekSelector from './WeekSelector'
 
@@ -13,9 +14,25 @@ export default function SheetTab({ sheetId, gid, type }) {
   const [view, setView] = useState('list')
   const { weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek } = useWeeklyData(type)
 
-  const activeData = activeWeek ? activeWeek.data : sheet.data
+  const rawData = activeWeek ? activeWeek.data : sheet.data
   const loading = activeWeek ? false : sheet.loading
   const error = activeWeek ? null : sheet.error
+
+  const storageKey = `vc_edits_${type}`
+  const [vcEdits, setVcEdits] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(storageKey) || '{}') } catch { return {} }
+  })
+
+  const onEditVC = (key, value) => {
+    const next = { ...vcEdits, [key]: value }
+    setVcEdits(next)
+    localStorage.setItem(storageKey, JSON.stringify(next))
+  }
+
+  const activeData = useMemo(() => rawData.map(row => {
+    const key = row['Mã hóa đơn'] || ''
+    return vcEdits[key] !== undefined ? { ...row, [VC_KEY]: vcEdits[key] } : row
+  }), [rawData, vcEdits])
 
   return (
     <div>
@@ -46,6 +63,14 @@ export default function SheetTab({ sheetId, gid, type }) {
             }`}
           >
             <Truck size={14} /> Đối tác VC
+          </button>
+          <button
+            onClick={() => setView('doisoat')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all ${
+              view === 'doisoat' ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <ClipboardCheck size={14} /> Đối soát VTP/SPX
           </button>
         </div>
 
@@ -79,7 +104,7 @@ export default function SheetTab({ sheetId, gid, type }) {
           error={error}
           refresh={sheet.refresh}
           lastRefresh={activeWeek ? null : sheet.lastRefresh}
-          storageKey={`vc_edits_${type}`}
+          onEditVC={onEditVC}
         />
       )}
       {view === 'stats' && (
@@ -92,6 +117,7 @@ export default function SheetTab({ sheetId, gid, type }) {
           ? <div className="text-center py-20 text-gray-400">Đang tải dữ liệu...</div>
           : <ThongKeDoiTac data={activeData} />
       )}
+      {view === 'doisoat' && <CarrierStats type={type} />}
     </div>
   )
 }

@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
-import { Truck, CheckCircle, Clock, RotateCcw, XCircle, AlertCircle, Package, Users, Pencil, Check } from 'lucide-react'
+import { useMemo, useState, useRef, useEffect } from 'react'
+import { Truck, CheckCircle, Clock, RotateCcw, XCircle, AlertCircle, Package, Users, Pencil, Check, ChevronUp, ChevronDown } from 'lucide-react'
+import { partnerType } from '../utils/partnerType'
+import { deliveryBucket } from '../utils/deliveryDays'
 
 function parseDate(str) {
   if (!str || str === '—') return null
@@ -51,6 +53,20 @@ function calcStats(rows) {
   return result
 }
 
+// Thống kê riêng cho "Giao hàng trực tiếp" — kế thừa cách tính giống tab Đối tác VC
+// (chỉ dựa vào chênh lệch Ngày tạo kiện / Ngày giao hàng, không phụ thuộc Trạng thái)
+function calcStatsTrucTiep(rows) {
+  const result = { total: rows.length, '24h': 0, '48h': 0, '72h': 0, chuaGiao: 0, giaoLai: 0, hoanHang: 0, chuaGiaoRows: [] }
+  for (const row of rows) {
+    const bucket = deliveryBucket(row)
+    if (bucket === '24')      result['24h']++
+    else if (bucket === '48') result['48h']++
+    else if (bucket === '72') result['72h']++
+    else { result.chuaGiao++; result.chuaGiaoRows.push(row) }
+  }
+  return result
+}
+
 // Phân loại khách hàng theo tên
 const KH_TYPES = {
   donC: [
@@ -70,6 +86,67 @@ const KH_COLORS = {
   nt:  { bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700' },
   pk:  { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700' },
   onl: { bg: 'bg-gray-50',   border: 'border-gray-200',   text: 'text-gray-600' },
+}
+
+function useChuaGiaoOverride(storageKey) {
+  const lsKey = `chuagiao_override_${storageKey}`
+  const [override, setOverride] = useState(() => {
+    const v = localStorage.getItem(lsKey)
+    return v === null ? '' : v
+  })
+  const commit = (v) => {
+    setOverride(v)
+    if (v === '') localStorage.removeItem(lsKey)
+    else localStorage.setItem(lsKey, v)
+  }
+  return [override, commit]
+}
+
+function EditableStatCard({ col, value, override, onCommit, label }) {
+  const Icon = col.icon
+  const [editing, setEditing] = useState(false)
+  const inputRef = useRef()
+
+  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+
+  const commit = (v) => { onCommit(v); setEditing(false) }
+
+  const displayVal = override !== '' ? override : value
+
+  return (
+    <div className={`rounded-xl border p-3 ${col.bg} text-center relative`}>
+      <Icon size={16} className={`${col.cls} mx-auto mb-1`} />
+      {editing ? (
+        <input
+          ref={inputRef}
+          type="number"
+          min="0"
+          defaultValue={displayVal}
+          onBlur={e => commit(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditing(false) }}
+          className={`text-xl font-bold ${col.cls} bg-transparent border-b-2 border-current w-16 text-center focus:outline-none`}
+        />
+      ) : (
+        <div
+          onDoubleClick={() => setEditing(true)}
+          className={`text-xl font-bold ${col.cls} cursor-pointer`}
+          title="Bấm đúp để nhập tay"
+        >
+          {displayVal}
+        </div>
+      )}
+      <div className="text-xs text-gray-500 mt-0.5 leading-tight">{label}</div>
+      {override !== '' && (
+        <button
+          onClick={() => commit('')}
+          className="absolute top-1 right-1 text-[9px] text-gray-400 hover:text-red-500"
+          title="Khôi phục số tự động"
+        >
+          ↺
+        </button>
+      )}
+    </div>
+  )
 }
 
 function ChuaGiaoBreakdown({ type, storageKey }) {
@@ -118,17 +195,139 @@ const COLS_DIRECT  = ['24h', '48h', '72h', 'chuaGiao']
 const COLS_PARTNER = ['24h', '48h', '72h', 'chuaGiao', 'giaoLai', 'hoanHang']
 const LABEL_PARTNER = { chuaGiao: 'Đang vận chuyển' }
 
+const isTrucTiep = row => partnerType(row) === 'tructiep'
+const isViettel   = row => partnerType(row) === 'viettel'
+const isSpx       = row => partnerType(row) === 'spx'
+const isChanhXe   = row => partnerType(row) === 'chanhxe'
+
 export const PARTNERS = {
   donC: [
-    { key: 'tructIep',    label: 'Giao hàng trực tiếp',    match: r => ['trực tiếp','truc tiep'].some(k => (r['Đối tác vận chuyển']||'').toLowerCase().includes(k)), detailed: true,  cols: COLS_DIRECT,  showKhBreakdown: true },
-    { key: 'chanhXe',     label: 'Giao hàng qua chành xe', match: r => ['chành','chanh'].some(k => (r['Đối tác vận chuyển']||'').toLowerCase().includes(k)),           detailed: false, cols: [] },
-    { key: 'viettelPost', label: 'Viettel Post',            match: r => (r['Đối tác vận chuyển']||'').toLowerCase().includes('viettel'),                                detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
-    { key: 'spx',         label: 'SPX Express',             match: r => (r['Đối tác vận chuyển']||'').toLowerCase().includes('spx'),                                    detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
+    { key: 'tructIep',    label: 'Giao hàng trực tiếp',    match: isTrucTiep, detailed: true,  cols: COLS_DIRECT,  showKhBreakdown: true },
+    { key: 'chanhXe',     label: 'Giao hàng qua chành xe', match: isChanhXe,  detailed: false, cols: [] },
+    { key: 'viettelPost', label: 'Viettel Post',            match: isViettel,  detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
+    { key: 'spx',         label: 'SPX Express',             match: isSpx,      detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
   ],
   donDTP: [
-    { key: 'tructIep',    label: 'Giao hàng trực tiếp',    match: r => ['trực tiếp','truc tiep'].some(k => (r['Đối tác vận chuyển']||'').toLowerCase().includes(k)), detailed: true,  cols: COLS_DIRECT,  showKhBreakdown: true },
-    { key: 'viettelPost', label: 'Viettel Post',            match: r => (r['Đối tác vận chuyển']||'').toLowerCase().includes('viettel'),                                detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
+    { key: 'tructIep',    label: 'Giao hàng trực tiếp',    match: isTrucTiep, detailed: true,  cols: COLS_DIRECT,  showKhBreakdown: true },
+    { key: 'viettelPost', label: 'Viettel Post',            match: isViettel,  detailed: true,  cols: COLS_PARTNER, labelMap: LABEL_PARTNER },
   ],
+}
+
+function GroupCard({ g, type }) {
+  const [override, commitOverride] = useChuaGiaoOverride(`${type}_${g.key}`)
+  const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${type}_${g.key}_chuagui`)
+  const [open, setOpen] = useState(false)
+
+  if (!g.detailed) {
+    const chuaGuiVal = chuaGuiChanh !== '' ? Number(chuaGuiChanh) : 0
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div
+          className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer"
+          onClick={() => setOpen(o => !o)}
+        >
+          <Truck size={16} className="text-gray-500" />
+          <span className="font-semibold text-gray-700">{g.label}</span>
+          <span className="ml-auto bg-[#1e3a5f] text-white text-xs font-bold px-2.5 py-1 rounded-full">{g.rows.length + chuaGuiVal} đơn</span>
+          {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
+        </div>
+        {open && (
+          <>
+            <div className="px-5 py-4 text-sm text-gray-500 flex items-center gap-2">
+              <Package size={15} className="text-gray-400" />
+              Tổng số đơn đã gửi qua chành: <strong className="text-gray-800 ml-1">{g.rows.length} đơn</strong>
+            </div>
+            <div className="px-5 pb-4 flex items-center gap-2">
+              <label className="text-sm text-gray-500 flex items-center gap-2">
+                Số đơn chưa gửi chành:
+                <input
+                  type="number"
+                  min="0"
+                  value={chuaGuiChanh}
+                  onChange={e => setChuaGuiChanh(e.target.value)}
+                  placeholder="0"
+                  className="w-20 text-center font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                />
+                đơn
+              </label>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const effectiveChuaGiao = override !== '' ? Number(override) : g.stats.chuaGiao
+  const totalWithOverride = g.stats['24h'] + g.stats['48h'] + g.stats['72h'] + effectiveChuaGiao
+    + (g.cols.includes('giaoLai') ? g.stats.giaoLai : 0)
+    + (g.cols.includes('hoanHang') ? g.stats.hoanHang : 0)
+
+  const delivered = g.stats['24h'] + g.stats['48h'] + g.stats['72h']
+  const pct = totalWithOverride > 0 ? Math.round((delivered / totalWithOverride) * 100) : 0
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
+        <Truck size={16} className="text-gray-500" />
+        <span className="font-semibold text-gray-700">{g.label}</span>
+        <span className="ml-auto bg-[#1e3a5f] text-white text-xs font-bold px-2.5 py-1 rounded-full">{totalWithOverride} đơn</span>
+      </div>
+
+      <div className="p-4">
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: `repeat(${g.cols.length}, minmax(0, 1fr))` }}>
+          {STAT_COLS.filter(col => g.cols.includes(col.key)).map(col => {
+            const Icon = col.icon
+            const val = g.stats[col.key]
+            const label = (g.labelMap && g.labelMap[col.key]) || col.label
+            if (col.key === 'chuaGiao') {
+              return (
+                <EditableStatCard
+                  key={col.key}
+                  col={col}
+                  value={val}
+                  override={override}
+                  onCommit={commitOverride}
+                  label={label}
+                />
+              )
+            }
+            return (
+              <div key={col.key} className={`rounded-xl border p-3 ${col.bg} text-center`}>
+                <Icon size={16} className={`${col.cls} mx-auto mb-1`} />
+                <div className={`text-xl font-bold ${col.cls}`}>{val}</div>
+                <div className="text-xs text-gray-500 mt-0.5 leading-tight">{label}</div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Phân loại khách hàng chưa giao — chỉ giao trực tiếp */}
+        {g.showKhBreakdown && (
+          <ChuaGiaoBreakdown type={type} storageKey={`${type}_${g.key}`} />
+        )}
+
+        {totalWithOverride > 0 && (() => {
+          const chuaGiaoPct = Math.round((effectiveChuaGiao / totalWithOverride) * 100)
+          return (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-1.5 text-xs">
+                <span className="flex items-center gap-1.5 text-green-700 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-green-500" /> Đã giao: {delivered} đơn ({pct}%)
+                </span>
+                <span className="flex items-center gap-1.5 text-yellow-700 font-medium">
+                  Chưa giao: {effectiveChuaGiao} đơn ({chuaGiaoPct}%) <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                </span>
+              </div>
+              <div className="flex bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
+                <div className="h-full bg-yellow-400" style={{ width: `${chuaGiaoPct}%` }} />
+              </div>
+            </div>
+          )
+        })()}
+      </div>
+    </div>
+  )
 }
 
 export default function ThongKeGiaoHang({ data, type }) {
@@ -137,7 +336,8 @@ export default function ThongKeGiaoHang({ data, type }) {
   const groups = useMemo(() => {
     return partners.map(p => {
       const rows = data.filter(r => p.match(r))
-      return { ...p, rows, stats: p.detailed ? calcStats(rows) : null }
+      const stats = !p.detailed ? null : p.key === 'tructIep' ? calcStatsTrucTiep(rows) : calcStats(rows)
+      return { ...p, rows, stats }
     })
   }, [data, type])
 
@@ -147,62 +347,7 @@ export default function ThongKeGiaoHang({ data, type }) {
 
   return (
     <div className="space-y-4">
-      {groups.map(g => (
-        <div key={g.key} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
-            <Truck size={16} className="text-gray-500" />
-            <span className="font-semibold text-gray-700">{g.label}</span>
-            <span className="ml-auto bg-[#1e3a5f] text-white text-xs font-bold px-2.5 py-1 rounded-full">{g.rows.length} đơn</span>
-          </div>
-
-          {!g.detailed && (
-            <div className="px-5 py-4 text-sm text-gray-500 flex items-center gap-2">
-              <Package size={15} className="text-gray-400" />
-              Tổng số đơn đã gửi qua chành: <strong className="text-gray-800 ml-1">{g.rows.length} đơn</strong>
-            </div>
-          )}
-
-          {g.detailed && (
-            <div className="p-4">
-              {g.stats && (
-                <div style={{ display: 'grid', gap: 8, gridTemplateColumns: `repeat(${g.cols.length}, minmax(0, 1fr))` }}>
-                  {STAT_COLS.filter(col => g.cols.includes(col.key)).map(col => {
-                    const Icon = col.icon
-                    const val = g.stats[col.key]
-                    const label = (g.labelMap && g.labelMap[col.key]) || col.label
-                    return (
-                      <div key={col.key} className={`rounded-xl border p-3 ${col.bg} text-center`}>
-                        <Icon size={16} className={`${col.cls} mx-auto mb-1`} />
-                        <div className={`text-xl font-bold ${col.cls}`}>{val}</div>
-                        <div className="text-xs text-gray-500 mt-0.5 leading-tight">{label}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* Phân loại khách hàng chưa giao — chỉ giao trực tiếp */}
-              {g.showKhBreakdown && (
-                <ChuaGiaoBreakdown type={type} storageKey={`${type}_${g.key}`} />
-              )}
-
-              {g.stats && g.rows.length > 0 && (() => {
-                const delivered = g.stats['24h'] + g.stats['48h'] + g.stats['72h']
-                const pct = Math.round((delivered / g.rows.length) * 100)
-                return (
-                  <div className="mt-3 flex items-center gap-3">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">Tỷ lệ giao thành công</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="text-xs font-bold text-green-700 whitespace-nowrap">{pct}%</span>
-                  </div>
-                )
-              })()}
-            </div>
-          )}
-        </div>
-      ))}
+      {groups.map(g => <GroupCard key={g.key} g={g} type={type} />)}
 
       {unmatched.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

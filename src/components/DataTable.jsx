@@ -6,14 +6,22 @@ import SummaryCards from './SummaryCards'
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 'all']
 
-function ColumnFilter({ colKey, data, selected, onChange }) {
+export function ColumnFilter({ colKey, data, selected, onChange }) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const ref = useRef()
+  const inputRef = useRef()
 
   const options = useMemo(() =>
     [...new Set(data.map(r => r[colKey]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')),
     [data, colKey]
   )
+
+  const filteredOptions = useMemo(() => {
+    if (!query.trim()) return options
+    const q = query.toLowerCase()
+    return options.filter(opt => opt.toLowerCase().includes(q))
+  }, [options, query])
 
   useEffect(() => {
     if (!open) return
@@ -22,9 +30,28 @@ function ColumnFilter({ colKey, data, selected, onChange }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  useEffect(() => {
+    if (open) inputRef.current?.focus()
+    else setQuery('')
+  }, [open])
+
   const toggle = (opt) => {
     if (selected.includes(opt)) onChange(selected.filter(v => v !== opt))
     else onChange([...selected, opt])
+  }
+
+  const [pasteInfo, setPasteInfo] = useState(null)
+
+  const handlePaste = (e) => {
+    const text = e.clipboardData.getData('text')
+    if (!text.includes('\n') && !text.includes('\t') && !text.includes(',')) return
+    e.preventDefault()
+    const pasted = text.split(/[\n\t,]+/).map(s => s.trim()).filter(Boolean)
+    const matched = options.filter(opt => pasted.some(p => opt.toLowerCase() === p.toLowerCase()))
+    onChange([...new Set([...selected, ...matched])])
+    setPasteInfo(`Đã dán ${pasted.length} giá trị, khớp ${matched.length}`)
+    setQuery('')
+    setTimeout(() => setPasteInfo(null), 3000)
   }
 
   if (options.length === 0) return null
@@ -42,7 +69,7 @@ function ColumnFilter({ colKey, data, selected, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg min-w-44 max-h-64 flex flex-col">
+        <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg min-w-56 max-h-80 flex flex-col text-gray-800">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100">
             <span className="text-xs text-gray-400">{selected.length > 0 ? `${selected.length} đã chọn` : 'Chọn giá trị'}</span>
@@ -50,9 +77,23 @@ function ColumnFilter({ colKey, data, selected, onChange }) {
               <button onClick={() => onChange([])} className="text-xs text-blue-500 hover:text-blue-700">Bỏ tất cả</button>
             )}
           </div>
+          {/* Search / paste box */}
+          <div className="px-2 py-1.5 border-b border-gray-100">
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onPaste={handlePaste}
+              placeholder="Tìm hoặc dán danh sách..."
+              className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-gray-800 bg-white"
+            />
+            {pasteInfo && <div className="text-[11px] text-green-600 mt-1">{pasteInfo}</div>}
+          </div>
           {/* Options */}
           <div className="overflow-y-auto">
-            {options.map(opt => {
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-gray-400">Không tìm thấy</div>
+            ) : filteredOptions.map(opt => {
               const checked = selected.includes(opt)
               return (
                 <label
@@ -83,7 +124,7 @@ function useColWidths() {
   return [widths, setWidth]
 }
 
-function ResizeHandle({ colKey, setWidth }) {
+export function ResizeHandle({ colKey, setWidth }) {
   const startX = useRef(null)
   const startW = useRef(null)
 
@@ -114,7 +155,7 @@ function ResizeHandle({ colKey, setWidth }) {
   )
 }
 
-const VC_KEY = 'Đối tác vận chuyển'
+export const VC_KEY = 'Đối tác vận chuyển'
 
 function EditableVCCell({ value, rowIndex, onSave }) {
   const [editing, setEditing] = useState(false)
@@ -149,26 +190,12 @@ function EditableVCCell({ value, rowIndex, onSave }) {
   )
 }
 
-export default function DataTable({ data, loading, error, refresh, lastRefresh, storageKey = 'vc_edits' }) {
+export default function DataTable({ data, loading, error, refresh, lastRefresh, onEditVC }) {
   const [search, setSearch] = useState('')
   const [colFilters, setColFilters] = useState({})
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [colWidths, setColWidth] = useColWidths()
-  const [edits, setEdits] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(storageKey) || '{}') } catch { return {} }
-  })
-
-  const saveEdit = (key, newVal) => {
-    const next = { ...edits, [key]: newVal }
-    setEdits(next)
-    localStorage.setItem(storageKey, JSON.stringify(next))
-  }
-
-  const getVC = (row) => {
-    const key = row['Mã hóa đơn'] || ''
-    return edits[key] !== undefined ? edits[key] : row[VC_KEY]
-  }
   const topScrollRef = useRef()
   const tableScrollRef = useRef()
   const minTableWidthRef = useRef(0)
@@ -332,7 +359,7 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh, 
                         {col.key === 'Trạng thái'
                           ? <StatusBadge status={row[col.key]} />
                           : col.key === VC_KEY
-                            ? <EditableVCCell value={getVC(row)} rowIndex={i} onSave={(_, v) => saveEdit(row['Mã hóa đơn'] || String(i), v)} />
+                            ? <EditableVCCell value={row[VC_KEY]} rowIndex={i} onSave={(_, v) => onEditVC?.(row['Mã hóa đơn'] || String(i), v)} />
                           : col.key === 'Thu hộ' || col.key === 'TT Thu hộ' || col.key === 'Phí Ship/kiện'
                             ? <span className="font-semibold text-gray-800">{row[col.key] || '—'}</span>
                             : row[col.key] || <span className="text-gray-300">—</span>
