@@ -1,35 +1,153 @@
 import * as XLSX from 'xlsx'
-import { parseDate } from './deliveryDays'
+import { parseDate as parseDateDMY } from './deliveryDays'
 
-// Các cột cần giữ lại từ file xuất Viettel Post / SPX Express
-const KEEP_COLUMNS = [
+// SPX xuất ngày theo yyyy-mm-dd HH:mm, Viettel xuất theo dd/mm/yyyy — parse cả 2 (chỉ lấy ngày)
+function parseDate(str) {
+  if (!str) return null
+  const s = String(str).trim()
+  const ymd = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+  return parseDateDMY(s)
+}
+
+// Parse đầy đủ ngày + giờ:phút, dùng để tính chênh lệch chính xác theo giờ (cho SPX)
+function parseDateTime(str) {
+  if (!str) return null
+  const s = String(str).trim()
+  const ymd = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})[ T]?(\d{1,2}):(\d{1,2})/)
+  if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), Number(ymd[4]), Number(ymd[5]))
+  const dmy = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})[ T]?(\d{1,2}):(\d{1,2})/)
+  if (dmy) return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]), Number(dmy[4]), Number(dmy[5]))
+  return parseDate(str)
+}
+
+const VIETTEL_COLUMNS = [
   'Mã Vận Đơn', 'Mã đơn hàng', 'Ngày tạo', 'Người nhận', 'Địa chỉ nhận',
   'ĐT Nhận', 'Trạng Thái', 'Lý do', 'Đơn chuyển hoàn', 'Ngày chuyển trạng thái',
 ]
 
-const REQUIRED_HEADER_CELL = 'Mã Vận Đơn'
+const SPX_COLUMNS = [
+  'Mã vận đơn', 'Thời gian tạo đơn', 'Thời gian giao hàng', 'Trạng thái hiện tại',
+  'Tên người nhận', 'Số điện thoại người nhận', 'Mã khách hàng',
+  'Thu COD (Có/Không)', 'Số tiền COD', 'Giá trị đơn hàng',
+]
+
+// Viettel: đối chiếu "Mã Vận Đơn" (file VTP xuất) với cột "Mã vận đơn" của dữ liệu nội bộ (Đơn C/DTP)
+// — cả 2 đều là mã tracking number do Viettel Post cấp, khớp trực tiếp 1-1.
+// Nếu nhiều dòng nội bộ dùng chung 1 Mã vận đơn (đơn CB gộp), số dòng khớp = số đơn thật sự.
+// Không đối chiếu được (chưa có trong dữ liệu nội bộ) thì dùng phỏng đoán cũ dựa vào "Mã đơn hàng" (CB = 2).
+function viettelOrderCount(row, config, lookupMap) {
+  const trackingCode = String(row[config.requiredHeaderCell] || '').trim().toUpperCase()
+  const matched = lookupMap?.get(trackingCode)
+  if (matched) return matched
+
+  const raw = row[config.orderKey] || ''
+  const parts = raw.split(',').map(s => s.trim()).filter(Boolean)
+  if (parts.length === 0) return 1
+  return parts.reduce((sum, p) => sum + (p.toUpperCase().includes('CB') ? 2 : 1), 0)
+}
+
+// SPX: số lần xuất hiện "FB" trong Mã khách hàng = số đơn ghép trong dòng đó
+function spxOrderCount(row, config) {
+  const raw = row[config.orderKey] || ''
+  const matches = raw.match(/FB/gi)
+  return matches ? matches.length : 1
+}
+
+// Xây bảng đối chiếu: mỗi giá trị cột "Mã vận đơn" trong dữ liệu nội bộ xuất hiện bao nhiêu dòng
+// (mỗi dòng nội bộ = 1 đơn nhỏ thật sự, dùng để biết chính xác 1 mã CB gộp bao nhiêu đơn)
+export function buildInternalOrderLookup(internalData, internalKey = 'Mã vận đơn') {
+  const map = new Map()
+  for (const row of internalData || []) {
+    const code = String(row[internalKey] || '').trim().toUpperCase()
+    if (!code) continue
+    map.set(code, (map.get(code) || 0) + 1)
+  }
+  return map
+}
+
+// Đối soát: so khớp "Mã Vận Đơn" (file VTP) với "Mã vận đơn" (nội bộ) — cùng là mã tracking number
+// missingInVtp: đơn nội bộ đã gán Viettel Post nhưng KHÔNG thấy trong file VTP (chưa gửi / chưa cập nhật)
+// extraInVtp: mã trong file VTP nhưng KHÔNG khớp bất kỳ đơn nội bộ nào (sai mã / dữ liệu tuần khác)
+export function reconcileViettelOrders(vtpRows, internalData, trackingKey = 'Mã Vận Đơn', internalKey = 'Mã vận đơn') {
+  const vtpCodes = new Set()
+  for (const row of vtpRows || []) {
+    const code = String(row[trackingKey] || '').trim().toUpperCase()
+    if (code) vtpCodes.add(code)
+  }
+
+  const missingInVtp = []
+  const seenInternal = new Set()
+  for (const row of internalData || []) {
+    const code = String(row[internalKey] || '').trim().toUpperCase()
+    if (!code || seenInternal.has(code)) continue
+    seenInternal.add(code)
+    if (!vtpCodes.has(code)) missingInVtp.push({ code, row })
+  }
+
+  const extraInVtp = [...vtpCodes].filter(c => !seenInternal.has(c))
+
+  return {
+    internalTotal: internalData?.length || 0,
+    vtpUniqueCodes: vtpCodes.size,
+    missingInVtp,
+    extraInVtp,
+  }
+}
+
+const CARRIER_CONFIG = {
+  viettel: {
+    columns: VIETTEL_COLUMNS,
+    requiredHeaderCell: 'Mã Vận Đơn',
+    orderKey: 'Mã đơn hàng',
+    statusKey: 'Trạng Thái',
+    createdKey: 'Ngày tạo',
+    deliveredAtKey: 'Ngày chuyển trạng thái',
+    deliveredStatus: 'Giao thành công',
+    giaoLaiStatuses: ['Chờ phát lại', 'Phát tiếp'],
+    hoanHangStatuses: [],
+    isHoanHang: row => row['Đơn chuyển hoàn'].toLowerCase() === 'x',
+    orderCounter: viettelOrderCount,
+  },
+  spx: {
+    columns: SPX_COLUMNS,
+    requiredHeaderCell: 'Mã vận đơn',
+    orderKey: 'Mã khách hàng',
+    statusKey: 'Trạng thái hiện tại',
+    createdKey: 'Thời gian tạo đơn',
+    deliveredAtKey: 'Thời gian giao hàng',
+    deliveredStatus: 'Đã giao hàng',
+    giaoLaiStatuses: ['Chờ giao lại'],
+    hoanHangStatuses: ['Đang trả hàng', 'Đã trả hàng'],
+    isHoanHang: () => false,
+    orderCounter: spxOrderCount,
+    useHourPrecision: true, // SPX có giờ:phút chi tiết, tính chênh lệch theo giờ thay vì làm tròn ngày
+  },
+}
 
 // Đọc file Excel xuất từ Viettel Post/SPX — tự tìm dòng tiêu đề thật (bỏ qua phần đầu là tên công ty)
-export function parseCarrierFile(arrayBuffer) {
+export function parseCarrierFile(arrayBuffer, carrierType = 'viettel') {
+  const config = CARRIER_CONFIG[carrierType]
   const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
   const ws = wb.Sheets[wb.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, dateNF: 'dd/mm/yyyy HH:mm:ss' })
 
-  const headerIdx = rows.findIndex(r => r.some(cell => String(cell).trim() === REQUIRED_HEADER_CELL))
-  if (headerIdx === -1) throw new Error('Không tìm thấy dòng tiêu đề "Mã Vận Đơn" trong file.')
+  const headerIdx = rows.findIndex(r => r.some(cell => String(cell).trim() === config.requiredHeaderCell))
+  if (headerIdx === -1) throw new Error(`Không tìm thấy dòng tiêu đề "${config.requiredHeaderCell}" trong file.`)
 
   const header = rows[headerIdx].map(h => String(h).trim())
-  const colIdx = Object.fromEntries(KEEP_COLUMNS.map(c => [c, header.indexOf(c)]))
+  const colIdx = Object.fromEntries(config.columns.map(c => [c, header.indexOf(c)]))
 
   const data = rows.slice(headerIdx + 1)
-    .filter(r => r[colIdx['Mã Vận Đơn']])
-    .map(r => Object.fromEntries(KEEP_COLUMNS.map(c => [c, colIdx[c] >= 0 ? String(r[colIdx[c]] ?? '').trim() : ''])))
+    .filter(r => r[colIdx[config.requiredHeaderCell]])
+    .map(r => Object.fromEntries(config.columns.map(c => [c, colIdx[c] >= 0 ? String(r[colIdx[c]] ?? '').trim() : ''])))
 
   return data
 }
 
-const GIAO_LAI_STATUSES = ['Chờ phát lại', 'Phát tiếp']
-const DELIVERED_STATUS = 'Giao thành công'
+export function getCarrierColumns(carrierType = 'viettel') {
+  return CARRIER_CONFIG[carrierType].columns
+}
 
 function diffDaysBetween(fromStr, toStr) {
   const d1 = parseDate(fromStr)
@@ -38,34 +156,43 @@ function diffDaysBetween(fromStr, toStr) {
   return Math.round((d2 - d1) / (1000 * 60 * 60 * 24))
 }
 
-// Mã đơn hàng có thể chứa nhiều mã ghép cách nhau bởi dấu phẩy — mỗi mã tính 1 đơn
-// Riêng mã chứa "CB" là đơn ghép, tính thêm là 2 đơn
-function orderCount(row) {
-  const parts = row['Mã đơn hàng'].split(',').map(s => s.trim()).filter(Boolean)
-  if (parts.length === 0) return 1
-  return parts.reduce((sum, p) => sum + (p.toUpperCase().includes('CB') ? 2 : 1), 0)
+// Chênh lệch chính xác theo giờ (không làm tròn ngày) — dùng cho SPX
+function diffHoursBetween(fromStr, toStr) {
+  const d1 = parseDateTime(fromStr)
+  const d2 = parseDateTime(toStr)
+  if (!d1 || !d2) return null
+  return (d2 - d1) / (1000 * 60 * 60)
 }
 
 // Thống kê: 24h / 48h / 72h / Đang vận chuyển / Giao lại lần 2 / Hoàn hàng
-export function computeCarrierStats(rows) {
+// lookupMap: bảng đối chiếu Mã vận đơn nội bộ (chỉ áp dụng cho Viettel) — xem buildInternalOrderLookup
+export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = null) {
+  const config = CARRIER_CONFIG[carrierType]
   const result = { total: 0, '24h': 0, '48h': 0, '72h': 0, dangVanChuyen: 0, giaoLai: 0, hoanHang: 0 }
 
   for (const row of rows) {
-    const count = orderCount(row)
+    const count = config.orderCounter(row, config, lookupMap)
     result.total += count
 
-    const chuyenHoan = row['Đơn chuyển hoàn'].toLowerCase() === 'x'
-    if (chuyenHoan) { result.hoanHang += count; continue }
+    if (config.isHoanHang(row)) { result.hoanHang += count; continue }
 
-    const status = row['Trạng Thái']
-    if (GIAO_LAI_STATUSES.includes(status)) { result.giaoLai += count; continue }
+    const status = row[config.statusKey]
+    if (config.hoanHangStatuses.includes(status)) { result.hoanHang += count; continue }
+    if (config.giaoLaiStatuses.includes(status)) { result.giaoLai += count; continue }
 
-    if (status !== DELIVERED_STATUS) { result.dangVanChuyen += count; continue }
+    if (status !== config.deliveredStatus) { result.dangVanChuyen += count; continue }
 
-    const diff = diffDaysBetween(row['Ngày tạo'], row['Ngày chuyển trạng thái'])
-    if (diff === 0 || diff === 1) result['24h'] += count
-    else if (diff === 2) result['48h'] += count
-    else result['72h'] += count // >= 3 ngày hoặc không xác định được ngày
+    if (config.useHourPrecision) {
+      const hours = diffHoursBetween(row[config.createdKey], row[config.deliveredAtKey])
+      if (hours !== null && hours <= 24) result['24h'] += count
+      else if (hours !== null && hours <= 48) result['48h'] += count
+      else result['72h'] += count // > 48 giờ hoặc không xác định được thời gian
+    } else {
+      const diff = diffDaysBetween(row[config.createdKey], row[config.deliveredAtKey])
+      if (diff === 0 || diff === 1) result['24h'] += count
+      else if (diff === 2) result['48h'] += count
+      else result['72h'] += count // >= 3 ngày hoặc không xác định được ngày
+    }
   }
 
   return result

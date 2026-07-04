@@ -8,8 +8,8 @@ import ThongKeDoiTac from './ThongKeDoiTac'
 import ExcelUpload from './ExcelUpload'
 import WeekSelector from './WeekSelector'
 
-// Đơn C: gộp Danh sách + Thống kê giao hàng + Đối tác VC thành 1 tab, danh sách chi tiết thu gọn mặc định
-const MERGE_LIST_PARTNER = type => type === 'donC'
+// Gộp Danh sách + Thống kê giao hàng + Đối tác VC thành 1 tab, danh sách chi tiết thu gọn mặc định
+const MERGE_LIST_PARTNER = type => type === 'donC' || type === 'donDTP'
 
 export default function SheetTab({ sheetId, gid, type }) {
   const sheet = useSheetData(sheetId, gid)
@@ -89,13 +89,6 @@ export default function SheetTab({ sheetId, gid, type }) {
         <ExcelUpload onData={addWeek} fileName="" onClear={() => {}} compact />
       </div>
 
-      {/* Chưa có tuần nào: hiện khung upload to */}
-      {weeks.length === 0 && (
-        <div className="mb-4">
-          <ExcelUpload onData={addWeek} fileName="" onClear={() => {}} />
-        </div>
-      )}
-
       {/* Nội dung */}
       {view === 'list' && (
         <DataTable
@@ -117,7 +110,7 @@ export default function SheetTab({ sheetId, gid, type }) {
           ? <div className="text-center py-20 text-gray-400">Đang tải dữ liệu...</div>
           : (
             <div>
-              <ThongKeDoiTac data={activeData} />
+              <ThongKeDoiTac data={activeData} type={type} />
               {merged && (
                 <div className="mt-5">
                   <ThongKeGiaoHang data={activeData} type={type} />

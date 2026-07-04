@@ -150,7 +150,7 @@ function GroupRow({ label, rows, children, depth = 0, hideDetail = false }) {
   )
 }
 
-function SummaryBar({ data, groups }) {
+function SummaryBar({ data, groups, showChanhXe }) {
   const total = data.length
   const doitacTotal = groups.doitac.rows.length
   const viettelCount = groups.doitac.sub.viettel.rows.length
@@ -158,14 +158,16 @@ function SummaryBar({ data, groups }) {
   const viettelPct = doitacTotal ? Math.round((viettelCount / doitacTotal) * 100) : 0
   const spxPct = doitacTotal ? Math.round((spxCount / doitacTotal) * 100) : 0
 
+  const cards = [
+    { label: 'Tổng đơn',                     value: total,                          icon: Package, cls: 'text-[#1e3a5f]', bg: 'bg-blue-50 border-blue-200' },
+    { label: 'Giao hàng trực tiếp',           value: groups.tructiep.rows.length,   icon: CheckCircle, cls: 'text-green-700', bg: 'bg-green-50 border-green-200' },
+    ...(showChanhXe ? [{ label: 'Giao qua Chành xe', value: groups.chanhxe.rows.length, icon: TrendingUp, cls: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' }] : []),
+    { label: 'Giao qua đối tác vận chuyển',   value: doitacTotal,                   icon: TrendingUp, cls: 'text-teal-700', bg: 'bg-teal-50 border-teal-200' },
+  ]
+
   return (
-    <div className="grid grid-cols-4 gap-3 mb-5">
-      {[
-        { label: 'Tổng đơn',                     value: total,                          icon: Package, cls: 'text-[#1e3a5f]', bg: 'bg-blue-50 border-blue-200' },
-        { label: 'Giao hàng trực tiếp',           value: groups.tructiep.rows.length,   icon: CheckCircle, cls: 'text-green-700', bg: 'bg-green-50 border-green-200' },
-        { label: 'Giao qua Chành xe',             value: groups.chanhxe.rows.length,    icon: TrendingUp, cls: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
-        { label: 'Giao qua đối tác vận chuyển',   value: doitacTotal,                   icon: TrendingUp, cls: 'text-teal-700', bg: 'bg-teal-50 border-teal-200' },
-      ].map((c, i) => {
+    <div className={`grid gap-3 mb-5 ${showChanhXe ? 'grid-cols-4' : 'grid-cols-3'}`}>
+      {cards.map((c, i) => {
         const Icon = c.icon
         const pct = total ? Math.round((c.value / total) * 100) : 0
         const isDoiTac = c.label === 'Giao qua đối tác vận chuyển'
@@ -200,13 +202,13 @@ function SummaryBar({ data, groups }) {
   )
 }
 
-export default function ThongKeDoiTac({ data }) {
+export default function ThongKeDoiTac({ data, type }) {
   const groups = useMemo(() => buildGroups(data), [data])
   if (!data.length) return <div className="text-center py-20 text-gray-400">Không có dữ liệu</div>
 
   return (
     <div>
-      <SummaryBar data={data} groups={groups} />
+      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} />
     </div>
   )
 }

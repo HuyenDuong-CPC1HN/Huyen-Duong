@@ -1,6 +1,6 @@
-import { useRef, useState, useMemo, useCallback } from 'react'
-import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp } from 'lucide-react'
-import { parseCarrierFile, computeCarrierStats } from '../utils/parseCarrierExport'
+import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
+import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
+import { parseCarrierFile, computeCarrierStats, getCarrierColumns, buildInternalOrderLookup, reconcileViettelOrders } from '../utils/parseCarrierExport'
 import { ColumnFilter, ResizeHandle } from './DataTable'
 
 const STAT_CARDS = [
@@ -67,14 +67,75 @@ function EditableCarrierStatCard({ col, value, override, onCommit }) {
   )
 }
 
-const TABLE_COLUMNS = ['Mã Vận Đơn', 'Mã đơn hàng', 'Ngày tạo', 'Người nhận', 'Địa chỉ nhận', 'ĐT Nhận', 'Trạng Thái', 'Lý do', 'Đơn chuyển hoàn', 'Ngày chuyển trạng thái']
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 'all']
-const DEFAULT_COL_WIDTH = { 'Mã Vận Đơn': 130, 'Mã đơn hàng': 130, 'Ngày tạo': 140, 'Người nhận': 200, 'Địa chỉ nhận': 260, 'ĐT Nhận': 140, 'Trạng Thái': 130, 'Lý do': 200, 'Đơn chuyển hoàn': 110, 'Ngày chuyển trạng thái': 150 }
+function ReconcilePanel({ vtpRows, internalData }) {
+  const [open, setOpen] = useState(false)
+  const result = useMemo(() => reconcileViettelOrders(vtpRows, internalData), [vtpRows, internalData])
 
-function useColWidths(storageKey) {
+  if (internalData.length === 0) return null
+  const isMatched = result.missingInVtp.length === 0 && result.extraInVtp.length === 0
+
+  return (
+    <div className={`rounded-xl border p-3 mb-4 ${isMatched ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 text-left">
+        {isMatched
+          ? <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
+          : <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />}
+        <span className={`text-sm font-medium ${isMatched ? 'text-green-800' : 'text-amber-800'}`}>
+          {isMatched
+            ? `Khớp hoàn toàn: ${result.internalTotal} đơn nội bộ ↔ ${result.vtpUniqueCodes} mã trong file VTP`
+            : `Lệch dữ liệu: ${result.internalTotal} đơn nội bộ, ${result.vtpUniqueCodes} mã VTP — ${result.missingInVtp.length} đơn chưa thấy trong VTP, ${result.extraInVtp.length} mã VTP không khớp nội bộ`}
+        </span>
+        {(open ? <ChevronUp size={15} className="ml-auto text-gray-400" /> : <ChevronDown size={15} className="ml-auto text-gray-400" />)}
+      </button>
+
+      {open && !isMatched && (
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {result.missingInVtp.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-amber-700 mb-1">
+                Đơn nội bộ chưa thấy trong file VTP ({result.missingInVtp.length})
+              </p>
+              <div className="max-h-40 overflow-y-auto bg-white rounded-lg border border-amber-100 p-2">
+                {result.missingInVtp.map(({ code, row }) => (
+                  <div key={code} className="text-xs text-gray-600 py-0.5 border-b border-gray-50 last:border-0">
+                    <span className="font-mono text-gray-800">{code}</span>
+                    {row['Tên khách hàng'] && <span className="text-gray-400"> — {row['Tên khách hàng']}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {result.extraInVtp.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-amber-700 mb-1">
+                Mã VTP không khớp đơn nội bộ ({result.extraInVtp.length})
+              </p>
+              <div className="max-h-40 overflow-y-auto bg-white rounded-lg border border-amber-100 p-2">
+                {result.extraInVtp.map(code => (
+                  <div key={code} className="text-xs font-mono text-gray-600 py-0.5 border-b border-gray-50 last:border-0">{code}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 'all']
+const DEFAULT_COL_WIDTH = {
+  'Mã Vận Đơn': 130, 'Mã đơn hàng': 130, 'Ngày tạo': 140, 'Người nhận': 200, 'Địa chỉ nhận': 260,
+  'ĐT Nhận': 140, 'Trạng Thái': 130, 'Lý do': 200, 'Đơn chuyển hoàn': 110, 'Ngày chuyển trạng thái': 150,
+  'Mã vận đơn': 150, 'Thời gian tạo đơn': 140, 'Thời gian giao hàng': 140, 'Trạng thái hiện tại': 150,
+  'Tên người nhận': 160, 'Số điện thoại người nhận': 140, 'Mã khách hàng': 140,
+  'Thu COD (Có/Không)': 130, 'Số tiền COD': 120, 'Giá trị đơn hàng': 130,
+}
+
+function useColWidths(storageKey, columns) {
   const lsKey = `carrier_colwidths_${storageKey}`
   const init = () => {
-    const defaults = Object.fromEntries(TABLE_COLUMNS.map(c => [c, DEFAULT_COL_WIDTH[c] ?? 120]))
+    const defaults = Object.fromEntries(columns.map(c => [c, DEFAULT_COL_WIDTH[c] ?? 120]))
     try {
       const saved = JSON.parse(localStorage.getItem(lsKey) || '{}')
       return { ...defaults, ...saved }
@@ -91,7 +152,12 @@ function useColWidths(storageKey) {
   return [widths, setWidth]
 }
 
-export function CarrierPanel({ carrierKey, label }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [] }) {
+  const TABLE_COLUMNS = getCarrierColumns(carrierType)
+  const lookupMap = useMemo(
+    () => carrierType === 'viettel' ? buildInternalOrderLookup(internalData) : null,
+    [internalData, carrierType]
+  )
   const lsKey = `carrier_data_${carrierKey}`
   const inputRef = useRef()
   const [dragging, setDragging] = useState(false)
@@ -104,7 +170,7 @@ export function CarrierPanel({ carrierKey, label }) {
   const [colFilters, setColFilters] = useState({})
   const [pageSize, setPageSize] = useState(50)
   const [tableExpanded, setTableExpanded] = useState(false)
-  const [colWidths, setColWidth] = useColWidths(carrierKey)
+  const [colWidths, setColWidth] = useColWidths(carrierKey, TABLE_COLUMNS)
   const [dangVanChuyenOv, setDangVanChuyenOv] = useStatOverride(carrierKey, 'dangVanChuyen')
   const [giaoLaiOv, setGiaoLaiOv] = useStatOverride(carrierKey, 'giaoLai')
   const [hoanHangOv, setHoanHangOv] = useStatOverride(carrierKey, 'hoanHang')
@@ -117,13 +183,29 @@ export function CarrierPanel({ carrierKey, label }) {
 
   const topScrollRef = useRef()
   const tableScrollRef = useRef()
+  const bottomScrollRef = useRef()
+  const [showBottomScroll, setShowBottomScroll] = useState(false)
 
-  const syncFromTop = useCallback(() => {
-    if (tableScrollRef.current) tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft
+  const syncScrollLeft = useCallback((sourceRef, ...targetRefs) => {
+    for (const ref of targetRefs) {
+      if (ref.current && ref.current.scrollLeft !== sourceRef.current.scrollLeft) {
+        ref.current.scrollLeft = sourceRef.current.scrollLeft
+      }
+    }
   }, [])
-  const syncFromTable = useCallback(() => {
-    if (topScrollRef.current) topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft
-  }, [])
+  const syncFromTop = useCallback(() => syncScrollLeft(topScrollRef, tableScrollRef, bottomScrollRef), [syncScrollLeft])
+  const syncFromTable = useCallback(() => syncScrollLeft(tableScrollRef, topScrollRef, bottomScrollRef), [syncScrollLeft])
+  const syncFromBottom = useCallback(() => syncScrollLeft(bottomScrollRef, topScrollRef, tableScrollRef), [syncScrollLeft])
+
+  useEffect(() => {
+    const el = tableScrollRef.current
+    if (!el || !tableExpanded) { setShowBottomScroll(false); return }
+    const update = () => setShowBottomScroll(el.scrollWidth > el.clientWidth)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [tableExpanded, stableWidth])
 
   const setColFilter = (key, vals) => setColFilters(f => ({ ...f, [key]: vals }))
 
@@ -133,7 +215,7 @@ export function CarrierPanel({ carrierKey, label }) {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const rows = parseCarrierFile(e.target.result)
+        const rows = parseCarrierFile(e.target.result, carrierType)
         if (rows.length === 0) { setError('Không tìm thấy dữ liệu đơn hàng trong file.'); return }
         const next = { fileName: file.name, uploadedAt: new Date().toISOString(), rows }
         setState(next)
@@ -156,7 +238,7 @@ export function CarrierPanel({ carrierKey, label }) {
     localStorage.removeItem(lsKey)
   }
 
-  const stats = useMemo(() => state ? computeCarrierStats(state.rows) : null, [state])
+  const stats = useMemo(() => state ? computeCarrierStats(state.rows, carrierType, lookupMap) : null, [state, carrierType, lookupMap])
 
   const activeFilters = Object.entries(colFilters).filter(([, v]) => v?.length > 0)
 
@@ -165,6 +247,20 @@ export function CarrierPanel({ carrierKey, label }) {
     const q = search.toLowerCase()
     return state.rows.filter(row => {
       for (const [key, vals] of activeFilters) {
+        if (!vals.includes(row[key])) return false
+      }
+      if (q) return Object.values(row).some(v => v.toLowerCase().includes(q))
+      return true
+    })
+  }, [state, search, activeFilters])
+
+  // Dữ liệu dùng để tính option cho từng cột: áp dụng mọi filter khác, trừ filter của chính cột đó (lọc liên động)
+  const dataForColumn = useCallback((excludeKey) => {
+    if (!state) return []
+    const q = search.toLowerCase()
+    return state.rows.filter(row => {
+      for (const [key, vals] of activeFilters) {
+        if (key === excludeKey) continue
         if (!vals.includes(row[key])) return false
       }
       if (q) return Object.values(row).some(v => v.toLowerCase().includes(q))
@@ -262,6 +358,9 @@ export function CarrierPanel({ carrierKey, label }) {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
+            <span className="text-xs text-gray-400 whitespace-nowrap">
+              {activeFilters.length > 0 || search ? `${filteredRows.length}/${state.rows.length} dòng (đã lọc)` : `${state.rows.length} dòng`}
+            </span>
             <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>Hiển thị</span>
               <select
@@ -292,7 +391,7 @@ export function CarrierPanel({ carrierKey, label }) {
                       <span className={colFilters[c]?.length > 0 ? 'text-yellow-300' : 'text-white'}>{c}</span>
                       <ColumnFilter
                         colKey={c}
-                        data={state.rows}
+                        data={dataForColumn(c)}
                         selected={colFilters[c] || []}
                         onChange={vals => setColFilter(c, vals)}
                       />
@@ -317,6 +416,17 @@ export function CarrierPanel({ carrierKey, label }) {
               <div className="text-center py-2 text-xs text-gray-400">Hiển thị {pageSize}/{filteredRows.length} dòng</div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Thanh scroll cố định dưới cùng màn hình — luôn thấy được dù cuộn tới đâu */}
+      {showBottomScroll && (
+        <div
+          ref={bottomScrollRef}
+          onScroll={syncFromBottom}
+          style={{ position: 'fixed', left: 0, right: 0, bottom: 0, overflowX: 'scroll', overflowY: 'hidden', height: 16, zIndex: 40, background: 'white', borderTop: '1px solid #e5e7eb' }}
+        >
+          <div style={{ height: 1, width: stableWidth }} />
         </div>
       )}
     </div>
@@ -347,8 +457,8 @@ export default function CarrierStats({ type }) {
         )}
       </div>
 
-      {tab === 'viettel' && <CarrierPanel carrierKey={`${type}_viettel`} label="Viettel Post" />}
-      {tab === 'spx' && showSpx && <CarrierPanel carrierKey={`${type}_spx`} label="SPX Express" />}
+      {tab === 'viettel' && <CarrierPanel carrierKey={`${type}_viettel`} label="Viettel Post" carrierType="viettel" />}
+      {tab === 'spx' && showSpx && <CarrierPanel carrierKey={`${type}_spx`} label="SPX Express" carrierType="spx" />}
     </div>
   )
 }

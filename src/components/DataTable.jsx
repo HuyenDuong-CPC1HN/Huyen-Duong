@@ -2,7 +2,6 @@ import { useState, useMemo, useRef, useEffect, useCallback, useReducer } from 'r
 import { Search, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react'
 import { COLUMNS } from '../config'
 import StatusBadge from './StatusBadge'
-import SummaryCards from './SummaryCards'
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 'all']
 
@@ -16,6 +15,8 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
     [...new Set(data.map(r => r[colKey]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')),
     [data, colKey]
   )
+
+  const hasBlank = useMemo(() => data.some(r => !r[colKey]), [data, colKey])
 
   const filteredOptions = useMemo(() => {
     if (!query.trim()) return options
@@ -54,7 +55,7 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
     setTimeout(() => setPasteInfo(null), 3000)
   }
 
-  if (options.length === 0) return null
+  if (options.length === 0 && !hasBlank) return null
 
   const hasFilter = selected.length > 0
 
@@ -91,8 +92,21 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
           </div>
           {/* Options */}
           <div className="overflow-y-auto">
+            {hasBlank && (
+              <label
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-blue-50 border-b border-gray-100 ${selected.includes('') ? 'bg-blue-50/60 text-blue-700 font-medium' : 'text-gray-500 italic'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes('')}
+                  onChange={() => toggle('')}
+                  className="accent-blue-500 flex-shrink-0"
+                />
+                <span>(Trống)</span>
+              </label>
+            )}
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-gray-400">Không tìm thấy</div>
+              !hasBlank && <div className="px-3 py-2 text-xs text-gray-400">Không tìm thấy</div>
             ) : filteredOptions.map(opt => {
               const checked = selected.includes(opt)
               return (
@@ -198,19 +212,35 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh, 
   const [colWidths, setColWidth] = useColWidths()
   const topScrollRef = useRef()
   const tableScrollRef = useRef()
+  const bottomScrollRef = useRef()
   const minTableWidthRef = useRef(0)
+  const [showBottomScroll, setShowBottomScroll] = useState(false)
 
   const totalTableWidth = 36 + Object.values(colWidths).reduce((a, b) => a + b, 0)
   // Chỉ tăng, không bao giờ giảm
   minTableWidthRef.current = Math.max(minTableWidthRef.current, totalTableWidth)
   const stableWidth = minTableWidthRef.current
 
-  const syncFromTop = useCallback(() => {
-    if (tableScrollRef.current) tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft
+  const syncScrollLeft = useCallback((sourceRef, ...targetRefs) => {
+    for (const ref of targetRefs) {
+      if (ref.current && ref.current.scrollLeft !== sourceRef.current.scrollLeft) {
+        ref.current.scrollLeft = sourceRef.current.scrollLeft
+      }
+    }
   }, [])
-  const syncFromTable = useCallback(() => {
-    if (topScrollRef.current) topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft
-  }, [])
+  const syncFromTop = useCallback(() => syncScrollLeft(topScrollRef, tableScrollRef, bottomScrollRef), [syncScrollLeft])
+  const syncFromTable = useCallback(() => syncScrollLeft(tableScrollRef, topScrollRef, bottomScrollRef), [syncScrollLeft])
+  const syncFromBottom = useCallback(() => syncScrollLeft(bottomScrollRef, topScrollRef, tableScrollRef), [syncScrollLeft])
+
+  useEffect(() => {
+    const el = tableScrollRef.current
+    if (!el) return
+    const update = () => setShowBottomScroll(el.scrollWidth > el.clientWidth)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [stableWidth])
 
   const setColFilter = (key, vals) => {
     setColFilters(f => ({ ...f, [key]: vals }))
@@ -220,6 +250,19 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh, 
   const activeFilters = Object.entries(colFilters).filter(([, v]) => v?.length > 0)
 
   const clearAll = () => { setColFilters({}); setSearch(''); setPage(1) }
+
+  // Dữ liệu dùng để tính option cho từng cột: áp dụng mọi filter khác, trừ filter của chính cột đó (lọc liên động)
+  const dataForColumn = useCallback((excludeKey) => {
+    const q = search.toLowerCase()
+    return data.filter(row => {
+      for (const [key, vals] of activeFilters) {
+        if (key === excludeKey) continue
+        if (!vals.includes(row[key])) return false
+      }
+      if (q) return Object.values(row).some(v => v.toLowerCase().includes(q))
+      return true
+    })
+  }, [data, search, activeFilters])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -244,11 +287,9 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh, 
 
   return (
     <div>
-      <SummaryCards data={filtered} />
-
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2 mb-3 items-center">
-        <div className="relative flex-1 min-w-48">
+        <div className="relative w-56 flex-shrink-0">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
@@ -257,6 +298,9 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh, 
             onChange={e => { setSearch(e.target.value); setPage(1) }}
           />
         </div>
+        <span className="text-xs text-gray-400 whitespace-nowrap">
+          {activeFilters.length > 0 || search ? `${filtered.length}/${data.length} dòng (đã lọc)` : `${data.length} dòng`}
+        </span>
         <div className="flex items-center gap-1.5 text-sm text-gray-500">
           <span>Hiển thị</span>
           <select
@@ -335,7 +379,7 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh, 
                       <span className={colFilters[col.key]?.length > 0 ? 'text-yellow-300' : 'text-white'}>{col.label}</span>
                       <ColumnFilter
                         colKey={col.key}
-                        data={data}
+                        data={dataForColumn(col.key)}
                         selected={colFilters[col.key] || []}
                         onChange={vals => setColFilter(col.key, vals)}
                       />
@@ -411,6 +455,17 @@ export default function DataTable({ data, loading, error, refresh, lastRefresh, 
         )}
         </div>
       </div>
+
+      {/* Thanh scroll cố định dưới cùng màn hình — luôn thấy được dù cuộn tới đâu */}
+      {showBottomScroll && (
+        <div
+          ref={bottomScrollRef}
+          onScroll={syncFromBottom}
+          style={{ position: 'fixed', left: 0, right: 0, bottom: 0, overflowX: 'scroll', overflowY: 'hidden', height: 16, zIndex: 40, background: 'white', borderTop: '1px solid #e5e7eb' }}
+        >
+          <div style={{ height: 1, width: stableWidth }} />
+        </div>
+      )}
     </div>
   )
 }

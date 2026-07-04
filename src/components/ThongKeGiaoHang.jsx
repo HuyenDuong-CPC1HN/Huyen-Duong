@@ -306,7 +306,7 @@ function ChanhXeDetail({ rows }) {
   )
 }
 
-function GroupCard({ g, type }) {
+function GroupCard({ g, type, internalData }) {
   const [override, commitOverride] = useChuaGiaoOverride(`${type}_${g.key}`)
   const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${type}_${g.key}_chuagui`)
   const [open, setOpen] = useState(false)
@@ -326,7 +326,12 @@ function GroupCard({ g, type }) {
         </div>
         {open && (
           <div className="p-4">
-            <CarrierPanel carrierKey={`${type}_${CARRIER_KEY_MAP[g.key]}`} label={g.label} />
+            <CarrierPanel
+              carrierKey={`${type}_${CARRIER_KEY_MAP[g.key]}`}
+              label={g.label}
+              carrierType={CARRIER_KEY_MAP[g.key]}
+              internalData={internalData}
+            />
           </div>
         )}
       </div>
@@ -487,51 +492,20 @@ export default function ThongKeGiaoHang({ data, type }) {
     })
   }, [validData, type])
 
-  const unmatched = useMemo(() => {
-    return validData.filter(row => !partners.some(p => p.match(row)))
-  }, [validData, type])
-
   const mainGroups = groups.filter(g => !g.carrierGroup)
   const carrierGroups = groups.filter(g => g.carrierGroup)
   const carrierTotal = carrierGroups.reduce((s, g) => s + g.rows.length, 0)
 
   return (
     <div className="space-y-4">
-      {mainGroups.map(g => <GroupCard key={g.key} g={g} type={type} />)}
+      {mainGroups.map(g => <GroupCard key={g.key} g={g} type={type} internalData={validData} />)}
 
       {carrierGroups.length > 0 && (
         <CarrierParentGroup label="Giao qua đối tác vận chuyển" total={carrierTotal}>
-          {carrierGroups.map(g => <GroupCard key={g.key} g={g} type={type} />)}
+          {carrierGroups.map(g => <GroupCard key={g.key} g={g} type={type} internalData={validData} />)}
         </CarrierParentGroup>
       )}
 
-      {unmatched.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
-            <span className="text-sm text-gray-500 font-medium">Đối tác khác / Chưa phân loại</span>
-            <span className="ml-auto bg-gray-400 text-white text-xs font-bold px-2.5 py-1 rounded-full">{unmatched.length} đơn</span>
-          </div>
-          <div className="p-4">
-            {(() => {
-              const st = calcStats(unmatched)
-              return (
-                <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>
-                  {STAT_COLS.map(col => {
-                    const Icon = col.icon
-                    return (
-                      <div key={col.key} className={`rounded-xl border p-3 ${col.bg} text-center`}>
-                        <Icon size={16} className={`${col.cls} mx-auto mb-1`} />
-                        <div className={`text-xl font-bold ${col.cls}`}>{st[col.key]}</div>
-                        <div className="text-xs text-gray-500 mt-0.5 leading-tight">{col.label}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })()}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
