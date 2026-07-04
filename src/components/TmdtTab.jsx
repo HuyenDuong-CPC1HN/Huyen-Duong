@@ -261,7 +261,7 @@ export default function TmdtTab() {
                   <td key={s} className="px-4 py-3 text-center font-bold text-gray-800">{r.counts[s] || 0}</td>
                 ))}
                 <td className="px-4 py-3 text-center">
-                  <span className="bg-[#1e3a5f] text-white text-xs font-bold px-2.5 py-1 rounded-full">{r.total}</span>
+                  <span className="inline-block bg-[#1e3a5f] text-white text-sm font-bold px-4 py-1.5 rounded min-w-16">{r.total}</span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1 justify-end">

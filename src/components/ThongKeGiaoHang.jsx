@@ -2,7 +2,7 @@ import { useMemo, useState, useRef, useEffect } from 'react'
 import { Truck, CheckCircle, Clock, RotateCcw, XCircle, AlertCircle, Package, Users, Pencil, Check, ChevronUp, ChevronDown } from 'lucide-react'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
-import { CarrierPanel } from './CarrierStats'
+import { CarrierPanel, getCarrierFileTotal } from './CarrierStats'
 import { DetailTable } from './ThongKeDoiTac'
 
 function parseDate(str) {
@@ -215,19 +215,22 @@ function TrucTiepBucketTable({ rows }) {
   )
 }
 
-function ChuaGiaoBreakdown({ type, storageKey }) {
-  const khTypes = KH_TYPES[type] || []
+function useKhBreakdownValues(storageKey) {
   const lsKey = `chuagiao_kh_${storageKey}`
-
   const [values, setValues] = useState(() => {
     try { return JSON.parse(localStorage.getItem(lsKey) || '{}') } catch { return {} }
   })
-
   const handleChange = (key, val) => {
     const next = { ...values, [key]: val }
     setValues(next)
     localStorage.setItem(lsKey, JSON.stringify(next))
   }
+  return [values, handleChange]
+}
+
+function ChuaGiaoBreakdown({ type, values, onChange }) {
+  const khTypes = KH_TYPES[type] || []
+  const handleChange = onChange
 
   return (
     <div className="mt-3 pt-3 border-t border-yellow-100">
@@ -309,10 +312,17 @@ function ChanhXeDetail({ rows }) {
 function GroupCard({ g, type, internalData }) {
   const [override, commitOverride] = useChuaGiaoOverride(`${type}_${g.key}`)
   const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${type}_${g.key}_chuagui`)
+  const [khValues, setKhValue] = useKhBreakdownValues(`${type}_${g.key}`)
   const [open, setOpen] = useState(false)
+
+  // "Chưa giao" = tổng các ô phân loại khách hàng (Bệnh viện + Nhà thuốc + KH ONL...) khi có nhập
+  const khBreakdownSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
 
   // Viettel Post / SPX Express: nhúng trực tiếp khung đối soát (upload file xuất, thống kê thật)
   if (CARRIER_KEY_MAP[g.key]) {
+    const carrierType = CARRIER_KEY_MAP[g.key]
+    const fileData = getCarrierFileTotal(`${type}_${carrierType}`, carrierType, internalData)
+    const badgeValue = fileData ? fileData.total : g.rows.length
     return (
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div
@@ -321,7 +331,7 @@ function GroupCard({ g, type, internalData }) {
         >
           <Truck size={16} className="text-gray-500" />
           <span className="font-semibold text-gray-700">{g.label}</span>
-          <OrderBadge value={g.rows.length} />
+          <OrderBadge value={badgeValue} />
           {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
         </div>
         {open && (
@@ -380,7 +390,9 @@ function GroupCard({ g, type, internalData }) {
     )
   }
 
-  const effectiveChuaGiao = override !== '' ? Number(override) : g.stats.chuaGiao
+  const effectiveChuaGiao = g.showKhBreakdown
+    ? khBreakdownSum
+    : (override !== '' ? Number(override) : g.stats.chuaGiao)
   const totalWithOverride = g.stats['24h'] + g.stats['48h'] + g.stats['72h'] + effectiveChuaGiao
     + (g.cols.includes('giaoLai') ? g.stats.giaoLai : 0)
     + (g.cols.includes('hoanHang') ? g.stats.hoanHang : 0)
@@ -406,6 +418,15 @@ function GroupCard({ g, type, internalData }) {
             const Icon = col.icon
             const val = g.stats[col.key]
             const label = (g.labelMap && g.labelMap[col.key]) || col.label
+            if (col.key === 'chuaGiao' && g.showKhBreakdown) {
+              return (
+                <div key={col.key} className={`rounded-xl border p-3 ${col.bg} text-center`} title="Bằng tổng phân loại khách hàng bên dưới">
+                  <Icon size={16} className={`${col.cls} mx-auto mb-1`} />
+                  <div className={`text-xl font-bold ${col.cls}`}>{khBreakdownSum}</div>
+                  <div className="text-xs text-gray-500 mt-0.5 leading-tight">{label}</div>
+                </div>
+              )
+            }
             if (col.key === 'chuaGiao') {
               return (
                 <EditableStatCard
@@ -433,7 +454,7 @@ function GroupCard({ g, type, internalData }) {
 
         {/* Phân loại khách hàng chưa giao — chỉ giao trực tiếp */}
         {g.showKhBreakdown && (
-          <ChuaGiaoBreakdown type={type} storageKey={`${type}_${g.key}`} />
+          <ChuaGiaoBreakdown type={type} values={khValues} onChange={setKhValue} />
         )}
 
         {totalWithOverride > 0 && (() => {
@@ -460,7 +481,48 @@ function GroupCard({ g, type, internalData }) {
   )
 }
 
-function CarrierParentGroup({ label, children, total }) {
+// So sánh nhanh số đơn nội bộ (Excel Đơn C/DTP) và số đơn theo file VTP/SPX đã upload
+function CarrierCompareSummary({ carrierGroups, type, internalData }) {
+  const rows = carrierGroups.map(g => {
+    const carrierKey = CARRIER_KEY_MAP[g.key]
+    const fileData = getCarrierFileTotal(`${type}_${carrierKey}`, carrierKey, internalData)
+    return { label: g.label, internalTotal: g.rows.length, fileData }
+  }).filter(r => r.fileData)
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="mb-3 bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
+            <th className="text-left px-3 py-2 font-medium">Đơn vị</th>
+            <th className="text-center px-3 py-2 font-medium">Nội bộ (Excel)</th>
+            <th className="text-center px-3 py-2 font-medium">File đã upload</th>
+            <th className="text-center px-3 py-2 font-medium">Chênh lệch</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => {
+            const delta = r.internalTotal - r.fileData.total
+            return (
+              <tr key={r.label} className="border-b border-gray-50 last:border-0">
+                <td className="px-3 py-2 text-gray-700 font-medium">{r.label}</td>
+                <td className="px-3 py-2 text-center font-semibold text-[#1e3a5f]">{r.internalTotal}</td>
+                <td className="px-3 py-2 text-center font-semibold text-teal-700">{r.fileData.total}</td>
+                <td className={`px-3 py-2 text-center font-semibold ${delta === 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                  {delta === 0 ? 'Khớp' : (delta > 0 ? `+${delta}` : delta)}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function CarrierParentGroup({ label, children, total, carrierGroups, type, internalData }) {
   const [open, setOpen] = useState(true)
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -473,7 +535,12 @@ function CarrierParentGroup({ label, children, total }) {
         <OrderBadge value={total} />
         {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
       </div>
-      {open && <div className="p-3 pl-8 space-y-3 bg-gray-50/50 border-l-4 border-blue-200 ml-4">{children}</div>}
+      {open && (
+        <div className="p-3 pl-8 bg-gray-50/50 border-l-4 border-blue-200 ml-4">
+          <CarrierCompareSummary carrierGroups={carrierGroups} type={type} internalData={internalData} />
+          <div className="space-y-3">{children}</div>
+        </div>
+      )}
     </div>
   )
 }
@@ -494,14 +561,18 @@ export default function ThongKeGiaoHang({ data, type }) {
 
   const mainGroups = groups.filter(g => !g.carrierGroup)
   const carrierGroups = groups.filter(g => g.carrierGroup)
-  const carrierTotal = carrierGroups.reduce((s, g) => s + g.rows.length, 0)
+  const carrierTotal = carrierGroups.reduce((s, g) => {
+    const carrierType = CARRIER_KEY_MAP[g.key]
+    const fileData = getCarrierFileTotal(`${type}_${carrierType}`, carrierType, validData)
+    return s + (fileData ? fileData.total : g.rows.length)
+  }, 0)
 
   return (
     <div className="space-y-4">
       {mainGroups.map(g => <GroupCard key={g.key} g={g} type={type} internalData={validData} />)}
 
       {carrierGroups.length > 0 && (
-        <CarrierParentGroup label="Giao qua đối tác vận chuyển" total={carrierTotal}>
+        <CarrierParentGroup label="Giao qua đối tác vận chuyển" total={carrierTotal} carrierGroups={carrierGroups} type={type} internalData={validData}>
           {carrierGroups.map(g => <GroupCard key={g.key} g={g} type={type} internalData={validData} />)}
         </CarrierParentGroup>
       )}

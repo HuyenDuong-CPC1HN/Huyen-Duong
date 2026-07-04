@@ -204,7 +204,9 @@ function EditableVCCell({ value, rowIndex, onSave }) {
   )
 }
 
-export default function DataTable({ data, loading, error, refresh, lastRefresh, onEditVC }) {
+export default function DataTable({ data: rawData, loading, error, refresh, lastRefresh, onEditVC }) {
+  // Bỏ các dòng không có Mã kiện hàng (dòng tổng/dòng trống trong file Excel)
+  const data = useMemo(() => rawData.filter(row => String(row['Mã kiện hàng'] ?? '').trim() !== ''), [rawData])
   const [search, setSearch] = useState('')
   const [colFilters, setColFilters] = useState({})
   const [page, setPage] = useState(1)

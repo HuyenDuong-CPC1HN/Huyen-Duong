@@ -30,7 +30,9 @@ export function useWeeklyData(type) {
 
   const addWeek = (rows, fileName) => {
     const now = new Date()
-    const label = `Tuần ${getWeekNumber(now)} - ${now.getFullYear()}`
+    const label = fileName
+      ? fileName.replace(/\.(xlsx|xls|csv)$/i, '')
+      : `Tuần ${getWeekNumber(now)} - ${now.getFullYear()}`
     const id = `${type}_${Date.now()}`
     const newWeek = { id, label, fileName, uploadedAt: now.toISOString(), data: rows }
 

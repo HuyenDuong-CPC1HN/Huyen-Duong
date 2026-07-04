@@ -15,8 +15,15 @@ export function diffDays(row) {
   return Math.round((d2 - d1) / (1000 * 60 * 60 * 24))
 }
 
+// Người đặt hàng chứa "Tân Thịnh" luôn tính là giao 24 giờ, bất kể chênh lệch ngày thực tế
+function isTanThinh(row) {
+  return (row['Người đặt hàng'] || '').toLowerCase().includes('tân thịnh')
+}
+
 // Phân loại mốc giao hàng trực tiếp: '24' | '48' | '72' | 'khac'
 export function deliveryBucket(row) {
+  if (isTanThinh(row)) return '24'
+
   const diff = diffDays(row)
   if (diff === 0 || diff === 1) return '24'
   if (diff === 2) return '48'

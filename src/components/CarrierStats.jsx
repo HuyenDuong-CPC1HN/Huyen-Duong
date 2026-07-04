@@ -12,6 +12,32 @@ const STAT_CARDS = [
   { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200', editable: true },
 ]
 
+// Đọc nhanh tổng đơn theo file đã upload cho 1 carrier (dùng để hiển thị khung tổng quan so sánh)
+export function getCarrierFileTotal(carrierKey, carrierType, internalData) {
+  try {
+    const state = JSON.parse(localStorage.getItem(`carrier_data_${carrierKey}`) || 'null')
+    if (!state) return null
+
+    const lookupMap = carrierType === 'viettel' ? buildInternalOrderLookup(internalData) : null
+    const stats = computeCarrierStats(state.rows, carrierType, lookupMap)
+
+    const readOverride = (key) => {
+      const v = localStorage.getItem(`carrier_statoverride_${carrierKey}_${key}`)
+      return v ? Number(v) : null
+    }
+    const dangVanChuyen = readOverride('dangVanChuyen') ?? stats.dangVanChuyen
+    const giaoLai = readOverride('giaoLai') ?? stats.giaoLai
+    const hoanHang = readOverride('hoanHang') ?? stats.hoanHang
+
+    return {
+      fileName: state.fileName,
+      total: stats['24h'] + stats['48h'] + stats['72h'] + dangVanChuyen + giaoLai + hoanHang,
+    }
+  } catch {
+    return null
+  }
+}
+
 function useStatOverride(storageKey, statKey) {
   const lsKey = `carrier_statoverride_${storageKey}_${statKey}`
   const [override, setOverride] = useState(() => localStorage.getItem(lsKey) ?? '')

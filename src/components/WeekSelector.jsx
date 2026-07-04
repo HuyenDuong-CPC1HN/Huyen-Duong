@@ -19,7 +19,7 @@ export default function WeekSelector({ weeks, activeId, onSelect, onRemove, onRe
   const startEdit = (w, e) => {
     e.stopPropagation()
     setEditingId(w.id)
-    setEditLabel(w.label)
+    setEditLabel(w.fileName ? w.fileName.replace(/\.(xlsx|xls|csv)$/i, '') : w.label)
   }
 
   const confirmEdit = (e) => {

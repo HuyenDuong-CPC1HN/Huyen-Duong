@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Package, CheckCircle, TrendingUp } from 'lucide
 import StatusBadge from './StatusBadge'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
+import { getCarrierFileTotal } from './CarrierStats'
 
 function buildGroups(data) {
   const groups = {
@@ -150,17 +151,29 @@ function GroupRow({ label, rows, children, depth = 0, hideDetail = false }) {
   )
 }
 
-function SummaryBar({ data, groups, showChanhXe }) {
-  const total = data.length
-  const doitacTotal = groups.doitac.rows.length
-  const viettelCount = groups.doitac.sub.viettel.rows.length
-  const spxCount = groups.doitac.sub.spx.rows.length
+function SummaryBar({ data, groups, showChanhXe, type }) {
+  // Ưu tiên lấy theo file VTP/SPX đã upload; chưa có file thì tạm dùng số đếm từ Excel nội bộ
+  const viettelFile = getCarrierFileTotal(`${type}_viettel`, 'viettel', data)
+  const spxFile = getCarrierFileTotal(`${type}_spx`, 'spx', data)
+  const viettelCount = viettelFile ? viettelFile.total : groups.doitac.sub.viettel.rows.length
+  const spxCount = spxFile ? spxFile.total : groups.doitac.sub.spx.rows.length
+  const doitacTotal = viettelCount + spxCount
   const viettelPct = doitacTotal ? Math.round((viettelCount / doitacTotal) * 100) : 0
   const spxPct = doitacTotal ? Math.round((spxCount / doitacTotal) * 100) : 0
 
+  // Kế thừa đúng số từ khung "Giao hàng trực tiếp" chi tiết (24h+48h+72h + Chưa giao nhập tay theo khách hàng)
+  const trucTiepDelivered = groups.tructiep.sub[24].length + groups.tructiep.sub[48].length + groups.tructiep.sub[72].length
+  let khSum = 0
+  try {
+    const khValues = JSON.parse(localStorage.getItem(`chuagiao_kh_${type}_tructIep`) || '{}')
+    khSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
+  } catch { /* ignore */ }
+  const trucTiepTotal = trucTiepDelivered + khSum
+  const total = trucTiepTotal + (showChanhXe ? groups.chanhxe.rows.length : 0) + doitacTotal
+
   const cards = [
     { label: 'Tổng đơn',                     value: total,                          icon: Package, cls: 'text-[#1e3a5f]', bg: 'bg-blue-50 border-blue-200' },
-    { label: 'Giao hàng trực tiếp',           value: groups.tructiep.rows.length,   icon: CheckCircle, cls: 'text-green-700', bg: 'bg-green-50 border-green-200' },
+    { label: 'Giao hàng trực tiếp',           value: trucTiepTotal,                 icon: CheckCircle, cls: 'text-green-700', bg: 'bg-green-50 border-green-200' },
     ...(showChanhXe ? [{ label: 'Giao qua Chành xe', value: groups.chanhxe.rows.length, icon: TrendingUp, cls: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' }] : []),
     { label: 'Giao qua đối tác vận chuyển',   value: doitacTotal,                   icon: TrendingUp, cls: 'text-teal-700', bg: 'bg-teal-50 border-teal-200' },
   ]
@@ -208,7 +221,7 @@ export default function ThongKeDoiTac({ data, type }) {
 
   return (
     <div>
-      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} />
+      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} type={type} />
     </div>
   )
 }
