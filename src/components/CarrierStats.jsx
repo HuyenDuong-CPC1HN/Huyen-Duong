@@ -12,8 +12,8 @@ const STAT_CARDS = [
   { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200', editable: true },
 ]
 
-// Đọc nhanh tổng đơn theo file đã upload cho 1 carrier (dùng để hiển thị khung tổng quan so sánh)
-export function getCarrierFileTotal(carrierKey, carrierType, internalData) {
+// Đọc nhanh toàn bộ thống kê (24h/48h/72h/đang vận chuyển/giao lại/hoàn hàng) theo file đã upload cho 1 carrier
+export function getCarrierFileStats(carrierKey, carrierType, internalData) {
   try {
     const state = JSON.parse(localStorage.getItem(`carrier_data_${carrierKey}`) || 'null')
     if (!state) return null
@@ -28,13 +28,49 @@ export function getCarrierFileTotal(carrierKey, carrierType, internalData) {
     const dangVanChuyen = readOverride('dangVanChuyen') ?? stats.dangVanChuyen
     const giaoLai = readOverride('giaoLai') ?? stats.giaoLai
     const hoanHang = readOverride('hoanHang') ?? stats.hoanHang
+    const effectiveStats = { ...stats, dangVanChuyen, giaoLai, hoanHang }
 
     return {
       fileName: state.fileName,
-      total: stats['24h'] + stats['48h'] + stats['72h'] + dangVanChuyen + giaoLai + hoanHang,
+      stats: effectiveStats,
+      total: effectiveStats['24h'] + effectiveStats['48h'] + effectiveStats['72h'] + dangVanChuyen + giaoLai + hoanHang,
     }
   } catch {
     return null
+  }
+}
+
+// Giữ tương thích ngược — chỉ lấy tổng đơn
+export function getCarrierFileTotal(carrierKey, carrierType, internalData) {
+  return getCarrierFileStats(carrierKey, carrierType, internalData)
+}
+
+const CARRIER_HISTORY_MAX = 8
+
+// Mỗi lần upload file mới, lưu lại 1 bản ghi lịch sử (tối đa 8 lần gần nhất) — dùng để so sánh "tuần trước"
+export function pushCarrierHistory(carrierKey, entry) {
+  try {
+    const lsKey = `carrier_history_${carrierKey}`
+    const history = JSON.parse(localStorage.getItem(lsKey) || '[]')
+    history.unshift(entry)
+    localStorage.setItem(lsKey, JSON.stringify(history.slice(0, CARRIER_HISTORY_MAX)))
+  } catch { /* ignore */ }
+}
+
+// So sánh 2 lần upload gần nhất (hiện tại vs lần trước) cho 1 carrier
+export function getCarrierHistoryCompare(carrierKey, carrierType, internalData) {
+  try {
+    const history = JSON.parse(localStorage.getItem(`carrier_history_${carrierKey}`) || '[]')
+    const buildStats = (entry) => {
+      if (!entry) return null
+      const lookupMap = carrierType === 'viettel' ? buildInternalOrderLookup(internalData) : null
+      const stats = computeCarrierStats(entry.rows, carrierType, lookupMap)
+      const total = stats['24h'] + stats['48h'] + stats['72h'] + stats.dangVanChuyen + stats.giaoLai + stats.hoanHang
+      return { fileName: entry.fileName, stats, total }
+    }
+    return { current: buildStats(history[0]), previous: buildStats(history[1]) }
+  } catch {
+    return { current: null, previous: null }
   }
 }
 
@@ -246,6 +282,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
         const next = { fileName: file.name, uploadedAt: new Date().toISOString(), rows }
         setState(next)
         localStorage.setItem(lsKey, JSON.stringify(next))
+        pushCarrierHistory(carrierKey, next)
       } catch (err) {
         setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
       }
