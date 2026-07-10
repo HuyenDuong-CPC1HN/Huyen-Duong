@@ -141,10 +141,28 @@ function computeWeekReport({ dataC, dataDTP, weekKey, tmdtTotal, viettelCompareC
 // ---------- UI bits ----------
 function SectionHeader({ num, title, icon: Icon, color }) {
   return (
-    <div className="flex items-center gap-2.5 mb-3">
-      <span className="w-7 h-7 rounded-full text-white flex items-center justify-center text-sm font-bold flex-shrink-0" style={{ background: color }}>{num}</span>
-      <h3 className="font-bold text-gray-800 tracking-wide">{title}</h3>
-      <Icon size={18} className="text-gray-300 ml-auto" />
+    <div className="flex items-center gap-2.5 mb-4">
+      <span
+        className="w-8 h-8 rounded-full text-white flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-md"
+        style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)`, boxShadow: `0 3px 8px ${color}55` }}
+      >
+        {num}
+      </span>
+      <h3 className="font-bold text-gray-800 tracking-wide text-[15px]">{title}</h3>
+      <span className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${color}12` }}>
+        <Icon size={16} style={{ color }} />
+      </span>
+    </div>
+  )
+}
+
+function SectionCard({ accent, children, className = '' }) {
+  return (
+    <div
+      className={`bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-5 ${className}`}
+      style={{ borderTop: `3px solid ${accent}` }}
+    >
+      {children}
     </div>
   )
 }
@@ -192,8 +210,8 @@ function OverviewTable({ rows }) {
 
 function InsightCard({ icon: Icon, color, title, text, onTextChange, editable, placeholder }) {
   return (
-    <div className="flex gap-3 bg-white rounded-lg border border-gray-100 p-3">
-      <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}18` }}>
+    <div className="flex gap-3 bg-gray-50/70 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 transition-colors">
+      <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm" style={{ background: `${color}18` }}>
         <Icon size={17} style={{ color }} />
       </span>
       <div className="min-w-0 flex-1">
@@ -228,8 +246,8 @@ function PartnerCompareRow({ label, v1, v2 }) {
 
 function SolutionCard({ num, text, onChange }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-100 p-3 flex gap-2 flex-1 min-w-[180px]">
-      <span className="w-6 h-6 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">{num}</span>
+    <div className="bg-gray-50/70 rounded-xl border border-gray-100 p-3 flex gap-2 flex-1 min-w-[180px] hover:bg-gray-50 transition-colors">
+      <span className="w-6 h-6 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm">{num}</span>
       <textarea
         value={text}
         onChange={e => onChange(e.target.value)}
@@ -285,15 +303,58 @@ export default function TongDonTab() {
 
   const [reportTitle, setReportTitle] = useWeekField(weekKey, 'title', 'Báo cáo giao hàng - CN HCM')
 
-  const [insight1, setInsight1] = useWeekField(weekKey, 'insight1', '')
-  const [insight2, setInsight2] = useWeekField(weekKey, 'insight2', '')
-  const [insight3, setInsight3] = useWeekField(weekKey, 'insight3', '')
+  // ---- Tự động sinh nhận định dựa trên số liệu Tuần 1 vs Tuần 2 ----
+  const deltaPctOf = (v1, v2) => v1 ? ((v2 - v1) / v1) * 100 : (v2 > 0 ? 100 : 0)
+  const totalDeltaPct = deltaPctOf(previous.grandTotal, current.grandTotal)
+  const groupDeltas = [
+    { name: 'Đơn C', pct: deltaPctOf(previous.totalC, current.totalC), abs: current.totalC - previous.totalC },
+    { name: 'Đơn DTP', pct: deltaPctOf(previous.totalDTP, current.totalDTP), abs: current.totalDTP - previous.totalDTP },
+    { name: 'Sàn TMĐT (SO3+SO6)', pct: deltaPctOf(previous.totalTMDT, current.totalTMDT), abs: current.totalTMDT - previous.totalTMDT },
+  ]
+  const topGroup = [...groupDeltas].sort((a, b) => Math.abs(b.abs) - Math.abs(a.abs))[0]
+  const rate24hDrop = current.rate24h < previous.rate24h
+  const chuaGiaoUp = current.chuaGiao > previous.chuaGiao
 
-  const [sol1, setSol1] = useWeekField(weekKey, 'sol1', '')
-  const [sol2, setSol2] = useWeekField(weekKey, 'sol2', '')
-  const [sol3, setSol3] = useWeekField(weekKey, 'sol3', '')
-  const [sol4, setSol4] = useWeekField(weekKey, 'sol4', '')
-  const [sol5, setSol5] = useWeekField(weekKey, 'sol5', '')
+  const autoInsight1 = totalDeltaPct >= 0
+    ? `Tổng đơn tăng ${totalDeltaPct.toFixed(1)}%, chủ yếu đến từ nhóm ${topGroup.name} (${topGroup.pct >= 0 ? '+' : ''}${topGroup.pct.toFixed(1)}%).`
+    : `Tổng đơn giảm ${Math.abs(totalDeltaPct).toFixed(1)}%, chủ yếu do nhóm ${topGroup.name} (${topGroup.pct >= 0 ? '+' : ''}${topGroup.pct.toFixed(1)}%).`
+
+  const autoInsight2 = (() => {
+    const parts = []
+    if (rate24hDrop) parts.push(`Tỷ lệ giao trực tiếp 24h giảm từ ${previous.rate24h.toFixed(1)}% xuống ${current.rate24h.toFixed(1)}%`)
+    else parts.push(`Tỷ lệ giao trực tiếp 24h ổn định/cải thiện, đạt ${current.rate24h.toFixed(1)}%`)
+    if (chuaGiaoUp) parts.push(`đơn chưa giao tăng từ ${previous.chuaGiao} lên ${current.chuaGiao} đơn`)
+    else if (current.chuaGiao > 0) parts.push(`đơn chưa giao ở mức ${current.chuaGiao} đơn`)
+    return parts.join('; ') + '.'
+  })()
+
+  const autoInsight3 = chuaGiaoUp && totalDeltaPct > 0
+    ? `Sản lượng đơn tăng mạnh (${totalDeltaPct >= 0 ? '+' : ''}${totalDeltaPct.toFixed(1)}%) trong khi năng lực xử lý giao hàng trực tiếp chưa theo kịp, khiến số đơn chưa giao tăng.`
+    : rate24hDrop
+      ? `Tỷ lệ giao 24h giảm dù sản lượng ${totalDeltaPct >= 0 ? 'tăng' : 'giảm'} ${Math.abs(totalDeltaPct).toFixed(1)}% — cần rà soát nguyên nhân chậm giao.`
+      : `Không phát sinh vấn đề đáng chú ý; các chỉ số giao hàng trong tuần ổn định.`
+
+  const [insight1, setInsight1] = useWeekField(weekKey, 'insight1', autoInsight1)
+  const [insight2, setInsight2] = useWeekField(weekKey, 'insight2', autoInsight2)
+  const [insight3, setInsight3] = useWeekField(weekKey, 'insight3', autoInsight3)
+
+  const autoSol1 = chuaGiaoUp
+    ? `Ưu tiên xử lý ${current.chuaGiao} đơn chưa giao ngay đầu tuần tới, đặc biệt nhóm phát sinh nhiều nhất.`
+    : `Duy trì tiến độ xử lý đơn chưa giao như tuần này.`
+  const autoSol2 = rate24hDrop
+    ? `Rà soát SLA giao 24h, ưu tiên các đơn đã quá hạn và gom tuyến theo khu vực.`
+    : `Tiếp tục duy trì tỷ lệ giao 24h hiện tại (${current.rate24h.toFixed(1)}%).`
+  const autoSol3 = `Đối soát hàng ngày với Viettel Post và SPX cho các đơn đang vận chuyển kéo dài.`
+  const autoSol4 = totalDeltaPct > 15
+    ? `Chuẩn bị thêm nhân sự/năng lực xử lý do sản lượng nhóm ${topGroup.name} tăng cao.`
+    : `Theo dõi sát biến động sản lượng để chủ động bố trí nguồn lực.`
+  const autoSol5 = `Thiết lập KPI tuần tới: Giao 24h ≥ 80% | Chưa giao < 10% tổng đơn trực tiếp.`
+
+  const [sol1, setSol1] = useWeekField(weekKey, 'sol1', autoSol1)
+  const [sol2, setSol2] = useWeekField(weekKey, 'sol2', autoSol2)
+  const [sol3, setSol3] = useWeekField(weekKey, 'sol3', autoSol3)
+  const [sol4, setSol4] = useWeekField(weekKey, 'sol4', autoSol4)
+  const [sol5, setSol5] = useWeekField(weekKey, 'sol5', autoSol5)
 
   if (loading) {
     return (
@@ -316,26 +377,26 @@ export default function TongDonTab() {
 
   const chartData = overviewRows.map(r => ({ name: r.label, 'Tuần 1': r.v1, 'Tuần 2': r.v2 }))
 
-  const rate24hDrop = current.rate24h < previous.rate24h
-  const chuaGiaoUp = current.chuaGiao > previous.chuaGiao
-
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <input
-          value={reportTitle}
-          onChange={e => setReportTitle(e.target.value)}
-          className="text-xl font-bold text-gray-800 border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded px-1 bg-transparent w-full max-w-xl"
-        />
-        <button onClick={refresh} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 flex-shrink-0">
-          <RefreshCw size={13} /> Làm mới
-        </button>
+    <div className="-m-5 p-5" style={{ background: 'radial-gradient(circle at 15% 0%, #eff6ff 0%, #f8fafc 45%, #f1f5f9 100%)' }}>
+      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-[0_2px_16px_rgba(15,23,42,0.06)] px-6 py-5 mb-5">
+        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(#1e3a5f 1px, transparent 1px)', backgroundSize: '14px 14px' }} />
+        <div className="relative flex items-center justify-between gap-3 mb-1">
+          <input
+            value={reportTitle}
+            onChange={e => setReportTitle(e.target.value)}
+            className="text-2xl font-extrabold text-[#0f2744] border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded px-1 bg-transparent w-full tracking-tight"
+          />
+          <button onClick={refresh} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 flex-shrink-0 bg-white">
+            <RefreshCw size={13} /> Làm mới
+          </button>
+        </div>
+        <p className="relative text-sm text-gray-400">Đánh giá tổng quan · Kết luận · Giải pháp cho tuần tiếp theo</p>
       </div>
-      <p className="text-sm text-gray-400 mb-5">Đánh giá tổng quan | Kết luận | Giải pháp cho tuần tiếp theo</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* 1. Tổng quan sản lượng */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <SectionCard accent="#3b82f6">
           <SectionHeader num={1} title="TỔNG QUAN SẢN LƯỢNG" icon={BarChart2} color="#3b82f6" />
           <OverviewTable rows={overviewRows} />
           <ResponsiveContainer width="100%" height={220}>
@@ -349,10 +410,10 @@ export default function TongDonTab() {
               <Bar dataKey="Tuần 2" fill="#1e3a5f" radius={[0, 3, 3, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </SectionCard>
 
         {/* 2. Hiệu suất giao hàng trực tiếp */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <SectionCard accent="#22c55e">
           <SectionHeader num={2} title="HIỆU SUẤT GIAO HÀNG TRỰC TIẾP" icon={Truck} color="#22c55e" />
           <table className="w-full text-sm mb-3">
             <thead>
@@ -388,24 +449,28 @@ export default function TongDonTab() {
 
           <div className="space-y-2">
             {rate24hDrop && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
-                <span className="text-xs font-medium text-red-700">Tỷ lệ giao 24h giảm ({previous.rate24h.toFixed(1)}% → {current.rate24h.toFixed(1)}%)</span>
+              <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 shadow-sm">
+                <span className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle size={16} className="text-red-500" />
+                </span>
+                <span className="text-xs font-semibold text-red-700">Tỷ lệ giao 24h giảm ({previous.rate24h.toFixed(1)}% → {current.rate24h.toFixed(1)}%)</span>
               </div>
             )}
             {chuaGiaoUp && (
-              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <AlertTriangle size={15} className="text-amber-500 flex-shrink-0" />
-                <span className="text-xs font-medium text-amber-700">Chưa giao tăng từ {previous.chuaGiao} lên {current.chuaGiao} đơn</span>
+              <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 shadow-sm">
+                <span className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle size={16} className="text-amber-500" />
+                </span>
+                <span className="text-xs font-semibold text-amber-700">Chưa giao tăng từ {previous.chuaGiao} lên {current.chuaGiao} đơn</span>
               </div>
             )}
           </div>
-        </div>
+        </SectionCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* 4. Đánh giá & kết luận */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <SectionCard accent="#6366f1">
           <SectionHeader num={4} title="ĐÁNH GIÁ & KẾT LUẬN" icon={ClipboardList} color="#6366f1" />
           <div className="space-y-2">
             <InsightCard icon={TrendingUp} color="#22c55e" title="Tăng trưởng" text={insight1} onTextChange={setInsight1} editable
@@ -413,18 +478,20 @@ export default function TongDonTab() {
             <InsightCard icon={TrendingDown} color="#ef4444" title="Chất lượng giao hàng" text={insight2} onTextChange={setInsight2} editable />
             <InsightCard icon={Users} color="#a855f7" title="Nguyên nhân chính" text={insight3} onTextChange={setInsight3} editable />
           </div>
-        </div>
+        </SectionCard>
 
         {/* Đối tác vận chuyển */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-2.5 mb-3">
-            <Handshake size={18} className="text-[#1e3a5f]" />
-            <h3 className="font-bold text-gray-800 tracking-wide">ĐỐI TÁC VẬN CHUYỂN</h3>
+        <SectionCard accent="#1e3a5f">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#1e3a5f12' }}>
+              <Handshake size={16} className="text-[#1e3a5f]" />
+            </span>
+            <h3 className="font-bold text-gray-800 tracking-wide text-[15px]">ĐỐI TÁC VẬN CHUYỂN</h3>
           </div>
 
           <div className="mb-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px] font-bold">VTP</span>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center text-[8px] font-bold shadow-sm">VTP</span>
               <span className="text-sm font-semibold text-gray-700">Viettel Post</span>
             </div>
             <table className="w-full text-xs">
@@ -440,8 +507,8 @@ export default function TongDonTab() {
           </div>
 
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center text-[9px] font-bold">SPX</span>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center text-[8px] font-bold shadow-sm">SPX</span>
               <span className="text-sm font-semibold text-gray-700">SPX Express</span>
             </div>
             <table className="w-full text-xs">
@@ -456,11 +523,11 @@ export default function TongDonTab() {
               </tbody>
             </table>
           </div>
-        </div>
+        </SectionCard>
       </div>
 
       {/* 5. Giải pháp tuần tiếp theo */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <SectionCard accent="#1e3a5f">
         <SectionHeader num={5} title="GIẢI PHÁP TUẦN TIẾP THEO" icon={Target} color="#1e3a5f" />
         <div className="flex flex-wrap gap-3">
           <SolutionCard num={1} text={sol1} onChange={setSol1} />
@@ -469,7 +536,7 @@ export default function TongDonTab() {
           <SolutionCard num={4} text={sol4} onChange={setSol4} />
           <SolutionCard num={5} text={sol5} onChange={setSol5} />
         </div>
-      </div>
+      </SectionCard>
     </div>
   )
 }

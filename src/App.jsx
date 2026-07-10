@@ -1,10 +1,14 @@
-import { useState } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut } from 'lucide-react'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { auth } from './firebase'
+import { hydrateLocalStorageFromCloud, startCloudSync, pushAllLocalStorageToCloud } from './cloudSync'
 import { SHEETS } from './config'
 import SheetTab from './components/SheetTab'
 import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
+import Login from './components/Login'
 
 const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
@@ -32,9 +36,62 @@ const BREADCRUMB = {
 }
 
 export default function App() {
+  const [authState, setAuthState] = useState('checking') // checking | loggedOut | syncing | ready
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        setUser(null)
+        setAuthState('loggedOut')
+        return
+      }
+      setUser(u)
+      setAuthState('syncing')
+      await hydrateLocalStorageFromCloud()
+      startCloudSync()
+      setAuthState('ready')
+    })
+    return unsub
+  }, [])
+
+  if (authState === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <RefreshCw size={28} className="animate-spin text-gray-400" />
+      </div>
+    )
+  }
+
+  if (authState === 'loggedOut') {
+    return <Login />
+  }
+
+  if (authState === 'syncing') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 gap-3">
+        <RefreshCw size={28} className="animate-spin text-[#1e3a5f]" />
+        <p className="text-sm text-gray-500">Đang đồng bộ dữ liệu...</p>
+      </div>
+    )
+  }
+
+  return <AppContent user={user} />
+}
+
+function AppContent({ user }) {
   const [active, setActive] = useState('donC')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [expanded, setExpanded] = useState({ baocao: true })
+  const [pushStatus, setPushStatus] = useState('idle') // idle | pushing | done
+
+  const handlePushAll = async () => {
+    setPushStatus('pushing')
+    const count = await pushAllLocalStorageToCloud()
+    setPushStatus('done')
+    alert(`Đã đẩy ${count} mục dữ liệu lên đám mây.`)
+    setTimeout(() => setPushStatus('idle'), 2000)
+  }
 
   const crumbs = BREADCRUMB[active] || []
 
@@ -117,8 +174,23 @@ export default function App() {
           })}
         </nav>
 
-        <div className="px-4 py-3 border-t border-white/10 text-xs text-white/40">
-          Báo cáo giao hàng v1.0
+        <div className="px-4 py-3 border-t border-white/10">
+          <div className="text-xs text-white/40 truncate mb-2">{user?.email}</div>
+          <button
+            onClick={handlePushAll}
+            disabled={pushStatus === 'pushing'}
+            className="w-full flex items-center gap-2 text-xs text-white/50 hover:text-white/90 transition-colors mb-2 disabled:opacity-50"
+            title="Đẩy toàn bộ dữ liệu trên máy này lên đám mây (dùng khi máy này có dữ liệu cũ chưa đồng bộ)"
+          >
+            <RefreshCw size={13} className={pushStatus === 'pushing' ? 'animate-spin' : ''} />
+            {pushStatus === 'pushing' ? 'Đang đồng bộ...' : 'Đồng bộ toàn bộ dữ liệu'}
+          </button>
+          <button
+            onClick={() => signOut(auth)}
+            className="w-full flex items-center gap-2 text-xs text-white/50 hover:text-white/90 transition-colors"
+          >
+            <LogOut size={13} /> Đăng xuất
+          </button>
         </div>
       </aside>
 
