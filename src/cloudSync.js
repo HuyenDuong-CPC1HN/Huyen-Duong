@@ -1,4 +1,4 @@
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore'
+import { collection, getDocs, getDoc, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore'
 import { db } from './firebase'
 
 const COLLECTION = 'kvstore'
@@ -6,7 +6,6 @@ const COLLECTION = 'kvstore'
 // Firestore giới hạn mỗi document tối đa ~1MB — dữ liệu tuần Excel/carrier có thể vượt giới hạn này,
 // nên phải cắt nhỏ thành nhiều document con ("chunk") khi cần.
 const CHUNK_SIZE = 700000 // ký tự — chừa dư so với giới hạn thật (1.048.487 byte) vì ký tự tiếng Việt UTF-8 có thể tới 3 byte
-const CHUNK_DELETE_SCAN = 40 // số chunk tối đa sẽ dọn dẹp khi ghi đè bằng bản nhỏ hơn/xoá key (dư sức cho dữ liệu thực tế)
 
 // Firestore không cho phép ký tự "/" trong document ID — mã hoá an toàn
 function encodeKey(key) {
@@ -44,34 +43,48 @@ export async function hydrateLocalStorageFromCloud() {
   }
 }
 
-// Xoá tối đa CHUNK_DELETE_SCAN document con của 1 key (dùng khi ghi đè bằng bản nhỏ hơn hoặc xoá hẳn key).
-// Xoá document không tồn tại trên Firestore không báo lỗi nên có thể "quét xoá" thoải mái.
-function deleteLeftoverChunks(encodedKeyId, fromIndex) {
-  for (let i = fromIndex; i < CHUNK_DELETE_SCAN; i++) {
-    deleteDoc(doc(db, COLLECTION, `${encodedKeyId}__chunk${i}`)).catch(() => { /* ignore */ })
-  }
+// Đọc số chunk cũ (nếu có) của 1 key để biết cần dọn dẹp bao nhiêu — tránh gửi hàng loạt request
+// xoá "phòng hờ" gây nghẽn hàng đợi ghi của Firestore (đã từng xảy ra: "write stream exhausted").
+async function readPrevChunkCount(docRef) {
+  try {
+    const snap = await getDoc(docRef)
+    if (snap.exists() && snap.data().chunked) return snap.data().chunkCount || 0
+  } catch { /* ignore, không chặn ghi mới nếu đọc lỗi */ }
+  return 0
 }
 
-// Ghi 1 key/value lên Firestore — tự động cắt nhỏ thành nhiều document nếu value vượt giới hạn 1 document
+// Ghi 1 key/value lên Firestore trong 1 batch duy nhất (1 lượt gửi mạng) — tự động cắt nhỏ thành
+// nhiều document nếu value vượt giới hạn 1 document, chỉ xoá đúng số chunk thừa từ lần ghi trước.
 async function writeKeyToCloud(key, value) {
   const id = encodeKey(key)
   const docRef = doc(db, COLLECTION, id)
+  const prevChunkCount = await readPrevChunkCount(docRef)
+  const batch = writeBatch(db)
 
   if (value.length <= CHUNK_SIZE) {
-    await setDoc(docRef, { value })
-    deleteLeftoverChunks(id, 0)
-    return
+    batch.set(docRef, { value })
+    for (let i = 0; i < prevChunkCount; i++) batch.delete(doc(db, COLLECTION, `${id}__chunk${i}`))
+  } else {
+    const chunkCount = Math.ceil(value.length / CHUNK_SIZE)
+    for (let i = 0; i < chunkCount; i++) {
+      batch.set(doc(db, COLLECTION, `${id}__chunk${i}`), { value: value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE) })
+    }
+    batch.set(docRef, { chunked: true, chunkCount })
+    for (let i = chunkCount; i < prevChunkCount; i++) batch.delete(doc(db, COLLECTION, `${id}__chunk${i}`))
   }
 
-  const chunkCount = Math.ceil(value.length / CHUNK_SIZE)
-  const writes = []
-  for (let i = 0; i < chunkCount; i++) {
-    const chunkValue = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
-    writes.push(setDoc(doc(db, COLLECTION, `${id}__chunk${i}`), { value: chunkValue }))
-  }
-  writes.push(setDoc(docRef, { chunked: true, chunkCount }))
-  await Promise.all(writes)
-  deleteLeftoverChunks(id, chunkCount)
+  await batch.commit()
+}
+
+// Xoá 1 key (và toàn bộ chunk của nó nếu có) trong 1 batch duy nhất
+async function removeKeyFromCloud(key) {
+  const id = encodeKey(key)
+  const docRef = doc(db, COLLECTION, id)
+  const prevChunkCount = await readPrevChunkCount(docRef)
+  const batch = writeBatch(db)
+  batch.delete(docRef)
+  for (let i = 0; i < prevChunkCount; i++) batch.delete(doc(db, COLLECTION, `${id}__chunk${i}`))
+  await batch.commit()
 }
 
 // Ghi đè localStorage.setItem/removeItem để mọi thay đổi cũng được đẩy lên Firestore (chạy nền, không chặn UI)
@@ -91,10 +104,9 @@ export function startCloudSync() {
 
   localStorage.removeItem = function (key) {
     originalRemoveItem(key)
-    deleteDoc(doc(db, COLLECTION, encodeKey(key))).catch(err => {
+    removeKeyFromCloud(key).catch(err => {
       console.error(`Lỗi xoá "${key}" trên Firebase:`, err)
     })
-    deleteLeftoverChunks(encodeKey(key), 0)
   }
 }
 
