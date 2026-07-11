@@ -93,7 +93,7 @@ function readChanhXeOverride(weekId, field) {
 }
 
 // Tổng hợp toàn bộ chỉ số cho 1 tuần (Đơn C + Đơn DTP), có thể là tuần hiện tại hoặc tuần trước
-function computeWeekReport({ dataC, dataDTP, weekIdC, weekIdDTP, tmdtTotal, viettelCompareC, spxCompareC, viettelCompareDTP, isCurrent }) {
+function computeWeekReport({ dataC, dataDTP, weekIdC, weekIdDTP, tmdtTotal, viettelCompareC, spxCompareC, viettelCompareDTP }) {
   const groupsC = buildGroups(dataC)
   const groupsDTP = buildGroups(dataDTP)
   const bC = trucTiepBuckets(groupsC.tructiep)
@@ -111,9 +111,11 @@ function computeWeekReport({ dataC, dataDTP, weekIdC, weekIdDTP, tmdtTotal, viet
   const chanhXeChuaGiao = readChanhXeOverride(weekIdC, 'chuagiao')
   const chanhXeTotal = groupsC.chanhxe.length + chanhXeChuaGui
 
-  const viettelTotalC = isCurrent ? (viettelCompareC?.total || 0) : (viettelCompareC?.total || 0)
-  const spxTotalC = spxCompareC?.total || 0
-  const viettelTotalDTP = viettelCompareDTP?.total || 0
+  // Nếu không có dữ liệu file VTP/SPX đã upload cho đúng tuần này (vd chưa từng upload tuần trước đó),
+  // lùi về đếm theo phân loại "Đối tác vận chuyển" trong file Excel nội bộ — giống cách các khung khác trong app làm.
+  const viettelTotalC = viettelCompareC ? viettelCompareC.total : groupsC.viettel.length
+  const spxTotalC = spxCompareC ? spxCompareC.total : groupsC.spx.length
+  const viettelTotalDTP = viettelCompareDTP ? viettelCompareDTP.total : groupsDTP.viettel.length
 
   const codC = viettelTotalC + spxTotalC
   const codDTP = viettelTotalDTP
@@ -287,13 +289,13 @@ export default function TongDonTab() {
   const liveCurrent = useMemo(() => computeWeekReport({
     dataC: donC.validData, dataDTP: donDTP.validData,
     weekIdC: donC.activeId || 'live', weekIdDTP: donDTP.activeId || 'live', tmdtTotal: tmdtCurrent,
-    viettelCompareC: viettelCurrentC, spxCompareC: spxCurrentC, viettelCompareDTP: viettelCurrentDTP, isCurrent: true,
+    viettelCompareC: viettelCurrentC, spxCompareC: spxCurrentC, viettelCompareDTP: viettelCurrentDTP,
   }), [donC.validData, donDTP.validData, donC.activeId, donDTP.activeId, tmdtCurrent, viettelCurrentC, spxCurrentC, viettelCurrentDTP])
 
   const livePrevious = useMemo(() => computeWeekReport({
     dataC: donC.prevValidData || [], dataDTP: donDTP.prevValidData || [],
     weekIdC: donC.prevWeekId, weekIdDTP: donDTP.prevWeekId, tmdtTotal: tmdtPrev,
-    viettelCompareC: viettelCompareC.previous, spxCompareC: spxCompareC.previous, viettelCompareDTP: viettelCompareDTP.previous, isCurrent: false,
+    viettelCompareC: viettelCompareC.previous, spxCompareC: spxCompareC.previous, viettelCompareDTP: viettelCompareDTP.previous,
   }), [donC.prevValidData, donDTP.prevValidData, donC.prevWeekId, donDTP.prevWeekId, tmdtPrev, viettelCompareC, spxCompareC, viettelCompareDTP])
 
   // ---- Lịch sử báo cáo: mỗi lần bấm "Lưu báo cáo" sẽ đóng băng toàn bộ số liệu hiện tại thành 1 bản ghi cố định ----
