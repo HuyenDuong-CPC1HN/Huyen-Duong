@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react'
 import { List, BarChart2, Truck, ChevronDown, ChevronUp } from 'lucide-react'
-import { useSheetData } from '../useSheetData'
 import { useWeeklyData } from '../useWeeklyData'
 import DataTable, { VC_KEY } from './DataTable'
 import ThongKeGiaoHang from './ThongKeGiaoHang'
@@ -11,16 +10,15 @@ import WeekSelector from './WeekSelector'
 // Gộp Danh sách + Thống kê giao hàng + Đối tác VC thành 1 tab, danh sách chi tiết thu gọn mặc định
 const MERGE_LIST_PARTNER = type => type === 'donC' || type === 'donDTP'
 
-export default function SheetTab({ sheetId, gid, type }) {
-  const sheet = useSheetData(sheetId, gid)
+export default function SheetTab({ type }) {
   const [view, setView] = useState(MERGE_LIST_PARTNER(type) ? 'partner' : 'list')
   const merged = MERGE_LIST_PARTNER(type)
   const [listExpanded, setListExpanded] = useState(false)
   const { weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek } = useWeeklyData(type)
 
-  const rawData = activeWeek ? activeWeek.data : sheet.data
-  const loading = activeWeek ? false : sheet.loading
-  const error = activeWeek ? null : sheet.error
+  const rawData = activeWeek ? activeWeek.data : []
+  const loading = false
+  const error = null
 
   const storageKey = `vc_edits_${type}`
   const [vcEdits, setVcEdits] = useState(() => {
@@ -37,6 +35,14 @@ export default function SheetTab({ sheetId, gid, type }) {
     const key = row['Mã hóa đơn'] || ''
     return vcEdits[key] !== undefined ? { ...row, [VC_KEY]: vcEdits[key] } : row
   }), [rawData, vcEdits])
+
+  if (weeks.length === 0) {
+    return (
+      <div>
+        <ExcelUpload onData={addWeek} fileName="" onClear={() => {}} />
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -95,8 +101,6 @@ export default function SheetTab({ sheetId, gid, type }) {
           data={activeData}
           loading={loading}
           error={error}
-          refresh={sheet.refresh}
-          lastRefresh={activeWeek ? null : sheet.lastRefresh}
           onEditVC={onEditVC}
         />
       )}
@@ -133,8 +137,6 @@ export default function SheetTab({ sheetId, gid, type }) {
                         data={activeData}
                         loading={loading}
                         error={error}
-                        refresh={sheet.refresh}
-                        lastRefresh={activeWeek ? null : sheet.lastRefresh}
                         onEditVC={onEditVC}
                       />
                     </div>

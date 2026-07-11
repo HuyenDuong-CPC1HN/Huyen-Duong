@@ -6,9 +6,7 @@ import {
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from 'recharts'
-import { useSheetData } from '../useSheetData'
 import { useWeeklyData } from '../useWeeklyData'
-import { SHEETS } from '../config'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
 import { getCarrierFileStats, getCarrierHistoryCompare } from './CarrierStats'
@@ -40,10 +38,9 @@ function saveWeekField(weekKey, field, value) {
   localStorage.setItem(`tongdon_field_${field}_${weekKey}`, String(value))
 }
 
-function useTypeData(type, sheetId, gid) {
-  const sheet = useSheetData(sheetId, gid)
+function useTypeData(type) {
   const { weeks, activeWeek, activeId } = useWeeklyData(type)
-  const rawData = activeWeek ? activeWeek.data : sheet.data
+  const rawData = activeWeek ? activeWeek.data : []
 
   const vcEdits = useMemo(() => readJSON(`vc_edits_${type}`, {}), [])
   const activeData = useMemo(() => rawData.map(row => {
@@ -60,7 +57,7 @@ function useTypeData(type, sheetId, gid) {
   }, [prevWeek])
 
   return {
-    loading: activeWeek ? false : sheet.loading, refresh: sheet.refresh,
+    loading: false,
     validData, prevValidData, activeId, prevWeekId: prevWeek?.id || null,
   }
 }
@@ -266,15 +263,14 @@ function SolutionCard({ num, text, onChange }) {
 }
 
 export default function TongDonTab() {
-  const donC = useTypeData('donC', SHEETS.donC.id, SHEETS.donC.gid)
-  const donDTP = useTypeData('donDTP', SHEETS.donDTP.id, SHEETS.donDTP.gid)
+  const donC = useTypeData('donC')
+  const donDTP = useTypeData('donDTP')
 
   const tmdtReports = useMemo(() => readJSON('tmdt_reports', []), [])
   const tmdtCurrent = tmdtReports[0]?.total || 0
   const tmdtPrev = tmdtReports[1]?.total || 0
 
   const loading = donC.loading || donDTP.loading
-  const refresh = () => { donC.refresh(); donDTP.refresh() }
 
   // Khóa "tuần" dùng để lưu các trường nhập tay (chưa giao, hàng gửi, nhân sự, kết luận, giải pháp...)
   const weekKey = `${donC.activeId || 'x'}_${donDTP.activeId || 'x'}`
@@ -448,14 +444,9 @@ export default function TongDonTab() {
                 <ArrowRight size={13} className="rotate-180" /> Quay lại xem trực tiếp
               </button>
             ) : (
-              <>
-                <button onClick={refresh} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 bg-white">
-                  <RefreshCw size={13} /> Làm mới
-                </button>
-                <button onClick={saveReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
-                  <ClipboardList size={13} /> Lưu báo cáo tuần này
-                </button>
-              </>
+              <button onClick={saveReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
+                <ClipboardList size={13} /> Lưu báo cáo tuần này
+              </button>
             )}
           </div>
         </div>

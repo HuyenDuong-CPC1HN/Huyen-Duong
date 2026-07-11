@@ -3,7 +3,6 @@ import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, 
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from './firebase'
 import { hydrateLocalStorageFromCloud, startCloudSync, pushAllLocalStorageToCloud } from './cloudSync'
-import { SHEETS } from './config'
 import SheetTab from './components/SheetTab'
 import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
@@ -236,8 +235,8 @@ function AppContent({ user }) {
             </div>
           )}
           {active === 'tongdon'  && <TongDonTab />}
-          {active === 'donC'    && <SheetTab sheetId={SHEETS.donC.id}   gid={SHEETS.donC.gid}   type="donC" />}
-          {active === 'donDTP'  && <SheetTab sheetId={SHEETS.donDTP.id} gid={SHEETS.donDTP.gid} type="donDTP" />}
+          {active === 'donC'    && <SheetTab type="donC" />}
+          {active === 'donDTP'  && <SheetTab type="donDTP" />}
           {active === 'tmdt'    && <TmdtTab />}
           {active === 'guilen8n' && <N8nWebhookForm />}
         </main>

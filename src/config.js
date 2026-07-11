@@ -1,16 +1,3 @@
-export const SHEETS = {
-  donC: {
-    id: '1BCMgiS88WUkC1DcZaWqlQBZFdbCv7iDETjq8JhhUt4I',
-    gid: '1043220532',
-    label: 'Giao hàng Đơn C',
-  },
-  donDTP: {
-    id: '17s9y-umcOEfnhdtHNZn8Esjg_aVXB06Ad8ZZ7NV7bmw',
-    gid: '1217258168',
-    label: 'Giao hàng Đơn DTP',
-  },
-}
-
 export const TMDT_STORES = [
   'Zentokid Vietnam Shopee',
   'Zentokid Vietnam',
