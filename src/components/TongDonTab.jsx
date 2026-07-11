@@ -111,11 +111,9 @@ function computeWeekReport({ dataC, dataDTP, weekIdC, weekIdDTP, tmdtTotal, viet
   const chanhXeChuaGiao = readChanhXeOverride(weekIdC, 'chuagiao')
   const chanhXeTotal = groupsC.chanhxe.length + chanhXeChuaGui
 
-  // Nếu không có dữ liệu file VTP/SPX đã upload cho đúng tuần này (vd chưa từng upload tuần trước đó),
-  // lùi về đếm theo phân loại "Đối tác vận chuyển" trong file Excel nội bộ — giống cách các khung khác trong app làm.
-  const viettelTotalC = viettelCompareC ? viettelCompareC.total : groupsC.viettel.length
-  const spxTotalC = spxCompareC ? spxCompareC.total : groupsC.spx.length
-  const viettelTotalDTP = viettelCompareDTP ? viettelCompareDTP.total : groupsDTP.viettel.length
+  const viettelTotalC = viettelCompareC?.total || 0
+  const spxTotalC = spxCompareC?.total || 0
+  const viettelTotalDTP = viettelCompareDTP?.total || 0
 
   const codC = viettelTotalC + spxTotalC
   const codDTP = viettelTotalDTP
@@ -292,11 +290,15 @@ export default function TongDonTab() {
     viettelCompareC: viettelCurrentC, spxCompareC: spxCurrentC, viettelCompareDTP: viettelCurrentDTP,
   }), [donC.validData, donDTP.validData, donC.activeId, donDTP.activeId, tmdtCurrent, viettelCurrentC, spxCurrentC, viettelCurrentDTP])
 
+  // Nếu chưa có lịch sử "tuần trước" riêng của VTP/SPX (mới upload 1 tuần), dùng luôn số liệu file mới nhất
+  // — giống hệt số app hiển thị ở khung Tổng đơn của từng trang, tránh tự đếm lại gây lệch.
   const livePrevious = useMemo(() => computeWeekReport({
     dataC: donC.prevValidData || [], dataDTP: donDTP.prevValidData || [],
     weekIdC: donC.prevWeekId, weekIdDTP: donDTP.prevWeekId, tmdtTotal: tmdtPrev,
-    viettelCompareC: viettelCompareC.previous, spxCompareC: spxCompareC.previous, viettelCompareDTP: viettelCompareDTP.previous,
-  }), [donC.prevValidData, donDTP.prevValidData, donC.prevWeekId, donDTP.prevWeekId, tmdtPrev, viettelCompareC, spxCompareC, viettelCompareDTP])
+    viettelCompareC: viettelCompareC.previous || viettelCurrentC,
+    spxCompareC: spxCompareC.previous || spxCurrentC,
+    viettelCompareDTP: viettelCompareDTP.previous || viettelCurrentDTP,
+  }), [donC.prevValidData, donDTP.prevValidData, donC.prevWeekId, donDTP.prevWeekId, tmdtPrev, viettelCompareC, spxCompareC, viettelCompareDTP, viettelCurrentC, spxCurrentC, viettelCurrentDTP])
 
   // ---- Lịch sử báo cáo: mỗi lần bấm "Lưu báo cáo" sẽ đóng băng toàn bộ số liệu hiện tại thành 1 bản ghi cố định ----
   const [reports, setReports] = useState(() => readJSON('tongdon_reports', []))
