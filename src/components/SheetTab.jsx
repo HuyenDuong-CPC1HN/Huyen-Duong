@@ -103,17 +103,17 @@ export default function SheetTab({ sheetId, gid, type }) {
       {view === 'stats' && (
         loading
           ? <div className="text-center py-20 text-gray-400">Đang tải dữ liệu...</div>
-          : <ThongKeGiaoHang data={activeData} type={type} />
+          : <ThongKeGiaoHang data={activeData} type={type} weekKey={activeId || 'live'} />
       )}
       {view === 'partner' && (
         loading
           ? <div className="text-center py-20 text-gray-400">Đang tải dữ liệu...</div>
           : (
             <div>
-              <ThongKeDoiTac data={activeData} type={type} />
+              <ThongKeDoiTac data={activeData} type={type} weekKey={activeId || 'live'} />
               {merged && (
                 <div className="mt-5">
-                  <ThongKeGiaoHang data={activeData} type={type} />
+                  <ThongKeGiaoHang data={activeData} type={type} weekKey={activeId || 'live'} />
                 </div>
               )}
 

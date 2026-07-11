@@ -309,10 +309,11 @@ function ChanhXeDetail({ rows }) {
   )
 }
 
-function GroupCard({ g, type, internalData }) {
-  const [override, commitOverride] = useChuaGiaoOverride(`${type}_${g.key}`)
-  const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${type}_${g.key}_chuagui`)
-  const [khValues, setKhValue] = useKhBreakdownValues(`${type}_${g.key}`)
+function GroupCard({ g, type, internalData, weekKey }) {
+  const scopedKey = `${type}_${g.key}_${weekKey}`
+  const [override, commitOverride] = useChuaGiaoOverride(scopedKey)
+  const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${scopedKey}_chuagui`)
+  const [khValues, setKhValue] = useKhBreakdownValues(scopedKey)
   const [open, setOpen] = useState(false)
 
   // "Chưa giao" = tổng các ô phân loại khách hàng (Bệnh viện + Nhà thuốc + KH ONL...) khi có nhập
@@ -545,7 +546,7 @@ function CarrierParentGroup({ label, children, total, carrierGroups, type, inter
   )
 }
 
-export default function ThongKeGiaoHang({ data, type }) {
+export default function ThongKeGiaoHang({ data, type, weekKey = 'live' }) {
   const partners = PARTNERS[type] || []
 
   // Chỉ tính đơn có Mã kiện hàng — khớp với cách tính ở tab Đối tác VC
@@ -569,11 +570,11 @@ export default function ThongKeGiaoHang({ data, type }) {
 
   return (
     <div className="space-y-4">
-      {mainGroups.map(g => <GroupCard key={g.key} g={g} type={type} internalData={validData} />)}
+      {mainGroups.map(g => <GroupCard key={`${g.key}_${weekKey}`} g={g} type={type} internalData={validData} weekKey={weekKey} />)}
 
       {carrierGroups.length > 0 && (
         <CarrierParentGroup label="Giao qua đối tác vận chuyển" total={carrierTotal} carrierGroups={carrierGroups} type={type} internalData={validData}>
-          {carrierGroups.map(g => <GroupCard key={g.key} g={g} type={type} internalData={validData} />)}
+          {carrierGroups.map(g => <GroupCard key={`${g.key}_${weekKey}`} g={g} type={type} internalData={validData} weekKey={weekKey} />)}
         </CarrierParentGroup>
       )}
 

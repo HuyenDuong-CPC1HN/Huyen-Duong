@@ -23,7 +23,7 @@ function parseDateTime(str) {
 
 const VIETTEL_COLUMNS = [
   'Mã Vận Đơn', 'Mã đơn hàng', 'Ngày tạo', 'Người nhận', 'Địa chỉ nhận',
-  'ĐT Nhận', 'Trạng Thái', 'Lý do', 'Đơn chuyển hoàn', 'Ngày chuyển trạng thái',
+  'ĐT Nhận', 'Tên hàng', 'Trạng Thái', 'Lý do', 'Đơn chuyển hoàn', 'Ngày chuyển trạng thái',
 ]
 
 const SPX_COLUMNS = [
@@ -106,6 +106,11 @@ const CARRIER_CONFIG = {
     deliveredStatus: 'Giao thành công',
     giaoLaiStatuses: ['Chờ phát lại', 'Phát tiếp'],
     hoanHangStatuses: [],
+    // Đơn shop tự huỷ hoặc không lấy được hàng trước khi giao — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
+    cancelStatuses: ['Shop hủy lấy', 'Shop huỷ lấy', 'Tồn - Lấy không thành công'],
+    // "Đang lấy hàng": đối chiếu Mã Vận Đơn (file VTP) với cột "Mã vận đơn VT" trong file
+    // "Chờ giao Logistics" upload thêm — khớp thì tính vào Đang vận chuyển, không khớp thì bỏ qua
+    holdStatuses: ['Đang lấy hàng'],
     isHoanHang: row => row['Đơn chuyển hoàn'].toLowerCase() === 'x',
     orderCounter: viettelOrderCount,
   },
@@ -119,6 +124,11 @@ const CARRIER_CONFIG = {
     deliveredStatus: 'Đã giao hàng',
     giaoLaiStatuses: ['Chờ giao lại'],
     hoanHangStatuses: ['Đang trả hàng', 'Đã trả hàng'],
+    // Đơn bị huỷ trước khi giao — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
+    cancelStatuses: ['Đã hủy', 'Đã huỷ'],
+    // "Lấy hàng không thành công": đối chiếu Mã vận đơn (file SPX) với Mã vận đơn nội bộ —
+    // khớp thì tính vào "Đang vận chuyển" (đơn vẫn còn đang xử lý), không khớp thì bỏ qua
+    pickupFailStatuses: ['Lấy hàng không thành công'],
     isHoanHang: () => false,
     orderCounter: spxOrderCount,
     useHourPrecision: true, // SPX có giờ:phút chi tiết, tính chênh lệch theo giờ thay vì làm tròn ngày
@@ -132,11 +142,12 @@ export function parseCarrierFile(arrayBuffer, carrierType = 'viettel') {
   const ws = wb.Sheets[wb.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, dateNF: 'dd/mm/yyyy HH:mm:ss' })
 
-  const headerIdx = rows.findIndex(r => r.some(cell => String(cell).trim() === config.requiredHeaderCell))
+  const headerIdx = rows.findIndex(r => r.some(cell => String(cell).trim().toLowerCase() === config.requiredHeaderCell.toLowerCase()))
   if (headerIdx === -1) throw new Error(`Không tìm thấy dòng tiêu đề "${config.requiredHeaderCell}" trong file.`)
 
   const header = rows[headerIdx].map(h => String(h).trim())
-  const colIdx = Object.fromEntries(config.columns.map(c => [c, header.indexOf(c)]))
+  const headerLower = header.map(h => h.toLowerCase())
+  const colIdx = Object.fromEntries(config.columns.map(c => [c, headerLower.indexOf(c.toLowerCase())]))
 
   const data = rows.slice(headerIdx + 1)
     .filter(r => r[colIdx[config.requiredHeaderCell]])
@@ -147,6 +158,17 @@ export function parseCarrierFile(arrayBuffer, carrierType = 'viettel') {
 
 export function getCarrierColumns(carrierType = 'viettel') {
   return CARRIER_CONFIG[carrierType].columns
+}
+
+// Đơn đang ở trạng thái "chờ lấy hàng" (cần đối chiếu với file Chờ giao Logistics)
+export function isHoldStatusRow(row, carrierType = 'viettel') {
+  const config = CARRIER_CONFIG[carrierType]
+  return !!config.holdStatuses?.includes(row[config.statusKey])
+}
+
+export function getTrackingCode(row, carrierType = 'viettel') {
+  const config = CARRIER_CONFIG[carrierType]
+  return String(row[config.requiredHeaderCell] || '').trim().toUpperCase()
 }
 
 function diffDaysBetween(fromStr, toStr) {
@@ -164,19 +186,55 @@ function diffHoursBetween(fromStr, toStr) {
   return (d2 - d1) / (1000 * 60 * 60)
 }
 
+// Xây tập mã tracking từ 1 cột bất kỳ của file đối chiếu phụ (vd "Mã vận đơn VT" trong file Chờ giao Logistics)
+export function buildTrackingSet(rows, key) {
+  const set = new Set()
+  for (const row of rows || []) {
+    const code = String(row[key] || '').trim().toUpperCase()
+    if (code) set.add(code)
+  }
+  return set
+}
+
 // Thống kê: 24h / 48h / 72h / Đang vận chuyển / Giao lại lần 2 / Hoàn hàng
 // lookupMap: bảng đối chiếu Mã vận đơn nội bộ (chỉ áp dụng cho Viettel) — xem buildInternalOrderLookup
-export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = null) {
+// holdLookupSet: tập Mã vận đơn từ file "Chờ giao Logistics" — dùng để đối chiếu trạng thái "Đang lấy hàng"
+export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = null, holdLookupSet = null) {
   const config = CARRIER_CONFIG[carrierType]
-  const result = { total: 0, '24h': 0, '48h': 0, '72h': 0, dangVanChuyen: 0, giaoLai: 0, hoanHang: 0 }
+  const result = { total: 0, '24h': 0, '48h': 0, '72h': 0, dangVanChuyen: 0, giaoLai: 0, hoanHang: 0, choLay: 0 }
 
   for (const row of rows) {
+    const status = row[config.statusKey]
+    // Đơn bị huỷ trước khi giao — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
+    if (config.cancelStatuses?.includes(status)) continue
+
+    // "Lấy hàng không thành công": chỉ tính (vào Đang vận chuyển) nếu khớp Mã vận đơn với dữ liệu nội bộ
+    if (config.pickupFailStatuses?.includes(status)) {
+      const code = String(row[config.requiredHeaderCell] || '').trim().toUpperCase()
+      if (!lookupMap?.has(code)) continue
+      const count = config.orderCounter(row, config, lookupMap)
+      result.total += count
+      result.dangVanChuyen += count
+      continue
+    }
+
+    // "Đang lấy hàng": nếu tính năng đối chiếu Chờ giao Logistics đang được dùng (có holdLookupSet) thì
+    // khớp Mã Vận Đơn → tính vào mục riêng "Chờ lấy", không khớp → không tính (highlight ở bảng chi tiết).
+    // Chưa dùng tính năng này (holdLookupSet null, vd tab Đơn C) thì vẫn tính bình thường như trước.
+    if (config.holdStatuses?.includes(status) && holdLookupSet) {
+      const code = String(row[config.requiredHeaderCell] || '').trim().toUpperCase()
+      if (!holdLookupSet.has(code)) continue
+      const count = config.orderCounter(row, config, lookupMap)
+      result.total += count
+      result.choLay += count
+      continue
+    }
+
     const count = config.orderCounter(row, config, lookupMap)
     result.total += count
 
     if (config.isHoanHang(row)) { result.hoanHang += count; continue }
 
-    const status = row[config.statusKey]
     if (config.hoanHangStatuses.includes(status)) { result.hoanHang += count; continue }
     if (config.giaoLaiStatuses.includes(status)) { result.giaoLai += count; continue }
 

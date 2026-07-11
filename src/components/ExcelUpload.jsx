@@ -2,6 +2,23 @@ import { useRef, useState } from 'react'
 import { Upload, FileSpreadsheet, X, FileUp } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
+// Các cột ngày/giờ có thể là ô kiểu Date thật trong Excel — định dạng hiển thị của Excel
+// đôi khi lưu theo kiểu Mỹ (m/d/yyyy) dù XLSX yêu cầu dd/mm/yyyy, gây đọc sai ngày (vd "7/10" hiểu nhầm
+// thành 7 tháng 10 thay vì 10 tháng 7). Nên lấy trực tiếp từ Date object thay vì tin vào chuỗi hiển thị.
+// "Ngày tạo kiện" có giờ thật (dùng để hiển thị) — các cột còn lại chỉ có ngày, bỏ giờ để tránh sai số
+// làm tròn số thực khi Excel lưu ngày (vd 46209.00001 lệch vài phút so với nửa đêm).
+const DATETIME_COLUMNS = ['Ngày tạo kiện']
+const DATE_ONLY_COLUMNS = ['Ngày giao hàng', 'Ngày ghi sổ']
+
+function pad2(n) { return String(n).padStart(2, '0') }
+
+function formatDate(d, withTime) {
+  const datePart = `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`
+  if (!withTime) return datePart
+  const hh = d.getHours(), mm = d.getMinutes()
+  return (hh === 0 && mm === 0) ? datePart : `${datePart} ${pad2(hh)}:${pad2(mm)}`
+}
+
 export default function ExcelUpload({ onData, fileName, onClear, compact = false }) {
   const inputRef = useRef()
   const [dragging, setDragging] = useState(false)
@@ -21,9 +38,21 @@ export default function ExcelUpload({ onData, fileName, onClear, compact = false
         const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true })
         const ws = wb.Sheets[wb.SheetNames[0]]
         const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, dateNF: 'dd/mm/yyyy' })
-        const cleaned = rows.map(row =>
-          Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim(), String(v).trim()]))
-        )
+        // Đọc lại riêng các cột ngày ở dạng Date object thật (raw), tránh phụ thuộc định dạng hiển thị lệch
+        const rawRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true })
+        const cleaned = rows.map((row, i) => {
+          const rawRow = rawRows[i] || {}
+          return Object.fromEntries(Object.entries(row).map(([k, v]) => {
+            const key = k.trim()
+            const rawVal = rawRow[k]
+            const isDatetime = DATETIME_COLUMNS.includes(key)
+            const isDateOnly = DATE_ONLY_COLUMNS.includes(key)
+            if ((isDatetime || isDateOnly) && rawVal instanceof Date && !isNaN(rawVal)) {
+              return [key, formatDate(rawVal, isDatetime)]
+            }
+            return [key, String(v).trim()]
+          }))
+        })
         onData(cleaned, file.name)
       } catch {
         setError('Không đọc được file. Vui lòng kiểm tra lại.')

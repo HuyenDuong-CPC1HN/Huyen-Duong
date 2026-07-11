@@ -1,132 +1,153 @@
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
-import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
-import { parseCarrierFile, computeCarrierStats, getCarrierColumns, buildInternalOrderLookup, reconcileViettelOrders } from '../utils/parseCarrierExport'
+import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp, AlertTriangle, Package } from 'lucide-react'
+import { parseCarrierFile, computeCarrierStats, getCarrierColumns, buildInternalOrderLookup, buildTrackingSet, reconcileViettelOrders, isHoldStatusRow, getTrackingCode } from '../utils/parseCarrierExport'
+import * as XLSX from 'xlsx'
 import { ColumnFilter, ResizeHandle } from './DataTable'
 
 const STAT_CARDS = [
   { key: '24h',          label: '≤ 24 giờ',        icon: CheckCircle, cls: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
   { key: '48h',          label: '≤ 48 giờ',        icon: CheckCircle, cls: 'text-teal-600',   bg: 'bg-teal-50 border-teal-200' },
   { key: '72h',          label: '≤ 72 giờ',        icon: Clock,       cls: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', editable: true },
-  { key: 'giaoLai',      label: 'Giao lại lần 2',  icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', editable: true },
-  { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200', editable: true },
+  { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200' },
+  { key: 'choLay',       label: 'Chờ lấy',         icon: Package,     cls: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
+  { key: 'giaoLai',      label: 'Giao lại lần 2',  icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
+  { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
 ]
 
-// Đọc nhanh toàn bộ thống kê (24h/48h/72h/đang vận chuyển/giao lại/hoàn hàng) theo file đã upload cho 1 carrier
-export function getCarrierFileStats(carrierKey, carrierType, internalData) {
+// ---- Lưu trữ dữ liệu upload theo TỪNG TUẦN, cố định/không bị ghi đè khi upload file mới ----
+// carrier_weeks_${carrierKey} = [{ id, fileName, uploadedAt, rows }, ...] (mới nhất ở đầu)
+
+function readCarrierWeeks(carrierKey) {
   try {
-    const state = JSON.parse(localStorage.getItem(`carrier_data_${carrierKey}`) || 'null')
-    if (!state) return null
-
-    const lookupMap = carrierType === 'viettel' ? buildInternalOrderLookup(internalData) : null
-    const stats = computeCarrierStats(state.rows, carrierType, lookupMap)
-
-    const readOverride = (key) => {
-      const v = localStorage.getItem(`carrier_statoverride_${carrierKey}_${key}`)
-      return v ? Number(v) : null
+    const weeks = JSON.parse(localStorage.getItem(`carrier_weeks_${carrierKey}`) || 'null')
+    if (Array.isArray(weeks)) return weeks
+    // Di chuyển dữ liệu cũ (định dạng 1 file duy nhất) sang định dạng nhiều tuần, giữ nguyên số liệu cũ
+    const legacy = JSON.parse(localStorage.getItem(`carrier_data_${carrierKey}`) || 'null')
+    if (legacy) {
+      const migrated = [{ id: legacy.uploadedAt || String(Date.now()), fileName: legacy.fileName, uploadedAt: legacy.uploadedAt, rows: legacy.rows }]
+      localStorage.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify(migrated))
+      return migrated
     }
-    const dangVanChuyen = readOverride('dangVanChuyen') ?? stats.dangVanChuyen
-    const giaoLai = readOverride('giaoLai') ?? stats.giaoLai
-    const hoanHang = readOverride('hoanHang') ?? stats.hoanHang
-    const effectiveStats = { ...stats, dangVanChuyen, giaoLai, hoanHang }
+    return []
+  } catch {
+    return []
+  }
+}
 
-    return {
-      fileName: state.fileName,
-      stats: effectiveStats,
-      total: effectiveStats['24h'] + effectiveStats['48h'] + effectiveStats['72h'] + dangVanChuyen + giaoLai + hoanHang,
-    }
+function writeCarrierWeeks(carrierKey, weeks) {
+  localStorage.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify(weeks))
+}
+
+// Thêm 1 tuần upload mới — KHÔNG ghi đè các tuần cũ
+export function addCarrierWeek(carrierKey, entry) {
+  const weeks = readCarrierWeeks(carrierKey)
+  const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
+  const next = [withId, ...weeks]
+  writeCarrierWeeks(carrierKey, next)
+  localStorage.setItem(`carrier_active_${carrierKey}`, withId.id)
+  return withId
+}
+
+// Xoá 1 tuần cụ thể (không ảnh hưởng các tuần khác)
+export function removeCarrierWeek(carrierKey, weekId) {
+  const weeks = readCarrierWeeks(carrierKey).filter(w => w.id !== weekId)
+  writeCarrierWeeks(carrierKey, weeks)
+  const activeId = localStorage.getItem(`carrier_active_${carrierKey}`)
+  if (activeId === weekId) {
+    if (weeks[0]) localStorage.setItem(`carrier_active_${carrierKey}`, weeks[0].id)
+    else localStorage.removeItem(`carrier_active_${carrierKey}`)
+  }
+}
+
+// ---- Loại trừ theo "Tên hàng" — áp dụng chung cho carrier (không riêng theo tuần), vì đây là quy tắc
+// phân loại sản phẩm (vd voucher, quà tặng...) chứ không phải số liệu upload ----
+export function readExcludedTenHang(carrierKey) {
+  try { return JSON.parse(localStorage.getItem(`carrier_exclude_tenhang_${carrierKey}`) || '[]') } catch { return [] }
+}
+export function writeExcludedTenHang(carrierKey, list) {
+  localStorage.setItem(`carrier_exclude_tenhang_${carrierKey}`, JSON.stringify(list))
+}
+function filterExcludedRows(rows, carrierKey) {
+  const excluded = readExcludedTenHang(carrierKey)
+  if (excluded.length === 0) return rows
+  const excludedSet = new Set(excluded)
+  return rows.filter(r => !excludedSet.has((r['Tên hàng'] || '').trim()))
+}
+
+// ---- File đối chiếu "Chờ giao Logistics" — dùng để xác nhận đơn "Đang lấy hàng" có thật đang xử lý không.
+// Mỗi lần upload là 1 tuần độc lập, KHÔNG ghi đè tuần cũ (giống dữ liệu carrier chính) ----
+export function readHoldWeeks(carrierKey) {
+  try {
+    const weeks = JSON.parse(localStorage.getItem(`carrier_holdweeks_${carrierKey}`) || '[]')
+    return Array.isArray(weeks) ? weeks : []
+  } catch {
+    return []
+  }
+}
+export function addHoldWeek(carrierKey, entry) {
+  const weeks = readHoldWeeks(carrierKey)
+  const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
+  const next = [withId, ...weeks]
+  localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(next))
+  return withId
+}
+export function removeHoldWeek(carrierKey, weekId) {
+  const next = readHoldWeeks(carrierKey).filter(w => w.id !== weekId)
+  localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(next))
+}
+// Gộp mã tracking từ TOÀN BỘ các tuần đã upload (tích luỹ dần) để đối chiếu
+function getHoldLookupSet(carrierKey) {
+  const weeks = readHoldWeeks(carrierKey)
+  if (weeks.length === 0) return null
+  const set = new Set()
+  for (const w of weeks) for (const code of buildTrackingSet(w.rows, 'Mã vận đơn VT')) set.add(code)
+  return set
+}
+
+function buildStatsForWeek(entry, carrierKey, carrierType, internalData) {
+  if (!entry) return null
+  const lookupMap = buildInternalOrderLookup(internalData)
+  const holdLookupSet = getHoldLookupSet(carrierKey)
+  const effectiveRows = filterExcludedRows(entry.rows, carrierKey)
+  const stats = computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet)
+
+  return {
+    weekId: entry.id,
+    fileName: entry.fileName,
+    uploadedAt: entry.uploadedAt,
+    stats,
+    total: stats['24h'] + stats['48h'] + stats['72h'] + stats.dangVanChuyen + stats.giaoLai + stats.hoanHang + stats.choLay,
+  }
+}
+
+// Đọc nhanh toàn bộ thống kê (24h/48h/72h/đang vận chuyển/giao lại/hoàn hàng) theo tuần đang chọn (mặc định: tuần mới nhất)
+export function getCarrierFileStats(carrierKey, carrierType, internalData, weekId) {
+  try {
+    const weeks = readCarrierWeeks(carrierKey)
+    if (weeks.length === 0) return null
+    const entry = weekId ? weeks.find(w => w.id === weekId) : weeks[0]
+    return buildStatsForWeek(entry, carrierKey, carrierType, internalData)
   } catch {
     return null
   }
 }
 
-// Giữ tương thích ngược — chỉ lấy tổng đơn
+// Giữ tương thích ngược — chỉ lấy tổng đơn (tuần mới nhất)
 export function getCarrierFileTotal(carrierKey, carrierType, internalData) {
   return getCarrierFileStats(carrierKey, carrierType, internalData)
 }
 
-const CARRIER_HISTORY_MAX = 8
-
-// Mỗi lần upload file mới, lưu lại 1 bản ghi lịch sử (tối đa 8 lần gần nhất) — dùng để so sánh "tuần trước"
-export function pushCarrierHistory(carrierKey, entry) {
-  try {
-    const lsKey = `carrier_history_${carrierKey}`
-    const history = JSON.parse(localStorage.getItem(lsKey) || '[]')
-    history.unshift(entry)
-    localStorage.setItem(lsKey, JSON.stringify(history.slice(0, CARRIER_HISTORY_MAX)))
-  } catch { /* ignore */ }
-}
-
-// So sánh 2 lần upload gần nhất (hiện tại vs lần trước) cho 1 carrier
+// So sánh tuần mới nhất vs tuần trước đó cho 1 carrier
 export function getCarrierHistoryCompare(carrierKey, carrierType, internalData) {
   try {
-    const history = JSON.parse(localStorage.getItem(`carrier_history_${carrierKey}`) || '[]')
-    const buildStats = (entry) => {
-      if (!entry) return null
-      const lookupMap = carrierType === 'viettel' ? buildInternalOrderLookup(internalData) : null
-      const stats = computeCarrierStats(entry.rows, carrierType, lookupMap)
-      const total = stats['24h'] + stats['48h'] + stats['72h'] + stats.dangVanChuyen + stats.giaoLai + stats.hoanHang
-      return { fileName: entry.fileName, stats, total }
+    const weeks = readCarrierWeeks(carrierKey)
+    return {
+      current: buildStatsForWeek(weeks[0], carrierKey, carrierType, internalData),
+      previous: buildStatsForWeek(weeks[1], carrierKey, carrierType, internalData),
     }
-    return { current: buildStats(history[0]), previous: buildStats(history[1]) }
   } catch {
     return { current: null, previous: null }
   }
-}
-
-function useStatOverride(storageKey, statKey) {
-  const lsKey = `carrier_statoverride_${storageKey}_${statKey}`
-  const [override, setOverride] = useState(() => localStorage.getItem(lsKey) ?? '')
-  const commit = (v) => {
-    setOverride(v)
-    if (v === '') localStorage.removeItem(lsKey)
-    else localStorage.setItem(lsKey, v)
-  }
-  return [override, commit]
-}
-
-function EditableCarrierStatCard({ col, value, override, onCommit }) {
-  const Icon = col.icon
-  const [editing, setEditing] = useState(false)
-  const inputRef = useRef()
-
-  const displayVal = override !== '' ? override : value
-
-  const startEdit = () => {
-    setEditing(true)
-    setTimeout(() => inputRef.current?.focus(), 0)
-  }
-
-  return (
-    <div className={`rounded-xl border p-3 ${col.bg} text-center relative`}>
-      <Icon size={16} className={`${col.cls} mx-auto mb-1`} />
-      {editing ? (
-        <input
-          ref={inputRef}
-          type="number"
-          min="0"
-          defaultValue={displayVal}
-          onBlur={e => { onCommit(e.target.value); setEditing(false) }}
-          onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditing(false) }}
-          className={`text-xl font-bold ${col.cls} bg-transparent border-b-2 border-current w-16 text-center focus:outline-none`}
-        />
-      ) : (
-        <div onDoubleClick={startEdit} className={`text-xl font-bold ${col.cls} cursor-pointer`} title="Bấm đúp để nhập tay">
-          {displayVal}
-        </div>
-      )}
-      <div className="text-xs text-gray-500 mt-0.5 leading-tight">{col.label}</div>
-      {override !== '' && (
-        <button
-          onClick={() => onCommit('')}
-          className="absolute top-1 right-1 text-[9px] text-gray-400 hover:text-red-500"
-          title="Khôi phục số tự động"
-        >
-          ↺
-        </button>
-      )}
-    </div>
-  )
 }
 
 function ReconcilePanel({ vtpRows, internalData }) {
@@ -188,10 +209,25 @@ function ReconcilePanel({ vtpRows, internalData }) {
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 'all']
 const DEFAULT_COL_WIDTH = {
   'Mã Vận Đơn': 130, 'Mã đơn hàng': 130, 'Ngày tạo': 140, 'Người nhận': 200, 'Địa chỉ nhận': 260,
-  'ĐT Nhận': 140, 'Trạng Thái': 130, 'Lý do': 200, 'Đơn chuyển hoàn': 110, 'Ngày chuyển trạng thái': 150,
+  'ĐT Nhận': 140, 'Tên hàng': 180, 'Trạng Thái': 130, 'Lý do': 200, 'Đơn chuyển hoàn': 110, 'Ngày chuyển trạng thái': 150,
   'Mã vận đơn': 150, 'Thời gian tạo đơn': 140, 'Thời gian giao hàng': 140, 'Trạng thái hiện tại': 150,
   'Tên người nhận': 160, 'Số điện thoại người nhận': 140, 'Mã khách hàng': 140,
   'Thu COD (Có/Không)': 130, 'Số tiền COD': 120, 'Giá trị đơn hàng': 130,
+}
+
+// Ghi chú tay theo từng mã vận đơn (dùng để theo dõi các đơn "Đang lấy hàng" chưa khớp file Chờ giao Logistics)
+function useHoldNotes(carrierKey) {
+  const lsKey = `carrier_hold_notes_${carrierKey}`
+  const [notes, setNotes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(lsKey) || '{}') } catch { return {} }
+  })
+  const setNote = (code, text) => {
+    const next = { ...notes, [code]: text }
+    if (!text) delete next[code]
+    setNotes(next)
+    localStorage.setItem(lsKey, JSON.stringify(next))
+  }
+  return [notes, setNote]
 }
 
 function useColWidths(storageKey, columns) {
@@ -216,30 +252,69 @@ function useColWidths(storageKey, columns) {
 
 export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [] }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
-  const lookupMap = useMemo(
-    () => carrierType === 'viettel' ? buildInternalOrderLookup(internalData) : null,
-    [internalData, carrierType]
-  )
-  const lsKey = `carrier_data_${carrierKey}`
+  const lookupMap = useMemo(() => buildInternalOrderLookup(internalData), [internalData])
   const inputRef = useRef()
+  const holdInputRef = useRef()
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [holdNotes, setHoldNote] = useHoldNotes(carrierKey)
 
-  const [state, setState] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(lsKey) || 'null') } catch { return null }
+  // File đối chiếu "Chờ giao Logistics" — xác nhận đơn "Đang lấy hàng" có đang thực sự xử lý không.
+  // Mỗi lần upload là 1 tuần độc lập, không ghi đè — mã tracking được gộp từ TẤT CẢ các tuần đã upload để đối chiếu.
+  const [holdWeeks, setHoldWeeks] = useState(() => readHoldWeeks(carrierKey))
+  const holdLookupSet = useMemo(() => {
+    if (holdWeeks.length === 0) return null
+    const set = new Set()
+    for (const w of holdWeeks) for (const code of buildTrackingSet(w.rows, 'Mã vận đơn VT')) set.add(code)
+    return set
+  }, [holdWeeks])
+
+  const parseHoldFile = (file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+        addHoldWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+        setHoldWeeks(readHoldWeeks(carrierKey))
+      } catch {
+        setError('Không đọc được file Chờ giao Logistics. Vui lòng kiểm tra lại.')
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  const removeHoldWeekEntry = (weekId) => {
+    removeHoldWeek(carrierKey, weekId)
+    setHoldWeeks(readHoldWeeks(carrierKey))
+  }
+
+  const [weeks, setWeeks] = useState(() => readCarrierWeeks(carrierKey))
+  const [activeWeekId, setActiveWeekId] = useState(() => {
+    const saved = localStorage.getItem(`carrier_active_${carrierKey}`)
+    const list = readCarrierWeeks(carrierKey)
+    return (saved && list.some(w => w.id === saved)) ? saved : (list[0]?.id || null)
   })
+  const state = weeks.find(w => w.id === activeWeekId) || null
+
+  const selectWeek = (id) => {
+    setActiveWeekId(id)
+    localStorage.setItem(`carrier_active_${carrierKey}`, id)
+  }
+
   const [colFilters, setColFilters] = useState({})
   const [pageSize, setPageSize] = useState(50)
   const [tableExpanded, setTableExpanded] = useState(false)
   const [colWidths, setColWidth] = useColWidths(carrierKey, TABLE_COLUMNS)
-  const [dangVanChuyenOv, setDangVanChuyenOv] = useStatOverride(carrierKey, 'dangVanChuyen')
-  const [giaoLaiOv, setGiaoLaiOv] = useStatOverride(carrierKey, 'giaoLai')
-  const [hoanHangOv, setHoanHangOv] = useStatOverride(carrierKey, 'hoanHang')
-  const statOverrides = { dangVanChuyen: [dangVanChuyenOv, setDangVanChuyenOv], giaoLai: [giaoLaiOv, setGiaoLaiOv], hoanHang: [hoanHangOv, setHoanHangOv] }
   const minTableWidthRef = useRef(0)
 
-  const totalTableWidth = Object.values(colWidths).reduce((a, b) => a + b, 0)
+  const NOTE_COL_WIDTH = 220
+  // Đối chiếu "Chờ giao Logistics" chỉ áp dụng cho Đơn DTP — Đơn C không cần kiểm tra mục này
+  const showNoteCol = carrierType === 'viettel' && carrierKey.startsWith('donDTP')
+  const totalTableWidth = Object.values(colWidths).reduce((a, b) => a + b, 0) + (showNoteCol ? NOTE_COL_WIDTH : 0)
   minTableWidthRef.current = Math.max(minTableWidthRef.current, totalTableWidth)
   const stableWidth = minTableWidthRef.current
 
@@ -271,6 +346,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
 
   const setColFilter = (key, vals) => setColFilters(f => ({ ...f, [key]: vals }))
 
+  // Mỗi lần upload tạo 1 tuần dữ liệu MỚI, độc lập — không ghi đè tuần đã có trước đó
   const parseFile = (file) => {
     setError('')
     if (!file) return
@@ -279,10 +355,9 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       try {
         const rows = parseCarrierFile(e.target.result, carrierType)
         if (rows.length === 0) { setError('Không tìm thấy dữ liệu đơn hàng trong file.'); return }
-        const next = { fileName: file.name, uploadedAt: new Date().toISOString(), rows }
-        setState(next)
-        localStorage.setItem(lsKey, JSON.stringify(next))
-        pushCarrierHistory(carrierKey, next)
+        const entry = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+        setWeeks(readCarrierWeeks(carrierKey))
+        setActiveWeekId(entry.id)
       } catch (err) {
         setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
       }
@@ -296,32 +371,62 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     parseFile(e.dataTransfer.files[0])
   }
 
-  const clear = () => {
-    setState(null)
-    localStorage.removeItem(lsKey)
+  // Xoá HẲN tuần đang xem — các tuần khác không bị ảnh hưởng
+  const removeActiveWeek = () => {
+    if (!state) return
+    if (!window.confirm(`Xoá dữ liệu tuần "${state.fileName}"? Các tuần khác vẫn được giữ nguyên.`)) return
+    removeCarrierWeek(carrierKey, state.id)
+    const next = readCarrierWeeks(carrierKey)
+    setWeeks(next)
+    setActiveWeekId(next[0]?.id || null)
   }
 
-  const stats = useMemo(() => state ? computeCarrierStats(state.rows, carrierType, lookupMap) : null, [state, carrierType, lookupMap])
+  // Loại trừ theo "Tên hàng" (vd voucher, quà tặng...) khỏi thống kê — áp dụng chung cho carrier này
+  const [excludedNames, setExcludedNames] = useState(() => readExcludedTenHang(carrierKey))
+  const hasTenHang = TABLE_COLUMNS.includes('Tên hàng')
+
+  const toggleExclude = (name) => {
+    const next = excludedNames.includes(name) ? excludedNames.filter(n => n !== name) : [...excludedNames, name]
+    setExcludedNames(next)
+    writeExcludedTenHang(carrierKey, next)
+  }
+
+  const effectiveRows = useMemo(() => {
+    if (!state) return []
+    if (!hasTenHang || excludedNames.length === 0) return state.rows
+    const excludedSet = new Set(excludedNames)
+    return state.rows.filter(r => !excludedSet.has((r['Tên hàng'] || '').trim()))
+  }, [state, excludedNames, hasTenHang])
+
+  const stats = useMemo(() => state ? computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet) : null, [state, effectiveRows, carrierType, lookupMap, holdLookupSet])
+
+  // Đơn "Đang lấy hàng" chưa khớp file Chờ giao Logistics — cần kiểm tra tay
+  const [onlyUnmatched, setOnlyUnmatched] = useState(false)
+  const unmatchedRows = useMemo(() => {
+    if (!state || !showNoteCol) return []
+    return state.rows.filter(row => isHoldStatusRow(row, carrierType) && !holdLookupSet?.has(getTrackingCode(row, carrierType)))
+  }, [state, carrierType, holdLookupSet, showNoteCol])
 
   const activeFilters = Object.entries(colFilters).filter(([, v]) => v?.length > 0)
 
   const filteredRows = useMemo(() => {
     if (!state) return []
     const q = search.toLowerCase()
-    return state.rows.filter(row => {
+    const base = onlyUnmatched ? unmatchedRows : state.rows
+    return base.filter(row => {
       for (const [key, vals] of activeFilters) {
         if (!vals.includes(row[key])) return false
       }
       if (q) return Object.values(row).some(v => v.toLowerCase().includes(q))
       return true
     })
-  }, [state, search, activeFilters])
+  }, [state, search, activeFilters, onlyUnmatched, unmatchedRows])
 
   // Dữ liệu dùng để tính option cho từng cột: áp dụng mọi filter khác, trừ filter của chính cột đó (lọc liên động)
   const dataForColumn = useCallback((excludeKey) => {
     if (!state) return []
     const q = search.toLowerCase()
-    return state.rows.filter(row => {
+    return (onlyUnmatched ? unmatchedRows : state.rows).filter(row => {
       for (const [key, vals] of activeFilters) {
         if (key === excludeKey) continue
         if (!vals.includes(row[key])) return false
@@ -329,7 +434,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       if (q) return Object.values(row).some(v => v.toLowerCase().includes(q))
       return true
     })
-  }, [state, search, activeFilters])
+  }, [state, search, activeFilters, onlyUnmatched, unmatchedRows])
 
   if (!state) {
     return (
@@ -356,19 +461,32 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     )
   }
 
-  const effectiveTotal = stats['24h'] + stats['48h'] + stats['72h']
-    + Number(dangVanChuyenOv !== '' ? dangVanChuyenOv : stats.dangVanChuyen)
-    + Number(giaoLaiOv !== '' ? giaoLaiOv : stats.giaoLai)
-    + Number(hoanHangOv !== '' ? hoanHangOv : stats.hoanHang)
+  const effectiveTotal = stats['24h'] + stats['48h'] + stats['72h'] + stats.dangVanChuyen + stats.giaoLai + stats.hoanHang + stats.choLay
 
   return (
     <div>
+      {weeks.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <span className="text-xs text-gray-400 mr-1">Tuần dữ liệu:</span>
+          {weeks.map((w, i) => (
+            <button
+              key={w.id}
+              onClick={() => selectWeek(w.id)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                w.id === activeWeekId
+                  ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600'
+              }`}
+              title={w.fileName}
+            >
+              {i === 0 ? 'Mới nhất' : `Tuần trước ×${i}`} · {new Date(w.uploadedAt).toLocaleDateString('vi-VN')}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-4">
         {STAT_CARDS.map(c => {
-          if (c.editable) {
-            const [ov, setOv] = statOverrides[c.key]
-            return <EditableCarrierStatCard key={c.key} col={c} value={stats[c.key]} override={ov} onCommit={setOv} />
-          }
           const Icon = c.icon
           return (
             <div key={c.key} className={`rounded-xl border p-3 ${c.bg} text-center`}>
@@ -385,7 +503,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
           <FileSpreadsheet size={15} className="text-green-600 flex-shrink-0" />
           <span className="text-green-700 font-medium truncate max-w-72">{state.fileName}</span>
           <span className="text-green-500 text-xs">({effectiveTotal} đơn, {state.rows.length} dòng)</span>
-          <button onClick={clear} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xóa file">
+          <button onClick={removeActiveWeek} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xoá hẳn dữ liệu tuần này (các tuần khác không bị ảnh hưởng)">
             <X size={14} />
           </button>
         </div>
@@ -394,11 +512,62 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
           className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors"
         >
           <Upload size={14} />
-          Upload file mới
+          Upload tuần mới
         </button>
         <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
         <span className="text-xs text-gray-400">Cập nhật: {new Date(state.uploadedAt).toLocaleString('vi-VN')}</span>
       </div>
+
+      {showNoteCol && (
+        <div className="mb-5">
+          <div className="flex items-center gap-2 flex-wrap">
+            {holdWeeks.length === 0 && (
+              <span className="text-xs text-gray-400">Chưa có file "Chờ giao Logistics" để đối chiếu đơn "Đang lấy hàng"</span>
+            )}
+            <button
+              onClick={() => holdInputRef.current.click()}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors"
+            >
+              <Upload size={14} />
+              Upload tuần Chờ giao Logistics
+            </button>
+            <input ref={holdInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseHoldFile(e.target.files[0])} />
+            {holdWeeks.length > 0 && (
+              <span className="text-xs text-gray-400">Tổng {holdLookupSet.size} mã đối chiếu từ {holdWeeks.length} tuần đã upload</span>
+            )}
+            {holdWeeks.length > 0 && (
+              unmatchedRows.length > 0 ? (
+                <button
+                  onClick={() => { setOnlyUnmatched(true); setTableExpanded(true) }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 hover:bg-red-100 transition-colors"
+                >
+                  <AlertTriangle size={14} />
+                  Xem {unmatchedRows.length} đơn chưa khớp
+                </button>
+              ) : (
+                <span className="flex items-center gap-1.5 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-600">
+                  <CheckCircle size={14} />
+                  0 đơn chưa khớp
+                </span>
+              )
+            )}
+          </div>
+          {holdWeeks.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {holdWeeks.map(w => (
+                <span key={w.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                  <FileSpreadsheet size={12} />
+                  <span className="max-w-48 truncate" title={w.fileName}>{w.fileName}</span>
+                  <span className="text-blue-400">· {new Date(w.uploadedAt).toLocaleDateString('vi-VN')}</span>
+                  <button onClick={() => removeHoldWeekEntry(w.id)} className="ml-0.5 text-blue-400 hover:text-red-500" title="Xoá tuần này">
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <button
         onClick={() => setTableExpanded(v => !v)}
@@ -411,6 +580,15 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
 
       {tableExpanded && (
         <div className="mt-3">
+          {onlyUnmatched && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+              <AlertTriangle size={14} />
+              Đang chỉ hiện {unmatchedRows.length} đơn "Đang lấy hàng" chưa khớp file Chờ giao Logistics
+              <button onClick={() => setOnlyUnmatched(false)} className="ml-auto flex items-center gap-1 text-red-500 hover:text-red-700 font-medium">
+                <X size={13} /> Bỏ lọc
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 mb-3 items-center">
             <div className="relative flex-1 min-w-48 max-w-sm">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -422,7 +600,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
               />
             </div>
             <span className="text-xs text-gray-400 whitespace-nowrap">
-              {activeFilters.length > 0 || search ? `${filteredRows.length}/${state.rows.length} dòng (đã lọc)` : `${state.rows.length} dòng`}
+              {activeFilters.length > 0 || search || onlyUnmatched ? `${filteredRows.length}/${state.rows.length} dòng (đã lọc)` : `${state.rows.length} dòng`}
             </span>
             <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>Hiển thị</span>
@@ -461,18 +639,59 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
                       <ResizeHandle colKey={c} setWidth={setColWidth} />
                     </th>
                   ))}
+                  {showNoteCol && (
+                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap border border-white/20" style={{ width: NOTE_COL_WIDTH }}>
+                      Ghi chú
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {filteredRows.length === 0 ? (
-                  <tr><td colSpan={TABLE_COLUMNS.length} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
-                ) : (pageSize === 'all' ? filteredRows : filteredRows.slice(0, pageSize)).map((row, i) => (
-                  <tr key={i} className="border-b border-gray-100 hover:bg-blue-50/40 text-[12px]">
-                    {TABLE_COLUMNS.map(c => (
-                      <td key={c} className="px-3 py-2 border border-gray-200" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row[c] || '—'}</td>
-                    ))}
-                  </tr>
-                ))}
+                  <tr><td colSpan={TABLE_COLUMNS.length + (showNoteCol ? 1 : 0)} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
+                ) : (pageSize === 'all' ? filteredRows : filteredRows.slice(0, pageSize)).map((row, i) => {
+                  const tenHang = (row['Tên hàng'] || '').trim()
+                  const isExcludedRow = hasTenHang && excludedNames.includes(tenHang)
+                  const code = showNoteCol ? getTrackingCode(row, carrierType) : null
+                  const isUnmatchedHold = showNoteCol && isHoldStatusRow(row, carrierType) && !holdLookupSet?.has(code)
+                  return (
+                    <tr
+                      key={i}
+                      className={`border-b border-gray-100 text-[12px] ${
+                        isExcludedRow ? 'opacity-40 hover:bg-blue-50/40'
+                        : isUnmatchedHold ? 'bg-red-50 hover:bg-red-100'
+                        : 'hover:bg-blue-50/40'
+                      }`}
+                      title={isUnmatchedHold ? 'Đơn "Đang lấy hàng" chưa khớp file Chờ giao Logistics — cần kiểm tra' : undefined}
+                    >
+                      {TABLE_COLUMNS.map(c => {
+                        const isTenHangCol = c === 'Tên hàng'
+                        return (
+                          <td
+                            key={c}
+                            onClick={isTenHangCol && tenHang ? () => toggleExclude(tenHang) : undefined}
+                            className={`px-3 py-2 border border-gray-200 ${isTenHangCol && tenHang ? 'cursor-pointer hover:bg-red-50' : ''}`}
+                            style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={isTenHangCol && tenHang ? 'Bấm để loại trừ/khôi phục các đơn cùng "Tên hàng" khỏi thống kê' : undefined}
+                          >
+                            {row[c] || '—'}
+                          </td>
+                        )
+                      })}
+                      {showNoteCol && (
+                        <td className="px-2 py-1 border border-gray-200">
+                          <input
+                            type="text"
+                            value={holdNotes[code] || ''}
+                            onChange={e => setHoldNote(code, e.target.value)}
+                            placeholder={isUnmatchedHold ? 'Ghi chú theo dõi...' : ''}
+                            className="w-full text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-blue-300 rounded px-1 py-0.5"
+                          />
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
             {pageSize !== 'all' && filteredRows.length > pageSize && (
