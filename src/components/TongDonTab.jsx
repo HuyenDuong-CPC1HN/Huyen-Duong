@@ -88,7 +88,7 @@ function readKhBreakdownSum(type, weekId) {
 
 // Số đơn chành xe "chưa gửi" / "chưa giao" nhập tay theo đúng tuần — lấy cùng nguồn với tab Thống kê giao hàng
 function readChanhXeOverride(weekId, field) {
-  const v = localStorage.getItem(`donC_chanhXe_${weekId || 'live'}_${field}`)
+  const v = localStorage.getItem(`chuagiao_override_donC_chanhXe_${weekId || 'live'}_${field}`)
   return v === null ? 0 : Number(v)
 }
 
