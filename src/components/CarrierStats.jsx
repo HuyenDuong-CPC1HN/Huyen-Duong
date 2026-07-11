@@ -137,6 +137,11 @@ export function getCarrierFileTotal(carrierKey, carrierType, internalData) {
   return getCarrierFileStats(carrierKey, carrierType, internalData)
 }
 
+// Danh sách rút gọn các tuần đã upload (không kèm rows) — dùng cho UI chọn tuần thủ công ở nơi khác (vd Tổng đơn)
+export function getCarrierWeeksList(carrierKey) {
+  return readCarrierWeeks(carrierKey).map(w => ({ id: w.id, fileName: w.fileName, uploadedAt: w.uploadedAt }))
+}
+
 // So sánh tuần mới nhất vs tuần trước đó cho 1 carrier
 export function getCarrierHistoryCompare(carrierKey, carrierType, internalData) {
   try {

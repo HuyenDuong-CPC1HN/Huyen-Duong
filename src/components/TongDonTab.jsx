@@ -9,7 +9,7 @@ import {
 import { useWeeklyData } from '../useWeeklyData'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
-import { getCarrierFileStats, getCarrierHistoryCompare } from './CarrierStats'
+import { getCarrierFileStats, getCarrierWeeksList } from './CarrierStats'
 
 function readJSON(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback } catch { return fallback }
@@ -60,6 +60,41 @@ function useTypeData(type) {
     loading: false,
     validData, prevValidData, activeId, prevWeekId: prevWeek?.id || null,
   }
+}
+
+// Cho phép tự chọn tuần VTP/SPX nào ứng với "Tuần này" / "Tuần trước" của báo cáo Tổng đơn —
+// vì tuần upload file carrier không nhất thiết khớp thứ tự với tuần Excel Đơn C/DTP (upload lộn xộn, upload lại...).
+// Mặc định: tuần mới nhất = Tuần này, tuần trước đó = Tuần trước (giống hành vi cũ nếu chưa ai chỉnh tay).
+function useCarrierWeekPicker(carrierKey, carrierType, internalData) {
+  const weeksList = useMemo(() => getCarrierWeeksList(carrierKey), [carrierKey, internalData])
+
+  const [currentId, setCurrentIdRaw] = useState(() => localStorage.getItem(`tongdon_carrierpick_current_${carrierKey}`) || '')
+  const [previousId, setPreviousIdRaw] = useState(() => localStorage.getItem(`tongdon_carrierpick_previous_${carrierKey}`) || '')
+
+  const setCurrentId = (id) => {
+    setCurrentIdRaw(id)
+    if (id) localStorage.setItem(`tongdon_carrierpick_current_${carrierKey}`, id)
+    else localStorage.removeItem(`tongdon_carrierpick_current_${carrierKey}`)
+  }
+  const setPreviousId = (id) => {
+    setPreviousIdRaw(id)
+    if (id) localStorage.setItem(`tongdon_carrierpick_previous_${carrierKey}`, id)
+    else localStorage.removeItem(`tongdon_carrierpick_previous_${carrierKey}`)
+  }
+
+  const effectiveCurrentId = (currentId && weeksList.some(w => w.id === currentId)) ? currentId : (weeksList[0]?.id || null)
+  const effectivePreviousId = (previousId && weeksList.some(w => w.id === previousId)) ? previousId : (weeksList[1]?.id || null)
+
+  const currentStats = useMemo(
+    () => effectiveCurrentId ? getCarrierFileStats(carrierKey, carrierType, internalData, effectiveCurrentId) : null,
+    [carrierKey, carrierType, internalData, effectiveCurrentId]
+  )
+  const previousStats = useMemo(
+    () => effectivePreviousId ? getCarrierFileStats(carrierKey, carrierType, internalData, effectivePreviousId) : null,
+    [carrierKey, carrierType, internalData, effectivePreviousId]
+  )
+
+  return { weeksList, currentId: effectiveCurrentId, previousId: effectivePreviousId, setCurrentId, setPreviousId, currentStats, previousStats }
 }
 
 function buildGroups(data) {
@@ -244,6 +279,47 @@ function PartnerCompareRow({ label, cur, prev }) {
   )
 }
 
+function weekOptionLabel(w) {
+  return `${w.fileName} · ${new Date(w.uploadedAt).toLocaleDateString('vi-VN')}`
+}
+
+function CarrierWeekPickRow({ label, pick }) {
+  const { weeksList, currentId, previousId, setCurrentId, setPreviousId } = pick
+  if (weeksList.length === 0) {
+    return (
+      <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">{label}: chưa có file nào upload</div>
+    )
+  }
+  return (
+    <div className="bg-gray-50/70 rounded-lg p-2.5">
+      <div className="text-xs font-medium text-gray-600 mb-1.5">{label}</div>
+      <div className="space-y-1.5">
+        <label className="flex items-center gap-1.5 text-[11px] text-gray-500">
+          <span className="w-16 flex-shrink-0">Tuần này:</span>
+          <select
+            value={currentId || ''}
+            onChange={e => setCurrentId(e.target.value)}
+            className="flex-1 min-w-0 border border-gray-200 rounded px-1.5 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+          >
+            {weeksList.map(w => <option key={w.id} value={w.id}>{weekOptionLabel(w)}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-[11px] text-gray-500">
+          <span className="w-16 flex-shrink-0">Tuần trước:</span>
+          <select
+            value={previousId || ''}
+            onChange={e => setPreviousId(e.target.value)}
+            className="flex-1 min-w-0 border border-gray-200 rounded px-1.5 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+          >
+            <option value="">— Không có —</option>
+            {weeksList.map(w => <option key={w.id} value={w.id}>{weekOptionLabel(w)}</option>)}
+          </select>
+        </label>
+      </div>
+    </div>
+  )
+}
+
 function SolutionCard({ num, text, onChange }) {
   return (
     <div className="bg-gray-50/70 rounded-xl border border-gray-100 p-3 flex gap-2 flex-1 min-w-[180px] hover:bg-gray-50 transition-colors">
@@ -276,29 +352,22 @@ export default function TongDonTab() {
   const weekKey = `${donC.activeId || 'x'}_${donDTP.activeId || 'x'}`
   const prevWeekKey = donC.prevWeekId || donDTP.prevWeekId ? `${donC.prevWeekId || 'x'}_${donDTP.prevWeekId || 'x'}` : null
 
-  const viettelCompareC = getCarrierHistoryCompare('donC_viettel', 'viettel', donC.validData)
-  const spxCompareC = getCarrierHistoryCompare('donC_spx', 'spx', donC.validData)
-  const viettelCompareDTP = getCarrierHistoryCompare('donDTP_viettel', 'viettel', donDTP.validData)
-
-  const viettelCurrentC = getCarrierFileStats('donC_viettel', 'viettel', donC.validData) || viettelCompareC.current
-  const spxCurrentC = getCarrierFileStats('donC_spx', 'spx', donC.validData) || spxCompareC.current
-  const viettelCurrentDTP = getCarrierFileStats('donDTP_viettel', 'viettel', donDTP.validData) || viettelCompareDTP.current
+  // Tự chọn tuần VTP/SPX ứng với "Tuần này"/"Tuần trước" — không tự đoán theo thứ tự upload nữa
+  const viettelPickC = useCarrierWeekPicker('donC_viettel', 'viettel', donC.validData)
+  const spxPickC = useCarrierWeekPicker('donC_spx', 'spx', donC.validData)
+  const viettelPickDTP = useCarrierWeekPicker('donDTP_viettel', 'viettel', donDTP.validData)
 
   const liveCurrent = useMemo(() => computeWeekReport({
     dataC: donC.validData, dataDTP: donDTP.validData,
     weekIdC: donC.activeId || 'live', weekIdDTP: donDTP.activeId || 'live', tmdtTotal: tmdtCurrent,
-    viettelCompareC: viettelCurrentC, spxCompareC: spxCurrentC, viettelCompareDTP: viettelCurrentDTP,
-  }), [donC.validData, donDTP.validData, donC.activeId, donDTP.activeId, tmdtCurrent, viettelCurrentC, spxCurrentC, viettelCurrentDTP])
+    viettelCompareC: viettelPickC.currentStats, spxCompareC: spxPickC.currentStats, viettelCompareDTP: viettelPickDTP.currentStats,
+  }), [donC.validData, donDTP.validData, donC.activeId, donDTP.activeId, tmdtCurrent, viettelPickC.currentStats, spxPickC.currentStats, viettelPickDTP.currentStats])
 
-  // Nếu chưa có lịch sử "tuần trước" riêng của VTP/SPX (mới upload 1 tuần), dùng luôn số liệu file mới nhất
-  // — giống hệt số app hiển thị ở khung Tổng đơn của từng trang, tránh tự đếm lại gây lệch.
   const livePrevious = useMemo(() => computeWeekReport({
     dataC: donC.prevValidData || [], dataDTP: donDTP.prevValidData || [],
     weekIdC: donC.prevWeekId, weekIdDTP: donDTP.prevWeekId, tmdtTotal: tmdtPrev,
-    viettelCompareC: viettelCompareC.previous || viettelCurrentC,
-    spxCompareC: spxCompareC.previous || spxCurrentC,
-    viettelCompareDTP: viettelCompareDTP.previous || viettelCurrentDTP,
-  }), [donC.prevValidData, donDTP.prevValidData, donC.prevWeekId, donDTP.prevWeekId, tmdtPrev, viettelCompareC, spxCompareC, viettelCompareDTP, viettelCurrentC, spxCurrentC, viettelCurrentDTP])
+    viettelCompareC: viettelPickC.previousStats, spxCompareC: spxPickC.previousStats, viettelCompareDTP: viettelPickDTP.previousStats,
+  }), [donC.prevValidData, donDTP.prevValidData, donC.prevWeekId, donDTP.prevWeekId, tmdtPrev, viettelPickC.previousStats, spxPickC.previousStats, viettelPickDTP.previousStats])
 
   // ---- Lịch sử báo cáo: mỗi lần bấm "Lưu báo cáo" sẽ đóng băng toàn bộ số liệu hiện tại thành 1 bản ghi cố định ----
   const [reports, setReports] = useState(() => readJSON('tongdon_reports', []))
@@ -495,6 +564,17 @@ export default function TongDonTab() {
           </div>
         )}
       </div>
+
+      {!isReadOnly && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-4 mb-4">
+          <p className="text-xs font-semibold text-gray-500 mb-2.5">Chọn tuần dữ liệu Viettel Post / SPX cho báo cáo (không tự đoán theo thứ tự upload)</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <CarrierWeekPickRow label="Viettel Post — Đơn C" pick={viettelPickC} />
+            <CarrierWeekPickRow label="SPX Express — Đơn C" pick={spxPickC} />
+            <CarrierWeekPickRow label="Viettel Post — Đơn DTP" pick={viettelPickDTP} />
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* 1. Tổng quan sản lượng */}
