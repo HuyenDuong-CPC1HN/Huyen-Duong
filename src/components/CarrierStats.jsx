@@ -36,14 +36,33 @@ function readCarrierWeeks(carrierKey) {
 
 const MAX_CARRIER_WEEKS = 8 // tối đa số tuần giữ lại — mỗi tuần lưu toàn bộ dòng dữ liệu, cần chặn để tránh đầy localStorage
 
-// Ghi danh sách tuần — nếu vượt quota (bộ nhớ trình duyệt đầy), tự động bớt dần các tuần CŨ NHẤT rồi ghi lại
+// localStorage đầy không chỉ do riêng carrier — các tuần Excel Đơn C/DTP (weeks_donC/weeks_donDTP) thường
+// chiếm nhiều chỗ nhất vì lưu toàn bộ dòng qua nhiều lần upload. Dữ liệu đã có trên Firebase nên có thể
+// bớt bớt bản cục bộ an toàn khi cần giải phóng chỗ ghi dữ liệu mới.
+function freeUpLocalStorageSpace() {
+  for (const type of ['donC', 'donDTP']) {
+    try {
+      const raw = localStorage.getItem(`weeks_${type}`)
+      if (!raw) continue
+      const weeks = JSON.parse(raw)
+      if (Array.isArray(weeks) && weeks.length > 2) {
+        localStorage.setItem(`weeks_${type}`, JSON.stringify(weeks.slice(-2)))
+      }
+    } catch { /* ignore */ }
+  }
+}
+
+// Ghi danh sách tuần — nếu vượt quota (bộ nhớ trình duyệt đầy): thử giải phóng chỗ từ nơi khác trước,
+// nếu vẫn không đủ thì tự động bớt dần các tuần CŨ NHẤT của chính carrier này rồi ghi lại
 function writeCarrierWeeks(carrierKey, weeks) {
   let list = weeks
+  let triedFreeing = false
   while (list.length > 0) {
     try {
       localStorage.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify(list))
       return list
     } catch (err) {
+      if (!triedFreeing) { triedFreeing = true; freeUpLocalStorageSpace(); continue }
       if (list.length <= 1) throw err
       list = list.slice(0, -1) // bỏ tuần cũ nhất (mảng đang sắp mới nhất ở đầu)
     }
@@ -102,11 +121,13 @@ export function addHoldWeek(carrierKey, entry) {
   const weeks = readHoldWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
   let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
+  let triedFreeing = false
   while (list.length > 0) {
     try {
       localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(list))
       return withId
     } catch (err) {
+      if (!triedFreeing) { triedFreeing = true; freeUpLocalStorageSpace(); continue }
       if (list.length <= 1) throw err
       list = list.slice(0, -1)
     }
