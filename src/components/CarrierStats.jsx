@@ -34,18 +34,32 @@ function readCarrierWeeks(carrierKey) {
   }
 }
 
+const MAX_CARRIER_WEEKS = 8 // tối đa số tuần giữ lại — mỗi tuần lưu toàn bộ dòng dữ liệu, cần chặn để tránh đầy localStorage
+
+// Ghi danh sách tuần — nếu vượt quota (bộ nhớ trình duyệt đầy), tự động bớt dần các tuần CŨ NHẤT rồi ghi lại
 function writeCarrierWeeks(carrierKey, weeks) {
-  localStorage.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify(weeks))
+  let list = weeks
+  while (list.length > 0) {
+    try {
+      localStorage.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify(list))
+      return list
+    } catch (err) {
+      if (list.length <= 1) throw err
+      list = list.slice(0, -1) // bỏ tuần cũ nhất (mảng đang sắp mới nhất ở đầu)
+    }
+  }
+  throw new Error('Không thể lưu — dữ liệu quá lớn ngay cả với 1 tuần.')
 }
 
-// Thêm 1 tuần upload mới — KHÔNG ghi đè các tuần cũ
+// Thêm 1 tuần upload mới — KHÔNG ghi đè các tuần cũ. Giới hạn tối đa MAX_CARRIER_WEEKS tuần,
+// và tự động bớt tuần cũ nhất nếu localStorage đầy (báo cho người dùng biết nếu có tuần bị bớt).
 export function addCarrierWeek(carrierKey, entry) {
   const weeks = readCarrierWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
-  const next = [withId, ...weeks]
-  writeCarrierWeeks(carrierKey, next)
+  const next = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
+  const saved = writeCarrierWeeks(carrierKey, next)
   localStorage.setItem(`carrier_active_${carrierKey}`, withId.id)
-  return withId
+  return { entry: withId, droppedCount: next.length - saved.length }
 }
 
 // Xoá 1 tuần cụ thể (không ảnh hưởng các tuần khác)
@@ -87,9 +101,17 @@ export function readHoldWeeks(carrierKey) {
 export function addHoldWeek(carrierKey, entry) {
   const weeks = readHoldWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
-  const next = [withId, ...weeks]
-  localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(next))
-  return withId
+  let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
+  while (list.length > 0) {
+    try {
+      localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(list))
+      return withId
+    } catch (err) {
+      if (list.length <= 1) throw err
+      list = list.slice(0, -1)
+    }
+  }
+  throw new Error('Không thể lưu — dữ liệu quá lớn ngay cả với 1 tuần.')
 }
 export function removeHoldWeek(carrierKey, weekId) {
   const next = readHoldWeeks(carrierKey).filter(w => w.id !== weekId)
@@ -360,9 +382,12 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       try {
         const rows = parseCarrierFile(e.target.result, carrierType)
         if (rows.length === 0) { setError('Không tìm thấy dữ liệu đơn hàng trong file.'); return }
-        const entry = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+        const { entry, droppedCount } = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
         setWeeks(readCarrierWeeks(carrierKey))
         setActiveWeekId(entry.id)
+        if (droppedCount > 0) {
+          setError(`Bộ nhớ trình duyệt gần đầy — đã tự động bỏ ${droppedCount} tuần cũ nhất để lưu được tuần này.`)
+        }
       } catch (err) {
         setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
       }
