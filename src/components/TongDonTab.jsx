@@ -1,11 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import {
-  RefreshCw, TrendingUp, TrendingDown, Package, Truck, Users, ClipboardList,
-  Handshake, Target, AlertTriangle, Clock, ArrowRight, BarChart2,
-} from 'lucide-react'
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
-} from 'recharts'
+import { RefreshCw, ClipboardList, ArrowRight } from 'lucide-react'
 import { useWeeklyData } from '../useWeeklyData'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
@@ -167,115 +161,250 @@ function computeWeekReport({ dataC, dataDTP, weekIdC, weekIdDTP, tmdtTotal, viet
     grandTotal, totalC, totalDTP, totalTMDT: tmdtTotal,
     tructiepTotalC, tructiepTotalDTP, chanhXeTotal, chanhXeChuaGiao, codC, codDTP,
     gh24, gh48, gh72, chuaGiao, chuaGiaoC, chuaGiaoDTP, trucTiepTong,
+    bC, bDTP, // mốc 24/48/72h riêng theo Đơn C và Đơn DTP — dùng cho biểu đồ chi tiết theo kênh
     rate24h: pct(gh24, trucTiepTong),
     viettelC: viettelCompareC, spxC: spxCompareC, viettelDTP: viettelCompareDTP,
   }
 }
 
-// ---------- UI bits ----------
-function SectionHeader({ num, title, icon: Icon, color }) {
-  return (
-    <div className="flex items-center gap-2.5 mb-4">
-      <span
-        className="w-8 h-8 rounded-full text-white flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-md"
-        style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)`, boxShadow: `0 3px 8px ${color}55` }}
-      >
-        {num}
-      </span>
-      <h3 className="font-bold text-gray-800 tracking-wide text-[15px]">{title}</h3>
-      <span className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${color}12` }}>
-        <Icon size={16} style={{ color }} />
-      </span>
-    </div>
-  )
+// ---------- UI bits (thiết kế báo cáo 2 cột so sánh tuần, theo mẫu dashboard) ----------
+const TONE = {
+  '24h': '#0E9A7D', '48h': '#D9A441', '72h': '#CC3F55', dangVanChuyen: '#59708F',
+  chuaGiao: '#59708F', giaoLai: '#7C5CD9', hoanHang: '#B23A4A', choLay: '#2A6FB0',
 }
 
-function SectionCard({ accent, children, className = '' }) {
-  return (
-    <div
-      className={`bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-5 ${className}`}
-      style={{ borderTop: `3px solid ${accent}` }}
-    >
-      {children}
-    </div>
-  )
-}
-
-function DeltaCell({ v1, v2 }) {
-  const delta = v1 ? ((v2 - v1) / v1) * 100 : (v2 > 0 ? 100 : 0)
+function KpiCard({ label, cur, prev }) {
+  const delta = prev ? ((cur - prev) / prev) * 100 : (cur > 0 ? 100 : 0)
   const up = delta >= 0
   return (
-    <span className={`inline-flex items-center gap-1 font-semibold ${up ? 'text-green-600' : 'text-red-500'}`}>
-      {up ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-      {fmtPctSigned(delta)}
-    </span>
-  )
-}
-
-function OverviewTable({ rows }) {
-  return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-gray-200">
-          <th className="text-left py-2 text-xs font-semibold text-gray-400"></th>
-          <th className="text-center py-2 text-xs font-semibold text-gray-400 w-20">Tuần này</th>
-          <th className="text-center py-2 text-xs font-semibold text-gray-400 w-20">Tuần trước</th>
-          <th className="text-center py-2 text-xs font-semibold text-gray-400 w-24">Thay đổi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(r => (
-          <tr key={r.label} className="border-b border-gray-50">
-            <td className="py-2.5 flex items-center gap-2 text-gray-700 font-medium">
-              <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${r.color}18` }}>
-                <r.icon size={13} style={{ color: r.color }} />
-              </span>
-              {r.label}
-            </td>
-            <td className="py-2.5 text-center font-bold text-gray-800">{r.v1.toLocaleString('vi-VN')}</td>
-            <td className="py-2.5 text-center text-gray-600">{r.v2.toLocaleString('vi-VN')}</td>
-            <td className="py-2.5 text-center"><DeltaCell v1={r.v2} v2={r.v1} /></td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-function InsightCard({ icon: Icon, color, title, text, onTextChange, editable, placeholder }) {
-  return (
-    <div className="flex gap-3 bg-gray-50/70 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 transition-colors">
-      <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm" style={{ background: `${color}18` }}>
-        <Icon size={17} style={{ color }} />
+    <div className="bg-white p-4">
+      <div className="text-xs text-gray-500 mb-3">{label}</div>
+      <div className="flex items-baseline gap-2 mb-2">
+        <span className="font-extrabold text-[28px] leading-none text-[#0E9A7D]">{cur.toLocaleString('vi-VN')}</span>
+        <span className="text-xs text-gray-300">/</span>
+        <span className="font-mono text-sm text-[#B9720C]">{prev.toLocaleString('vi-VN')}</span>
+      </div>
+      <span className={`inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded ${up ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
+        {up ? '▲' : '▼'} {Math.abs(cur - prev).toLocaleString('vi-VN')} đơn ({fmtPctSigned(delta)})
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="font-semibold text-sm" style={{ color }}>{title}</div>
-        {editable && onTextChange ? (
-          <textarea
-            value={text}
-            onChange={e => onTextChange(e.target.value)}
-            placeholder={placeholder}
-            rows={2}
-            className="w-full text-xs text-gray-500 mt-0.5 resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
-          />
-        ) : (
-          <p className="text-xs text-gray-500 mt-0.5">{text}</p>
+    </div>
+  )
+}
+
+function BreakdownRow({ name, sub, value, pctOfTotal, color, chips }) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <div className="grid grid-cols-[110px_1fr_66px] items-center gap-3">
+        <div className="text-[13px] text-gray-700 font-medium leading-tight">
+          {name}<span className="block text-[10px] text-gray-400 font-normal mt-0.5">{sub}</span>
+        </div>
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${Math.min(pctOfTotal, 100)}%`, background: color }} />
+        </div>
+        <div className="text-[13px] font-mono text-right text-gray-700">{value.toLocaleString('vi-VN')}</div>
+      </div>
+      {chips && chips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-1.5 pl-[122px]">
+          {chips.map((c, i) => (
+            <span key={i} className="text-[10px] font-mono text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{c}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StackBar({ segments }) {
+  const total = segments.reduce((s, x) => s + (x.value || 0), 0)
+  return (
+    <div className="flex h-4 rounded overflow-hidden bg-gray-100">
+      {total > 0 && segments.map((s, i) => s.value > 0 && (
+        <div key={i} style={{ width: `${(s.value / total) * 100}%`, background: s.color }} title={`${s.label || ''}: ${s.value}`} />
+      ))}
+    </div>
+  )
+}
+
+function CarrierBlock({ color, name, total, groups, legend }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="text-[13px] font-semibold text-gray-700 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-sm inline-block" style={{ background: color }} />{name}
+        </span>
+        <span className="text-xs font-mono text-gray-400">{total.toLocaleString('vi-VN')} đơn</span>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {groups.map((g, i) => (
+          <div key={i}>
+            <div className="flex justify-between text-[10.5px] font-mono text-gray-400 mb-1">
+              <span>{g.label} — {g.value.toLocaleString('vi-VN')} ({g.pctOfTotal}%)</span>
+            </div>
+            <StackBar segments={g.segments} />
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+        {legend.map((l, i) => (
+          <span key={i} className="text-[10px] font-mono text-gray-500 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-sm inline-block flex-shrink-0" style={{ background: l.color }} />{l.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// R = kết quả computeWeekReport cho 1 tuần (current hoặc previous)
+function WeekColumn({ label, tag, color, bg, R }) {
+  const tructiepTotal = R.tructiepTotalC + R.tructiepTotalDTP
+  const vtpTotal = (R.viettelC?.total || 0) + (R.viettelDTP?.total || 0)
+  const spxTotal = R.spxC?.total || 0
+
+  const vtpSegments = (stats) => stats ? [
+    { value: stats['24h'], color: TONE['24h'], label: '24h' },
+    { value: stats['48h'], color: TONE['48h'], label: '48h' },
+    { value: stats['72h'], color: TONE['72h'], label: '72h' },
+    { value: stats.dangVanChuyen, color: TONE.dangVanChuyen, label: 'Đang vận chuyển' },
+    { value: stats.choLay || 0, color: TONE.choLay, label: 'Chờ lấy' },
+    { value: stats.giaoLai, color: TONE.giaoLai, label: 'Giao lại lần 2' },
+    { value: stats.hoanHang, color: TONE.hoanHang, label: 'Hoàn hàng' },
+  ] : []
+
+  return (
+    <div>
+      <div className="flex items-center justify-between px-4 py-2.5 rounded-t-lg border" style={{ background: bg, borderColor: color }}>
+        <span className="font-bold text-lg" style={{ color }}>{label}</span>
+        <span className="text-[11px] font-mono text-gray-500 tracking-wide">{tag}</span>
+      </div>
+
+      <div className="bg-white border border-t-0 p-4" style={{ borderColor: color }}>
+        <div className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold mb-3">Tổng quan đơn hàng</div>
+        <div className="flex items-baseline gap-2 pb-3 mb-3 border-b border-gray-100">
+          <span className="font-extrabold text-4xl" style={{ color }}>{R.grandTotal.toLocaleString('vi-VN')}</span>
+          <span className="text-xs text-gray-400">đơn kho HCM</span>
+        </div>
+        <BreakdownRow name="Đơn C" sub={`${pct(R.totalC, R.grandTotal)}% tổng đơn kho`} value={R.totalC} pctOfTotal={pct(R.totalC, R.grandTotal)} color="#2A6FB0"
+          chips={[`Trực tiếp ${R.tructiepTotalC.toLocaleString('vi-VN')}`, `Chành xe ${R.chanhXeTotal.toLocaleString('vi-VN')}`, `COD (VTP,SPX) ${R.codC.toLocaleString('vi-VN')}`]} />
+        <BreakdownRow name="Đơn DTP" sub={`${pct(R.totalDTP, R.grandTotal)}% tổng đơn kho`} value={R.totalDTP} pctOfTotal={pct(R.totalDTP, R.grandTotal)} color="#6E4FC9"
+          chips={[`Trực tiếp ${R.tructiepTotalDTP.toLocaleString('vi-VN')}`, `COD Viettelpost ${R.codDTP.toLocaleString('vi-VN')}`]} />
+        <BreakdownRow name="SO3 + SO6" sub="Shopee, TikTok" value={R.totalTMDT} pctOfTotal={pct(R.totalTMDT, R.grandTotal)} color={color} />
+      </div>
+
+      <div className="bg-white border border-t-0 rounded-b-lg p-4 space-y-4" style={{ borderColor: color }}>
+        <div className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Chi tiết giao hàng theo kênh</div>
+
+        <CarrierBlock color={TONE['24h']} name="Giao hàng trực tiếp" total={tructiepTotal}
+          groups={[
+            { label: 'Đơn C', value: R.tructiepTotalC, pctOfTotal: pct(R.tructiepTotalC, tructiepTotal),
+              segments: [
+                { value: R.bC[24], color: TONE['24h'], label: '24h' },
+                { value: R.bC[48], color: TONE['48h'], label: '48h' },
+                { value: R.bC[72], color: TONE['72h'], label: '72h' },
+                { value: R.chuaGiaoC, color: TONE.chuaGiao, label: 'Chưa giao' },
+              ] },
+            { label: 'Đơn DTP', value: R.tructiepTotalDTP, pctOfTotal: pct(R.tructiepTotalDTP, tructiepTotal),
+              segments: [
+                { value: R.bDTP[24], color: TONE['24h'], label: '24h' },
+                { value: R.bDTP[48], color: TONE['48h'], label: '48h' },
+                { value: R.bDTP[72], color: TONE['72h'], label: '72h' },
+                { value: R.chuaGiaoDTP, color: TONE.chuaGiao, label: 'Chưa giao' },
+              ] },
+          ]}
+          legend={[
+            { label: 'Giao 24h', color: TONE['24h'] }, { label: 'Giao 48h', color: TONE['48h'] },
+            { label: 'Giao 72h', color: TONE['72h'] }, { label: `Chưa giao (${R.chuaGiao} đơn)`, color: TONE.chuaGiao },
+          ]}
+        />
+
+        <div className="h-px bg-gray-100" />
+
+        <CarrierBlock color={TONE.giaoLai} name="Viettel Post" total={vtpTotal}
+          groups={[
+            R.viettelC && { label: 'Đơn C', value: R.viettelC.total, pctOfTotal: pct(R.viettelC.total, vtpTotal), segments: vtpSegments(R.viettelC.stats) },
+            R.viettelDTP && { label: 'Đơn DTP', value: R.viettelDTP.total, pctOfTotal: pct(R.viettelDTP.total, vtpTotal), segments: vtpSegments(R.viettelDTP.stats) },
+          ].filter(Boolean)}
+          legend={[
+            { label: '24h', color: TONE['24h'] }, { label: '48h', color: TONE['48h'] }, { label: '72h', color: TONE['72h'] },
+            { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Chờ lấy', color: TONE.choLay },
+            { label: 'Giao lại lần 2', color: TONE.giaoLai }, { label: 'Hoàn hàng', color: TONE.hoanHang },
+          ]}
+        />
+
+        {R.spxC && (
+          <>
+            <div className="h-px bg-gray-100" />
+            <CarrierBlock color="#B9720C" name="SPX Express" total={spxTotal}
+              groups={[{ label: 'Đơn C', value: R.spxC.total, pctOfTotal: 100, segments: vtpSegments(R.spxC.stats) }]}
+              legend={[
+                { label: '24h', color: TONE['24h'] }, { label: '48h', color: TONE['48h'] }, { label: '72h', color: TONE['72h'] },
+                { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Giao lại lần 2', color: TONE.giaoLai },
+              ]}
+            />
+          </>
         )}
       </div>
     </div>
   )
 }
 
+const INSIGHT_TONE = { pos: '#1E9E5A', neg: '#CC3F55', warn: '#B9720C', neutral: '#59708F' }
 
-// cur = tuần này (Tuần này), prev = tuần trước (Tuần trước)
-function PartnerCompareRow({ label, cur, prev }) {
+function InsightCardV2({ tag, tone, title, body, onBodyChange, placeholder }) {
+  const c = INSIGHT_TONE[tone] || INSIGHT_TONE.neutral
   return (
-    <tr className="border-b border-gray-50">
-      <td className="py-1.5 text-gray-500">{label}</td>
-      <td className={`py-1.5 text-center font-bold ${cur >= prev ? 'text-green-600' : 'text-red-500'}`}>{cur.toLocaleString('vi-VN')}</td>
-      <td className="py-1.5 text-center"><ArrowRight size={11} className="inline text-gray-300 rotate-180" /></td>
-      <td className="py-1.5 text-center text-gray-500">{prev.toLocaleString('vi-VN')}</td>
-    </tr>
+    <div className="bg-white rounded-lg border border-gray-200 p-3.5" style={{ borderLeft: `3px solid ${c}` }}>
+      <span className="block text-[10px] font-mono uppercase tracking-wider mb-1.5" style={{ color: c }}>{tag}</span>
+      <div className="text-[13.5px] font-semibold text-gray-800 mb-1.5 leading-snug">{title}</div>
+      {onBodyChange ? (
+        <textarea
+          value={body} onChange={e => onBodyChange(e.target.value)} placeholder={placeholder} rows={3}
+          className="w-full text-xs text-gray-500 leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+        />
+      ) : (
+        <p className="text-xs text-gray-500 leading-relaxed">{body}</p>
+      )}
+    </div>
+  )
+}
+
+function VerdictBox({ text, onChange }) {
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex gap-4 items-start">
+      <span className="font-bold text-sm text-[#0E9A7D] bg-[#E4F5F0] border border-[#0B7A63] px-3 py-1.5 rounded flex-shrink-0 whitespace-nowrap">KẾT LUẬN</span>
+      {onChange ? (
+        <textarea
+          value={text} onChange={e => onChange(e.target.value)} rows={3}
+          className="w-full text-[13px] text-gray-600 leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+        />
+      ) : (
+        <p className="text-[13px] text-gray-600 leading-relaxed">{text}</p>
+      )}
+    </div>
+  )
+}
+
+const PRIORITY = {
+  high: { label: 'Ưu tiên cao', cls: 'bg-red-50 text-red-500' },
+  mid: { label: 'Ưu tiên vừa', cls: 'bg-amber-50 text-amber-600' },
+  low: { label: 'Theo dõi', cls: 'bg-slate-100 text-slate-500' },
+}
+
+function PlanItem({ num, text, onChange, priority }) {
+  const pr = PRIORITY[priority] || PRIORITY.low
+  return (
+    <div className="bg-white p-3.5 grid grid-cols-[28px_1fr_92px] gap-4 items-start border-b border-gray-100 last:border-b-0">
+      <span className="font-extrabold text-lg text-gray-300 leading-none">{String(num).padStart(2, '0')}</span>
+      {onChange ? (
+        <textarea
+          value={text} onChange={e => onChange(e.target.value)} rows={2}
+          className="w-full text-xs text-gray-500 leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+        />
+      ) : (
+        <p className="text-xs text-gray-500 leading-relaxed">{text}</p>
+      )}
+      <span className={`text-[10px] font-mono text-center px-2 py-1.5 rounded h-fit ${pr.cls}`}>{pr.label}</span>
+    </div>
   )
 }
 
@@ -316,24 +445,6 @@ function CarrierWeekPickRow({ label, pick }) {
           </select>
         </label>
       </div>
-    </div>
-  )
-}
-
-function SolutionCard({ num, text, onChange }) {
-  return (
-    <div className="bg-gray-50/70 rounded-xl border border-gray-100 p-3 flex gap-2 flex-1 min-w-[180px] hover:bg-gray-50 transition-colors">
-      <span className="w-6 h-6 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm">{num}</span>
-      {onChange ? (
-        <textarea
-          value={text}
-          onChange={e => onChange(e.target.value)}
-          rows={3}
-          className="w-full text-xs text-gray-600 resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
-        />
-      ) : (
-        <p className="w-full text-xs text-gray-600">{text}</p>
-      )}
     </div>
   )
 }
@@ -452,6 +563,17 @@ export default function TongDonTab() {
   const sol4 = snapshot ? snapshot.sol4 : sol4Live
   const sol5 = snapshot ? snapshot.sol5 : sol5Live
 
+  const autoVerdict = `Tuần này ${totalDeltaPct >= 0 ? 'tăng' : 'giảm'} ${Math.abs(totalDeltaPct).toFixed(1)}% so với tuần trước (${current.grandTotal.toLocaleString('vi-VN')} đơn). `
+    + (rate24hDrop ? `Tốc độ giao 24h giảm còn ${current.rate24h.toFixed(1)}%, cần rà soát nguyên nhân chậm giao. ` : `Tốc độ giao 24h duy trì/cải thiện, đạt ${current.rate24h.toFixed(1)}%. `)
+    + (chuaGiaoUp ? `Tồn "chưa giao" tăng lên ${current.chuaGiao} đơn — cần ưu tiên xử lý ngay đầu tuần tới.` : `Tồn "chưa giao" đang ở mức kiểm soát được (${current.chuaGiao} đơn).`)
+
+  const [verdictLive, setVerdict] = useWeekField(weekKey, 'verdict', autoVerdict)
+  const verdict = snapshot ? snapshot.verdict : verdictLive
+
+  const priority1 = chuaGiaoUp ? 'high' : 'low'
+  const priority2 = rate24hDrop ? 'high' : 'low'
+  const priority4 = totalDeltaPct > 15 ? 'high' : 'low'
+
   // Lưu toàn bộ số liệu + nhận định đang xem (live) thành 1 báo cáo cố định, không đổi khi dữ liệu sau này thay đổi
   const saveReport = () => {
     const id = String(Date.now())
@@ -461,6 +583,7 @@ export default function TongDonTab() {
       current: liveCurrent, previous: livePrevious,
       title: reportTitleLive,
       insight1: insight1Live, insight2: insight2Live, insight3: insight3Live,
+      verdict: verdictLive,
       sol1: sol1Live, sol2: sol2Live, sol3: sol3Live, sol4: sol4Live, sol5: sol5Live,
     }
     const next = [entry, ...reports].slice(0, 52)
@@ -484,18 +607,6 @@ export default function TongDonTab() {
       </div>
     )
   }
-
-  const overviewRows = [
-    { label: 'Tổng đơn kho HCM', v1: current.grandTotal, v2: previous.grandTotal, icon: Package, color: '#1e3a5f' },
-    { label: 'Đơn C', v1: current.totalC, v2: previous.totalC, icon: Truck, color: '#3b82f6' },
-    { label: 'Đơn DTP', v1: current.totalDTP, v2: previous.totalDTP, icon: Package, color: '#14b8a6' },
-    { label: 'Đơn SO3 + SO6', v1: current.totalTMDT, v2: previous.totalTMDT, icon: BarChart2, color: '#f97316' },
-    { label: 'Giao hàng trực tiếp', v1: current.tructiepTotalC + current.tructiepTotalDTP, v2: previous.tructiepTotalC + previous.tructiepTotalDTP, icon: Truck, color: '#22c55e' },
-    { label: 'COD Viettelpost', v1: (current.viettelC?.total || 0) + (current.viettelDTP?.total || 0), v2: (previous.viettelC?.total || 0) + (previous.viettelDTP?.total || 0), icon: Handshake, color: '#f59e0b' },
-    { label: 'COD SPX', v1: current.spxC?.total || 0, v2: previous.spxC?.total || 0, icon: Handshake, color: '#ef4444' },
-  ]
-
-  const chartData = overviewRows.map(r => ({ name: r.label, 'Tuần này': r.v1, 'Tuần trước': r.v2 }))
 
   return (
     <div className="-m-5 p-5" style={{ background: 'radial-gradient(circle at 15% 0%, #eff6ff 0%, #f8fafc 45%, #f1f5f9 100%)' }}>
@@ -576,153 +687,44 @@ export default function TongDonTab() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        {/* 1. Tổng quan sản lượng */}
-        <SectionCard accent="#3b82f6">
-          <SectionHeader num={1} title="TỔNG QUAN SẢN LƯỢNG" icon={BarChart2} color="#3b82f6" />
-          <OverviewTable rows={overviewRows} />
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 35, left: 10, bottom: 5 }} barCategoryGap="25%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={110} />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Tuần trước" fill="#93c5fd" radius={[0, 3, 3, 0]}>
-                <LabelList dataKey="Tuần trước" position="right" fontSize={11} fill="#3b82f6" formatter={v => v.toLocaleString('vi-VN')} />
-              </Bar>
-              <Bar dataKey="Tuần này" fill="#1e3a5f" radius={[0, 3, 3, 0]}>
-                <LabelList dataKey="Tuần này" position="right" fontSize={11} fill="#1e3a5f" fontWeight={600} formatter={v => v.toLocaleString('vi-VN')} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </SectionCard>
-
-        {/* 2. Hiệu suất giao hàng trực tiếp */}
-        <SectionCard accent="#22c55e">
-          <SectionHeader num={2} title="HIỆU SUẤT GIAO HÀNG TRỰC TIẾP" icon={Truck} color="#22c55e" />
-          <table className="w-full text-sm mb-3">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-2 text-xs font-semibold text-gray-400">Chỉ số</th>
-                <th className="text-center py-2 text-xs font-semibold text-gray-400">Tuần này</th>
-                <th className="text-center py-2 text-xs font-semibold text-gray-400">Tuần trước</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-gray-50">
-                <td className="py-2 flex items-center gap-1.5 text-gray-600"><Clock size={13} className="text-green-500" />Giao 24h</td>
-                <td className={`py-2 text-center font-bold ${rate24hDrop ? 'text-red-500' : 'text-green-600'}`}>{current.gh24} đơn ({current.rate24h.toFixed(1)}%)</td>
-                <td className="py-2 text-center text-gray-500">{previous.gh24} đơn ({previous.rate24h.toFixed(1)}%)</td>
-              </tr>
-              <tr className="border-b border-gray-50">
-                <td className="py-2 flex items-center gap-1.5 text-gray-600"><Clock size={13} className="text-teal-500" />Giao 48h</td>
-                <td className="py-2 text-center font-bold text-gray-800">{current.gh48}</td>
-                <td className="py-2 text-center text-gray-500">{previous.gh48}</td>
-              </tr>
-              <tr className="border-b border-gray-50">
-                <td className="py-2 flex items-center gap-1.5 text-gray-600"><Clock size={13} className="text-blue-500" />Giao 72h</td>
-                <td className="py-2 text-center font-bold text-gray-800">{current.gh72}</td>
-                <td className="py-2 text-center text-gray-500">{previous.gh72}</td>
-              </tr>
-              <tr>
-                <td className="py-2 flex items-center gap-1.5 text-gray-600"><AlertTriangle size={13} className="text-yellow-500" />Chưa giao</td>
-                <td className={`py-2 text-center font-bold ${chuaGiaoUp ? 'text-red-500' : 'text-gray-800'}`}>{current.chuaGiao}</td>
-                <td className="py-2 text-center text-gray-500">{previous.chuaGiao}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div className="space-y-2">
-            {rate24hDrop && (
-              <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 shadow-sm">
-                <span className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                  <AlertTriangle size={16} className="text-red-500" />
-                </span>
-                <span className="text-xs font-semibold text-red-700">Tỷ lệ giao 24h giảm ({previous.rate24h.toFixed(1)}% → {current.rate24h.toFixed(1)}%)</span>
-              </div>
-            )}
-            {chuaGiaoUp && (
-              <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 shadow-sm">
-                <span className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <AlertTriangle size={16} className="text-amber-500" />
-                </span>
-                <span className="text-xs font-semibold text-amber-700">Chưa giao tăng từ {previous.chuaGiao} lên {current.chuaGiao} đơn</span>
-              </div>
-            )}
-          </div>
-        </SectionCard>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden mb-5">
+        <KpiCard label="Tổng đơn kho HCM" cur={current.grandTotal} prev={previous.grandTotal} />
+        <KpiCard label="Đơn C" cur={current.totalC} prev={previous.totalC} />
+        <KpiCard label="Đơn DTP" cur={current.totalDTP} prev={previous.totalDTP} />
+        <KpiCard label="SO3 + SO6 (Shopee, TikTok)" cur={current.totalTMDT} prev={previous.totalTMDT} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        {/* 4. Đánh giá & kết luận */}
-        <SectionCard accent="#6366f1">
-          <SectionHeader num={4} title="ĐÁNH GIÁ & KẾT LUẬN" icon={ClipboardList} color="#6366f1" />
-          <div className="space-y-2">
-            <InsightCard icon={TrendingUp} color="#22c55e" title="Tăng trưởng" text={insight1} onTextChange={isReadOnly ? undefined : setInsight1} editable
-              placeholder="VD: Tổng đơn tăng X%, chủ yếu từ nhóm..." />
-            <InsightCard icon={TrendingDown} color="#ef4444" title="Chất lượng giao hàng" text={insight2} onTextChange={isReadOnly ? undefined : setInsight2} editable />
-            <InsightCard icon={Users} color="#a855f7" title="Nguyên nhân chính" text={insight3} onTextChange={isReadOnly ? undefined : setInsight3} editable />
-          </div>
-        </SectionCard>
-
-        {/* Đối tác vận chuyển */}
-        <SectionCard accent="#1e3a5f">
-          <div className="flex items-center gap-2.5 mb-4">
-            <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#1e3a5f12' }}>
-              <Handshake size={16} className="text-[#1e3a5f]" />
-            </span>
-            <h3 className="font-bold text-gray-800 tracking-wide text-[15px]">ĐỐI TÁC VẬN CHUYỂN</h3>
-          </div>
-
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center text-[8px] font-bold shadow-sm">VTP</span>
-              <span className="text-sm font-semibold text-gray-700">Viettel Post</span>
-            </div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr><th></th><th className="text-center text-gray-400 font-medium">Tuần này</th><th></th><th className="text-center text-gray-400 font-medium">Tuần trước</th></tr>
-              </thead>
-              <tbody>
-                <PartnerCompareRow label="Tổng đơn" cur={(current.viettelC?.total || 0) + (current.viettelDTP?.total || 0)} prev={(previous.viettelC?.total || 0) + (previous.viettelDTP?.total || 0)} />
-                <PartnerCompareRow label="Giao 24h" cur={(current.viettelC?.stats['24h'] || 0) + (current.viettelDTP?.stats['24h'] || 0)} prev={(previous.viettelC?.stats['24h'] || 0) + (previous.viettelDTP?.stats['24h'] || 0)} />
-                <PartnerCompareRow label="Đang vận chuyển" cur={(current.viettelC?.stats.dangVanChuyen || 0) + (current.viettelDTP?.stats.dangVanChuyen || 0)} prev={(previous.viettelC?.stats.dangVanChuyen || 0) + (previous.viettelDTP?.stats.dangVanChuyen || 0)} />
-              </tbody>
-            </table>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center text-[8px] font-bold shadow-sm">SPX</span>
-              <span className="text-sm font-semibold text-gray-700">SPX Express</span>
-            </div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr><th></th><th className="text-center text-gray-400 font-medium">Tuần này</th><th></th><th className="text-center text-gray-400 font-medium">Tuần trước</th></tr>
-              </thead>
-              <tbody>
-                <PartnerCompareRow label="Tổng đơn" cur={current.spxC?.total || 0} prev={previous.spxC?.total || 0} />
-                <PartnerCompareRow label="Giao 24h" cur={current.spxC?.stats['24h'] || 0} prev={previous.spxC?.stats['24h'] || 0} />
-                <PartnerCompareRow label="Giao 72h" cur={current.spxC?.stats['72h'] || 0} prev={previous.spxC?.stats['72h'] || 0} />
-                <PartnerCompareRow label="Đang vận chuyển" cur={current.spxC?.stats.dangVanChuyen || 0} prev={previous.spxC?.stats.dangVanChuyen || 0} />
-              </tbody>
-            </table>
-          </div>
-        </SectionCard>
+      {/* 2 cột so sánh Tuần này / Tuần trước */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+        <WeekColumn label="TUẦN NÀY" tag="MỚI NHẤT" color="#0E9A7D" bg="#E4F5F0" R={current} />
+        <WeekColumn label="TUẦN TRƯỚC" tag="LIỀN KỀ" color="#B9720C" bg="#FBEEDC" R={previous} />
       </div>
 
-      {/* 5. Giải pháp tuần tiếp theo */}
-      <SectionCard accent="#1e3a5f">
-        <SectionHeader num={5} title="GIẢI PHÁP TUẦN TIẾP THEO" icon={Target} color="#1e3a5f" />
-        <div className="flex flex-wrap gap-3">
-          <SolutionCard num={1} text={sol1} onChange={isReadOnly ? undefined : setSol1} />
-          <SolutionCard num={2} text={sol2} onChange={isReadOnly ? undefined : setSol2} />
-          <SolutionCard num={3} text={sol3} onChange={isReadOnly ? undefined : setSol3} />
-          <SolutionCard num={4} text={sol4} onChange={isReadOnly ? undefined : setSol4} />
-          <SolutionCard num={5} text={sol5} onChange={isReadOnly ? undefined : setSol5} />
+      {/* Phân tích & đánh giá tổng quan */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-5">
+        <h3 className="font-bold text-gray-800 tracking-wide text-lg mb-4">PHÂN TÍCH &amp; ĐÁNH GIÁ TỔNG QUAN</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <InsightCardV2 tag="Sản lượng" tone={totalDeltaPct >= 0 ? 'pos' : 'neg'} title={topGroup.name + (topGroup.pct >= 0 ? ' tăng' : ' giảm') + ' chi phối biến động tổng đơn'}
+            body={insight1} onBodyChange={isReadOnly ? undefined : setInsight1} placeholder="VD: Tổng đơn tăng X%, chủ yếu từ nhóm..." />
+          <InsightCardV2 tag="Tốc độ giao" tone={rate24hDrop ? 'neg' : 'pos'} title="Hiệu suất giao hàng trực tiếp"
+            body={insight2} onBodyChange={isReadOnly ? undefined : setInsight2} />
+          <InsightCardV2 tag="Nguyên nhân" tone={chuaGiaoUp && totalDeltaPct > 0 ? 'warn' : 'neutral'} title="Nguyên nhân chính cần lưu ý"
+            body={insight3} onBodyChange={isReadOnly ? undefined : setInsight3} />
         </div>
-      </SectionCard>
+
+        <VerdictBox text={verdict} onChange={isReadOnly ? undefined : setVerdict} />
+
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-5">Giải pháp cho tuần tiếp theo</div>
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <PlanItem num={1} text={sol1} onChange={isReadOnly ? undefined : setSol1} priority={priority1} />
+          <PlanItem num={2} text={sol2} onChange={isReadOnly ? undefined : setSol2} priority={priority2} />
+          <PlanItem num={3} text={sol3} onChange={isReadOnly ? undefined : setSol3} priority="mid" />
+          <PlanItem num={4} text={sol4} onChange={isReadOnly ? undefined : setSol4} priority={priority4} />
+          <PlanItem num={5} text={sol5} onChange={isReadOnly ? undefined : setSol5} priority="low" />
+        </div>
+      </div>
     </div>
   )
 }
