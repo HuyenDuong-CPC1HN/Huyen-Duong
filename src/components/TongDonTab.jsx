@@ -1,9 +1,12 @@
 import { useMemo, useState, useEffect } from 'react'
-import { RefreshCw, ClipboardList, ArrowRight } from 'lucide-react'
+import { RefreshCw, ClipboardList, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { useWeeklyData } from '../useWeeklyData'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
-import { getCarrierFileStats, getCarrierWeeksList } from './CarrierStats'
+import { readSheetReports } from '../utils/sheetReports'
+import {
+  getCarrierFileStats, pickCarrierWeekIdByDate, pruneCarrierWeeksToIds, carrierWeekHasRows,
+} from './CarrierStats'
 
 function readJSON(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback } catch { return fallback }
@@ -32,63 +35,122 @@ function saveWeekField(weekKey, field, value) {
   localStorage.setItem(`tongdon_field_${field}_${weekKey}`, String(value))
 }
 
+// Gộp các tuần Excel còn sống (chưa lưu/xoá) với các tuần đã "Lưu số liệu tuần này" (Excel gốc đã bị xoá,
+// chỉ còn số liệu đóng băng) thành 1 dòng thời gian chung, mới nhất lên đầu — "current"/"previous" luôn lấy
+// đúng 2 mục gần nhất bất kể nó còn Excel sống hay đã chốt số liệu.
 function useTypeData(type) {
-  const { weeks, activeWeek, activeId } = useWeeklyData(type)
-  const rawData = activeWeek ? activeWeek.data : []
+  const { weeks, pruneToIds } = useWeeklyData(type)
+  const savedReports = useMemo(() => readSheetReports(type), [type])
 
   const vcEdits = useMemo(() => readJSON(`vc_edits_${type}`, {}), [])
-  const activeData = useMemo(() => rawData.map(row => {
-    const key = row['Mã hóa đơn'] || ''
-    return vcEdits[key] !== undefined ? { ...row, 'Đối tác vận chuyển': vcEdits[key] } : row
-  }), [rawData, vcEdits])
-  const validData = useMemo(() => activeData.filter(r => String(r['Mã kiện hàng'] ?? '').trim()), [activeData])
 
-  const idx = weeks.findIndex(w => w.id === activeId)
-  const prevWeek = idx > 0 ? weeks[idx - 1] : null
-  const prevValidData = useMemo(() => {
-    if (!prevWeek) return null
-    return prevWeek.data.filter(r => String(r['Mã kiện hàng'] ?? '').trim())
-  }, [prevWeek])
+  const timeline = useMemo(() => {
+    const live = weeks.map(w => ({
+      id: w.id,
+      kind: 'live',
+      at: w.uploadedAt,
+      label: w.label,
+      data: w.data
+        .map(row => {
+          const key = row['Mã hóa đơn'] || ''
+          return vcEdits[key] !== undefined ? { ...row, 'Đối tác vận chuyển': vcEdits[key] } : row
+        })
+        .filter(r => String(r['Mã kiện hàng'] ?? '').trim()),
+    }))
+    const saved = savedReports.map(r => ({ id: r.id, kind: 'saved', at: r.createdAt, snapshot: r }))
+    return [...live, ...saved].sort((a, b) => new Date(b.at) - new Date(a.at))
+  }, [weeks, savedReports, vcEdits])
 
   return {
     loading: false,
-    validData, prevValidData, activeId, prevWeekId: prevWeek?.id || null,
+    timeline,
+    current: timeline[0] || null,
+    previous: timeline[1] || null,
+    pruneToIds,
   }
 }
 
-// Cho phép tự chọn tuần VTP/SPX nào ứng với "Tuần này" / "Tuần trước" của báo cáo Tổng đơn —
-// vì tuần upload file carrier không nhất thiết khớp thứ tự với tuần Excel Đơn C/DTP (upload lộn xộn, upload lại...).
-// Mặc định: tuần mới nhất = Tuần này, tuần trước đó = Tuần trước (giống hành vi cũ nếu chưa ai chỉnh tay).
-function useCarrierWeekPicker(carrierKey, carrierType, internalData) {
-  const weeksList = useMemo(() => getCarrierWeeksList(carrierKey), [carrierKey, internalData])
+// Dùng đúng tên tuần như hiển thị ở "Lịch sử upload" của tab Đơn C/DTP (vd "Đơn C - Tuần 4.7"), không hiện
+// nhãn chung chung "Đã lưu"/"Excel sống" nữa — chỉ thêm hậu tố (Đã lưu) nếu Excel gốc đã bị xoá.
+function formatEntryOption(e) {
+  const label = (e.kind === 'saved' ? e.snapshot.label : e.label) || 'Tuần'
+  const d = new Date(e.at)
+  const dateStr = isNaN(d) ? '' : d.toLocaleDateString('vi-VN')
+  return `${label}${e.kind === 'saved' ? ' (Đã lưu)' : ''} · ${dateStr}`
+}
 
-  const [currentId, setCurrentIdRaw] = useState(() => localStorage.getItem(`tongdon_carrierpick_current_${carrierKey}`) || '')
-  const [previousId, setPreviousIdRaw] = useState(() => localStorage.getItem(`tongdon_carrierpick_previous_${carrierKey}`) || '')
+// Tìm mục có "at" (ngày) gần nhất với referenceDate trong 1 timeline (Đơn C/DTP) — dùng để tự khớp Đơn DTP
+// theo đúng tuần Đơn C đã chọn, không cần chọn tay riêng từng nguồn.
+function closestTimelineEntry(timeline, referenceDate) {
+  if (timeline.length === 0) return null
+  if (!referenceDate) return timeline[0]
+  const refTime = new Date(referenceDate).getTime()
+  let best = timeline[0]
+  let bestDiff = Math.abs(new Date(best.at).getTime() - refTime)
+  for (const e of timeline) {
+    const diff = Math.abs(new Date(e.at).getTime() - refTime)
+    if (diff < bestDiff) { best = e; bestDiff = diff }
+  }
+  return best
+}
+
+// Tương tự nhưng cho báo cáo TMĐT (dùng "dateFrom" làm mốc ngày, không có "at")
+function closestTmdtReport(reports, referenceDate) {
+  if (reports.length === 0) return null
+  if (!referenceDate) return reports[0]
+  const refTime = new Date(referenceDate).getTime()
+  let best = reports[0]
+  let bestDiff = Math.abs(new Date(best.dateFrom).getTime() - refTime)
+  for (const r of reports) {
+    const diff = Math.abs(new Date(r.dateFrom).getTime() - refTime)
+    if (diff < bestDiff) { best = r; bestDiff = diff }
+  }
+  return best
+}
+
+// Bộ chọn tay "Tuần này"/"Tuần trước" cho 1 nguồn dữ liệu bất kỳ (Đơn C, Đơn DTP, Viettel Post, SPX, TMĐT) —
+// mặc định dùng defaultCurrentId/defaultPreviousId (cách khớp tự động, thông minh), nhưng lưu lại lựa chọn tay
+// riêng nếu người dùng tự chọn lại (vd khi hệ thống khớp sai tuần) để tránh nhầm lẫn khi so sánh báo cáo.
+function usePickedPair(storageKey, options, defaultCurrentId, defaultPreviousId) {
+  const [currentId, setCurrentIdRaw] = useState(() => localStorage.getItem(`tongdon_pick_${storageKey}_current`) || '')
+  const [previousId, setPreviousIdRaw] = useState(() => localStorage.getItem(`tongdon_pick_${storageKey}_previous`) || '')
 
   const setCurrentId = (id) => {
     setCurrentIdRaw(id)
-    if (id) localStorage.setItem(`tongdon_carrierpick_current_${carrierKey}`, id)
-    else localStorage.removeItem(`tongdon_carrierpick_current_${carrierKey}`)
+    if (id) localStorage.setItem(`tongdon_pick_${storageKey}_current`, id)
+    else localStorage.removeItem(`tongdon_pick_${storageKey}_current`)
   }
   const setPreviousId = (id) => {
     setPreviousIdRaw(id)
-    if (id) localStorage.setItem(`tongdon_carrierpick_previous_${carrierKey}`, id)
-    else localStorage.removeItem(`tongdon_carrierpick_previous_${carrierKey}`)
+    if (id) localStorage.setItem(`tongdon_pick_${storageKey}_previous`, id)
+    else localStorage.removeItem(`tongdon_pick_${storageKey}_previous`)
   }
 
-  const effectiveCurrentId = (currentId && weeksList.some(w => w.id === currentId)) ? currentId : (weeksList[0]?.id || null)
-  const effectivePreviousId = (previousId && weeksList.some(w => w.id === previousId)) ? previousId : (weeksList[1]?.id || null)
+  const effectiveCurrentId = (currentId && options.some(o => o.id === currentId)) ? currentId : (defaultCurrentId || options[0]?.id || null)
+  const effectivePreviousId = (previousId && options.some(o => o.id === previousId)) ? previousId : (defaultPreviousId || options[1]?.id || null)
 
-  const currentStats = useMemo(
-    () => effectiveCurrentId ? getCarrierFileStats(carrierKey, carrierType, internalData, effectiveCurrentId) : null,
-    [carrierKey, carrierType, internalData, effectiveCurrentId]
-  )
-  const previousStats = useMemo(
-    () => effectivePreviousId ? getCarrierFileStats(carrierKey, carrierType, internalData, effectivePreviousId) : null,
-    [carrierKey, carrierType, internalData, effectivePreviousId]
-  )
+  return { options, currentId: effectiveCurrentId, previousId: effectivePreviousId, setCurrentId, setPreviousId }
+}
 
-  return { weeksList, currentId: effectiveCurrentId, previousId: effectivePreviousId, setCurrentId, setPreviousId, currentStats, previousStats }
+// Số liệu VTP/SPX ứng với 1 weekId cụ thể (đã chọn tay hoặc tự động khớp) — còn dòng dữ liệu gốc thì tính
+// trực tiếp (luôn mới nhất), đã xoá rồi thì tìm đúng số đã đóng băng trong báo cáo Đơn C/DTP có tham chiếu
+// weekId này. contextEntry (tuần Đơn C/DTP tương ứng) chỉ dùng để lấy internalData/carrierLookup cho chính xác
+// hơn (đơn CB gộp) — không dùng contextEntry để suy ra weekId nữa vì đã có picker chọn tay riêng.
+function statsForCarrierWeekId(carrierKey, carrierType, weekId, contextEntry) {
+  if (!weekId) return null
+  if (carrierWeekHasRows(carrierKey, weekId)) {
+    const internalData = contextEntry?.kind === 'live' ? contextEntry.data : []
+    const frozenLookup = contextEntry?.kind === 'saved' ? contextEntry.snapshot.carrierLookup : null
+    return getCarrierFileStats(carrierKey, carrierType, internalData, weekId, frozenLookup)
+  }
+  // Rows đã xoá — tìm bản đã lưu (Đơn C hoặc Đơn DTP) có tham chiếu đúng weekId này để lấy số đã đóng băng
+  for (const t of ['donC', 'donDTP']) {
+    for (const r of readSheetReports(t)) {
+      if (r.viettelWeekId === weekId && r.viettelFrozen) return r.viettelFrozen
+      if (r.spxWeekId === weekId && r.spxFrozen) return r.spxFrozen
+    }
+  }
+  return null
 }
 
 function buildGroups(data) {
@@ -121,12 +183,24 @@ function readChanhXeOverride(weekId, field) {
   return v === null ? 0 : Number(v)
 }
 
+// Số liệu "Giao hàng trực tiếp" (mốc 24h/48h/72h) + số đơn Chành xe cho 1 bên (Đơn C hoặc Đơn DTP) —
+// ưu tiên đọc bản đã "Lưu số liệu tuần này" (Excel gốc đã xoá), nếu chưa lưu thì tính trực tiếp từ Excel gốc.
+function trucTiepStatsFor(entry) {
+  if (!entry) return { b: { 24: 0, 48: 0, 72: 0 }, chanhXeCount: 0 }
+  if (entry.kind === 'saved') {
+    const s = entry.snapshot
+    return { b: { 24: s.b24 || 0, 48: s.b48 || 0, 72: s.b72 || 0 }, chanhXeCount: s.chanhXeCount || 0 }
+  }
+  const groups = buildGroups(entry.data)
+  return { b: trucTiepBuckets(groups.tructiep), chanhXeCount: groups.chanhxe.length }
+}
+
 // Tổng hợp toàn bộ chỉ số cho 1 tuần (Đơn C + Đơn DTP), có thể là tuần hiện tại hoặc tuần trước
-function computeWeekReport({ dataC, dataDTP, weekIdC, weekIdDTP, tmdtTotal, viettelCompareC, spxCompareC, viettelCompareDTP }) {
-  const groupsC = buildGroups(dataC)
-  const groupsDTP = buildGroups(dataDTP)
-  const bC = trucTiepBuckets(groupsC.tructiep)
-  const bDTP = trucTiepBuckets(groupsDTP.tructiep)
+function computeWeekReport({ entryC, entryDTP, tmdtTotal, viettelCompareC, spxCompareC, viettelCompareDTP }) {
+  const weekIdC = entryC?.id || 'live'
+  const weekIdDTP = entryDTP?.id || 'live'
+  const { b: bC, chanhXeCount: chanhXeRowCountC } = trucTiepStatsFor(entryC)
+  const { b: bDTP } = trucTiepStatsFor(entryDTP)
 
   const chuaGiaoC = readKhBreakdownSum('donC', weekIdC)
   const chuaGiaoDTP = readKhBreakdownSum('donDTP', weekIdDTP)
@@ -138,7 +212,7 @@ function computeWeekReport({ dataC, dataDTP, weekIdC, weekIdDTP, tmdtTotal, viet
 
   const chanhXeChuaGui = readChanhXeOverride(weekIdC, 'chuagui')
   const chanhXeChuaGiao = readChanhXeOverride(weekIdC, 'chuagiao')
-  const chanhXeTotal = groupsC.chanhxe.length + chanhXeChuaGui
+  const chanhXeTotal = chanhXeRowCountC + chanhXeChuaGui
 
   const viettelTotalC = viettelCompareC?.total || 0
   const spxTotalC = spxCompareC?.total || 0
@@ -267,7 +341,7 @@ function WeekColumn({ label, tag, color, bg, R }) {
     { value: stats['72h'], color: TONE['72h'], label: '72h' },
     { value: stats.dangVanChuyen, color: TONE.dangVanChuyen, label: 'Đang vận chuyển' },
     { value: stats.choLay || 0, color: TONE.choLay, label: 'Chờ lấy' },
-    { value: stats.giaoLai, color: TONE.giaoLai, label: 'Giao lại lần 2' },
+    { value: stats.giaoLai, color: TONE.giaoLai, label: 'Đang giao hàng' },
     { value: stats.hoanHang, color: TONE.hoanHang, label: 'Hoàn hàng' },
   ] : []
 
@@ -327,7 +401,7 @@ function WeekColumn({ label, tag, color, bg, R }) {
           legend={[
             { label: '24h', color: TONE['24h'] }, { label: '48h', color: TONE['48h'] }, { label: '72h', color: TONE['72h'] },
             { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Chờ lấy', color: TONE.choLay },
-            { label: 'Giao lại lần 2', color: TONE.giaoLai }, { label: 'Hoàn hàng', color: TONE.hoanHang },
+            { label: 'Đang giao hàng', color: TONE.giaoLai }, { label: 'Hoàn hàng', color: TONE.hoanHang },
           ]}
         />
 
@@ -338,7 +412,7 @@ function WeekColumn({ label, tag, color, bg, R }) {
               groups={[{ label: 'Đơn C', value: R.spxC.total, pctOfTotal: 100, segments: vtpSegments(R.spxC.stats) }]}
               legend={[
                 { label: '24h', color: TONE['24h'] }, { label: '48h', color: TONE['48h'] }, { label: '72h', color: TONE['72h'] },
-                { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Giao lại lần 2', color: TONE.giaoLai },
+                { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Đang giao hàng', color: TONE.giaoLai },
               ]}
             />
           </>
@@ -408,43 +482,58 @@ function PlanItem({ num, text, onChange, priority }) {
   )
 }
 
-function weekOptionLabel(w) {
-  return `${w.fileName} · ${new Date(w.uploadedAt).toLocaleDateString('vi-VN')}`
-}
-
-function CarrierWeekPickRow({ label, pick }) {
-  const { weeksList, currentId, previousId, setCurrentId, setPreviousId } = pick
-  if (weeksList.length === 0) {
+function SourceRow({ label, pick }) {
+  if (pick.options.length === 0) {
     return (
-      <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">{label}: chưa có file nào upload</div>
+      <div className="grid grid-cols-[110px_1fr_1fr] items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+        <span className="text-xs font-medium text-gray-500">{label}</span>
+        <span className="text-xs text-gray-300 col-span-2">Chưa có dữ liệu</span>
+      </div>
     )
   }
   return (
-    <div className="bg-gray-50/70 rounded-lg p-2.5">
-      <div className="text-xs font-medium text-gray-600 mb-1.5">{label}</div>
-      <div className="space-y-1.5">
-        <label className="flex items-center gap-1.5 text-[11px] text-gray-500">
-          <span className="w-16 flex-shrink-0">Tuần này:</span>
-          <select
-            value={currentId || ''}
-            onChange={e => setCurrentId(e.target.value)}
-            className="flex-1 min-w-0 border border-gray-200 rounded px-1.5 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
-          >
-            {weeksList.map(w => <option key={w.id} value={w.id}>{weekOptionLabel(w)}</option>)}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5 text-[11px] text-gray-500">
-          <span className="w-16 flex-shrink-0">Tuần trước:</span>
-          <select
-            value={previousId || ''}
-            onChange={e => setPreviousId(e.target.value)}
-            className="flex-1 min-w-0 border border-gray-200 rounded px-1.5 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
-          >
-            <option value="">— Không có —</option>
-            {weeksList.map(w => <option key={w.id} value={w.id}>{weekOptionLabel(w)}</option>)}
-          </select>
-        </label>
-      </div>
+    <div className="grid grid-cols-[110px_1fr_1fr] items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+      <span className="text-xs font-medium text-gray-600">{label}</span>
+      <select
+        value={pick.currentId || ''}
+        onChange={e => pick.setCurrentId(e.target.value)}
+        className="min-w-0 border border-gray-200 rounded px-1.5 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+      >
+        {pick.options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+      <select
+        value={pick.previousId || ''}
+        onChange={e => pick.setPreviousId(e.target.value)}
+        className="min-w-0 border border-gray-200 rounded px-1.5 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+      >
+        <option value="">— Không có —</option>
+        {pick.options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+    </div>
+  )
+}
+
+// Chọn tay 3 nguồn chính: Đơn C, Đơn DTP, TMĐT. Viettel Post/SPX (không có tuần riêng, chỉ là file upload)
+// tự khớp theo ngày của Đơn C/DTP tương ứng — xem chi tiết thì qua đúng tab tương ứng, không lặp lại ở đây.
+function DataSourcePicker({ open, onToggle, donCPick, donDTPPick, tmdtPick }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-4 mb-4">
+      <button onClick={onToggle} className="w-full flex items-center justify-between text-left">
+        <span className="text-sm font-semibold text-gray-700">Chọn tuần so sánh — Viettel Post/SPX tự khớp theo tuần Đơn C/DTP</span>
+        {open ? <ChevronUp size={15} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={15} className="text-gray-400 flex-shrink-0" />}
+      </button>
+      {open && (
+        <div className="mt-3">
+          <div className="grid grid-cols-[110px_1fr_1fr] gap-2 mb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">
+            <span />
+            <span>Tuần này</span>
+            <span>Tuần trước</span>
+          </div>
+          <SourceRow label="Đơn C" pick={donCPick} />
+          <SourceRow label="Đơn DTP" pick={donDTPPick} />
+          <SourceRow label="TMĐT (SO3+SO6)" pick={tmdtPick} />
+        </div>
+      )}
     </div>
   )
 }
@@ -454,31 +543,59 @@ export default function TongDonTab() {
   const donDTP = useTypeData('donDTP')
 
   const tmdtReports = useMemo(() => readJSON('tmdt_reports', []), [])
-  const tmdtCurrent = tmdtReports[0]?.total || 0
-  const tmdtPrev = tmdtReports[1]?.total || 0
 
   const loading = donC.loading || donDTP.loading
 
-  // Khóa "tuần" dùng để lưu các trường nhập tay (chưa giao, hàng gửi, nhân sự, kết luận, giải pháp...)
-  const weekKey = `${donC.activeId || 'x'}_${donDTP.activeId || 'x'}`
-  const prevWeekKey = donC.prevWeekId || donDTP.prevWeekId ? `${donC.prevWeekId || 'x'}_${donDTP.prevWeekId || 'x'}` : null
+  // ---- Chọn tay 3 nguồn chính: Đơn C, Đơn DTP, TMĐT — Viettel Post/SPX (không có tuần riêng, chỉ là file
+  // upload) tự khớp theo đúng ngày của Đơn C/DTP tương ứng, không cần chọn tay riêng (tránh rối/nhầm lẫn). ----
+  const donCOptions = donC.timeline.map(e => ({ id: e.id, label: formatEntryOption(e) }))
+  const donCPick = usePickedPair('donC', donCOptions, donC.timeline[0]?.id, donC.timeline[1]?.id)
+  const donCCurrentEntry = donC.timeline.find(e => e.id === donCPick.currentId) || null
+  const donCPreviousEntry = donC.timeline.find(e => e.id === donCPick.previousId) || null
 
-  // Tự chọn tuần VTP/SPX ứng với "Tuần này"/"Tuần trước" — không tự đoán theo thứ tự upload nữa
-  const viettelPickC = useCarrierWeekPicker('donC_viettel', 'viettel', donC.validData)
-  const spxPickC = useCarrierWeekPicker('donC_spx', 'spx', donC.validData)
-  const viettelPickDTP = useCarrierWeekPicker('donDTP_viettel', 'viettel', donDTP.validData)
+  const donDTPOptions = donDTP.timeline.map(e => ({ id: e.id, label: formatEntryOption(e) }))
+  const donDTPPick = usePickedPair('donDTP', donDTPOptions,
+    closestTimelineEntry(donDTP.timeline, donCCurrentEntry?.at)?.id, closestTimelineEntry(donDTP.timeline, donCPreviousEntry?.at)?.id)
+  const donDTPCurrentEntry = donDTP.timeline.find(e => e.id === donDTPPick.currentId) || null
+  const donDTPPreviousEntry = donDTP.timeline.find(e => e.id === donDTPPick.previousId) || null
+
+  const tmdtOptions = tmdtReports.map(r => ({ id: r.id, label: r.label }))
+  const tmdtPick = usePickedPair('tmdt', tmdtOptions,
+    closestTmdtReport(tmdtReports, donCCurrentEntry?.at)?.id, closestTmdtReport(tmdtReports, donCPreviousEntry?.at)?.id)
+  const tmdtCurrentReport = tmdtReports.find(r => r.id === tmdtPick.currentId) || null
+  const tmdtPreviousReport = tmdtReports.find(r => r.id === tmdtPick.previousId) || null
+  const tmdtCurrent = tmdtCurrentReport?.total || 0
+  const tmdtPrev = tmdtPreviousReport?.total || 0
+
+  // Viettel Post/SPX: tự tìm file có ngày upload gần nhất với tuần Đơn C/DTP tương ứng
+  const viettelCWeekIdCurrent = pickCarrierWeekIdByDate('donC_viettel', donCCurrentEntry?.at)
+  const viettelCWeekIdPrevious = pickCarrierWeekIdByDate('donC_viettel', donCPreviousEntry?.at)
+  const spxCWeekIdCurrent = pickCarrierWeekIdByDate('donC_spx', donCCurrentEntry?.at)
+  const spxCWeekIdPrevious = pickCarrierWeekIdByDate('donC_spx', donCPreviousEntry?.at)
+  const viettelDTPWeekIdCurrent = pickCarrierWeekIdByDate('donDTP_viettel', donDTPCurrentEntry?.at)
+  const viettelDTPWeekIdPrevious = pickCarrierWeekIdByDate('donDTP_viettel', donDTPPreviousEntry?.at)
+
+  // Khóa "tuần" dùng để lưu các trường nhập tay (chưa giao, hàng gửi, nhân sự, kết luận, giải pháp...)
+  const weekKey = `${donCCurrentEntry?.id || 'x'}_${donDTPCurrentEntry?.id || 'x'}`
+
+  const viettelC_current = useMemo(() => ({ weekId: viettelCWeekIdCurrent, stats: statsForCarrierWeekId('donC_viettel', 'viettel', viettelCWeekIdCurrent, donCCurrentEntry) }), [viettelCWeekIdCurrent, donCCurrentEntry])
+  const viettelC_previous = useMemo(() => ({ weekId: viettelCWeekIdPrevious, stats: statsForCarrierWeekId('donC_viettel', 'viettel', viettelCWeekIdPrevious, donCPreviousEntry) }), [viettelCWeekIdPrevious, donCPreviousEntry])
+  const spxC_current = useMemo(() => ({ weekId: spxCWeekIdCurrent, stats: statsForCarrierWeekId('donC_spx', 'spx', spxCWeekIdCurrent, donCCurrentEntry) }), [spxCWeekIdCurrent, donCCurrentEntry])
+  const spxC_previous = useMemo(() => ({ weekId: spxCWeekIdPrevious, stats: statsForCarrierWeekId('donC_spx', 'spx', spxCWeekIdPrevious, donCPreviousEntry) }), [spxCWeekIdPrevious, donCPreviousEntry])
+  const viettelDTP_current = useMemo(() => ({ weekId: viettelDTPWeekIdCurrent, stats: statsForCarrierWeekId('donDTP_viettel', 'viettel', viettelDTPWeekIdCurrent, donDTPCurrentEntry) }), [viettelDTPWeekIdCurrent, donDTPCurrentEntry])
+  const viettelDTP_previous = useMemo(() => ({ weekId: viettelDTPWeekIdPrevious, stats: statsForCarrierWeekId('donDTP_viettel', 'viettel', viettelDTPWeekIdPrevious, donDTPPreviousEntry) }), [viettelDTPWeekIdPrevious, donDTPPreviousEntry])
 
   const liveCurrent = useMemo(() => computeWeekReport({
-    dataC: donC.validData, dataDTP: donDTP.validData,
-    weekIdC: donC.activeId || 'live', weekIdDTP: donDTP.activeId || 'live', tmdtTotal: tmdtCurrent,
-    viettelCompareC: viettelPickC.currentStats, spxCompareC: spxPickC.currentStats, viettelCompareDTP: viettelPickDTP.currentStats,
-  }), [donC.validData, donDTP.validData, donC.activeId, donDTP.activeId, tmdtCurrent, viettelPickC.currentStats, spxPickC.currentStats, viettelPickDTP.currentStats])
+    entryC: donCCurrentEntry, entryDTP: donDTPCurrentEntry, tmdtTotal: tmdtCurrent,
+    viettelCompareC: viettelC_current.stats, spxCompareC: spxC_current.stats, viettelCompareDTP: viettelDTP_current.stats,
+  }), [donCCurrentEntry, donDTPCurrentEntry, tmdtCurrent, viettelC_current.stats, spxC_current.stats, viettelDTP_current.stats])
 
   const livePrevious = useMemo(() => computeWeekReport({
-    dataC: donC.prevValidData || [], dataDTP: donDTP.prevValidData || [],
-    weekIdC: donC.prevWeekId, weekIdDTP: donDTP.prevWeekId, tmdtTotal: tmdtPrev,
-    viettelCompareC: viettelPickC.previousStats, spxCompareC: spxPickC.previousStats, viettelCompareDTP: viettelPickDTP.previousStats,
-  }), [donC.prevValidData, donDTP.prevValidData, donC.prevWeekId, donDTP.prevWeekId, tmdtPrev, viettelPickC.previousStats, spxPickC.previousStats, viettelPickDTP.previousStats])
+    entryC: donCPreviousEntry, entryDTP: donDTPPreviousEntry, tmdtTotal: tmdtPrev,
+    viettelCompareC: viettelC_previous.stats, spxCompareC: spxC_previous.stats, viettelCompareDTP: viettelDTP_previous.stats,
+  }), [donCPreviousEntry, donDTPPreviousEntry, tmdtPrev, viettelC_previous.stats, spxC_previous.stats, viettelDTP_previous.stats])
+
+  const [sourcePickerOpen, setSourcePickerOpen] = useState(false)
 
   // ---- Lịch sử báo cáo: mỗi lần bấm "Lưu báo cáo" sẽ đóng băng toàn bộ số liệu hiện tại thành 1 bản ghi cố định ----
   const [reports, setReports] = useState(() => readJSON('tongdon_reports', []))
@@ -590,13 +707,13 @@ export default function TongDonTab() {
     setReports(next)
     localStorage.setItem('tongdon_reports', JSON.stringify(next))
     setViewingId(id)
-  }
 
-  const removeReport = (id) => {
-    const next = reports.filter(r => r.id !== id)
-    setReports(next)
-    localStorage.setItem('tongdon_reports', JSON.stringify(next))
-    if (viewingId === id) setViewingId(null)
+    // Số liệu đã đóng băng vào báo cáo — không cần giữ file gốc của các tuần cũ hơn nữa, đỡ tốn bộ nhớ trình duyệt/cloud
+    donC.pruneToIds([donCCurrentEntry?.id, donCPreviousEntry?.id].filter(Boolean))
+    donDTP.pruneToIds([donDTPCurrentEntry?.id, donDTPPreviousEntry?.id].filter(Boolean))
+    pruneCarrierWeeksToIds('donC_viettel', [viettelC_current.weekId, viettelC_previous.weekId].filter(Boolean))
+    pruneCarrierWeeksToIds('donC_spx', [spxC_current.weekId, spxC_previous.weekId].filter(Boolean))
+    pruneCarrierWeeksToIds('donDTP_viettel', [viettelDTP_current.weekId, viettelDTP_previous.weekId].filter(Boolean))
   }
 
   if (loading) {
@@ -639,52 +756,16 @@ export default function TongDonTab() {
             ? `Báo cáo đã lưu · ${new Date(snapshot.createdAt).toLocaleString('vi-VN')}`
             : 'Đánh giá tổng quan · Kết luận · Giải pháp cho tuần tiếp theo'}
         </p>
-
-        {reports.length > 0 && (
-          <div className="relative flex flex-wrap items-center gap-1.5 pt-3 border-t border-gray-100">
-            <span className="text-xs text-gray-400 mr-1">Lịch sử báo cáo:</span>
-            <button
-              onClick={() => setViewingId(null)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                !viewingId ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600'
-              }`}
-            >
-              Trực tiếp (live)
-            </button>
-            {reports.map(r => (
-              <span key={r.id} className="inline-flex items-center">
-                <button
-                  onClick={() => setViewingId(r.id)}
-                  className={`px-2.5 py-1 rounded-l-lg text-xs font-medium border transition-colors ${
-                    viewingId === r.id ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600'
-                  }`}
-                >
-                  {r.label}
-                </button>
-                <button
-                  onClick={() => removeReport(r.id)}
-                  className={`px-1.5 py-1 rounded-r-lg text-xs border border-l-0 ${
-                    viewingId === r.id ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-400 border-gray-200 hover:text-red-500'
-                  }`}
-                  title="Xoá báo cáo này"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       {!isReadOnly && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-4 mb-4">
-          <p className="text-xs font-semibold text-gray-500 mb-2.5">Chọn tuần dữ liệu Viettel Post / SPX cho báo cáo (không tự đoán theo thứ tự upload)</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <CarrierWeekPickRow label="Viettel Post — Đơn C" pick={viettelPickC} />
-            <CarrierWeekPickRow label="SPX Express — Đơn C" pick={spxPickC} />
-            <CarrierWeekPickRow label="Viettel Post — Đơn DTP" pick={viettelPickDTP} />
-          </div>
-        </div>
+        <DataSourcePicker
+          open={sourcePickerOpen}
+          onToggle={() => setSourcePickerOpen(o => !o)}
+          donCPick={donCPick}
+          donDTPPick={donDTPPick}
+          tmdtPick={tmdtPick}
+        />
       )}
 
       {/* KPI strip */}

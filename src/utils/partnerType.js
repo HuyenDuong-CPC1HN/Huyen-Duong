@@ -8,6 +8,10 @@ export function partnerType(row) {
   if (raw.includes('TRỰC TIẾP') || raw.includes('TRUC TIEP') || raw.includes('GIAO THẲNG')) return 'tructiep'
   if (raw.includes('VIETTEL')) return 'viettel'
   if (raw.includes('SPX')) return 'spx'
+  // "Đối tác vận chuyển" không rõ (thường gặp ở file Đơn DTP) — kiểm tra thêm cột "Người giao hàng",
+  // nếu ghi VIETTELPOST thì vẫn tính là giao qua đối tác Viettel Post
+  const nguoiGiao = (row['Người giao hàng'] || '').trim().toUpperCase()
+  if (nguoiGiao.includes('VIETTELPOST')) return 'viettel'
   // Bất kỳ đối tác nào khác (chành xe, cá nhân vận chuyển...) đều tính là Chành xe
   return 'chanhxe'
 }

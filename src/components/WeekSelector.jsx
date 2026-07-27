@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Trash2, Pencil, Check, X, CalendarDays } from 'lucide-react'
 
-export default function WeekSelector({ weeks, activeId, onSelect, onRemove, onRename }) {
+export default function WeekSelector({ weeks, activeId, savedIds = [], onSelect, onRemove, onRename }) {
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editLabel, setEditLabel] = useState('')
@@ -71,8 +71,13 @@ export default function WeekSelector({ weeks, activeId, onSelect, onRemove, onRe
                     />
                   ) : (
                     <>
-                      <p className={`text-sm font-medium truncate ${w.id === activeId ? 'text-blue-700' : 'text-gray-700'}`}>
+                      <p className={`text-sm font-medium truncate flex items-center gap-1.5 ${w.id === activeId ? 'text-blue-700' : 'text-gray-700'}`}>
                         {w.label}
+                        {savedIds.includes(w.id) && (
+                          <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 flex-shrink-0" title="Đã bấm Lưu số liệu tuần này — file Excel gốc đã xoá, chỉ còn số liệu tổng hợp">
+                            Đã lưu
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-gray-400 truncate">{w.fileName} · {new Date(w.uploadedAt).toLocaleDateString('vi-VN')}</p>
                     </>
@@ -90,7 +95,7 @@ export default function WeekSelector({ weeks, activeId, onSelect, onRemove, onRe
                     <>
                       <button onClick={(e) => startEdit(w, e)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Pencil size={13} /></button>
                       <button
-                        onClick={() => { if (confirm(`Xóa "${w.label}"?`)) onRemove(w.id) }}
+                        onClick={() => { if (confirm(`Xóa vĩnh viễn "${w.label}"?\n\nSẽ KHÔNG lưu lại số liệu — không thể khôi phục sau khi xóa.\n(Nếu muốn giữ lại số liệu, hãy dùng nút "Lưu số liệu tuần này" thay vì xóa ở đây.)`)) onRemove(w.id) }}
                         className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
                       >
                         <Trash2 size={13} />

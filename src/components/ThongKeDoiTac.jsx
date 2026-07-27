@@ -151,10 +151,10 @@ function GroupRow({ label, rows, children, depth = 0, hideDetail = false }) {
   )
 }
 
-function SummaryBar({ data, groups, showChanhXe, type, weekKey }) {
-  // Ưu tiên lấy theo file VTP/SPX đã upload; chưa có file thì tạm dùng số đếm từ Excel nội bộ
-  const viettelFile = getCarrierFileTotal(`${type}_viettel`, 'viettel', data)
-  const spxFile = getCarrierFileTotal(`${type}_spx`, 'spx', data)
+function SummaryBar({ data, groups, showChanhXe, type, weekKey, referenceDate = null }) {
+  // Ưu tiên lấy theo file VTP/SPX đã upload (khớp theo ngày tuần Đơn C/DTP đang chọn); chưa có file thì tạm dùng số đếm từ Excel nội bộ
+  const viettelFile = getCarrierFileTotal(`${type}_viettel`, 'viettel', data, referenceDate)
+  const spxFile = getCarrierFileTotal(`${type}_spx`, 'spx', data, referenceDate)
   const viettelCount = viettelFile ? viettelFile.total : groups.doitac.sub.viettel.rows.length
   const spxCount = spxFile ? spxFile.total : groups.doitac.sub.spx.rows.length
   const doitacTotal = viettelCount + spxCount
@@ -220,13 +220,13 @@ function SummaryBar({ data, groups, showChanhXe, type, weekKey }) {
   )
 }
 
-export default function ThongKeDoiTac({ data, type, weekKey = 'live' }) {
+export default function ThongKeDoiTac({ data, type, weekKey = 'live', referenceDate = null }) {
   const groups = useMemo(() => buildGroups(data), [data])
   if (!data.length) return <div className="text-center py-20 text-gray-400">Không có dữ liệu</div>
 
   return (
     <div>
-      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} type={type} weekKey={weekKey} />
+      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} type={type} weekKey={weekKey} referenceDate={referenceDate} />
     </div>
   )
 }

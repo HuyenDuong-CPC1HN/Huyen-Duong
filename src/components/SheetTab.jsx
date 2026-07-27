@@ -6,6 +6,8 @@ import ThongKeGiaoHang from './ThongKeGiaoHang'
 import ThongKeDoiTac from './ThongKeDoiTac'
 import ExcelUpload from './ExcelUpload'
 import WeekSelector from './WeekSelector'
+import SheetReportPanel from './SheetReportPanel'
+import { readSheetReports } from '../utils/sheetReports'
 
 // Gộp Danh sách + Thống kê giao hàng + Đối tác VC thành 1 tab, danh sách chi tiết thu gọn mặc định
 const MERGE_LIST_PARTNER = type => type === 'donC' || type === 'donDTP'
@@ -14,7 +16,7 @@ export default function SheetTab({ type }) {
   const [view, setView] = useState(MERGE_LIST_PARTNER(type) ? 'partner' : 'list')
   const merged = MERGE_LIST_PARTNER(type)
   const [listExpanded, setListExpanded] = useState(false)
-  const { weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek } = useWeeklyData(type)
+  const { weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek, pendingClear, schedulePendingClear, cancelPendingClear } = useWeeklyData(type)
 
   const rawData = activeWeek ? activeWeek.data : []
   const loading = false
@@ -35,6 +37,13 @@ export default function SheetTab({ type }) {
     const key = row['Mã hóa đơn'] || ''
     return vcEdits[key] !== undefined ? { ...row, [VC_KEY]: vcEdits[key] } : row
   }), [rawData, vcEdits])
+
+  // Ngày upload của tuần Excel đang chọn — dùng để khớp đúng file VTP/SPX có ngày upload gần nhất
+  // (đáng tin cậy hơn đếm vị trí, vì 2 danh sách Excel & VTP/SPX là 2 danh sách upload độc lập)
+  const referenceDate = activeWeek?.uploadedAt || null
+
+  // Tuần nào đã bấm "Lưu số liệu tuần này" — hiện tag "Đã lưu" trong Lịch sử upload để dễ phân biệt
+  const savedIds = useMemo(() => (merged ? readSheetReports(type).map(r => r.id) : []), [merged, type, weeks])
 
   if (weeks.length === 0) {
     return (
@@ -85,6 +94,7 @@ export default function SheetTab({ type }) {
           <WeekSelector
             weeks={weeks}
             activeId={activeId}
+            savedIds={savedIds}
             onSelect={selectWeek}
             onRemove={removeWeek}
             onRename={renameWeek}
@@ -107,43 +117,50 @@ export default function SheetTab({ type }) {
       {view === 'stats' && (
         loading
           ? <div className="text-center py-20 text-gray-400">Đang tải dữ liệu...</div>
-          : <ThongKeGiaoHang data={activeData} type={type} weekKey={activeId || 'live'} />
+          : <ThongKeGiaoHang data={activeData} type={type} weekKey={activeId || 'live'} referenceDate={referenceDate} />
       )}
       {view === 'partner' && (
         loading
           ? <div className="text-center py-20 text-gray-400">Đang tải dữ liệu...</div>
-          : (
-            <div>
-              <ThongKeDoiTac data={activeData} type={type} weekKey={activeId || 'live'} />
-              {merged && (
-                <div className="mt-5">
-                  <ThongKeGiaoHang data={activeData} type={type} weekKey={activeId || 'live'} />
-                </div>
-              )}
+          : merged ? (
+            <SheetReportPanel
+              type={type}
+              data={activeData}
+              weekId={activeId}
+              weekLabel={activeWeek?.label}
+              referenceDate={referenceDate}
+              pendingClear={pendingClear}
+              onSaved={id => schedulePendingClear(id)}
+              onUndoClear={cancelPendingClear}
+            >
+              <ThongKeDoiTac data={activeData} type={type} weekKey={activeId || 'live'} referenceDate={referenceDate} />
+              <div className="mt-5">
+                <ThongKeGiaoHang data={activeData} type={type} weekKey={activeId || 'live'} referenceDate={referenceDate} />
+              </div>
 
-              {merged && (
-                <div className="mt-5 bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <button
-                    onClick={() => setListExpanded(v => !v)}
-                    className="w-full flex items-center gap-2 px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-                  >
-                    <List size={15} className="text-gray-500" />
-                    <span className="font-semibold text-gray-700 text-sm">Danh sách chi tiết đơn hàng</span>
-                    {listExpanded ? <ChevronUp size={15} className="text-gray-400 ml-auto" /> : <ChevronDown size={15} className="text-gray-400 ml-auto" />}
-                  </button>
-                  {listExpanded && (
-                    <div className="p-4">
-                      <DataTable
-                        data={activeData}
-                        loading={loading}
-                        error={error}
-                        onEditVC={onEditVC}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+              <div className="mt-5 bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => setListExpanded(v => !v)}
+                  className="w-full flex items-center gap-2 px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                >
+                  <List size={15} className="text-gray-500" />
+                  <span className="font-semibold text-gray-700 text-sm">Danh sách chi tiết đơn hàng</span>
+                  {listExpanded ? <ChevronUp size={15} className="text-gray-400 ml-auto" /> : <ChevronDown size={15} className="text-gray-400 ml-auto" />}
+                </button>
+                {listExpanded && (
+                  <div className="p-4">
+                    <DataTable
+                      data={activeData}
+                      loading={loading}
+                      error={error}
+                      onEditVC={onEditVC}
+                    />
+                  </div>
+                )}
+              </div>
+            </SheetReportPanel>
+          ) : (
+            <ThongKeDoiTac data={activeData} type={type} weekKey={activeId || 'live'} referenceDate={referenceDate} />
           )
       )}
     </div>

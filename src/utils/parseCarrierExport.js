@@ -122,12 +122,14 @@ const CARRIER_CONFIG = {
     createdKey: 'Thời gian tạo đơn',
     deliveredAtKey: 'Thời gian giao hàng',
     deliveredStatus: 'Đã giao hàng',
-    giaoLaiStatuses: ['Chờ giao lại'],
+    // "Đang giao hàng" tính vào Giao lại lần 2 (theo yêu cầu); "Đang vận chuyển" không nằm trong danh sách này
+    // nên vẫn rơi vào nhánh mặc định (Đang vận chuyển) như cũ.
+    giaoLaiStatuses: ['Chờ giao lại', 'Đang giao hàng'],
     hoanHangStatuses: ['Đang trả hàng', 'Đã trả hàng'],
     // Đơn bị huỷ trước khi giao — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
     cancelStatuses: ['Đã hủy', 'Đã huỷ'],
-    // "Lấy hàng không thành công": đối chiếu Mã vận đơn (file SPX) với Mã vận đơn nội bộ —
-    // khớp thì tính vào "Đang vận chuyển" (đơn vẫn còn đang xử lý), không khớp thì bỏ qua
+    // "Lấy hàng không thành công": luôn tính vào "Chờ lấy" (đơn vẫn chưa lấy được), không cần đối chiếu
+    // Mã vận đơn nội bộ (khác các trạng thái khác — trạng thái này SPX thường chưa gán Mã vận đơn nội bộ)
     pickupFailStatuses: ['Lấy hàng không thành công'],
     isHoanHang: () => false,
     orderCounter: spxOrderCount,
@@ -208,13 +210,11 @@ export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = n
     // Đơn bị huỷ trước khi giao — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
     if (config.cancelStatuses?.includes(status)) continue
 
-    // "Lấy hàng không thành công": chỉ tính (vào Đang vận chuyển) nếu khớp Mã vận đơn với dữ liệu nội bộ
+    // "Lấy hàng không thành công": luôn tính vào Chờ lấy, không cần khớp Mã vận đơn với dữ liệu nội bộ
     if (config.pickupFailStatuses?.includes(status)) {
-      const code = String(row[config.requiredHeaderCell] || '').trim().toUpperCase()
-      if (!lookupMap?.has(code)) continue
       const count = config.orderCounter(row, config, lookupMap)
       result.total += count
-      result.dangVanChuyen += count
+      result.choLay += count
       continue
     }
 

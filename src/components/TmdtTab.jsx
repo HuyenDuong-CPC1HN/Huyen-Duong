@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, BarChart2, X, Save } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const STORES = [
   'Zentokid Vietnam Shopee',
@@ -83,10 +83,11 @@ export default function TmdtTab() {
     setShowForm(true)
   }
 
-  // Tổng theo store (tất cả tuần)
+  // Tổng theo store — chỉ tuần mới nhất (reports đã sắp xếp mới nhất lên đầu), không cộng dồn các tuần cũ
+  const latestReport = reports[0] || null
   const storeTotals = STORES.map(s => ({
     store: s,
-    total: reports.reduce((sum, r) => sum + (r.counts[s] || 0), 0),
+    total: latestReport?.counts[s] || 0,
   }))
 
   // Chart data (8 tuần gần nhất)
@@ -97,13 +98,16 @@ export default function TmdtTab() {
 
   return (
     <div>
-      {/* Tổng theo store */}
+      {/* Tổng theo store — tuần mới nhất */}
+      {latestReport && (
+        <p className="text-xs text-gray-400 mb-2">Tuần mới nhất: {latestReport.label}</p>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         {storeTotals.map((s, i) => (
           <div key={s.store} className={`rounded-xl border-2 p-4 ${STORE_CLS[s.store]}`}>
             <div className="text-xs font-semibold mb-2 leading-tight">{s.store}</div>
             <div className="text-3xl font-bold">{s.total}</div>
-            <div className="text-xs opacity-60 mt-1">tổng đơn</div>
+            <div className="text-xs opacity-60 mt-1">tổng đơn tuần này</div>
           </div>
         ))}
       </div>
@@ -116,16 +120,16 @@ export default function TmdtTab() {
             <span className="text-sm font-semibold text-gray-700">Biểu đồ theo tuần</span>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+            <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {STORES.map((s, i) => (
-                <Bar key={s} dataKey={s} fill={STORE_COLORS[i]} radius={[3, 3, 0, 0]} />
+                <Line key={s} type="monotone" dataKey={s} stroke={STORE_COLORS[i]} strokeWidth={2} dot={{ r: 3 }} />
               ))}
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         </div>
       )}

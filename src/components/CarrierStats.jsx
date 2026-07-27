@@ -10,7 +10,7 @@ const STAT_CARDS = [
   { key: '72h',          label: '≤ 72 giờ',        icon: Clock,       cls: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
   { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200' },
   { key: 'choLay',       label: 'Chờ lấy',         icon: Package,     cls: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
-  { key: 'giaoLai',      label: 'Giao lại lần 2',  icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
+  { key: 'giaoLai',      label: 'Đang giao hàng',  icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
   { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
 ]
 
@@ -92,6 +92,67 @@ export function removeCarrierWeek(carrierKey, weekId) {
   }
 }
 
+// Chỉ giữ lại các tuần có id trong keepIds — dùng khi báo cáo Tổng đơn đã lưu, không cần giữ file các tuần cũ hơn để đỡ tốn bộ nhớ
+export function pruneCarrierWeeksToIds(carrierKey, keepIds) {
+  const weeks = readCarrierWeeks(carrierKey)
+  const kept = weeks.filter(w => keepIds.includes(w.id))
+  if (kept.length === weeks.length) return
+  writeCarrierWeeks(carrierKey, kept)
+}
+
+// Xoá phần dòng dữ liệu (rows) của 1 tuần VTP/SPX sau khi đã đóng băng đủ 7 số liệu vào báo cáo Đơn C/DTP —
+// KHÔNG xoá hẳn tuần khỏi danh sách, chỉ rỗng rows để đỡ tốn bộ nhớ. Lưu ý: file này có thể đang được tab
+// Tổng đơn dùng để tính "Tuần này/Tuần trước" — xoá rows có thể khiến Tổng đơn hiện 0 cho đến khi có tuần mới.
+export function clearCarrierWeekRows(carrierKey, weekId) {
+  const weeks = readCarrierWeeks(carrierKey)
+  const updated = weeks.map(w => w.id === weekId ? { ...w, rows: [] } : w)
+  writeCarrierWeeks(carrierKey, updated)
+}
+
+export function carrierWeekHasRows(carrierKey, weekId) {
+  const w = readCarrierWeeks(carrierKey).find(w => w.id === weekId)
+  return !!(w && w.rows && w.rows.length > 0)
+}
+
+function pendingClearCarrierKey(carrierKey) { return `pending_clear_carrier_${carrierKey}` }
+function loadCarrierPendingClear(carrierKey) {
+  try { return JSON.parse(localStorage.getItem(pendingClearCarrierKey(carrierKey)) || 'null') } catch { return null }
+}
+
+// Thời gian ân hạn trước khi thực sự xoá rows của 1 tuần VTP/SPX (giống cơ chế Excel Đơn C/DTP) —
+// cho phép "Hoàn tác" trong vài phút. carrierKey có thể là null (vd donDTP không có SPX) — khi đó hook chỉ đứng yên.
+export function useCarrierRowsPendingClear(carrierKey) {
+  const [pendingClear, setPendingClear] = useState(() => carrierKey ? loadCarrierPendingClear(carrierKey) : null)
+
+  const scheduleClear = (weekId, delayMs = 3 * 60 * 1000) => {
+    if (!carrierKey) return
+    const info = { weekId, clearAt: Date.now() + delayMs }
+    localStorage.setItem(pendingClearCarrierKey(carrierKey), JSON.stringify(info))
+    setPendingClear(info)
+  }
+
+  const cancelClear = () => {
+    if (!carrierKey) return
+    localStorage.removeItem(pendingClearCarrierKey(carrierKey))
+    setPendingClear(null)
+  }
+
+  useEffect(() => {
+    if (!carrierKey || !pendingClear) return
+    const remaining = pendingClear.clearAt - Date.now()
+    const finalize = () => {
+      clearCarrierWeekRows(carrierKey, pendingClear.weekId)
+      localStorage.removeItem(pendingClearCarrierKey(carrierKey))
+      setPendingClear(null)
+    }
+    if (remaining <= 0) { finalize(); return }
+    const timer = setTimeout(finalize, remaining)
+    return () => clearTimeout(timer)
+  }, [carrierKey, pendingClear])
+
+  return { pendingClear, scheduleClear, cancelClear }
+}
+
 // ---- Loại trừ theo "Tên hàng" — áp dụng chung cho carrier (không riêng theo tuần), vì đây là quy tắc
 // phân loại sản phẩm (vd voucher, quà tặng...) chứ không phải số liệu upload ----
 export function readExcludedTenHang(carrierKey) {
@@ -147,9 +208,11 @@ function getHoldLookupSet(carrierKey) {
   return set
 }
 
-function buildStatsForWeek(entry, carrierKey, carrierType, internalData) {
+// frozenLookup (object {mã: số lượng}, xem snapshotCarrierLookup): dùng thay cho internalData khi Excel gốc
+// đã bị xoá (báo cáo Đơn C/DTP đã lưu) — vẫn đếm đúng đơn CB gộp/SPX lấy hàng-không-thành-công.
+function buildStatsForWeek(entry, carrierKey, carrierType, internalData, frozenLookup = null) {
   if (!entry) return null
-  const lookupMap = buildInternalOrderLookup(internalData)
+  const lookupMap = frozenLookup ? new Map(Object.entries(frozenLookup)) : buildInternalOrderLookup(internalData)
   const holdLookupSet = getHoldLookupSet(carrierKey)
   const effectiveRows = filterExcludedRows(entry.rows, carrierKey)
   const stats = computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet)
@@ -164,20 +227,52 @@ function buildStatsForWeek(entry, carrierKey, carrierType, internalData) {
 }
 
 // Đọc nhanh toàn bộ thống kê (24h/48h/72h/đang vận chuyển/giao lại/hoàn hàng) theo tuần đang chọn (mặc định: tuần mới nhất)
-export function getCarrierFileStats(carrierKey, carrierType, internalData, weekId) {
+export function getCarrierFileStats(carrierKey, carrierType, internalData, weekId, frozenLookup = null) {
   try {
     const weeks = readCarrierWeeks(carrierKey)
     if (weeks.length === 0) return null
     const entry = weekId ? weeks.find(w => w.id === weekId) : weeks[0]
-    return buildStatsForWeek(entry, carrierKey, carrierType, internalData)
+    return buildStatsForWeek(entry, carrierKey, carrierType, internalData, frozenLookup)
   } catch {
     return null
   }
 }
 
-// Giữ tương thích ngược — chỉ lấy tổng đơn (tuần mới nhất)
-export function getCarrierFileTotal(carrierKey, carrierType, internalData) {
-  return getCarrierFileStats(carrierKey, carrierType, internalData)
+// Chọn tuần có ngày upload GẦN NHẤT với referenceDate — đáng tin cậy hơn so với đếm vị trí trong danh sách,
+// vì danh sách Excel Đơn C/DTP và danh sách VTP/SPX là 2 danh sách upload độc lập, không tăng đồng bộ với nhau
+// (đã từng gây bug: dùng vị trí (rank) làm lệch tuần VTP khi 1 trong 2 danh sách có tuần bị "dọn rỗng"/lưu trước đó).
+function closestByDate(weeks, referenceDate) {
+  if (weeks.length === 0) return null
+  if (!referenceDate) return weeks[0]
+  const refTime = new Date(referenceDate).getTime()
+  let best = weeks[0]
+  let bestDiff = Math.abs(new Date(best.uploadedAt).getTime() - refTime)
+  for (const w of weeks) {
+    const diff = Math.abs(new Date(w.uploadedAt).getTime() - refTime)
+    if (diff < bestDiff) { best = w; bestDiff = diff }
+  }
+  return best
+}
+
+// Đóng băng bảng đối chiếu "Mã vận đơn" nội bộ (object nhỏ gọn, không phải toàn bộ dòng Excel) — gọi lúc
+// còn dữ liệu Excel sống (trước khi "Lưu số liệu tuần này" xoá Excel gốc) để giữ đúng cách đếm đơn CB gộp/
+// SPX lấy hàng-không-thành-công về sau, không bị lệch khi Excel đã xoá (internalData sẽ thành rỗng).
+export function snapshotCarrierLookup(internalData) {
+  return Object.fromEntries(buildInternalOrderLookup(internalData))
+}
+
+// Lấy tổng đơn theo file VTP/SPX có ngày upload gần nhất với referenceDate (ngày upload Excel Đơn C/DTP
+// đang xem) — không truyền referenceDate thì mặc định lấy file mới nhất.
+export function getCarrierFileTotal(carrierKey, carrierType, internalData, referenceDate = null) {
+  const weeks = readCarrierWeeks(carrierKey)
+  const entry = closestByDate(weeks, referenceDate)
+  return entry ? buildStatsForWeek(entry, carrierKey, carrierType, internalData) : null
+}
+
+// Trả về id của file VTP/SPX khớp gần nhất với referenceDate — dùng để "đóng băng" đúng file tương ứng
+// vào 1 báo cáo đã lưu (Lưu số liệu tuần này), tránh lệch nếu sau này upload thêm file mới.
+export function pickCarrierWeekIdByDate(carrierKey, referenceDate) {
+  return closestByDate(readCarrierWeeks(carrierKey), referenceDate)?.id || null
 }
 
 // Danh sách rút gọn các tuần đã upload (không kèm rows) — dùng cho UI chọn tuần thủ công ở nơi khác (vd Tổng đơn)
@@ -298,9 +393,15 @@ function useColWidths(storageKey, columns) {
   return [widths, setWidth]
 }
 
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [] }) {
+// frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
+// báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
+// lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
-  const lookupMap = useMemo(() => buildInternalOrderLookup(internalData), [internalData])
+  const lookupMap = useMemo(
+    () => frozenLookup ? new Map(Object.entries(frozenLookup)) : buildInternalOrderLookup(internalData),
+    [internalData, frozenLookup]
+  )
   const inputRef = useRef()
   const holdInputRef = useRef()
   const [dragging, setDragging] = useState(false)
@@ -341,17 +442,9 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   }
 
   const [weeks, setWeeks] = useState(() => readCarrierWeeks(carrierKey))
-  const [activeWeekId, setActiveWeekId] = useState(() => {
-    const saved = localStorage.getItem(`carrier_active_${carrierKey}`)
-    const list = readCarrierWeeks(carrierKey)
-    return (saved && list.some(w => w.id === saved)) ? saved : (list[0]?.id || null)
-  })
-  const state = weeks.find(w => w.id === activeWeekId) || null
-
-  const selectWeek = (id) => {
-    setActiveWeekId(id)
-    localStorage.setItem(`carrier_active_${carrierKey}`, id)
-  }
+  // Tuần đang xem: nếu có weekId cụ thể (vd đang xem 1 báo cáo Đơn C/DTP đã lưu) thì lấy đúng file đó;
+  // không thì lấy file có ngày upload gần nhất với referenceDate (ngày upload tuần Excel Đơn C/DTP đang chọn)
+  const state = weekId ? (weeks.find(w => w.id === weekId) || null) : closestByDate(weeks, referenceDate)
 
   const [colFilters, setColFilters] = useState({})
   const [pageSize, setPageSize] = useState(50)
@@ -403,9 +496,8 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       try {
         const rows = parseCarrierFile(e.target.result, carrierType)
         if (rows.length === 0) { setError('Không tìm thấy dữ liệu đơn hàng trong file.'); return }
-        const { entry, droppedCount } = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+        const { droppedCount } = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
         setWeeks(readCarrierWeeks(carrierKey))
-        setActiveWeekId(entry.id)
         if (droppedCount > 0) {
           setError(`Bộ nhớ trình duyệt gần đầy — đã tự động bỏ ${droppedCount} tuần cũ nhất để lưu được tuần này.`)
         }
@@ -427,9 +519,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     if (!state) return
     if (!window.confirm(`Xoá dữ liệu tuần "${state.fileName}"? Các tuần khác vẫn được giữ nguyên.`)) return
     removeCarrierWeek(carrierKey, state.id)
-    const next = readCarrierWeeks(carrierKey)
-    setWeeks(next)
-    setActiveWeekId(next[0]?.id || null)
+    setWeeks(readCarrierWeeks(carrierKey))
   }
 
   // Loại trừ theo "Tên hàng" (vd voucher, quà tặng...) khỏi thống kê — áp dụng chung cho carrier này
@@ -517,32 +607,25 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   return (
     <div>
       {weeks.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <span className="text-xs text-gray-400 mr-1">Tuần dữ liệu:</span>
-          {weeks.map((w, i) => (
-            <button
-              key={w.id}
-              onClick={() => selectWeek(w.id)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                w.id === activeWeekId
-                  ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600'
-              }`}
-              title={w.fileName}
-            >
-              {i === 0 ? 'Mới nhất' : `Tuần trước ×${i}`} · {new Date(w.uploadedAt).toLocaleDateString('vi-VN')}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5 mb-3 text-xs text-gray-400">
+          <span>{weekId ? 'Tuần dữ liệu (cố định theo báo cáo đã lưu):' : 'Tuần dữ liệu (khớp theo ngày tuần Đơn C/DTP đang chọn ở trên):'}</span>
+          <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 font-medium" title={state.fileName}>
+            {state.fileName} · {new Date(state.uploadedAt).toLocaleDateString('vi-VN')}
+          </span>
         </div>
       )}
 
       <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-4">
         {STAT_CARDS.map(c => {
           const Icon = c.icon
+          const cardPct = effectiveTotal ? Math.round((stats[c.key] / effectiveTotal) * 100) : 0
           return (
             <div key={c.key} className={`rounded-xl border p-3 ${c.bg} text-center`}>
               <Icon size={16} className={`${c.cls} mx-auto mb-1`} />
-              <div className={`text-xl font-bold ${c.cls}`}>{stats[c.key]}</div>
+              <div className={`text-xl font-bold ${c.cls}`}>
+                {stats[c.key]}
+                <span className="text-xs font-medium text-gray-400 ml-1">({cardPct}%)</span>
+              </div>
               <div className="text-xs text-gray-500 mt-0.5 leading-tight">{c.label}</div>
             </div>
           )

@@ -24,7 +24,7 @@ const STAT_COLS = [
   { key: '48h',      label: '≤ 48 giờ',       icon: CheckCircle, cls: 'text-teal-600',   bg: 'bg-teal-50 border-teal-200' },
   { key: '72h',      label: '≤ 72 giờ',       icon: Clock,       cls: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
   { key: 'chuaGiao', label: 'Chưa giao',      icon: AlertCircle, cls: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200' },
-  { key: 'giaoLai',  label: 'Giao lại lần 2', icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
+  { key: 'giaoLai',  label: 'Đang giao hàng', icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
   { key: 'hoanHang', label: 'Hoàn hàng',      icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
 ]
 
@@ -309,7 +309,7 @@ function ChanhXeDetail({ rows }) {
   )
 }
 
-function GroupCard({ g, type, internalData, weekKey }) {
+function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
   const scopedKey = `${type}_${g.key}_${weekKey}`
   const [override, commitOverride] = useChuaGiaoOverride(scopedKey)
   const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${scopedKey}_chuagui`)
@@ -319,10 +319,10 @@ function GroupCard({ g, type, internalData, weekKey }) {
   // "Chưa giao" = tổng các ô phân loại khách hàng (Bệnh viện + Nhà thuốc + KH ONL...) khi có nhập
   const khBreakdownSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
 
-  // Viettel Post / SPX Express: nhúng trực tiếp khung đối soát (upload file xuất, thống kê thật)
+  // Viettel Post / SPX Express: nhúng trực tiếp khung đối soát (upload file xuất, thống kê thật) — khớp đúng tuần đang chọn
   if (CARRIER_KEY_MAP[g.key]) {
     const carrierType = CARRIER_KEY_MAP[g.key]
-    const fileData = getCarrierFileTotal(`${type}_${carrierType}`, carrierType, internalData)
+    const fileData = getCarrierFileTotal(`${type}_${carrierType}`, carrierType, internalData, referenceDate)
     const badgeValue = fileData ? fileData.total : g.rows.length
     return (
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -342,6 +342,7 @@ function GroupCard({ g, type, internalData, weekKey }) {
               label={g.label}
               carrierType={CARRIER_KEY_MAP[g.key]}
               internalData={internalData}
+              referenceDate={referenceDate}
             />
           </div>
         )}
@@ -483,10 +484,10 @@ function GroupCard({ g, type, internalData, weekKey }) {
 }
 
 // So sánh nhanh số đơn nội bộ (Excel Đơn C/DTP) và số đơn theo file VTP/SPX đã upload
-function CarrierCompareSummary({ carrierGroups, type, internalData }) {
+function CarrierCompareSummary({ carrierGroups, type, internalData, referenceDate = null }) {
   const rows = carrierGroups.map(g => {
     const carrierKey = CARRIER_KEY_MAP[g.key]
-    const fileData = getCarrierFileTotal(`${type}_${carrierKey}`, carrierKey, internalData)
+    const fileData = getCarrierFileTotal(`${type}_${carrierKey}`, carrierKey, internalData, referenceDate)
     return { label: g.label, internalTotal: g.rows.length, fileData }
   }).filter(r => r.fileData)
 
@@ -523,7 +524,7 @@ function CarrierCompareSummary({ carrierGroups, type, internalData }) {
   )
 }
 
-function CarrierParentGroup({ label, children, total, carrierGroups, type, internalData }) {
+function CarrierParentGroup({ label, children, total, carrierGroups, type, internalData, referenceDate = null }) {
   const [open, setOpen] = useState(true)
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -538,7 +539,7 @@ function CarrierParentGroup({ label, children, total, carrierGroups, type, inter
       </div>
       {open && (
         <div className="p-3 pl-8 bg-gray-50/50 border-l-4 border-blue-200 ml-4">
-          <CarrierCompareSummary carrierGroups={carrierGroups} type={type} internalData={internalData} />
+          <CarrierCompareSummary carrierGroups={carrierGroups} type={type} internalData={internalData} referenceDate={referenceDate} />
           <div className="space-y-3">{children}</div>
         </div>
       )}
@@ -546,7 +547,7 @@ function CarrierParentGroup({ label, children, total, carrierGroups, type, inter
   )
 }
 
-export default function ThongKeGiaoHang({ data, type, weekKey = 'live' }) {
+export default function ThongKeGiaoHang({ data, type, weekKey = 'live', referenceDate = null }) {
   const partners = PARTNERS[type] || []
 
   // Chỉ tính đơn có Mã kiện hàng — khớp với cách tính ở tab Đối tác VC
@@ -564,17 +565,17 @@ export default function ThongKeGiaoHang({ data, type, weekKey = 'live' }) {
   const carrierGroups = groups.filter(g => g.carrierGroup)
   const carrierTotal = carrierGroups.reduce((s, g) => {
     const carrierType = CARRIER_KEY_MAP[g.key]
-    const fileData = getCarrierFileTotal(`${type}_${carrierType}`, carrierType, validData)
+    const fileData = getCarrierFileTotal(`${type}_${carrierType}`, carrierType, validData, referenceDate)
     return s + (fileData ? fileData.total : g.rows.length)
   }, 0)
 
   return (
     <div className="space-y-4">
-      {mainGroups.map(g => <GroupCard key={`${g.key}_${weekKey}`} g={g} type={type} internalData={validData} weekKey={weekKey} />)}
+      {mainGroups.map(g => <GroupCard key={`${g.key}_${weekKey}`} g={g} type={type} internalData={validData} weekKey={weekKey} referenceDate={referenceDate} />)}
 
       {carrierGroups.length > 0 && (
-        <CarrierParentGroup label="Giao qua đối tác vận chuyển" total={carrierTotal} carrierGroups={carrierGroups} type={type} internalData={validData}>
-          {carrierGroups.map(g => <GroupCard key={`${g.key}_${weekKey}`} g={g} type={type} internalData={validData} weekKey={weekKey} />)}
+        <CarrierParentGroup label="Giao qua đối tác vận chuyển" total={carrierTotal} carrierGroups={carrierGroups} type={type} internalData={validData} referenceDate={referenceDate}>
+          {carrierGroups.map(g => <GroupCard key={`${g.key}_${weekKey}`} g={g} type={type} internalData={validData} weekKey={weekKey} referenceDate={referenceDate} />)}
         </CarrierParentGroup>
       )}
 

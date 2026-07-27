@@ -1,7 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 function storageKey(type) { return `weeks_${type}` }
 function activeKey(type) { return `activeWeek_${type}` }
+function pendingClearKey(type) { return `pending_clear_${type}` }
+
+function loadPendingClear(type) {
+  try { return JSON.parse(localStorage.getItem(pendingClearKey(type)) || 'null') } catch { return null }
+}
 
 function loadWeeks(type) {
   try {
@@ -61,6 +66,56 @@ export function useWeeklyData(type) {
     }
   }
 
+  // Chỉ giữ lại các tuần có id trong keepIds (dùng khi báo cáo Tổng đơn đã lưu, không cần giữ Excel các tuần cũ hơn để đỡ tốn bộ nhớ)
+  const pruneToIds = (keepIds) => {
+    const updated = weeks.filter(w => keepIds.includes(w.id))
+    if (updated.length === weeks.length) return
+    saveWeeks(type, updated)
+    setWeeks(updated)
+  }
+
+  // Xoá phần dữ liệu chi tiết (rows) của 1 tuần sau khi đã "Lưu số liệu tuần này" (đóng băng số liệu) —
+  // KHÔNG xoá hẳn khỏi danh sách, tuần vẫn hiện trong "Lịch sử upload" để chọn lại xem báo cáo đã lưu.
+  // Cập nhật theo kiểu functional (setWeeks(prev => ...)) vì hàm này còn được gọi từ bộ đếm hết hạn ân hạn
+  // (setTimeout) — lúc đó biến `weeks` trong closure có thể đã cũ nếu người dùng upload tuần mới trong lúc chờ.
+  const clearWeekData = (id) => {
+    setWeeks(prev => {
+      const updated = prev.map(w => w.id === id ? { ...w, data: [] } : w)
+      saveWeeks(type, updated)
+      return updated
+    })
+  }
+
+  // ---- Thời gian ân hạn trước khi thực sự xoá Excel gốc sau khi "Lưu số liệu tuần này" ----
+  // Cho phép "Hoàn tác" trong vài phút, tránh mất dữ liệu nếu lỡ bấm nhầm/số liệu chưa đúng.
+  const [pendingClear, setPendingClear] = useState(() => loadPendingClear(type))
+
+  const schedulePendingClear = (id, delayMs = 3 * 60 * 1000) => {
+    const info = { weekId: id, clearAt: Date.now() + delayMs }
+    localStorage.setItem(pendingClearKey(type), JSON.stringify(info))
+    setPendingClear(info)
+  }
+
+  const cancelPendingClear = () => {
+    localStorage.removeItem(pendingClearKey(type))
+    setPendingClear(null)
+  }
+
+  // Hết thời gian ân hạn thì thực sự xoá — kể cả khi mới mở lại trang (không cần đợi tab luôn mở)
+  useEffect(() => {
+    if (!pendingClear) return
+    const remaining = pendingClear.clearAt - Date.now()
+    const finalize = () => {
+      clearWeekData(pendingClear.weekId)
+      localStorage.removeItem(pendingClearKey(type))
+      setPendingClear(null)
+    }
+    if (remaining <= 0) { finalize(); return }
+    const timer = setTimeout(finalize, remaining)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingClear])
+
   const renameWeek = (id, label) => {
     const updated = weeks.map(w => w.id === id ? { ...w, label } : w)
     saveWeeks(type, updated)
@@ -72,7 +127,10 @@ export function useWeeklyData(type) {
     setActiveId(id)
   }
 
-  return { weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek }
+  return {
+    weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek, pruneToIds, clearWeekData,
+    pendingClear, schedulePendingClear, cancelPendingClear,
+  }
 }
 
 function getWeekNumber(date) {
