@@ -1,5 +1,10 @@
-import { useMemo, useState, useEffect } from 'react'
-import { RefreshCw, ClipboardList, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react'
+import { useMemo, useState, useEffect, useRef } from 'react'
+import {
+  RefreshCw, ClipboardList, ArrowRight, ChevronDown, ChevronUp, Download, Printer,
+  Package, Truck, ShoppingBag, Layers, PieChart as PieIcon, BarChart2, ClipboardCheck, Calendar, Building2, AlertCircle,
+} from 'lucide-react'
+import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from 'recharts'
+import { toPng } from 'html-to-image'
 import { useWeeklyData } from '../useWeeklyData'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
@@ -262,20 +267,156 @@ const TONE = {
   chuaGiao: '#59708F', giaoLai: '#7C5CD9', hoanHang: '#B23A4A', choLay: '#2A6FB0',
 }
 
-function KpiCard({ label, cur, prev }) {
+function KpiCard({ label, cur, prev, icon: Icon, accent = '#0E9A7D' }) {
   const delta = prev ? ((cur - prev) / prev) * 100 : (cur > 0 ? 100 : 0)
   const up = delta >= 0
   return (
     <div className="bg-white p-4">
-      <div className="text-xs text-gray-500 mb-3">{label}</div>
+      <div className="flex items-center gap-2 mb-3">
+        {Icon && (
+          <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${accent}18`, color: accent }}>
+            <Icon size={16} />
+          </span>
+        )}
+        <div className="text-xs text-gray-500 leading-tight">{label}</div>
+      </div>
       <div className="flex items-baseline gap-2 mb-2">
-        <span className="font-extrabold text-[28px] leading-none text-[#0E9A7D]">{cur.toLocaleString('vi-VN')}</span>
+        <span className="font-extrabold text-[28px] leading-none" style={{ color: accent }}>{cur.toLocaleString('vi-VN')}</span>
         <span className="text-xs text-gray-300">/</span>
-        <span className="font-mono text-sm text-[#B9720C]">{prev.toLocaleString('vi-VN')}</span>
+        <span className="font-mono text-sm text-gray-400">{prev.toLocaleString('vi-VN')}</span>
       </div>
       <span className={`inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded ${up ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
         {up ? '▲' : '▼'} {Math.abs(cur - prev).toLocaleString('vi-VN')} đơn ({fmtPctSigned(delta)})
       </span>
+    </div>
+  )
+}
+
+// Banner tiêu đề toàn trang, kiểu dashboard cảnh báo (nền xanh đậm, ngày + badge chi nhánh góc phải)
+function PageHeaderBanner({ title, editable, onTitleChange, subtitle }) {
+  const todayStr = new Date().toLocaleDateString('vi-VN')
+  return (
+    <div className="relative overflow-hidden rounded-2xl px-6 py-5 mb-5" style={{ background: 'linear-gradient(135deg, #0f2744 0%, #1e3a5f 60%, #14304f 100%)' }}>
+      <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '14px 14px' }} />
+      <div className="relative flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-200 mb-1.5">
+            <ClipboardCheck size={13} /> Báo cáo giao ban tuần
+          </div>
+          {editable ? (
+            <input
+              value={title} onChange={e => onTitleChange(e.target.value)}
+              className="text-2xl font-extrabold text-white border-0 focus:outline-none focus:ring-1 focus:ring-blue-300/50 rounded px-1 bg-transparent w-full tracking-tight"
+            />
+          ) : (
+            <h2 className="text-2xl font-extrabold text-white tracking-tight">{title}</h2>
+          )}
+          <p className="text-sm text-blue-200/80 mt-1">{subtitle}</p>
+        </div>
+        <div className="flex flex-col items-end gap-2 flex-shrink-0">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-white bg-white/10 px-3 py-1.5 rounded-lg whitespace-nowrap">
+            <Calendar size={13} /> {todayStr}
+          </span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-[#0f2744] bg-white px-3 py-1.5 rounded-lg whitespace-nowrap">
+            <Building2 size={13} /> CN TP.HCM
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Banner tiêu đề cho từng khối nội dung (đánh số 1/2/3/4, nền màu riêng theo chủ đề) — theo mẫu dashboard cảnh báo
+function SectionHeader({ num, color, icon: Icon, title, subtitle, badge }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 rounded-t-xl" style={{ background: color }}>
+      <span className="w-6 h-6 rounded-full bg-white/20 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">{num}</span>
+      {Icon && <Icon size={15} className="text-white flex-shrink-0" />}
+      <div className="min-w-0">
+        <div className="text-white font-bold text-sm tracking-wide truncate">{title}</div>
+        {subtitle && <div className="text-white/70 text-[11px] truncate">{subtitle}</div>}
+      </div>
+      {badge && (
+        <span className="ml-auto flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/20 text-white whitespace-nowrap">{badge}</span>
+      )}
+    </div>
+  )
+}
+
+// Donut cơ cấu kênh (Đơn C / Đơn DTP / SO3+SO6) trong tổng đơn kho HCM của 1 tuần
+function ChannelDonut({ R }) {
+  const data = [
+    { name: 'Đơn C', value: R.totalC, color: '#2A6FB0' },
+    { name: 'Đơn DTP', value: R.totalDTP, color: '#6E4FC9' },
+    { name: 'SO3 + SO6', value: R.totalTMDT, color: '#0E9A7D' },
+  ].filter(d => d.value > 0)
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 items-center">
+      <div className="relative w-[180px] h-[180px] mx-auto">
+        {data.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={80} paddingAngle={2} stroke="none">
+                {data.map((d, i) => <Cell key={i} fill={d.color} />)}
+              </Pie>
+              <RTooltip formatter={(v) => Number(v).toLocaleString('vi-VN')} />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="w-full h-full rounded-full border-8 border-gray-100" />
+        )}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="font-extrabold text-2xl text-[#0f2744]">{R.grandTotal.toLocaleString('vi-VN')}</span>
+          <span className="text-[10px] text-gray-400 uppercase tracking-wide">Tổng đơn</span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {data.map((d, i) => (
+          <div key={i} className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2 text-gray-700">
+              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: d.color }} />
+              {d.name}
+            </span>
+            <span className="font-mono text-gray-500">{d.value.toLocaleString('vi-VN')} · {pct(d.value, R.grandTotal)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Bảng "top kênh biến động" — cùng dữ liệu groupDeltas dùng để sinh nhận định tự động, xếp theo mức thay đổi tuyệt đối
+function DeltaTable({ groups }) {
+  const sorted = [...groups].sort((a, b) => Math.abs(b.abs) - Math.abs(a.abs))
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100">
+            <th className="py-2 pr-3 font-semibold">Kênh</th>
+            <th className="py-2 pr-3 font-semibold text-right">Tuần này</th>
+            <th className="py-2 pr-3 font-semibold text-right">Tuần trước</th>
+            <th className="py-2 pr-3 font-semibold text-right">Thay đổi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((g, i) => {
+            const up = g.abs >= 0
+            return (
+              <tr key={i} className="border-b border-gray-50 last:border-b-0">
+                <td className="py-2.5 pr-3 font-medium text-gray-700">{g.name}</td>
+                <td className="py-2.5 pr-3 text-right font-mono text-gray-700">{g.cur.toLocaleString('vi-VN')}</td>
+                <td className="py-2.5 pr-3 text-right font-mono text-gray-400">{g.prev.toLocaleString('vi-VN')}</td>
+                <td className="py-2.5 pr-3 text-right">
+                  <span className={`inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded ${up ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
+                    {up ? '▲' : '▼'} {Math.abs(g.abs).toLocaleString('vi-VN')} ({fmtPctSigned(g.pct)})
+                  </span>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -620,6 +761,25 @@ export default function TongDonTab() {
   const snapshot = viewingId ? reports.find(r => r.id === viewingId) : null
   const isReadOnly = !!snapshot
 
+  // Xuất dashboard Tổng đơn thành 1 ảnh PNG để đính kèm/gửi báo cáo, không cần chụp màn hình tay
+  const exportRef = useRef(null)
+  const [exporting, setExporting] = useState(false)
+  const handleExportImage = async () => {
+    if (!exportRef.current) return
+    setExporting(true)
+    try {
+      const dataUrl = await toPng(exportRef.current, { backgroundColor: '#f8fafc', pixelRatio: 2 })
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `TongDon_${(reportTitle || 'BaoCao').replace(/[^\p{L}\p{N}]+/gu, '_')}.png`
+      a.click()
+    } catch {
+      window.alert('Không xuất được ảnh, vui lòng thử lại.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const current = snapshot ? snapshot.current : liveCurrent
   const previous = snapshot ? snapshot.previous : livePrevious
 
@@ -640,13 +800,14 @@ export default function TongDonTab() {
   const deltaPctOf = (v1, v2) => v1 ? ((v2 - v1) / v1) * 100 : (v2 > 0 ? 100 : 0)
   const totalDeltaPct = deltaPctOf(previous.grandTotal, current.grandTotal)
   const groupDeltas = [
-    { name: 'Đơn C', pct: deltaPctOf(previous.totalC, current.totalC), abs: current.totalC - previous.totalC },
-    { name: 'Đơn DTP', pct: deltaPctOf(previous.totalDTP, current.totalDTP), abs: current.totalDTP - previous.totalDTP },
-    { name: 'Sàn TMĐT (SO3+SO6)', pct: deltaPctOf(previous.totalTMDT, current.totalTMDT), abs: current.totalTMDT - previous.totalTMDT },
+    { name: 'Đơn C', cur: current.totalC, prev: previous.totalC, pct: deltaPctOf(previous.totalC, current.totalC), abs: current.totalC - previous.totalC },
+    { name: 'Đơn DTP', cur: current.totalDTP, prev: previous.totalDTP, pct: deltaPctOf(previous.totalDTP, current.totalDTP), abs: current.totalDTP - previous.totalDTP },
+    { name: 'Sàn TMĐT (SO3+SO6)', cur: current.totalTMDT, prev: previous.totalTMDT, pct: deltaPctOf(previous.totalTMDT, current.totalTMDT), abs: current.totalTMDT - previous.totalTMDT },
   ]
   const topGroup = [...groupDeltas].sort((a, b) => Math.abs(b.abs) - Math.abs(a.abs))[0]
   const rate24hDrop = current.rate24h < previous.rate24h
   const chuaGiaoUp = current.chuaGiao > previous.chuaGiao
+  const needsAttention = chuaGiaoUp || rate24hDrop || totalDeltaPct > 15
 
   const autoInsight1 = totalDeltaPct >= 0
     ? `Tổng đơn tăng ${totalDeltaPct.toFixed(1)}%, chủ yếu đến từ nhóm ${topGroup.name} (${topGroup.pct >= 0 ? '+' : ''}${topGroup.pct.toFixed(1)}%).`
@@ -744,36 +905,40 @@ export default function TongDonTab() {
 
   return (
     <div className="-m-5 p-5" style={{ background: 'radial-gradient(circle at 15% 0%, #eff6ff 0%, #f8fafc 45%, #f1f5f9 100%)' }}>
-      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-[0_2px_16px_rgba(15,23,42,0.06)] px-6 py-5 mb-5">
-        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(#1e3a5f 1px, transparent 1px)', backgroundSize: '14px 14px' }} />
-        <div className="relative flex items-center justify-between gap-3 mb-1">
-          {isReadOnly ? (
-            <h2 className="text-2xl font-extrabold text-[#0f2744] tracking-tight">{reportTitle}</h2>
-          ) : (
-            <input
-              value={reportTitle}
-              onChange={e => setReportTitle(e.target.value)}
-              className="text-2xl font-extrabold text-[#0f2744] border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded px-1 bg-transparent w-full tracking-tight"
-            />
-          )}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {isReadOnly ? (
-              <button onClick={() => setViewingId(null)} className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 text-blue-600 rounded-lg text-sm hover:bg-blue-50 bg-white">
-                <ArrowRight size={13} className="rotate-180" /> Quay lại xem trực tiếp
-              </button>
-            ) : (
-              <button onClick={saveReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
-                <ClipboardList size={13} /> Lưu báo cáo tuần này
-              </button>
-            )}
-          </div>
-        </div>
-        <p className="relative text-sm text-gray-400 mb-3">
-          {isReadOnly
-            ? `Báo cáo đã lưu · ${new Date(snapshot.createdAt).toLocaleString('vi-VN')}`
-            : 'Đánh giá tổng quan · Kết luận · Giải pháp cho tuần tiếp theo'}
-        </p>
+      <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
+        {isReadOnly ? (
+          <button onClick={() => setViewingId(null)} className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 text-blue-600 rounded-lg text-sm hover:bg-blue-50 bg-white">
+            <ArrowRight size={13} className="rotate-180" /> Quay lại xem trực tiếp
+          </button>
+        ) : (
+          <button onClick={saveReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
+            <ClipboardList size={13} /> Lưu báo cáo tuần này
+          </button>
+        )}
+        <button
+          onClick={handleExportImage}
+          disabled={exporting}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white disabled:opacity-50"
+        >
+          <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh'}
+        </button>
+        <button
+          onClick={() => window.print()}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white"
+        >
+          <Printer size={13} /> In / Xuất PDF
+        </button>
       </div>
+
+      <div ref={exportRef}>
+      <PageHeaderBanner
+        title={reportTitle}
+        editable={!isReadOnly}
+        onTitleChange={setReportTitle}
+        subtitle={isReadOnly
+          ? `Báo cáo đã lưu · ${new Date(snapshot.createdAt).toLocaleString('vi-VN')}`
+          : 'Đánh giá tổng quan · Kết luận · Giải pháp cho tuần tiếp theo'}
+      />
 
       {!isReadOnly && (
         <DataSourcePicker
@@ -787,41 +952,73 @@ export default function TongDonTab() {
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden mb-5">
-        <KpiCard label="Tổng đơn kho HCM" cur={current.grandTotal} prev={previous.grandTotal} />
-        <KpiCard label="Đơn C" cur={current.totalC} prev={previous.totalC} />
-        <KpiCard label="Đơn DTP" cur={current.totalDTP} prev={previous.totalDTP} />
-        <KpiCard label="SO3 + SO6 (Shopee, TikTok)" cur={current.totalTMDT} prev={previous.totalTMDT} />
+        <KpiCard label="Tổng đơn kho HCM" cur={current.grandTotal} prev={previous.grandTotal} icon={Package} accent="#0f2744" />
+        <KpiCard label="Đơn C" cur={current.totalC} prev={previous.totalC} icon={Truck} accent="#2A6FB0" />
+        <KpiCard label="Đơn DTP" cur={current.totalDTP} prev={previous.totalDTP} icon={Layers} accent="#6E4FC9" />
+        <KpiCard label="SO3 + SO6 (Shopee, TikTok)" cur={current.totalTMDT} prev={previous.totalTMDT} icon={ShoppingBag} accent="#0E9A7D" />
       </div>
 
-      {/* 2 cột so sánh Tuần này / Tuần trước */}
+      {/* 1: Cơ cấu kênh (donut) + 2: Top kênh biến động */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-        <WeekColumn label="TUẦN NÀY" tag="MỚI NHẤT" color="#0E9A7D" bg="#E4F5F0" R={current} />
-        <WeekColumn label="TUẦN TRƯỚC" tag="LIỀN KỀ" color="#B9720C" bg="#FBEEDC" R={previous} />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden">
+          <SectionHeader num={1} color="#B23A4A" icon={PieIcon} title="CƠ CẤU KÊNH GIAO HÀNG" subtitle="Tuần này · theo tổng đơn kho HCM" />
+          <div className="p-4">
+            <ChannelDonut R={current} />
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden">
+          <SectionHeader num={2} color="#B9720C" icon={BarChart2} title="TOP KÊNH BIẾN ĐỘNG" subtitle="So với tuần trước" badge={`${groupDeltas.length} kênh`} />
+          <div className="p-4">
+            <DeltaTable groups={groupDeltas} />
+          </div>
+        </div>
       </div>
 
-      {/* Phân tích & đánh giá tổng quan */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-5">
-        <h3 className="font-bold text-gray-800 tracking-wide text-lg mb-4">PHÂN TÍCH &amp; ĐÁNH GIÁ TỔNG QUAN</h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <InsightCardV2 tag="Sản lượng" tone={totalDeltaPct >= 0 ? 'pos' : 'neg'} title={topGroup.name + (topGroup.pct >= 0 ? ' tăng' : ' giảm') + ' chi phối biến động tổng đơn'}
-            body={insight1} onBodyChange={isReadOnly ? undefined : setInsight1} placeholder="VD: Tổng đơn tăng X%, chủ yếu từ nhóm..." />
-          <InsightCardV2 tag="Tốc độ giao" tone={rate24hDrop ? 'neg' : 'pos'} title="Hiệu suất giao hàng trực tiếp"
-            body={insight2} onBodyChange={isReadOnly ? undefined : setInsight2} />
-          <InsightCardV2 tag="Nguyên nhân" tone={chuaGiaoUp && totalDeltaPct > 0 ? 'warn' : 'neutral'} title="Nguyên nhân chính cần lưu ý"
-            body={insight3} onBodyChange={isReadOnly ? undefined : setInsight3} />
+      {/* 3: Bảng so sánh chi tiết Tuần này / Tuần trước */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden mb-5">
+        <SectionHeader num={3} color="#1e3a5f" icon={Layers} title="BẢNG SO SÁNH CHI TIẾT TUẦN NÀY / TUẦN TRƯỚC" subtitle="Giao hàng trực tiếp · Chành xe · Viettel Post · SPX Express" />
+        <div className="p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <WeekColumn label="TUẦN NÀY" tag="MỚI NHẤT" color="#0E9A7D" bg="#E4F5F0" R={current} />
+            <WeekColumn label="TUẦN TRƯỚC" tag="LIỀN KỀ" color="#B9720C" bg="#FBEEDC" R={previous} />
+          </div>
         </div>
+      </div>
 
-        <VerdictBox text={verdict} onChange={isReadOnly ? undefined : setVerdict} />
+      {/* 4: Phân tích & đánh giá tổng quan */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden">
+        <SectionHeader num={4} color="#1E9E5A" icon={ClipboardCheck} title="PHÂN TÍCH & ĐÁNH GIÁ TỔNG QUAN" subtitle="Kết luận · Giải pháp cho tuần tiếp theo" />
+        <div className="p-5">
+          {needsAttention && (
+            <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+              <AlertCircle size={15} className="flex-shrink-0" />
+              <span>
+                Cần chú ý — {chuaGiaoUp ? 'tồn đơn chưa giao đang tăng' : rate24hDrop ? 'tốc độ giao 24h đang giảm' : 'sản lượng biến động mạnh'} so với tuần trước.
+              </span>
+            </div>
+          )}
 
-        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-5">Giải pháp cho tuần tiếp theo</div>
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <PlanItem num={1} text={sol1} onChange={isReadOnly ? undefined : setSol1} priority={priority1} />
-          <PlanItem num={2} text={sol2} onChange={isReadOnly ? undefined : setSol2} priority={priority2} />
-          <PlanItem num={3} text={sol3} onChange={isReadOnly ? undefined : setSol3} priority="mid" />
-          <PlanItem num={4} text={sol4} onChange={isReadOnly ? undefined : setSol4} priority={priority4} />
-          <PlanItem num={5} text={sol5} onChange={isReadOnly ? undefined : setSol5} priority="low" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+            <InsightCardV2 tag="Sản lượng" tone={totalDeltaPct >= 0 ? 'pos' : 'neg'} title={topGroup.name + (topGroup.pct >= 0 ? ' tăng' : ' giảm') + ' chi phối biến động tổng đơn'}
+              body={insight1} onBodyChange={isReadOnly ? undefined : setInsight1} placeholder="VD: Tổng đơn tăng X%, chủ yếu từ nhóm..." />
+            <InsightCardV2 tag="Tốc độ giao" tone={rate24hDrop ? 'neg' : 'pos'} title="Hiệu suất giao hàng trực tiếp"
+              body={insight2} onBodyChange={isReadOnly ? undefined : setInsight2} />
+            <InsightCardV2 tag="Nguyên nhân" tone={chuaGiaoUp && totalDeltaPct > 0 ? 'warn' : 'neutral'} title="Nguyên nhân chính cần lưu ý"
+              body={insight3} onBodyChange={isReadOnly ? undefined : setInsight3} />
+          </div>
+
+          <VerdictBox text={verdict} onChange={isReadOnly ? undefined : setVerdict} />
+
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-5">Giải pháp cho tuần tiếp theo</div>
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <PlanItem num={1} text={sol1} onChange={isReadOnly ? undefined : setSol1} priority={priority1} />
+            <PlanItem num={2} text={sol2} onChange={isReadOnly ? undefined : setSol2} priority={priority2} />
+            <PlanItem num={3} text={sol3} onChange={isReadOnly ? undefined : setSol3} priority="mid" />
+            <PlanItem num={4} text={sol4} onChange={isReadOnly ? undefined : setSol4} priority={priority4} />
+            <PlanItem num={5} text={sol5} onChange={isReadOnly ? undefined : setSol5} priority="low" />
+          </div>
         </div>
+      </div>
       </div>
     </div>
   )
