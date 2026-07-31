@@ -208,14 +208,20 @@ function getHoldLookupSet(carrierKey) {
   return set
 }
 
+// Ghi chú tay theo từng mã vận đơn (xem useHoldNotes) — đọc trực tiếp từ localStorage cho bản build tĩnh
+function readHoldNotesMap(carrierKey) {
+  try { return JSON.parse(localStorage.getItem(`carrier_hold_notes_${carrierKey}`) || '{}') } catch { return {} }
+}
+
 // frozenLookup (object {mã: số lượng}, xem snapshotCarrierLookup): dùng thay cho internalData khi Excel gốc
 // đã bị xoá (báo cáo Đơn C/DTP đã lưu) — vẫn đếm đúng đơn CB gộp/SPX lấy hàng-không-thành-công.
 function buildStatsForWeek(entry, carrierKey, carrierType, internalData, frozenLookup = null) {
   if (!entry) return null
   const lookupMap = frozenLookup ? new Map(Object.entries(frozenLookup)) : buildInternalOrderLookup(internalData)
   const holdLookupSet = getHoldLookupSet(carrierKey)
+  const holdNotes = readHoldNotesMap(carrierKey)
   const effectiveRows = filterExcludedRows(entry.rows, carrierKey)
-  const stats = computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet)
+  const stats = computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes)
 
   return {
     weekId: entry.id,
@@ -539,7 +545,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     return state.rows.filter(r => !excludedSet.has((r['Tên hàng'] || '').trim()))
   }, [state, excludedNames, hasTenHang])
 
-  const stats = useMemo(() => state ? computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet) : null, [state, effectiveRows, carrierType, lookupMap, holdLookupSet])
+  const stats = useMemo(() => state ? computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes) : null, [state, effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes])
 
   // Đơn "Đang lấy hàng" chưa khớp file Chờ giao Logistics — cần kiểm tra tay
   const [onlyUnmatched, setOnlyUnmatched] = useState(false)

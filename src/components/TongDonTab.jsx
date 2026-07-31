@@ -126,10 +126,25 @@ function usePickedPair(storageKey, options, defaultCurrentId, defaultPreviousId)
     else localStorage.removeItem(`tongdon_pick_${storageKey}_previous`)
   }
 
-  const effectiveCurrentId = (currentId && options.some(o => o.id === currentId)) ? currentId : (defaultCurrentId || options[0]?.id || null)
-  const effectivePreviousId = (previousId && options.some(o => o.id === previousId)) ? previousId : (defaultPreviousId || options[1]?.id || null)
+  // localStorage/<select> luôn lưu id dạng chuỗi, nhưng id gốc trong options có thể là số (vd TMĐT dùng
+  // Date.now()) — so sánh dạng chuỗi để không bị lệch kiểu, rồi trả về đúng o.id gốc (giữ nguyên kiểu số/chuỗi)
+  // để các chỗ dùng .find(e => e.id === pick.xxxId) ở nơi khác vẫn khớp được đúng lựa chọn tay của người dùng.
+  const matchedCurrent = currentId ? options.find(o => String(o.id) === String(currentId)) : null
+  const matchedPrevious = previousId ? options.find(o => String(o.id) === String(previousId)) : null
+  const effectiveCurrentId = matchedCurrent ? matchedCurrent.id : (defaultCurrentId || options[0]?.id || null)
+  const effectivePreviousId = matchedPrevious ? matchedPrevious.id : (defaultPreviousId || options[1]?.id || null)
 
   return { options, currentId: effectiveCurrentId, previousId: effectivePreviousId, setCurrentId, setPreviousId }
+}
+
+// Tuần VTP/SPX tương ứng 1 mục Đơn C/DTP (entry): nếu entry là báo cáo ĐÃ LƯU và có tham chiếu weekId đã
+// đóng băng lúc lưu (viettelWeekId/spxWeekId) thì dùng ĐÚNG weekId đó — khớp chính xác với số "Tổng đơn" đã
+// hiện ở tab Đơn C/DTP lúc lưu, không bị lệch nếu sau đó có upload thêm file VTP/SPX mới (date-matching sẽ
+// đổi kết quả theo thời gian). Chỉ khi chưa có tham chiếu (báo cáo cũ trước khi có tính năng này, hoặc entry
+// đang là Excel sống) mới tự khớp theo ngày gần nhất như cũ.
+function resolveCarrierWeekId(entry, carrierKey, frozenField) {
+  if (entry?.kind === 'saved' && entry.snapshot[frozenField]) return entry.snapshot[frozenField]
+  return pickCarrierWeekIdByDate(carrierKey, entry?.at)
 }
 
 // Số liệu VTP/SPX ứng với 1 weekId cụ thể (đã chọn tay hoặc tự động khớp) — còn dòng dữ liệu gốc thì tính
@@ -567,13 +582,15 @@ export default function TongDonTab() {
   const tmdtCurrent = tmdtCurrentReport?.total || 0
   const tmdtPrev = tmdtPreviousReport?.total || 0
 
-  // Viettel Post/SPX: tự tìm file có ngày upload gần nhất với tuần Đơn C/DTP tương ứng
-  const viettelCWeekIdCurrent = pickCarrierWeekIdByDate('donC_viettel', donCCurrentEntry?.at)
-  const viettelCWeekIdPrevious = pickCarrierWeekIdByDate('donC_viettel', donCPreviousEntry?.at)
-  const spxCWeekIdCurrent = pickCarrierWeekIdByDate('donC_spx', donCCurrentEntry?.at)
-  const spxCWeekIdPrevious = pickCarrierWeekIdByDate('donC_spx', donCPreviousEntry?.at)
-  const viettelDTPWeekIdCurrent = pickCarrierWeekIdByDate('donDTP_viettel', donDTPCurrentEntry?.at)
-  const viettelDTPWeekIdPrevious = pickCarrierWeekIdByDate('donDTP_viettel', donDTPPreviousEntry?.at)
+  // Viettel Post/SPX: nếu tuần Đơn C/DTP là báo cáo đã lưu, dùng đúng weekId đã đóng băng lúc lưu (khớp
+  // chính xác với số ở tab Đơn C/DTP); chưa lưu (Excel sống) hoặc báo cáo cũ chưa có tham chiếu thì mới
+  // tự tìm file có ngày upload gần nhất.
+  const viettelCWeekIdCurrent = resolveCarrierWeekId(donCCurrentEntry, 'donC_viettel', 'viettelWeekId')
+  const viettelCWeekIdPrevious = resolveCarrierWeekId(donCPreviousEntry, 'donC_viettel', 'viettelWeekId')
+  const spxCWeekIdCurrent = resolveCarrierWeekId(donCCurrentEntry, 'donC_spx', 'spxWeekId')
+  const spxCWeekIdPrevious = resolveCarrierWeekId(donCPreviousEntry, 'donC_spx', 'spxWeekId')
+  const viettelDTPWeekIdCurrent = resolveCarrierWeekId(donDTPCurrentEntry, 'donDTP_viettel', 'viettelWeekId')
+  const viettelDTPWeekIdPrevious = resolveCarrierWeekId(donDTPPreviousEntry, 'donDTP_viettel', 'viettelWeekId')
 
   // Khóa "tuần" dùng để lưu các trường nhập tay (chưa giao, hàng gửi, nhân sự, kết luận, giải pháp...)
   const weekKey = `${donCCurrentEntry?.id || 'x'}_${donDTPCurrentEntry?.id || 'x'}`

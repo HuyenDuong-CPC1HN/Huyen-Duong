@@ -128,9 +128,9 @@ const CARRIER_CONFIG = {
     hoanHangStatuses: ['Đang trả hàng', 'Đã trả hàng'],
     // Đơn bị huỷ trước khi giao — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
     cancelStatuses: ['Đã hủy', 'Đã huỷ'],
-    // "Lấy hàng không thành công": luôn tính vào "Chờ lấy" (đơn vẫn chưa lấy được), không cần đối chiếu
-    // Mã vận đơn nội bộ (khác các trạng thái khác — trạng thái này SPX thường chưa gán Mã vận đơn nội bộ)
-    pickupFailStatuses: ['Lấy hàng không thành công'],
+    // "Lấy hàng không thành công" / "Đang chờ lấy hàng": luôn tính vào "Chờ lấy" (đơn vẫn chưa lấy được),
+    // không cần đối chiếu Mã vận đơn nội bộ (khác các trạng thái khác)
+    pickupFailStatuses: ['Lấy hàng không thành công', 'Đang chờ lấy hàng'],
     isHoanHang: () => false,
     orderCounter: spxOrderCount,
     useHourPrecision: true, // SPX có giờ:phút chi tiết, tính chênh lệch theo giờ thay vì làm tròn ngày
@@ -198,10 +198,15 @@ export function buildTrackingSet(rows, key) {
   return set
 }
 
+// Ghi chú tay cho đơn "Đang lấy hàng" chưa khớp file Chờ giao Logistics — nếu ghi đúng 1 trong các giá trị
+// này thì vẫn tính vào "Đang vận chuyển" thay vì bị loại khỏi tổng (xem computeCarrierStats)
+export const HOLD_NOTE_TRANSIT_VALUES = ['Đang vận chuyển', 'Đã lấy hàng']
+
 // Thống kê: 24h / 48h / 72h / Đang vận chuyển / Giao lại lần 2 / Hoàn hàng
 // lookupMap: bảng đối chiếu Mã vận đơn nội bộ (chỉ áp dụng cho Viettel) — xem buildInternalOrderLookup
 // holdLookupSet: tập Mã vận đơn từ file "Chờ giao Logistics" — dùng để đối chiếu trạng thái "Đang lấy hàng"
-export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = null, holdLookupSet = null) {
+// holdNotes: ghi chú tay theo mã vận đơn (object {mã: ghi chú}) cho đơn "Đang lấy hàng" chưa khớp holdLookupSet
+export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = null, holdLookupSet = null, holdNotes = null) {
   const config = CARRIER_CONFIG[carrierType]
   const result = { total: 0, '24h': 0, '48h': 0, '72h': 0, dangVanChuyen: 0, giaoLai: 0, hoanHang: 0, choLay: 0 }
 
@@ -219,14 +224,22 @@ export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = n
     }
 
     // "Đang lấy hàng": nếu tính năng đối chiếu Chờ giao Logistics đang được dùng (có holdLookupSet) thì
-    // khớp Mã Vận Đơn → tính vào mục riêng "Chờ lấy", không khớp → không tính (highlight ở bảng chi tiết).
+    // khớp Mã Vận Đơn → tính vào mục riêng "Chờ lấy". Không khớp thì xem ghi chú tay — nếu ghi "Đang vận
+    // chuyển"/"Đã lấy hàng" thì tính vào "Đang vận chuyển", chưa ghi/ghi khác thì không tính (cần kiểm tra tay).
     // Chưa dùng tính năng này (holdLookupSet null, vd tab Đơn C) thì vẫn tính bình thường như trước.
     if (config.holdStatuses?.includes(status) && holdLookupSet) {
       const code = String(row[config.requiredHeaderCell] || '').trim().toUpperCase()
-      if (!holdLookupSet.has(code)) continue
       const count = config.orderCounter(row, config, lookupMap)
-      result.total += count
-      result.choLay += count
+      if (holdLookupSet.has(code)) {
+        result.total += count
+        result.choLay += count
+        continue
+      }
+      const note = String(holdNotes?.[code] || '').trim()
+      if (HOLD_NOTE_TRANSIT_VALUES.includes(note)) {
+        result.total += count
+        result.dangVanChuyen += count
+      }
       continue
     }
 
