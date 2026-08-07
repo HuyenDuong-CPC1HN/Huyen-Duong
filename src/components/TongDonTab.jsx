@@ -1,9 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import {
-  RefreshCw, ClipboardList, ArrowRight, ChevronDown, ChevronUp, Download, Printer,
-  Package, Truck, ShoppingBag, Layers, PieChart as PieIcon, BarChart2, ClipboardCheck, Calendar, Building2, AlertCircle,
-} from 'lucide-react'
-import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from 'recharts'
+import { RefreshCw, ClipboardList, ChevronDown, ChevronUp, Download, Printer, AlertCircle, Upload } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { useWeeklyData } from '../useWeeklyData'
 import { partnerType } from '../utils/partnerType'
@@ -261,162 +257,84 @@ function computeWeekReport({ entryC, entryDTP, tmdtTotal, viettelCompareC, spxCo
   }
 }
 
-// ---------- UI bits (thiết kế báo cáo 2 cột so sánh tuần, theo mẫu dashboard) ----------
+// ---------- Design system: 2 màu nhất quán cho toàn bộ báo cáo — CURRENT = xanh lá (kỳ hiện tại/tuần này),
+// PREVIOUS = cam (kỳ so sánh/tuần trước). Không dùng màu nền/viền riêng theo từng khối nội dung nữa — chỉ
+// còn 3 cấp chữ (số liệu lớn → tiêu đề → mô tả) và màu trạng thái (tăng/giảm, mức ưu tiên) mang ý nghĩa dữ liệu. ----------
+const CURRENT_COLOR = 'var(--color-current, #16a67a)'
+const PREVIOUS_COLOR = 'var(--color-previous, #e8912a)'
 const TONE = {
-  '24h': '#0E9A7D', '48h': '#D9A441', '72h': '#CC3F55', dangVanChuyen: '#59708F',
-  chuaGiao: '#59708F', giaoLai: '#7C5CD9', hoanHang: '#B23A4A', choLay: '#2A6FB0',
+  '24h': 'var(--color-current, #16a67a)', '48h': 'var(--color-previous, #e8912a)', '72h': 'var(--color-red, #e14b4b)', dangVanChuyen: 'var(--text-secondary, #6b7280)',
+  chuaGiao: 'var(--text-secondary, #6b7280)', giaoLai: 'var(--color-purple, #7c5cd6)', hoanHang: 'var(--color-red, #e14b4b)', choLay: 'var(--color-blue, #3b6fd6)',
 }
 
-function KpiCard({ label, cur, prev, icon: Icon, accent = '#0E9A7D' }) {
+// Cấp 3: legend biểu đồ dùng chung 1 kiểu duy nhất cho mọi section (chấm màu vuông nhỏ + nhãn)
+function ChartLegend({ items }) {
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1">
+      {items.map((l, i) => (
+        <span key={i} className="text-[10px] flex items-center gap-1" style={{ color: 'var(--text-secondary, #6b7280)' }}>
+          <span className="w-1.5 h-1.5 rounded-sm inline-block flex-shrink-0" style={{ background: l.color }} />{l.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function KpiCard({ label, cur, prev }) {
   const delta = prev ? ((cur - prev) / prev) * 100 : (cur > 0 ? 100 : 0)
   const up = delta >= 0
   return (
-    <div className="bg-white p-4">
-      <div className="flex items-center gap-2 mb-3">
-        {Icon && (
-          <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${accent}18`, color: accent }}>
-            <Icon size={16} />
-          </span>
-        )}
-        <div className="text-xs text-gray-500 leading-tight">{label}</div>
+    <div className="min-w-0 rounded-xl p-5" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04))' }}>
+      <div className="text-[13px] mb-1.5" style={{ color: 'var(--text-secondary, #6b7280)' }}>{label}</div>
+      <div className="flex items-baseline gap-2 mb-1.5">
+        <span className="font-bold text-[28px] leading-[1.1]" style={{ color: 'var(--text-primary, #1a1d23)' }}>{cur.toLocaleString('vi-VN')}</span>
+        <span className="text-[16px]" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>/ {prev.toLocaleString('vi-VN')}</span>
       </div>
-      <div className="flex items-baseline gap-2 mb-2">
-        <span className="font-extrabold text-[28px] leading-none" style={{ color: accent }}>{cur.toLocaleString('vi-VN')}</span>
-        <span className="text-xs text-gray-300">/</span>
-        <span className="font-mono text-sm text-gray-400">{prev.toLocaleString('vi-VN')}</span>
-      </div>
-      <span className={`inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded ${up ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
+      <span className="text-[13px] font-semibold mt-1.5 block" style={{ color: up ? 'var(--color-current, #16a67a)' : 'var(--color-red, #e14b4b)' }}>
         {up ? '▲' : '▼'} {Math.abs(cur - prev).toLocaleString('vi-VN')} đơn ({fmtPctSigned(delta)})
       </span>
     </div>
   )
 }
 
-// Banner tiêu đề toàn trang, kiểu dashboard cảnh báo (nền xanh đậm, ngày + badge chi nhánh góc phải)
-function PageHeaderBanner({ title, editable, onTitleChange, subtitle }) {
-  const todayStr = new Date().toLocaleDateString('vi-VN')
+// Tiêu đề trang: chữ đen thường (không banner màu), chấm xanh lá/cam ở góc phải chú thích kỳ hiện tại/so sánh
+function PageHeader({ title, editable, onTitleChange, subtitle, currentDate, previousDate }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl px-6 py-5 mb-5" style={{ background: 'linear-gradient(135deg, #0f2744 0%, #1e3a5f 60%, #14304f 100%)' }}>
-      <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '14px 14px' }} />
-      <div className="relative flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-200 mb-1.5">
-            <ClipboardCheck size={13} /> Báo cáo giao ban tuần
-          </div>
-          {editable ? (
-            <input
-              value={title} onChange={e => onTitleChange(e.target.value)}
-              className="text-2xl font-extrabold text-white border-0 focus:outline-none focus:ring-1 focus:ring-blue-300/50 rounded px-1 bg-transparent w-full tracking-tight"
-            />
-          ) : (
-            <h2 className="text-2xl font-extrabold text-white tracking-tight">{title}</h2>
-          )}
-          <p className="text-sm text-blue-200/80 mt-1">{subtitle}</p>
-        </div>
-        <div className="flex flex-col items-end gap-2 flex-shrink-0">
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-white bg-white/10 px-3 py-1.5 rounded-lg whitespace-nowrap">
-            <Calendar size={13} /> {todayStr}
-          </span>
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-[#0f2744] bg-white px-3 py-1.5 rounded-lg whitespace-nowrap">
-            <Building2 size={13} /> CN TP.HCM
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Banner tiêu đề cho từng khối nội dung (đánh số 1/2/3/4, nền màu riêng theo chủ đề) — theo mẫu dashboard cảnh báo
-function SectionHeader({ num, color, icon: Icon, title, subtitle, badge }) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5 rounded-t-xl" style={{ background: color }}>
-      <span className="w-6 h-6 rounded-full bg-white/20 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">{num}</span>
-      {Icon && <Icon size={15} className="text-white flex-shrink-0" />}
-      <div className="min-w-0">
-        <div className="text-white font-bold text-sm tracking-wide truncate">{title}</div>
-        {subtitle && <div className="text-white/70 text-[11px] truncate">{subtitle}</div>}
-      </div>
-      {badge && (
-        <span className="ml-auto flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/20 text-white whitespace-nowrap">{badge}</span>
-      )}
-    </div>
-  )
-}
-
-// Donut cơ cấu kênh (Đơn C / Đơn DTP / SO3+SO6) trong tổng đơn kho HCM của 1 tuần
-function ChannelDonut({ R }) {
-  const data = [
-    { name: 'Đơn C', value: R.totalC, color: '#2A6FB0' },
-    { name: 'Đơn DTP', value: R.totalDTP, color: '#6E4FC9' },
-    { name: 'SO3 + SO6', value: R.totalTMDT, color: '#0E9A7D' },
-  ].filter(d => d.value > 0)
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 items-center">
-      <div className="relative w-[180px] h-[180px] mx-auto">
-        {data.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={80} paddingAngle={2} stroke="none">
-                {data.map((d, i) => <Cell key={i} fill={d.color} />)}
-              </Pie>
-              <RTooltip formatter={(v) => Number(v).toLocaleString('vi-VN')} />
-            </PieChart>
-          </ResponsiveContainer>
+    <div className="flex items-start justify-between gap-4 flex-wrap pb-4" style={{ borderBottom: '1px solid var(--border-color, #eaecef)' }}>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Báo cáo giao ban tuần</div>
+        {editable ? (
+          <input
+            value={title} onChange={e => onTitleChange(e.target.value)}
+            className="text-[28px] font-bold border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded px-1 bg-transparent w-full my-1"
+            style={{ color: 'var(--text-primary, #1a1d23)' }}
+          />
         ) : (
-          <div className="w-full h-full rounded-full border-8 border-gray-100" />
+          <h2 className="text-[28px] font-bold my-1" style={{ color: 'var(--text-primary, #1a1d23)' }}>{title}</h2>
         )}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="font-extrabold text-2xl text-[#0f2744]">{R.grandTotal.toLocaleString('vi-VN')}</span>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wide">Tổng đơn</span>
-        </div>
+        <p className="text-[13px]" style={{ color: 'var(--text-secondary, #6b7280)' }}>{subtitle}</p>
       </div>
-      <div className="space-y-2">
-        {data.map((d, i) => (
-          <div key={i} className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-2 text-gray-700">
-              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: d.color }} />
-              {d.name}
-            </span>
-            <span className="font-mono text-gray-500">{d.value.toLocaleString('vi-VN')} · {pct(d.value, R.grandTotal)}%</span>
-          </div>
-        ))}
+      <div className="flex gap-4 flex-shrink-0 text-[13px] items-center" style={{ color: 'var(--text-secondary, #6b7280)' }}>
+        <span className="flex items-center">
+          <span className="w-2 h-2 rounded-full flex-shrink-0 mr-1.5" style={{ background: CURRENT_COLOR }} />
+          Tuần này{currentDate ? ` · ${currentDate}` : ''}
+        </span>
+        <span className="flex items-center">
+          <span className="w-2 h-2 rounded-full flex-shrink-0 mr-1.5" style={{ background: PREVIOUS_COLOR }} />
+          Tuần trước{previousDate ? ` · ${previousDate}` : ''}
+        </span>
       </div>
     </div>
   )
 }
 
-// Bảng "top kênh biến động" — cùng dữ liệu groupDeltas dùng để sinh nhận định tự động, xếp theo mức thay đổi tuyệt đối
-function DeltaTable({ groups }) {
-  const sorted = [...groups].sort((a, b) => Math.abs(b.abs) - Math.abs(a.abs))
+// Tiêu đề khối nội dung: chữ đen thường, không nền màu/số tròn — chỉ eyebrow nhỏ + tiêu đề đậm
+function SectionHeading({ eyebrow, title, subtitle }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-[11px] text-gray-400 uppercase tracking-wide border-b border-gray-100">
-            <th className="py-2 pr-3 font-semibold">Kênh</th>
-            <th className="py-2 pr-3 font-semibold text-right">Tuần này</th>
-            <th className="py-2 pr-3 font-semibold text-right">Tuần trước</th>
-            <th className="py-2 pr-3 font-semibold text-right">Thay đổi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((g, i) => {
-            const up = g.abs >= 0
-            return (
-              <tr key={i} className="border-b border-gray-50 last:border-b-0">
-                <td className="py-2.5 pr-3 font-medium text-gray-700">{g.name}</td>
-                <td className="py-2.5 pr-3 text-right font-mono text-gray-700">{g.cur.toLocaleString('vi-VN')}</td>
-                <td className="py-2.5 pr-3 text-right font-mono text-gray-400">{g.prev.toLocaleString('vi-VN')}</td>
-                <td className="py-2.5 pr-3 text-right">
-                  <span className={`inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded ${up ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
-                    {up ? '▲' : '▼'} {Math.abs(g.abs).toLocaleString('vi-VN')} ({fmtPctSigned(g.pct)})
-                  </span>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div className="mb-4">
+      {eyebrow && <div className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{eyebrow}</div>}
+      <h3 className="font-bold text-xl" style={{ color: 'var(--text-primary, #1a1d23)' }}>{title}</h3>
+      {subtitle && <p className="text-[13px] mt-1" style={{ color: 'var(--text-secondary, #6b7280)' }}>{subtitle}</p>}
     </div>
   )
 }
@@ -425,18 +343,18 @@ function BreakdownRow({ name, sub, value, pctOfTotal, color, chips }) {
   return (
     <div className="mb-3 last:mb-0">
       <div className="grid grid-cols-[110px_1fr_66px] items-center gap-3">
-        <div className="text-[13px] text-gray-700 font-medium leading-tight">
-          {name}<span className="block text-[10px] text-gray-400 font-normal mt-0.5">{sub}</span>
+        <div className="text-[13px] font-medium leading-tight" style={{ color: 'var(--text-primary, #1a1d23)' }}>
+          {name}<span className="block text-[10px] font-normal mt-0.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{sub}</span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--border-color, #eaecef)' }}>
           <div className="h-full rounded-full" style={{ width: `${Math.min(pctOfTotal, 100)}%`, background: color }} />
         </div>
-        <div className="text-[13px] font-mono text-right text-gray-700">{value.toLocaleString('vi-VN')}</div>
+        <div className="text-[13px] text-right" style={{ color: 'var(--text-primary, #1a1d23)' }}>{value.toLocaleString('vi-VN')}</div>
       </div>
       {chips && chips.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-1.5 pl-[122px]">
           {chips.map((c, i) => (
-            <span key={i} className="text-[10px] font-mono text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{c}</span>
+            <span key={i} className="text-[10px] rounded px-1.5 py-0.5" style={{ color: 'var(--text-secondary, #6b7280)', background: 'var(--bg-card-subtle, #fafbfc)' }}>{c}</span>
           ))}
         </div>
       )}
@@ -447,7 +365,7 @@ function BreakdownRow({ name, sub, value, pctOfTotal, color, chips }) {
 function StackBar({ segments }) {
   const total = segments.reduce((s, x) => s + (x.value || 0), 0)
   return (
-    <div className="flex h-4 rounded overflow-hidden bg-gray-100">
+    <div className="flex overflow-hidden rounded-full" style={{ height: '10px', background: 'var(--border-color, #eaecef)' }}>
       {total > 0 && segments.map((s, i) => s.value > 0 && (
         <div key={i} style={{ width: `${(s.value / total) * 100}%`, background: s.color }} title={`${s.label || ''}: ${s.value}`} />
       ))}
@@ -459,34 +377,54 @@ function CarrierBlock({ color, name, total, groups, legend }) {
   return (
     <div>
       <div className="flex items-baseline justify-between mb-2">
-        <span className="text-[13px] font-semibold text-gray-700 flex items-center gap-1.5">
+        <span className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: 'var(--text-primary, #1a1d23)' }}>
           <span className="w-1.5 h-1.5 rounded-sm inline-block" style={{ background: color }} />{name}
         </span>
-        <span className="text-xs font-mono text-gray-400">{total.toLocaleString('vi-VN')} đơn</span>
+        <span className="text-xs" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{total.toLocaleString('vi-VN')} đơn</span>
       </div>
       <div className="flex flex-col gap-2.5">
         {groups.map((g, i) => (
           <div key={i}>
-            <div className="flex justify-between text-[10.5px] font-mono text-gray-400 mb-1">
+            <div className="flex justify-between text-[11px] mb-1" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>
               <span>{g.label} — {g.value.toLocaleString('vi-VN')} ({g.pctOfTotal}%)</span>
             </div>
             <StackBar segments={g.segments} />
           </div>
         ))}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
-        {legend.map((l, i) => (
-          <span key={i} className="text-[10px] font-mono text-gray-500 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-sm inline-block flex-shrink-0" style={{ background: l.color }} />{l.label}
-          </span>
-        ))}
+      <div className="mt-2">
+        <ChartLegend items={legend} />
       </div>
     </div>
   )
 }
 
 // R = kết quả computeWeekReport cho 1 tuần (current hoặc previous)
-function WeekColumn({ label, tag, color, bg, R }) {
+// Thẻ "Tổng quan đơn hàng" — pill tiêu đề màu (xanh lá/cam theo kỳ) gắn liền phần thân trắng bên dưới thành 1 khối bo tròn
+function WeekSummaryCard({ label, tag, color, bg, R }) {
+  return (
+    <div className="rounded-2xl p-6" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04))', borderTop: `3px solid ${color}` }}>
+      <div className="flex items-center justify-between mb-4">
+        <span className="font-bold text-lg" style={{ color: 'var(--text-primary, #1a1d23)' }}>{label}</span>
+        <span className="text-[11px] font-bold px-2.5 py-[3px] rounded-full tracking-wide" style={{ background: bg, color }}>{tag}</span>
+      </div>
+      <div className="text-xs uppercase tracking-wide font-semibold mb-3" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Tổng quan đơn hàng</div>
+      <div className="flex items-baseline gap-2 pb-4 mb-4" style={{ borderBottom: '1px solid var(--border-color, #eaecef)' }}>
+        <span className="font-bold text-4xl" style={{ color: 'var(--text-primary, #1a1d23)' }}>{R.grandTotal.toLocaleString('vi-VN')}</span>
+        <span className="text-xs" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>đơn kho HCM</span>
+      </div>
+      <BreakdownRow name="Đơn C" sub={`${pct(R.totalC, R.grandTotal)}% tổng đơn kho`} value={R.totalC} pctOfTotal={pct(R.totalC, R.grandTotal)} color="var(--color-blue, #3b6fd6)"
+        chips={[`Trực tiếp ${R.tructiepTotalC.toLocaleString('vi-VN')}`, `Chành xe ${R.chanhXeTotal.toLocaleString('vi-VN')}`, `COD (VTP,SPX) ${R.codC.toLocaleString('vi-VN')}`]} />
+      <BreakdownRow name="Đơn DTP" sub={`${pct(R.totalDTP, R.grandTotal)}% tổng đơn kho`} value={R.totalDTP} pctOfTotal={pct(R.totalDTP, R.grandTotal)} color="var(--color-purple, #7c5cd6)"
+        chips={[`Trực tiếp ${R.tructiepTotalDTP.toLocaleString('vi-VN')}`, `COD Viettelpost ${R.codDTP.toLocaleString('vi-VN')}`]} />
+      <BreakdownRow name="SO3 + SO6" sub="Shopee, TikTok" value={R.totalTMDT} pctOfTotal={pct(R.totalTMDT, R.grandTotal)} color={color} />
+    </div>
+  )
+}
+
+// 3 thẻ chi tiết theo kênh (Giao trực tiếp / Viettel Post / SPX Express) — mỗi thẻ tách riêng, có viền/bóng
+// và khoảng cách rõ ràng, không gộp chung 1 khối như WeekSummaryCard nữa (đúng bố cục mẫu tham khảo)
+function WeekDetailCards({ R }) {
   const tructiepTotal = R.tructiepTotalC + R.tructiepTotalDTP
   const vtpTotal = (R.viettelC?.total || 0) + (R.viettelDTP?.total || 0)
   const spxTotal = R.spxC?.total || 0
@@ -502,28 +440,8 @@ function WeekColumn({ label, tag, color, bg, R }) {
   ] : []
 
   return (
-    <div>
-      <div className="flex items-center justify-between px-4 py-2.5 rounded-t-lg border" style={{ background: bg, borderColor: color }}>
-        <span className="font-bold text-lg" style={{ color }}>{label}</span>
-        <span className="text-[11px] font-mono text-gray-500 tracking-wide">{tag}</span>
-      </div>
-
-      <div className="bg-white border border-t-0 p-4" style={{ borderColor: color }}>
-        <div className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold mb-3">Tổng quan đơn hàng</div>
-        <div className="flex items-baseline gap-2 pb-3 mb-3 border-b border-gray-100">
-          <span className="font-extrabold text-4xl" style={{ color }}>{R.grandTotal.toLocaleString('vi-VN')}</span>
-          <span className="text-xs text-gray-400">đơn kho HCM</span>
-        </div>
-        <BreakdownRow name="Đơn C" sub={`${pct(R.totalC, R.grandTotal)}% tổng đơn kho`} value={R.totalC} pctOfTotal={pct(R.totalC, R.grandTotal)} color="#2A6FB0"
-          chips={[`Trực tiếp ${R.tructiepTotalC.toLocaleString('vi-VN')}`, `Chành xe ${R.chanhXeTotal.toLocaleString('vi-VN')}`, `COD (VTP,SPX) ${R.codC.toLocaleString('vi-VN')}`]} />
-        <BreakdownRow name="Đơn DTP" sub={`${pct(R.totalDTP, R.grandTotal)}% tổng đơn kho`} value={R.totalDTP} pctOfTotal={pct(R.totalDTP, R.grandTotal)} color="#6E4FC9"
-          chips={[`Trực tiếp ${R.tructiepTotalDTP.toLocaleString('vi-VN')}`, `COD Viettelpost ${R.codDTP.toLocaleString('vi-VN')}`]} />
-        <BreakdownRow name="SO3 + SO6" sub="Shopee, TikTok" value={R.totalTMDT} pctOfTotal={pct(R.totalTMDT, R.grandTotal)} color={color} />
-      </div>
-
-      <div className="bg-white border border-t-0 rounded-b-lg p-4 space-y-4" style={{ borderColor: color }}>
-        <div className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Chi tiết giao hàng theo kênh</div>
-
+    <div className="space-y-4">
+      <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #eaecef)' }}>
         <CarrierBlock color={TONE['24h']} name="Giao hàng trực tiếp" total={tructiepTotal}
           groups={[
             { label: 'Đơn C', value: R.tructiepTotalC, pctOfTotal: pct(R.tructiepTotalC, tructiepTotal),
@@ -546,9 +464,9 @@ function WeekColumn({ label, tag, color, bg, R }) {
             { label: 'Giao 72h', color: TONE['72h'] }, { label: `Chưa giao (${R.chuaGiao} đơn)`, color: TONE.chuaGiao },
           ]}
         />
+      </div>
 
-        <div className="h-px bg-gray-100" />
-
+      <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #eaecef)' }}>
         <CarrierBlock color={TONE.giaoLai} name="Viettel Post" total={vtpTotal}
           groups={[
             R.viettelC && { label: 'Đơn C', value: R.viettelC.total, pctOfTotal: pct(R.viettelC.total, vtpTotal), segments: vtpSegments(R.viettelC.stats) },
@@ -560,39 +478,39 @@ function WeekColumn({ label, tag, color, bg, R }) {
             { label: 'Đang giao hàng', color: TONE.giaoLai }, { label: 'Hoàn hàng', color: TONE.hoanHang },
           ]}
         />
-
-        {R.spxC && (
-          <>
-            <div className="h-px bg-gray-100" />
-            <CarrierBlock color="#B9720C" name="SPX Express" total={spxTotal}
-              groups={[{ label: 'Đơn C', value: R.spxC.total, pctOfTotal: 100, segments: vtpSegments(R.spxC.stats) }]}
-              legend={[
-                { label: '24h', color: TONE['24h'] }, { label: '48h', color: TONE['48h'] }, { label: '72h', color: TONE['72h'] },
-                { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Đang giao hàng', color: TONE.giaoLai },
-              ]}
-            />
-          </>
-        )}
       </div>
+
+      {R.spxC && (
+        <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #eaecef)' }}>
+          <CarrierBlock color="var(--color-previous, #e8912a)" name="SPX Express" total={spxTotal}
+            groups={[{ label: 'Đơn C', value: R.spxC.total, pctOfTotal: 100, segments: vtpSegments(R.spxC.stats) }]}
+            legend={[
+              { label: '24h', color: TONE['24h'] }, { label: '48h', color: TONE['48h'] }, { label: '72h', color: TONE['72h'] },
+              { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Đang giao hàng', color: TONE.giaoLai },
+            ]}
+          />
+        </div>
+      )}
     </div>
   )
 }
 
-const INSIGHT_TONE = { pos: '#1E9E5A', neg: '#CC3F55', warn: '#B9720C', neutral: '#59708F' }
+const INSIGHT_TONE = { pos: 'var(--color-current, #16a67a)', neg: 'var(--color-red, #e14b4b)', warn: 'var(--color-previous, #e8912a)', neutral: 'var(--text-secondary, #6b7280)' }
 
 function InsightCardV2({ tag, tone, title, body, onBodyChange, placeholder }) {
   const c = INSIGHT_TONE[tone] || INSIGHT_TONE.neutral
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3.5" style={{ borderLeft: `3px solid ${c}` }}>
-      <span className="block text-[10px] font-mono uppercase tracking-wider mb-1.5" style={{ color: c }}>{tag}</span>
-      <div className="text-[13.5px] font-semibold text-gray-800 mb-1.5 leading-snug">{title}</div>
+    <div className="min-w-0 rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04))', borderLeft: `3px solid ${c}` }}>
+      <span className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{tag}</span>
+      <div className="text-[15px] font-semibold mb-1.5 leading-snug" style={{ color: 'var(--text-primary, #1a1d23)' }}>{title}</div>
       {onBodyChange ? (
         <textarea
           value={body} onChange={e => onBodyChange(e.target.value)} placeholder={placeholder} rows={3}
-          className="w-full text-xs text-gray-500 leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+          className="w-full text-[13px] leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+          style={{ color: 'var(--text-secondary, #6b7280)' }}
         />
       ) : (
-        <p className="text-xs text-gray-500 leading-relaxed">{body}</p>
+        <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary, #6b7280)' }}>{body}</p>
       )}
     </div>
   )
@@ -600,40 +518,44 @@ function InsightCardV2({ tag, tone, title, body, onBodyChange, placeholder }) {
 
 function VerdictBox({ text, onChange }) {
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex gap-4 items-start">
-      <span className="font-bold text-sm text-[#0E9A7D] bg-[#E4F5F0] border border-[#0B7A63] px-3 py-1.5 rounded flex-shrink-0 whitespace-nowrap">KẾT LUẬN</span>
+    <div className="rounded-xl py-4 px-6" style={{ background: 'var(--color-current-bg, #e8f7f1)', borderLeft: `4px solid ${CURRENT_COLOR}` }}>
+      <div className="flex items-center gap-1.5 font-bold text-sm mb-2" style={{ color: CURRENT_COLOR }}>
+        <span>✓</span> KẾT LUẬN
+      </div>
       {onChange ? (
         <textarea
           value={text} onChange={e => onChange(e.target.value)} rows={3}
-          className="w-full text-[13px] text-gray-600 leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+          className="w-full text-sm leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+          style={{ color: 'var(--text-primary, #1a1d23)' }}
         />
       ) : (
-        <p className="text-[13px] text-gray-600 leading-relaxed">{text}</p>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary, #1a1d23)' }}>{text}</p>
       )}
     </div>
   )
 }
 
 const PRIORITY = {
-  high: { label: 'Ưu tiên cao', cls: 'bg-red-50 text-red-500' },
-  mid: { label: 'Ưu tiên vừa', cls: 'bg-amber-50 text-amber-600' },
-  low: { label: 'Theo dõi', cls: 'bg-slate-100 text-slate-500' },
+  high: { label: 'Ưu tiên cao', bg: 'var(--color-red-bg, #fceaea)', color: 'var(--color-red, #e14b4b)' },
+  mid: { label: 'Ưu tiên vừa', bg: 'var(--color-previous-bg, #fdf1e2)', color: 'var(--color-previous, #e8912a)' },
+  low: { label: 'Theo dõi', bg: '#f1f2f4', color: 'var(--text-secondary, #6b7280)' },
 }
 
 function PlanItem({ num, text, onChange, priority }) {
   const pr = PRIORITY[priority] || PRIORITY.low
   return (
-    <div className="bg-white p-3.5 grid grid-cols-[28px_1fr_92px] gap-4 items-start border-b border-gray-100 last:border-b-0">
-      <span className="font-extrabold text-lg text-gray-300 leading-none">{String(num).padStart(2, '0')}</span>
+    <div className="p-4 grid grid-cols-[24px_1fr_92px] gap-4 items-start" style={{ background: 'var(--bg-card, #ffffff)', borderBottom: '1px solid var(--border-color, #eaecef)' }}>
+      <span className="font-bold text-[13px] leading-tight" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{String(num).padStart(2, '0')}</span>
       {onChange ? (
         <textarea
           value={text} onChange={e => onChange(e.target.value)} rows={2}
-          className="w-full text-xs text-gray-500 leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+          className="w-full text-[13px] leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
+          style={{ color: 'var(--text-secondary, #6b7280)' }}
         />
       ) : (
-        <p className="text-xs text-gray-500 leading-relaxed">{text}</p>
+        <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary, #6b7280)' }}>{text}</p>
       )}
-      <span className={`text-[10px] font-mono text-center px-2 py-1.5 rounded h-fit ${pr.cls}`}>{pr.label}</span>
+      <span className="text-[11px] font-bold text-center px-3 py-1 rounded-full h-fit" style={{ background: pr.bg, color: pr.color }}>{pr.label}</span>
     </div>
   )
 }
@@ -673,9 +595,9 @@ function SourceRow({ label, pick }) {
 // tự khớp theo ngày của Đơn C/DTP tương ứng — xem chi tiết thì qua đúng tab tương ứng, không lặp lại ở đây.
 function DataSourcePicker({ open, onToggle, donCPick, donDTPPick, tmdtPick }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-4 mb-4">
+    <div className="rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04))' }}>
       <button onClick={onToggle} className="w-full flex items-center justify-between text-left">
-        <span className="text-sm font-semibold text-gray-700">Chọn tuần so sánh — Viettel Post/SPX tự khớp theo tuần Đơn C/DTP</span>
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary, #1a1d23)' }}>Chọn tuần so sánh — Viettel Post/SPX tự khớp theo tuần Đơn C/DTP</span>
         {open ? <ChevronUp size={15} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={15} className="text-gray-400 flex-shrink-0" />}
       </button>
       {open && (
@@ -694,7 +616,7 @@ function DataSourcePicker({ open, onToggle, donCPick, donDTPPick, tmdtPick }) {
   )
 }
 
-export default function TongDonTab() {
+export default function TongDonTab({ onNavigate }) {
   const donC = useTypeData('donC')
   const donDTP = useTypeData('donDTP')
 
@@ -755,11 +677,13 @@ export default function TongDonTab() {
 
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false)
 
-  // ---- Lịch sử báo cáo: mỗi lần bấm "Lưu báo cáo" sẽ đóng băng toàn bộ số liệu hiện tại thành 1 bản ghi cố định ----
+  // ---- Báo cáo đã lưu: chỉ giữ ĐÚNG 1 bản (tuần mới nhất đã lưu), không lưu thành danh sách lịch sử.
+  // Mỗi tuần chỉ lưu 1 lần — hễ đúng weekKey đã lưu thì tự động khoá lại (read-only), không có nút quay lại
+  // sửa tiếp; muốn làm báo cáo mới thì phải chuyển sang tuần khác (Upload tuần mới → Đơn C/DTP có tuần mới). ----
   const [reports, setReports] = useState(() => readJSON('tongdon_reports', []))
-  const [viewingId, setViewingId] = useState(null) // null = đang xem trực tiếp (live)
-  const snapshot = viewingId ? reports.find(r => r.id === viewingId) : null
-  const isReadOnly = !!snapshot
+  const savedReport = reports[0] || null
+  const isReadOnly = savedReport?.weekKey === weekKey
+  const snapshot = isReadOnly ? savedReport : null
 
   // Xuất dashboard Tổng đơn thành 1 ảnh PNG để đính kèm/gửi báo cáo, không cần chụp màn hình tay
   const exportRef = useRef(null)
@@ -768,7 +692,7 @@ export default function TongDonTab() {
     if (!exportRef.current) return
     setExporting(true)
     try {
-      const dataUrl = await toPng(exportRef.current, { backgroundColor: '#f8fafc', pixelRatio: 2 })
+      const dataUrl = await toPng(exportRef.current, { backgroundColor: '#f5f6f8', pixelRatio: 2 })
       const a = document.createElement('a')
       a.href = dataUrl
       a.download = `TongDon_${(reportTitle || 'BaoCao').replace(/[^\p{L}\p{N}]+/gu, '_')}.png`
@@ -828,12 +752,46 @@ export default function TongDonTab() {
       ? `Tỷ lệ giao 24h giảm dù sản lượng ${totalDeltaPct >= 0 ? 'tăng' : 'giảm'} ${Math.abs(totalDeltaPct).toFixed(1)}% — cần rà soát nguyên nhân chậm giao.`
       : `Không phát sinh vấn đề đáng chú ý; các chỉ số giao hàng trong tuần ổn định.`
 
+  // Cơ cấu đơn: Đơn C vs Đơn DTP biến động cùng chiều hay ngược chiều so với tuần trước
+  const cDelta = groupDeltas.find(g => g.name === 'Đơn C')
+  const dtpDelta = groupDeltas.find(g => g.name === 'Đơn DTP')
+  const autoInsight4 = `Đơn C ${cDelta.abs >= 0 ? 'tăng' : 'giảm'} ${Math.abs(cDelta.abs).toLocaleString('vi-VN')} đơn (${fmtPctSigned(cDelta.pct)}), Đơn DTP ${dtpDelta.abs >= 0 ? 'tăng' : 'giảm'} ${Math.abs(dtpDelta.abs).toLocaleString('vi-VN')} đơn (${fmtPctSigned(dtpDelta.pct)}) so với tuần trước.`
+  const cocauWarn = (cDelta.abs >= 0) !== (dtpDelta.abs >= 0)
+
+  // SPX Express: tổng đơn + tỷ lệ "đang vận chuyển" (đơn tồn) thay đổi ra sao
+  const spxCurTotal = current.spxC?.total || 0
+  const spxPrevTotal = previous.spxC?.total || 0
+  const spxCurDVCPct = pct(current.spxC?.stats?.dangVanChuyen || 0, spxCurTotal)
+  const spxPrevDVCPct = pct(previous.spxC?.stats?.dangVanChuyen || 0, spxPrevTotal)
+  const spxDVCUp = spxCurDVCPct > spxPrevDVCPct
+  const autoInsight5 = spxCurTotal > 0
+    ? `Đơn qua SPX Express ${deltaPctOf(spxPrevTotal, spxCurTotal) >= 0 ? 'tăng' : 'giảm'} từ ${spxPrevTotal.toLocaleString('vi-VN')} lên ${spxCurTotal.toLocaleString('vi-VN')} đơn, tỷ lệ "đang vận chuyển" ${spxDVCUp ? 'tăng' : 'giảm'} từ ${spxPrevDVCPct}% lên ${spxCurDVCPct}%${spxDVCUp ? ' — cần rà soát nguyên nhân tồn vận chuyển' : ''}.`
+    : 'Không có dữ liệu SPX Express trong tuần này.'
+
+  // Viettel Post: gộp Đơn C + Đơn DTP qua Viettel, cùng logic theo dõi tồn vận chuyển
+  const vtpCurTotal = (current.viettelC?.total || 0) + (current.viettelDTP?.total || 0)
+  const vtpPrevTotal = (previous.viettelC?.total || 0) + (previous.viettelDTP?.total || 0)
+  const vtpCurDVC = (current.viettelC?.stats?.dangVanChuyen || 0) + (current.viettelDTP?.stats?.dangVanChuyen || 0)
+  const vtpPrevDVC = (previous.viettelC?.stats?.dangVanChuyen || 0) + (previous.viettelDTP?.stats?.dangVanChuyen || 0)
+  const vtpCurDVCPct = pct(vtpCurDVC, vtpCurTotal)
+  const vtpPrevDVCPct = pct(vtpPrevDVC, vtpPrevTotal)
+  const vtpDVCUp = vtpCurDVCPct > vtpPrevDVCPct
+  const autoInsight6 = vtpCurTotal > 0
+    ? `Đơn qua Viettel Post ${deltaPctOf(vtpPrevTotal, vtpCurTotal) >= 0 ? 'tăng' : 'giảm'} từ ${vtpPrevTotal.toLocaleString('vi-VN')} lên ${vtpCurTotal.toLocaleString('vi-VN')} đơn, tỷ lệ "đang vận chuyển" ${vtpDVCUp ? 'tăng' : 'giảm'} từ ${vtpPrevDVCPct}% lên ${vtpCurDVCPct}%${vtpDVCUp ? ' — cần xác nhận năng lực xử lý' : ''}.`
+    : 'Không có dữ liệu Viettel Post trong tuần này.'
+
   const [insight1Live, setInsight1] = useWeekField(weekKey, 'insight1', autoInsight1)
   const [insight2Live, setInsight2] = useWeekField(weekKey, 'insight2', autoInsight2)
   const [insight3Live, setInsight3] = useWeekField(weekKey, 'insight3', autoInsight3)
+  const [insight4Live, setInsight4] = useWeekField(weekKey, 'insight4', autoInsight4)
+  const [insight5Live, setInsight5] = useWeekField(weekKey, 'insight5', autoInsight5)
+  const [insight6Live, setInsight6] = useWeekField(weekKey, 'insight6', autoInsight6)
   const insight1 = snapshot ? snapshot.insight1 : insight1Live
   const insight2 = snapshot ? snapshot.insight2 : insight2Live
   const insight3 = snapshot ? snapshot.insight3 : insight3Live
+  const insight4 = snapshot ? snapshot.insight4 : insight4Live
+  const insight5 = snapshot ? snapshot.insight5 : insight5Live
+  const insight6 = snapshot ? snapshot.insight6 : insight6Live
 
   const autoSol1 = chuaGiaoUp
     ? `Ưu tiên xử lý ${current.chuaGiao} đơn chưa giao ngay đầu tuần tới, đặc biệt nhóm phát sinh nhiều nhất.`
@@ -869,22 +827,24 @@ export default function TongDonTab() {
   const priority2 = rate24hDrop ? 'high' : 'low'
   const priority4 = totalDeltaPct > 15 ? 'high' : 'low'
 
-  // Lưu toàn bộ số liệu + nhận định đang xem (live) thành 1 báo cáo cố định, không đổi khi dữ liệu sau này thay đổi
+  // Lưu toàn bộ số liệu + nhận định đang xem (live) thành 1 báo cáo cố định, không đổi khi dữ liệu sau này thay đổi.
+  // Chỉ giữ đúng 1 bản mới nhất (không lưu thành danh sách lịch sử) — lưu xong tự khoá (read-only) theo weekKey,
+  // không quay lại sửa được nữa; muốn làm báo cáo mới thì phải sang tuần khác (weekKey khác).
   const saveReport = () => {
     const id = String(Date.now())
     const label = `${reportTitleLive || 'Báo cáo'} · ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
     const entry = {
-      id, createdAt: new Date().toISOString(), label,
+      id, weekKey, createdAt: new Date().toISOString(), label,
       current: liveCurrent, previous: livePrevious,
       title: reportTitleLive,
       insight1: insight1Live, insight2: insight2Live, insight3: insight3Live,
+      insight4: insight4Live, insight5: insight5Live, insight6: insight6Live,
       verdict: verdictLive,
       sol1: sol1Live, sol2: sol2Live, sol3: sol3Live, sol4: sol4Live, sol5: sol5Live,
     }
-    const next = [entry, ...reports].slice(0, 52)
+    const next = [entry]
     setReports(next)
     localStorage.setItem('tongdon_reports', JSON.stringify(next))
-    setViewingId(id)
 
     // Số liệu đã đóng băng vào báo cáo — không cần giữ file gốc của các tuần cũ hơn nữa, đỡ tốn bộ nhớ trình duyệt/cloud
     donC.pruneToIds([donCCurrentEntry?.id, donCPreviousEntry?.id].filter(Boolean))
@@ -904,121 +864,122 @@ export default function TongDonTab() {
   }
 
   return (
-    <div className="-m-5 p-5" style={{ background: 'radial-gradient(circle at 15% 0%, #eff6ff 0%, #f8fafc 45%, #f1f5f9 100%)' }}>
-      <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
-        {isReadOnly ? (
-          <button onClick={() => setViewingId(null)} className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 text-blue-600 rounded-lg text-sm hover:bg-blue-50 bg-white">
-            <ArrowRight size={13} className="rotate-180" /> Quay lại xem trực tiếp
+    <div className="-m-5" style={{ background: 'var(--bg-page, #f5f6f8)' }}>
+      <div className="w-full max-w-[1000px] mx-auto flex flex-col gap-8 box-border" style={{ padding: '32px 24px' }}>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {isReadOnly ? (
+            onNavigate && (
+              <button onClick={() => onNavigate('donC')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
+                <Upload size={13} /> Upload tuần mới
+              </button>
+            )
+          ) : (
+            <button onClick={saveReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
+              <ClipboardList size={13} /> Lưu báo cáo tuần này
+            </button>
+          )}
+          <button
+            onClick={handleExportImage}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white disabled:opacity-50"
+          >
+            <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh'}
           </button>
-        ) : (
-          <button onClick={saveReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
-            <ClipboardList size={13} /> Lưu báo cáo tuần này
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white"
+          >
+            <Printer size={13} /> In / Xuất PDF
           </button>
-        )}
-        <button
-          onClick={handleExportImage}
-          disabled={exporting}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white disabled:opacity-50"
-        >
-          <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh'}
-        </button>
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white"
-        >
-          <Printer size={13} /> In / Xuất PDF
-        </button>
-      </div>
-
-      <div ref={exportRef}>
-      <PageHeaderBanner
-        title={reportTitle}
-        editable={!isReadOnly}
-        onTitleChange={setReportTitle}
-        subtitle={isReadOnly
-          ? `Báo cáo đã lưu · ${new Date(snapshot.createdAt).toLocaleString('vi-VN')}`
-          : 'Đánh giá tổng quan · Kết luận · Giải pháp cho tuần tiếp theo'}
-      />
-
-      {!isReadOnly && (
-        <DataSourcePicker
-          open={sourcePickerOpen}
-          onToggle={() => setSourcePickerOpen(o => !o)}
-          donCPick={donCPick}
-          donDTPPick={donDTPPick}
-          tmdtPick={tmdtPick}
-        />
-      )}
-
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden mb-5">
-        <KpiCard label="Tổng đơn kho HCM" cur={current.grandTotal} prev={previous.grandTotal} icon={Package} accent="#0f2744" />
-        <KpiCard label="Đơn C" cur={current.totalC} prev={previous.totalC} icon={Truck} accent="#2A6FB0" />
-        <KpiCard label="Đơn DTP" cur={current.totalDTP} prev={previous.totalDTP} icon={Layers} accent="#6E4FC9" />
-        <KpiCard label="SO3 + SO6 (Shopee, TikTok)" cur={current.totalTMDT} prev={previous.totalTMDT} icon={ShoppingBag} accent="#0E9A7D" />
-      </div>
-
-      {/* 1: Cơ cấu kênh (donut) + 2: Top kênh biến động */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden">
-          <SectionHeader num={1} color="#B23A4A" icon={PieIcon} title="CƠ CẤU KÊNH GIAO HÀNG" subtitle="Tuần này · theo tổng đơn kho HCM" />
-          <div className="p-4">
-            <ChannelDonut R={current} />
-          </div>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden">
-          <SectionHeader num={2} color="#B9720C" icon={BarChart2} title="TOP KÊNH BIẾN ĐỘNG" subtitle="So với tuần trước" badge={`${groupDeltas.length} kênh`} />
-          <div className="p-4">
-            <DeltaTable groups={groupDeltas} />
-          </div>
-        </div>
-      </div>
 
-      {/* 3: Bảng so sánh chi tiết Tuần này / Tuần trước */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden mb-5">
-        <SectionHeader num={3} color="#1e3a5f" icon={Layers} title="BẢNG SO SÁNH CHI TIẾT TUẦN NÀY / TUẦN TRƯỚC" subtitle="Giao hàng trực tiếp · Chành xe · Viettel Post · SPX Express" />
-        <div className="p-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <WeekColumn label="TUẦN NÀY" tag="MỚI NHẤT" color="#0E9A7D" bg="#E4F5F0" R={current} />
-            <WeekColumn label="TUẦN TRƯỚC" tag="LIỀN KỀ" color="#B9720C" bg="#FBEEDC" R={previous} />
-          </div>
-        </div>
-      </div>
+        <div ref={exportRef} className="flex flex-col gap-8">
+          <PageHeader
+            title={reportTitle}
+            editable={!isReadOnly}
+            onTitleChange={setReportTitle}
+            subtitle={isReadOnly
+              ? `Báo cáo đã lưu · ${new Date(snapshot.createdAt).toLocaleString('vi-VN')}`
+              : 'Đánh giá tổng quan · Kết luận · Giải pháp cho tuần tiếp theo'}
+            currentDate={!isReadOnly && donCCurrentEntry?.at && !isNaN(new Date(donCCurrentEntry.at)) ? new Date(donCCurrentEntry.at).toLocaleDateString('vi-VN') : null}
+            previousDate={!isReadOnly && donCPreviousEntry?.at && !isNaN(new Date(donCPreviousEntry.at)) ? new Date(donCPreviousEntry.at).toLocaleDateString('vi-VN') : null}
+          />
 
-      {/* 4: Phân tích & đánh giá tổng quan */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden">
-        <SectionHeader num={4} color="#1E9E5A" icon={ClipboardCheck} title="PHÂN TÍCH & ĐÁNH GIÁ TỔNG QUAN" subtitle="Kết luận · Giải pháp cho tuần tiếp theo" />
-        <div className="p-5">
-          {needsAttention && (
-            <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-              <AlertCircle size={15} className="flex-shrink-0" />
-              <span>
-                Cần chú ý — {chuaGiaoUp ? 'tồn đơn chưa giao đang tăng' : rate24hDrop ? 'tốc độ giao 24h đang giảm' : 'sản lượng biến động mạnh'} so với tuần trước.
-              </span>
-            </div>
+          {!isReadOnly && (
+            <DataSourcePicker
+              open={sourcePickerOpen}
+              onToggle={() => setSourcePickerOpen(o => !o)}
+              donCPick={donCPick}
+              donDTPPick={donDTPPick}
+              tmdtPick={tmdtPick}
+            />
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-            <InsightCardV2 tag="Sản lượng" tone={totalDeltaPct >= 0 ? 'pos' : 'neg'} title={topGroup.name + (topGroup.pct >= 0 ? ' tăng' : ' giảm') + ' chi phối biến động tổng đơn'}
-              body={insight1} onBodyChange={isReadOnly ? undefined : setInsight1} placeholder="VD: Tổng đơn tăng X%, chủ yếu từ nhóm..." />
-            <InsightCardV2 tag="Tốc độ giao" tone={rate24hDrop ? 'neg' : 'pos'} title="Hiệu suất giao hàng trực tiếp"
-              body={insight2} onBodyChange={isReadOnly ? undefined : setInsight2} />
-            <InsightCardV2 tag="Nguyên nhân" tone={chuaGiaoUp && totalDeltaPct > 0 ? 'warn' : 'neutral'} title="Nguyên nhân chính cần lưu ý"
-              body={insight3} onBodyChange={isReadOnly ? undefined : setInsight3} />
+          {/* KPI strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KpiCard label="Tổng đơn kho HCM" cur={current.grandTotal} prev={previous.grandTotal} />
+            <KpiCard label="Đơn C" cur={current.totalC} prev={previous.totalC} />
+            <KpiCard label="Đơn DTP" cur={current.totalDTP} prev={previous.totalDTP} />
+            <KpiCard label="SO3 + SO6 (Shopee, TikTok)" cur={current.totalTMDT} prev={previous.totalTMDT} />
           </div>
 
-          <VerdictBox text={verdict} onChange={isReadOnly ? undefined : setVerdict} />
+          {/* Bảng so sánh chi tiết Tuần này / Tuần trước */}
+          <div>
+            <SectionHeading title="Bảng so sánh chi tiết tuần này / tuần trước" subtitle="Giao hàng trực tiếp · Chành xe · Viettel Post · SPX Express" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+              <div className="min-w-0"><WeekSummaryCard label="TUẦN NÀY" tag="MỚI NHẤT" color={CURRENT_COLOR} bg="var(--color-current-bg, #e8f7f1)" R={current} /></div>
+              <div className="min-w-0"><WeekSummaryCard label="TUẦN TRƯỚC" tag="LIỀN KỀ" color={PREVIOUS_COLOR} bg="var(--color-previous-bg, #fdf1e2)" R={previous} /></div>
+            </div>
 
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-5">Giải pháp cho tuần tiếp theo</div>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <PlanItem num={1} text={sol1} onChange={isReadOnly ? undefined : setSol1} priority={priority1} />
-            <PlanItem num={2} text={sol2} onChange={isReadOnly ? undefined : setSol2} priority={priority2} />
-            <PlanItem num={3} text={sol3} onChange={isReadOnly ? undefined : setSol3} priority="mid" />
-            <PlanItem num={4} text={sol4} onChange={isReadOnly ? undefined : setSol4} priority={priority4} />
-            <PlanItem num={5} text={sol5} onChange={isReadOnly ? undefined : setSol5} priority="low" />
+            <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Chi tiết giao hàng theo kênh</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="min-w-0"><WeekDetailCards R={current} /></div>
+              <div className="min-w-0"><WeekDetailCards R={previous} /></div>
+            </div>
+          </div>
+
+          {/* Phân tích & đánh giá tổng quan */}
+          <div>
+            <SectionHeading eyebrow="Nhận định vận hành" title="Phân tích & đánh giá tổng quan" subtitle="Kết luận · Giải pháp cho tuần tiếp theo" />
+
+            {needsAttention && (
+              <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                <AlertCircle size={15} className="flex-shrink-0" />
+                <span>
+                  Cần chú ý — {chuaGiaoUp ? 'tồn đơn chưa giao đang tăng' : rate24hDrop ? 'tốc độ giao 24h đang giảm' : 'sản lượng biến động mạnh'} so với tuần trước.
+                </span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <InsightCardV2 tag="Sản lượng" tone={totalDeltaPct >= 0 ? 'pos' : 'neg'} title={topGroup.name + (topGroup.pct >= 0 ? ' tăng' : ' giảm') + ' chi phối biến động tổng đơn'}
+                body={insight1} onBodyChange={isReadOnly ? undefined : setInsight1} placeholder="VD: Tổng đơn tăng X%, chủ yếu từ nhóm..." />
+              <InsightCardV2 tag="Cơ cấu đơn" tone={cocauWarn ? 'warn' : 'neutral'} title="Đơn C và Đơn DTP bù trừ lẫn nhau"
+                body={insight4} onBodyChange={isReadOnly ? undefined : setInsight4} />
+              <InsightCardV2 tag="Tốc độ giao" tone={rate24hDrop ? 'neg' : 'pos'} title="Hiệu suất giao hàng trực tiếp"
+                body={insight2} onBodyChange={isReadOnly ? undefined : setInsight2} />
+              <InsightCardV2 tag="SPX Express" tone={spxCurTotal === 0 ? 'neutral' : spxDVCUp ? 'warn' : 'pos'} title="Sản lượng & tồn vận chuyển SPX"
+                body={insight5} onBodyChange={isReadOnly ? undefined : setInsight5} />
+              <InsightCardV2 tag="Viettel Post" tone={vtpCurTotal === 0 ? 'neutral' : vtpDVCUp ? 'warn' : 'pos'} title="Sản lượng & tồn vận chuyển Viettel Post"
+                body={insight6} onBodyChange={isReadOnly ? undefined : setInsight6} />
+              <InsightCardV2 tag="Nguyên nhân" tone={chuaGiaoUp && totalDeltaPct > 0 ? 'warn' : 'neutral'} title="Nguyên nhân chính cần lưu ý"
+                body={insight3} onBodyChange={isReadOnly ? undefined : setInsight3} />
+            </div>
+
+            <div className="mb-4">
+              <VerdictBox text={verdict} onChange={isReadOnly ? undefined : setVerdict} />
+            </div>
+
+            <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Giải pháp cho tuần tiếp theo</div>
+            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-color, #eaecef)' }}>
+              <PlanItem num={1} text={sol1} onChange={isReadOnly ? undefined : setSol1} priority={priority1} />
+              <PlanItem num={2} text={sol2} onChange={isReadOnly ? undefined : setSol2} priority={priority2} />
+              <PlanItem num={3} text={sol3} onChange={isReadOnly ? undefined : setSol3} priority="mid" />
+              <PlanItem num={4} text={sol4} onChange={isReadOnly ? undefined : setSol4} priority={priority4} />
+              <PlanItem num={5} text={sol5} onChange={isReadOnly ? undefined : setSol5} priority="low" />
+            </div>
           </div>
         </div>
-      </div>
       </div>
     </div>
   )

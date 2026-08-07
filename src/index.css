@@ -1,4 +1,54 @@
 @import "tailwindcss";
 
+/* ===== DESIGN TOKENS — dùng chung cho toàn bộ báo cáo (Tổng đơn, Đơn C/DTP, TMĐT) ===== */
+:root {
+  /* Màu nền */
+  --bg-page: #f5f6f8;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #fafbfc;
+
+  /* Màu chủ đạo — so sánh 2 kỳ */
+  --color-current: #16a67a;        /* xanh lá - tuần này */
+  --color-current-bg: #e8f7f1;
+  --color-previous: #e8912a;       /* cam - tuần trước */
+  --color-previous-bg: #fdf1e2;
+
+  /* Màu phụ (biểu đồ / trạng thái) */
+  --color-blue: #3b6fd6;
+  --color-purple: #7c5cd6;
+  --color-red: #e14b4b;
+  --color-red-bg: #fceaea;
+
+  /* Text */
+  --text-primary: #1a1d23;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+
+  /* Border & shadow */
+  --border-color: #eaecef;
+  --shadow-card: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+
+  /* Spacing scale */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 48px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* Font */
+  --font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ===== BASE ===== */
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; }
+body {
+  background: var(--bg-page);
+  font-family: var(--font-family);
+  color: var(--text-primary);
+}

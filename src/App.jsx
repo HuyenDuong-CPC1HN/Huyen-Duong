@@ -234,7 +234,7 @@ function AppContent({ user }) {
               })}
             </div>
           )}
-          {active === 'tongdon'  && <TongDonTab />}
+          {active === 'tongdon'  && <TongDonTab onNavigate={setActive} />}
           {active === 'donC'    && <SheetTab type="donC" />}
           {active === 'donDTP'  && <SheetTab type="donDTP" />}
           {active === 'tmdt'    && <TmdtTab />}
