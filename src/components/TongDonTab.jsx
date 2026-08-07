@@ -284,7 +284,7 @@ function KpiCard({ label, cur, prev }) {
   const delta = prev ? ((cur - prev) / prev) * 100 : (cur > 0 ? 100 : 0)
   const up = delta >= 0
   return (
-    <div className="min-w-0 rounded-xl p-5" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04))' }}>
+    <div className="min-w-0 rounded-xl p-5" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 2px rgba(16,24,40,0.04), 0 4px 10px rgba(16,24,40,0.09))', border: '1px solid var(--border-color, #e2e5ea)' }}>
       <div className="text-[13px] mb-1.5" style={{ color: 'var(--text-secondary, #6b7280)' }}>{label}</div>
       <div className="flex items-baseline gap-2 mb-1.5">
         <span className="font-bold text-[28px] leading-[1.1]" style={{ color: 'var(--text-primary, #1a1d23)' }}>{cur.toLocaleString('vi-VN')}</span>
@@ -403,7 +403,7 @@ function CarrierBlock({ color, name, total, groups, legend }) {
 // Thẻ "Tổng quan đơn hàng" — pill tiêu đề màu (xanh lá/cam theo kỳ) gắn liền phần thân trắng bên dưới thành 1 khối bo tròn
 function WeekSummaryCard({ label, tag, color, bg, R }) {
   return (
-    <div className="rounded-2xl p-6" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04))', borderTop: `3px solid ${color}` }}>
+    <div className="rounded-2xl p-6" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 2px rgba(16,24,40,0.04), 0 4px 10px rgba(16,24,40,0.09))', border: '1px solid var(--border-color, #e2e5ea)', borderTop: `3px solid ${color}` }}>
       <div className="flex items-center justify-between mb-4">
         <span className="font-bold text-lg" style={{ color: 'var(--text-primary, #1a1d23)' }}>{label}</span>
         <span className="text-[11px] font-bold px-2.5 py-[3px] rounded-full tracking-wide" style={{ background: bg, color }}>{tag}</span>
@@ -500,7 +500,7 @@ const INSIGHT_TONE = { pos: 'var(--color-current, #16a67a)', neg: 'var(--color-r
 function InsightCardV2({ tag, tone, title, body, onBodyChange, placeholder }) {
   const c = INSIGHT_TONE[tone] || INSIGHT_TONE.neutral
   return (
-    <div className="min-w-0 rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04))', borderLeft: `3px solid ${c}` }}>
+    <div className="min-w-0 rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 2px rgba(16,24,40,0.04), 0 4px 10px rgba(16,24,40,0.09))', border: '1px solid var(--border-color, #e2e5ea)', borderLeft: `3px solid ${c}` }}>
       <span className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{tag}</span>
       <div className="text-[15px] font-semibold mb-1.5 leading-snug" style={{ color: 'var(--text-primary, #1a1d23)' }}>{title}</div>
       {onBodyChange ? (
@@ -595,7 +595,7 @@ function SourceRow({ label, pick }) {
 // tự khớp theo ngày của Đơn C/DTP tương ứng — xem chi tiết thì qua đúng tab tương ứng, không lặp lại ở đây.
 function DataSourcePicker({ open, onToggle, donCPick, donDTPPick, tmdtPick }) {
   return (
-    <div className="rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04))' }}>
+    <div className="rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 2px rgba(16,24,40,0.04), 0 4px 10px rgba(16,24,40,0.09))' }}>
       <button onClick={onToggle} className="w-full flex items-center justify-between text-left">
         <span className="text-sm font-semibold" style={{ color: 'var(--text-primary, #1a1d23)' }}>Chọn tuần so sánh — Viettel Post/SPX tự khớp theo tuần Đơn C/DTP</span>
         {open ? <ChevronUp size={15} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={15} className="text-gray-400 flex-shrink-0" />}
