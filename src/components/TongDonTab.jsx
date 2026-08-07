@@ -284,7 +284,7 @@ function KpiCard({ label, cur, prev }) {
   const delta = prev ? ((cur - prev) / prev) * 100 : (cur > 0 ? 100 : 0)
   const up = delta >= 0
   return (
-    <div className="min-w-0 rounded-xl p-5" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 2px rgba(16,24,40,0.04), 0 4px 10px rgba(16,24,40,0.09))', border: '1px solid var(--border-color, #e2e5ea)' }}>
+    <div className="min-w-0 rounded-xl p-5" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))', border: '1px solid var(--border-color, #e5e7eb)' }}>
       <div className="text-[13px] mb-1.5" style={{ color: 'var(--text-secondary, #6b7280)' }}>{label}</div>
       <div className="flex items-baseline gap-2 mb-1.5">
         <span className="font-bold text-[28px] leading-[1.1]" style={{ color: 'var(--text-primary, #1a1d23)' }}>{cur.toLocaleString('vi-VN')}</span>
@@ -300,7 +300,7 @@ function KpiCard({ label, cur, prev }) {
 // Tiêu đề trang: chữ đen thường (không banner màu), chấm xanh lá/cam ở góc phải chú thích kỳ hiện tại/so sánh
 function PageHeader({ title, editable, onTitleChange, subtitle, currentDate, previousDate }) {
   return (
-    <div className="flex items-start justify-between gap-4 flex-wrap pb-4" style={{ borderBottom: '1px solid var(--border-color, #eaecef)' }}>
+    <div className="flex items-start justify-between gap-4 flex-wrap pb-4" style={{ borderBottom: '1px solid var(--border-color, #e5e7eb)' }}>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Báo cáo giao ban tuần</div>
         {editable ? (
@@ -346,7 +346,7 @@ function BreakdownRow({ name, sub, value, pctOfTotal, color, chips }) {
         <div className="text-[13px] font-medium leading-tight" style={{ color: 'var(--text-primary, #1a1d23)' }}>
           {name}<span className="block text-[10px] font-normal mt-0.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{sub}</span>
         </div>
-        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--border-color, #eaecef)' }}>
+        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--border-color, #e5e7eb)' }}>
           <div className="h-full rounded-full" style={{ width: `${Math.min(pctOfTotal, 100)}%`, background: color }} />
         </div>
         <div className="text-[13px] text-right" style={{ color: 'var(--text-primary, #1a1d23)' }}>{value.toLocaleString('vi-VN')}</div>
@@ -365,7 +365,7 @@ function BreakdownRow({ name, sub, value, pctOfTotal, color, chips }) {
 function StackBar({ segments }) {
   const total = segments.reduce((s, x) => s + (x.value || 0), 0)
   return (
-    <div className="flex overflow-hidden rounded-full" style={{ height: '10px', background: 'var(--border-color, #eaecef)' }}>
+    <div className="flex overflow-hidden rounded-full" style={{ height: '10px', background: 'var(--border-color, #e5e7eb)' }}>
       {total > 0 && segments.map((s, i) => s.value > 0 && (
         <div key={i} style={{ width: `${(s.value / total) * 100}%`, background: s.color }} title={`${s.label || ''}: ${s.value}`} />
       ))}
@@ -403,13 +403,13 @@ function CarrierBlock({ color, name, total, groups, legend }) {
 // Thẻ "Tổng quan đơn hàng" — pill tiêu đề màu (xanh lá/cam theo kỳ) gắn liền phần thân trắng bên dưới thành 1 khối bo tròn
 function WeekSummaryCard({ label, tag, color, bg, R }) {
   return (
-    <div className="rounded-2xl p-6" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 2px rgba(16,24,40,0.04), 0 4px 10px rgba(16,24,40,0.09))', border: '1px solid var(--border-color, #e2e5ea)', borderTop: `3px solid ${color}` }}>
+    <div className="rounded-2xl p-6" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))', border: '1px solid var(--border-color, #e5e7eb)', borderTop: `3px solid ${color}` }}>
       <div className="flex items-center justify-between mb-4">
         <span className="font-bold text-lg" style={{ color: 'var(--text-primary, #1a1d23)' }}>{label}</span>
         <span className="text-[11px] font-bold px-2.5 py-[3px] rounded-full tracking-wide" style={{ background: bg, color }}>{tag}</span>
       </div>
       <div className="text-xs uppercase tracking-wide font-semibold mb-3" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Tổng quan đơn hàng</div>
-      <div className="flex items-baseline gap-2 pb-4 mb-4" style={{ borderBottom: '1px solid var(--border-color, #eaecef)' }}>
+      <div className="flex items-baseline gap-2 pb-4 mb-4" style={{ borderBottom: '1px solid var(--border-color, #e5e7eb)' }}>
         <span className="font-bold text-4xl" style={{ color: 'var(--text-primary, #1a1d23)' }}>{R.grandTotal.toLocaleString('vi-VN')}</span>
         <span className="text-xs" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>đơn kho HCM</span>
       </div>
@@ -441,7 +441,7 @@ function WeekDetailCards({ R }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #eaecef)' }}>
+      <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #e5e7eb)' }}>
         <CarrierBlock color={TONE['24h']} name="Giao hàng trực tiếp" total={tructiepTotal}
           groups={[
             { label: 'Đơn C', value: R.tructiepTotalC, pctOfTotal: pct(R.tructiepTotalC, tructiepTotal),
@@ -466,7 +466,7 @@ function WeekDetailCards({ R }) {
         />
       </div>
 
-      <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #eaecef)' }}>
+      <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #e5e7eb)' }}>
         <CarrierBlock color={TONE.giaoLai} name="Viettel Post" total={vtpTotal}
           groups={[
             R.viettelC && { label: 'Đơn C', value: R.viettelC.total, pctOfTotal: pct(R.viettelC.total, vtpTotal), segments: vtpSegments(R.viettelC.stats) },
@@ -481,7 +481,7 @@ function WeekDetailCards({ R }) {
       </div>
 
       {R.spxC && (
-        <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #eaecef)' }}>
+        <div className="rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #e5e7eb)' }}>
           <CarrierBlock color="var(--color-previous, #e8912a)" name="SPX Express" total={spxTotal}
             groups={[{ label: 'Đơn C', value: R.spxC.total, pctOfTotal: 100, segments: vtpSegments(R.spxC.stats) }]}
             legend={[
@@ -500,7 +500,7 @@ const INSIGHT_TONE = { pos: 'var(--color-current, #16a67a)', neg: 'var(--color-r
 function InsightCardV2({ tag, tone, title, body, onBodyChange, placeholder }) {
   const c = INSIGHT_TONE[tone] || INSIGHT_TONE.neutral
   return (
-    <div className="min-w-0 rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 2px rgba(16,24,40,0.04), 0 4px 10px rgba(16,24,40,0.09))', border: '1px solid var(--border-color, #e2e5ea)', borderLeft: `3px solid ${c}` }}>
+    <div className="min-w-0 rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))', border: '1px solid var(--border-color, #e5e7eb)', borderLeft: `3px solid ${c}` }}>
       <span className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{tag}</span>
       <div className="text-[15px] font-semibold mb-1.5 leading-snug" style={{ color: 'var(--text-primary, #1a1d23)' }}>{title}</div>
       {onBodyChange ? (
@@ -544,7 +544,7 @@ const PRIORITY = {
 function PlanItem({ num, text, onChange, priority }) {
   const pr = PRIORITY[priority] || PRIORITY.low
   return (
-    <div className="p-4 grid grid-cols-[24px_1fr_92px] gap-4 items-start" style={{ background: 'var(--bg-card, #ffffff)', borderBottom: '1px solid var(--border-color, #eaecef)' }}>
+    <div className="p-4 grid grid-cols-[24px_1fr_92px] gap-4 items-start" style={{ background: 'var(--bg-card, #ffffff)', borderBottom: '1px solid var(--border-color, #e5e7eb)' }}>
       <span className="font-bold text-[13px] leading-tight" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{String(num).padStart(2, '0')}</span>
       {onChange ? (
         <textarea
@@ -595,7 +595,7 @@ function SourceRow({ label, pick }) {
 // tự khớp theo ngày của Đơn C/DTP tương ứng — xem chi tiết thì qua đúng tab tương ứng, không lặp lại ở đây.
 function DataSourcePicker({ open, onToggle, donCPick, donDTPPick, tmdtPick }) {
   return (
-    <div className="rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 1px 2px rgba(16,24,40,0.04), 0 4px 10px rgba(16,24,40,0.09))' }}>
+    <div className="rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))' }}>
       <button onClick={onToggle} className="w-full flex items-center justify-between text-left">
         <span className="text-sm font-semibold" style={{ color: 'var(--text-primary, #1a1d23)' }}>Chọn tuần so sánh — Viettel Post/SPX tự khớp theo tuần Đơn C/DTP</span>
         {open ? <ChevronUp size={15} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={15} className="text-gray-400 flex-shrink-0" />}
@@ -971,7 +971,7 @@ export default function TongDonTab({ onNavigate }) {
             </div>
 
             <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Giải pháp cho tuần tiếp theo</div>
-            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-color, #eaecef)' }}>
+            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-color, #e5e7eb)' }}>
               <PlanItem num={1} text={sol1} onChange={isReadOnly ? undefined : setSol1} priority={priority1} />
               <PlanItem num={2} text={sol2} onChange={isReadOnly ? undefined : setSol2} priority={priority2} />
               <PlanItem num={3} text={sol3} onChange={isReadOnly ? undefined : setSol3} priority="mid" />
