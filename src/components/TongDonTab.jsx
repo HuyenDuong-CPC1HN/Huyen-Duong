@@ -6,7 +6,7 @@ import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
 import { readSheetReports } from '../utils/sheetReports'
 import {
-  getCarrierFileStats, pickCarrierWeekIdByDate, pruneCarrierWeeksToIds, carrierWeekHasRows,
+  getCarrierFileStats, pickCarrierWeekIdByDate, carrierWeekHasRows,
 } from './CarrierStats'
 
 function readJSON(key, fallback) {
@@ -845,13 +845,9 @@ export default function TongDonTab({ onNavigate }) {
     const next = [entry]
     setReports(next)
     localStorage.setItem('tongdon_reports', JSON.stringify(next))
-
-    // Số liệu đã đóng băng vào báo cáo — không cần giữ file gốc của các tuần cũ hơn nữa, đỡ tốn bộ nhớ trình duyệt/cloud
-    donC.pruneToIds([donCCurrentEntry?.id, donCPreviousEntry?.id].filter(Boolean))
-    donDTP.pruneToIds([donDTPCurrentEntry?.id, donDTPPreviousEntry?.id].filter(Boolean))
-    pruneCarrierWeeksToIds('donC_viettel', [viettelC_current.weekId, viettelC_previous.weekId].filter(Boolean))
-    pruneCarrierWeeksToIds('donC_spx', [spxC_current.weekId, spxC_previous.weekId].filter(Boolean))
-    pruneCarrierWeeksToIds('donDTP_viettel', [viettelDTP_current.weekId, viettelDTP_previous.weekId].filter(Boolean))
+    // KHÔNG tự dọn bớt Excel các tuần cũ ở đây nữa — trước đây tự xoá ngay khi lưu (không hỏi, không ân hạn)
+    // từng làm mất luôn cả những tuần đã "Lưu số liệu tuần này" riêng ở tab Đơn C/DTP khỏi "Lịch sử upload".
+    // Muốn giảm dung lượng thì dùng đúng nút "Lưu số liệu tuần này" ở từng tab — có ân hạn 3 phút + Hoàn tác.
   }
 
   // Lối thoát khi lỡ chọn nhầm tuần so sánh rồi mới lưu — xoá báo cáo đã lưu để quay lại chỉnh sửa trực tiếp
