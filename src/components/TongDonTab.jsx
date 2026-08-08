@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { RefreshCw, ClipboardList, ChevronDown, ChevronUp, Download, Printer, AlertCircle, Upload } from 'lucide-react'
+import { RefreshCw, ClipboardList, ChevronDown, ChevronUp, Download, Printer, AlertCircle, Upload, RotateCcw } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { useWeeklyData } from '../useWeeklyData'
 import { partnerType } from '../utils/partnerType'
@@ -854,6 +854,14 @@ export default function TongDonTab({ onNavigate }) {
     pruneCarrierWeeksToIds('donDTP_viettel', [viettelDTP_current.weekId, viettelDTP_previous.weekId].filter(Boolean))
   }
 
+  // Lối thoát khi lỡ chọn nhầm tuần so sánh rồi mới lưu — xoá báo cáo đã lưu để quay lại chỉnh sửa trực tiếp
+  // (khác với việc cho sửa tự do sau khi lưu: phải xoá hẳn rồi làm lại, có xác nhận trước để tránh xoá nhầm)
+  const deleteReport = () => {
+    if (!window.confirm('Xoá báo cáo đã lưu để chọn lại tuần so sánh và làm lại?\n\nSố liệu/nhận định đã lưu sẽ mất, cần lưu lại từ đầu.')) return
+    setReports([])
+    localStorage.removeItem('tongdon_reports')
+  }
+
   if (loading) {
     return (
       <div className="text-center py-24 text-gray-400">
@@ -868,11 +876,20 @@ export default function TongDonTab({ onNavigate }) {
       <div className="w-full max-w-[1000px] mx-auto flex flex-col gap-8 box-border" style={{ padding: '32px 24px' }}>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {isReadOnly ? (
-            onNavigate && (
-              <button onClick={() => onNavigate('donC')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
-                <Upload size={13} /> Upload tuần mới
+            <>
+              <button
+                onClick={deleteReport}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-200 text-amber-700 rounded-lg text-sm hover:bg-amber-50 bg-white"
+                title="Xoá báo cáo đã lưu để chọn lại tuần so sánh và làm lại (dùng khi lỡ chọn nhầm tuần)"
+              >
+                <RotateCcw size={13} /> Chọn lại & làm lại
               </button>
-            )
+              {onNavigate && (
+                <button onClick={() => onNavigate('donC')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
+                  <Upload size={13} /> Upload tuần mới
+                </button>
+              )}
+            </>
           ) : (
             <button onClick={saveReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
               <ClipboardList size={13} /> Lưu báo cáo tuần này
