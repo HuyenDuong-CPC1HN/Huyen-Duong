@@ -18,7 +18,25 @@ export default function SheetTab({ type }) {
   const [listExpanded, setListExpanded] = useState(false)
   const { weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek, pendingClear, schedulePendingClear, cancelPendingClear } = useWeeklyData(type)
 
-  const rawData = activeWeek ? activeWeek.data : []
+  // Tuần nào đã bấm "Lưu số liệu tuần này" — hiện tag "Đã lưu" trong Lịch sử upload để dễ phân biệt
+  const savedReports = useMemo(() => (merged ? readSheetReports(type) : []), [merged, type, weeks])
+  const savedIds = useMemo(() => savedReports.map(r => r.id), [savedReports])
+
+  // Gộp thêm các tuần CHỈ còn bản đã lưu (Excel gốc đã bị "Lưu báo cáo Tổng đơn" xoá bớt để đỡ tốn dung lượng,
+  // dù bản thân tuần đó đã "Lưu số liệu tuần này" — vẫn phải hiện & chọn lại được ngay từ tab này, không chỉ từ
+  // tab Tổng đơn) — nếu không sẽ trông như mất dữ liệu dù số liệu đã lưu vẫn còn nguyên.
+  const displayWeeks = useMemo(() => {
+    const existingIds = new Set(weeks.map(w => w.id))
+    const savedOnly = savedReports
+      .filter(r => !existingIds.has(r.id))
+      .map(r => ({ id: r.id, label: r.label, fileName: null, uploadedAt: r.createdAt, data: [] }))
+    if (savedOnly.length === 0) return weeks
+    return [...weeks, ...savedOnly].sort((a, b) => new Date(a.uploadedAt) - new Date(b.uploadedAt))
+  }, [weeks, savedReports])
+
+  const activeWeekDisplay = displayWeeks.find(w => w.id === activeId) || activeWeek
+
+  const rawData = activeWeekDisplay ? activeWeekDisplay.data : []
   const loading = false
   const error = null
 
@@ -40,12 +58,9 @@ export default function SheetTab({ type }) {
 
   // Ngày upload của tuần Excel đang chọn — dùng để khớp đúng file VTP/SPX có ngày upload gần nhất
   // (đáng tin cậy hơn đếm vị trí, vì 2 danh sách Excel & VTP/SPX là 2 danh sách upload độc lập)
-  const referenceDate = activeWeek?.uploadedAt || null
+  const referenceDate = activeWeekDisplay?.uploadedAt || null
 
-  // Tuần nào đã bấm "Lưu số liệu tuần này" — hiện tag "Đã lưu" trong Lịch sử upload để dễ phân biệt
-  const savedIds = useMemo(() => (merged ? readSheetReports(type).map(r => r.id) : []), [merged, type, weeks])
-
-  if (weeks.length === 0) {
+  if (displayWeeks.length === 0) {
     return (
       <div>
         <ExcelUpload onData={addWeek} fileName="" onClear={() => {}} />
@@ -90,9 +105,9 @@ export default function SheetTab({ type }) {
         </div>
 
         {/* Week selector */}
-        {weeks.length > 0 && (
+        {displayWeeks.length > 0 && (
           <WeekSelector
-            weeks={weeks}
+            weeks={displayWeeks}
             activeId={activeId}
             savedIds={savedIds}
             onSelect={selectWeek}
@@ -127,7 +142,7 @@ export default function SheetTab({ type }) {
               type={type}
               data={activeData}
               weekId={activeId}
-              weekLabel={activeWeek?.label}
+              weekLabel={activeWeekDisplay?.label}
               referenceDate={referenceDate}
               pendingClear={pendingClear}
               onSaved={id => schedulePendingClear(id)}
