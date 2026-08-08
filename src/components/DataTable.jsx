@@ -41,6 +41,9 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
     else onChange([...selected, opt])
   }
 
+  // Chọn tất cả — chỉ áp dụng cho các giá trị đang hiện ra (theo ô tìm kiếm), không đụng tới lựa chọn đã có sẵn
+  const selectAllVisible = () => onChange([...new Set([...selected, ...filteredOptions])])
+
   const [pasteInfo, setPasteInfo] = useState(null)
 
   const handlePaste = (e) => {
@@ -74,9 +77,14 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100">
             <span className="text-xs text-gray-400">{selected.length > 0 ? `${selected.length} đã chọn` : 'Chọn giá trị'}</span>
-            {selected.length > 0 && (
-              <button onClick={() => onChange([])} className="text-xs text-blue-500 hover:text-blue-700">Bỏ tất cả</button>
-            )}
+            <div className="flex items-center gap-2">
+              {filteredOptions.length > 0 && (
+                <button onClick={selectAllVisible} className="text-xs text-blue-500 hover:text-blue-700">Chọn tất cả</button>
+              )}
+              {selected.length > 0 && (
+                <button onClick={() => onChange([])} className="text-xs text-blue-500 hover:text-blue-700">Bỏ tất cả</button>
+              )}
+            </div>
           </div>
           {/* Search / paste box */}
           <div className="px-2 py-1.5 border-b border-gray-100">
