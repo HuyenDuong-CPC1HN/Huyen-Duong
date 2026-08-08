@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { List, BarChart2, Truck, ChevronDown, ChevronUp } from 'lucide-react'
 import { useWeeklyData } from '../useWeeklyData'
 import DataTable, { VC_KEY } from './DataTable'
@@ -7,7 +7,7 @@ import ThongKeDoiTac from './ThongKeDoiTac'
 import ExcelUpload from './ExcelUpload'
 import WeekSelector from './WeekSelector'
 import SheetReportPanel from './SheetReportPanel'
-import { readSheetReports } from '../utils/sheetReports'
+import { readSheetReports, renameSheetReport, removeSheetReport } from '../utils/sheetReports'
 
 // Gộp Danh sách + Thống kê giao hàng + Đối tác VC thành 1 tab, danh sách chi tiết thu gọn mặc định
 const MERGE_LIST_PARTNER = type => type === 'donC' || type === 'donDTP'
@@ -18,9 +18,27 @@ export default function SheetTab({ type }) {
   const [listExpanded, setListExpanded] = useState(false)
   const { weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek, pendingClear, schedulePendingClear, cancelPendingClear } = useWeeklyData(type)
 
-  // Tuần nào đã bấm "Lưu số liệu tuần này" — hiện tag "Đã lưu" trong Lịch sử upload để dễ phân biệt
-  const savedReports = useMemo(() => (merged ? readSheetReports(type) : []), [merged, type, weeks])
+  // Tuần nào đã bấm "Lưu số liệu tuần này" — hiện tag "Đã lưu" trong Lịch sử upload để dễ phân biệt.
+  // Giữ ở state riêng (không chỉ useMemo) để có thể cập nhật ngay sau khi đổi tên/xoá 1 tuần chỉ còn bản đã lưu
+  // (Excel gốc không còn nên không thể sửa qua renameWeek/removeWeek thường, phải sửa thẳng vào bản đã lưu).
+  const [savedReports, setSavedReports] = useState(() => (merged ? readSheetReports(type) : []))
+  // Khi Excel gốc của 1 tuần bị xoá sau ân hạn (weeks đổi), đọc lại để tag "Đã lưu"/danh sách gộp cập nhật đúng
+  useEffect(() => {
+    setSavedReports(merged ? readSheetReports(type) : [])
+  }, [merged, type, weeks])
   const savedIds = useMemo(() => savedReports.map(r => r.id), [savedReports])
+
+  // Đổi tên/xoá: nếu tuần còn Excel gốc thì dùng đúng luồng cũ (renameWeek/removeWeek); nếu chỉ còn bản đã lưu
+  // (không có trong weeks) thì phải sửa/xoá thẳng trong sheet_reports_${type}, rồi cập nhật lại state để hiện ngay.
+  const existingWeekIds = useMemo(() => new Set(weeks.map(w => w.id)), [weeks])
+  const renameAny = (id, label) => {
+    if (existingWeekIds.has(id)) { renameWeek(id, label); return }
+    setSavedReports(renameSheetReport(type, id, label))
+  }
+  const removeAny = (id) => {
+    if (existingWeekIds.has(id)) { removeWeek(id); return }
+    setSavedReports(removeSheetReport(type, id))
+  }
 
   // Gộp thêm các tuần CHỈ còn bản đã lưu (Excel gốc đã bị "Lưu báo cáo Tổng đơn" xoá bớt để đỡ tốn dung lượng,
   // dù bản thân tuần đó đã "Lưu số liệu tuần này" — vẫn phải hiện & chọn lại được ngay từ tab này, không chỉ từ
@@ -111,8 +129,8 @@ export default function SheetTab({ type }) {
             activeId={activeId}
             savedIds={savedIds}
             onSelect={selectWeek}
-            onRemove={removeWeek}
-            onRename={renameWeek}
+            onRemove={removeAny}
+            onRename={renameAny}
           />
         )}
 

@@ -37,6 +37,12 @@ export function relinkSheetReportCarrier(type, weekId, { viettelWeekId, spxWeekI
   return next
 }
 
+export function renameSheetReport(type, id, label) {
+  const next = readSheetReports(type).map(r => r.id === id ? { ...r, label } : r)
+  localStorage.setItem(storageKey(type), JSON.stringify(next))
+  return next
+}
+
 export function removeSheetReport(type, id) {
   const next = readSheetReports(type).filter(r => r.id !== id)
   localStorage.setItem(storageKey(type), JSON.stringify(next))
