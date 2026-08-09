@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { opsStore as localStorage } from '../data/workspace'
 import { Plus, Trash2, BarChart2, X, Save } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 

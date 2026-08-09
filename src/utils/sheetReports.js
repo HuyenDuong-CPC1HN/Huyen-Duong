@@ -1,3 +1,5 @@
+import { opsStore as localStorage } from '../data/workspace'
+
 // ---- Số liệu đã "chốt" theo tuần cho tab Đơn C / Đơn DTP ----
 // Khi người dùng bấm "Lưu số liệu tuần này", các số tính được từ file Excel gốc (mốc giao 24h/48h/72h
 // của Giao hàng trực tiếp, số đơn Chành xe) được đóng băng vào đây — sau đó file Excel gốc có thể xoá

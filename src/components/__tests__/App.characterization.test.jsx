@@ -1,32 +1,44 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
 
-vi.mock('../../firebase', () => ({ auth: {} }))
-
-vi.mock('firebase/auth', () => ({
-  onAuthStateChanged: (_auth, callback) => {
-    callback({ email: 'operations@cpc1hn.com' })
-    return () => {}
-  },
-  signOut: vi.fn(),
+const authMocks = vi.hoisted(() => ({ getSession: vi.fn(), onAuthStateChange: vi.fn() }))
+vi.mock('../../supabase', () => ({
+  supabaseConfigReady: true,
+  supabaseMissingEnv: [],
+  assertCloudAvailable: vi.fn().mockResolvedValue(undefined),
+  supabase: { auth: { getSession: authMocks.getSession, onAuthStateChange: authMocks.onAuthStateChange, signOut: vi.fn() } },
 }))
-
-vi.mock('../../cloudSync', () => ({
-  hydrateLocalStorageFromCloud: vi.fn().mockResolvedValue(undefined),
-  startCloudSync: vi.fn(),
-  pushAllLocalStorageToCloud: vi.fn().mockResolvedValue(0),
+const workspaceMocks = vi.hoisted(() => {
+  const values = new Map()
+  return {
+    clear: () => values.clear(),
+    opsStore: {
+      getItem: key => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, String(value)); return Promise.resolve() },
+      removeItem: key => { values.delete(key); return Promise.resolve() },
+    },
+  }
+})
+vi.mock('../../data/workspace', () => ({
+  loadWorkspace: vi.fn().mockResolvedValue(undefined),
+  clearWorkspaceCache: workspaceMocks.clear,
+  opsStore: workspaceMocks.opsStore,
 }))
 
 describe('authenticated application shell', () => {
+  beforeEach(() => {
+    authMocks.getSession.mockResolvedValue({ data: { session: { user: { email: 'operations@cpc1hn.com' } } }, error: null })
+    authMocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+  })
   afterEach(() => {
     cleanup()
-    localStorage.clear()
+    workspaceMocks.clear()
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
   })
 
   it('opens on a calm operations brief with status, exceptions, then actions', async () => {
-    localStorage.setItem('weeks_donC', '{malformed')
+    workspaceMocks.opsStore.setItem('weeks_donC', '{malformed')
     render(<App />)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })).toBeInTheDocument()
@@ -45,25 +57,25 @@ describe('authenticated application shell', () => {
   })
 
   it('shows only saved values and flags an active week that has not been saved', async () => {
-    localStorage.setItem(
+    workspaceMocks.opsStore.setItem(
       'weeks_donC',
       JSON.stringify([{ id: 'c-1', label: 'Tuần 32 · Đơn C', data: [{ id: 1 }] }]),
     )
-    localStorage.setItem('activeWeek_donC', 'c-1')
-    localStorage.setItem(
+    workspaceMocks.opsStore.setItem('activeWeek_donC', 'c-1')
+    workspaceMocks.opsStore.setItem(
       'sheet_reports_donC',
       JSON.stringify([{ id: 'c-1', label: 'Tuần 32 · Đơn C', b24: 316 }]),
     )
-    localStorage.setItem(
+    workspaceMocks.opsStore.setItem(
       'weeks_donDTP',
       JSON.stringify([{ id: 'd-1', label: 'Tuần 32 · Đơn DTP', data: [{ id: 2 }] }]),
     )
-    localStorage.setItem('activeWeek_donDTP', 'd-1')
-    localStorage.setItem(
+    workspaceMocks.opsStore.setItem('activeWeek_donDTP', 'd-1')
+    workspaceMocks.opsStore.setItem(
       'tmdt_reports',
       JSON.stringify([{ id: 't-1', label: '04/08 – 10/08', total: 92 }]),
     )
-    localStorage.setItem(
+    workspaceMocks.opsStore.setItem(
       'tongdon_reports',
       JSON.stringify([
         { id: 'all-1', label: 'Tuần 32', current: { grandTotal: 1450 } },
@@ -82,10 +94,10 @@ describe('authenticated application shell', () => {
   })
 
   it('shows a clear week and offers n8n only when every channel has saved data', async () => {
-    localStorage.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 316 }]))
-    localStorage.setItem('sheet_reports_donDTP', JSON.stringify([{ id: 'd-1', b24: 144 }]))
-    localStorage.setItem('tmdt_reports', JSON.stringify([{ id: 't-1', total: 92 }]))
-    localStorage.setItem(
+    workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 316 }]))
+    workspaceMocks.opsStore.setItem('sheet_reports_donDTP', JSON.stringify([{ id: 'd-1', b24: 144 }]))
+    workspaceMocks.opsStore.setItem('tmdt_reports', JSON.stringify([{ id: 't-1', total: 92 }]))
+    workspaceMocks.opsStore.setItem(
       'tongdon_reports',
       JSON.stringify([{ id: 'all-1', current: { grandTotal: 1450 } }]),
     )
@@ -102,8 +114,8 @@ describe('authenticated application shell', () => {
   })
 
   it('treats invalid storage entries as missing instead of crashing the brief', async () => {
-    localStorage.setItem('weeks_donC', JSON.stringify([null]))
-    localStorage.setItem('sheet_reports_donC', JSON.stringify([null]))
+    workspaceMocks.opsStore.setItem('weeks_donC', JSON.stringify([null]))
+    workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([null]))
 
     render(<App />)
 

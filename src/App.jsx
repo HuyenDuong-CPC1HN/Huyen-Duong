@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose } from 'lucide-react'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { auth } from './firebase'
-import { hydrateLocalStorageFromCloud, startCloudSync, pushAllLocalStorageToCloud } from './cloudSync'
+import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
+import { loadWorkspace } from './data/workspace'
 import SheetTab from './components/SheetTab'
 import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
@@ -37,24 +36,74 @@ const BREADCRUMB = {
 }
 
 export default function App() {
-  const [authState, setAuthState] = useState('checking') // checking | loggedOut | syncing | ready
+  const [authState, setAuthState] = useState('checking') // checking | loggedOut | syncing | ready | blocked
   const [user, setUser] = useState(null)
+  const [blockingError, setBlockingError] = useState('')
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
-        setUser(null)
-        setAuthState('loggedOut')
+    const block = (event) => {
+      setBlockingError(event.detail || 'Không thể ghi dữ liệu lên Supabase.')
+      setAuthState('blocked')
+    }
+    window.addEventListener('ops-store-error', block)
+    return () => window.removeEventListener('ops-store-error', block)
+  }, [])
+
+  useEffect(() => {
+    if (!supabaseConfigReady || !supabase) return undefined
+    let active = true
+    const openWorkspace = async (session) => {
+      if (!session) {
+        if (active) { setUser(null); setAuthState('loggedOut') }
         return
       }
-      setUser(u)
-      setAuthState('syncing')
-      await hydrateLocalStorageFromCloud()
-      startCloudSync()
-      setAuthState('ready')
-    })
-    return unsub
+      if (active) { setUser(session.user); setAuthState('syncing') }
+      try {
+        await assertCloudAvailable(supabase)
+        await loadWorkspace(supabase)
+        if (active) setAuthState('ready')
+      } catch (error) {
+        if (active) {
+          setBlockingError(error.message || 'Không thể kết nối dữ liệu đám mây.')
+          setAuthState('blocked')
+        }
+      }
+    }
+    const boot = async () => {
+      try {
+        await assertCloudAvailable(supabase)
+        const { data, error } = await supabase.auth.getSession()
+        if (error) throw error
+        await openWorkspace(data.session)
+      } catch (error) {
+        if (active) {
+          setBlockingError(error.message || 'Ứng dụng chỉ hoạt động khi có Internet.')
+          setAuthState('blocked')
+        }
+      }
+    }
+    void boot()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { void openWorkspace(session) })
+    return () => { active = false; subscription.unsubscribe() }
   }, [])
+
+  if (!supabaseConfigReady) {
+    return (
+      <div className="app-loading-state" role="alert">
+        <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
+        <strong>Thiếu cấu hình Supabase</strong>
+        <span>
+          Build production chưa có biến môi trường Vite. Thêm các key sau trên Vercel (Production)
+          rồi Redeploy:
+        </span>
+        <ul style={{ textAlign: 'left', margin: 0, paddingLeft: 18, color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+          {supabaseMissingEnv.map((key) => (
+            <li key={key}><code>{key}</code></li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
 
   if (authState === 'checking') {
     return (
@@ -70,12 +119,23 @@ export default function App() {
     return <Login />
   }
 
+  if (authState === 'blocked') {
+    return (
+      <div className="app-loading-state" role="alert">
+        <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
+        <strong>Ứng dụng chỉ hoạt động khi có Internet</strong>
+        <span>{blockingError}</span>
+        <span>Kiểm tra kết nối mạng và trạng thái Supabase, sau đó tải lại trang.</span>
+      </div>
+    )
+  }
+
   if (authState === 'syncing') {
     return (
       <div className="app-loading-state" role="status" aria-live="polite">
         <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
         <RefreshCw size={22} className="animate-spin" aria-hidden="true" />
-        <span>Đang đồng bộ dữ liệu...</span>
+        <span>Đang tải không gian làm việc trên đám mây...</span>
       </div>
     )
   }
@@ -89,20 +149,11 @@ function AppContent({ user }) {
     () => typeof window === 'undefined' || window.innerWidth >= 900,
   )
   const [expanded, setExpanded] = useState({ baocao: true })
-  const [pushStatus, setPushStatus] = useState('idle') // idle | pushing | done
   const menuTriggerRef = useRef(null)
 
   const closeSidebar = () => {
     setSidebarOpen(false)
     requestAnimationFrame(() => menuTriggerRef.current?.focus())
-  }
-
-  const handlePushAll = async () => {
-    setPushStatus('pushing')
-    const count = await pushAllLocalStorageToCloud()
-    setPushStatus('done')
-    alert(`Đã đẩy ${count} mục dữ liệu lên đám mây.`)
-    setTimeout(() => setPushStatus('idle'), 2000)
   }
 
   const crumbs = BREADCRUMB[active] || []
@@ -206,17 +257,7 @@ function AppContent({ user }) {
           <div className="dashboard-account-email">{user?.email}</div>
           <button
             type="button"
-            onClick={handlePushAll}
-            disabled={pushStatus === 'pushing'}
-            className="dashboard-account-action"
-            title="Đẩy toàn bộ dữ liệu trên máy này lên đám mây (dùng khi máy này có dữ liệu cũ chưa đồng bộ)"
-          >
-            <RefreshCw size={16} className={pushStatus === 'pushing' ? 'animate-spin' : ''} aria-hidden="true" />
-            {pushStatus === 'pushing' ? 'Đang đồng bộ...' : 'Đồng bộ toàn bộ dữ liệu'}
-          </button>
-          <button
-            type="button"
-            onClick={() => signOut(auth)}
+            onClick={() => supabase.auth.signOut()}
             className="dashboard-account-action is-logout"
           >
             <LogOut size={16} aria-hidden="true" /> Đăng xuất

@@ -7,13 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test",
+    "test": "node --test test/xlsx-security.test.js scripts/__tests__/migrate-firestore-to-supabase.test.mjs",
     "test:ui": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
     "@tanstack/react-table": "^8.21.3",
-    "firebase": "^12.16.0",
     "html-to-image": "^1.11.13",
     "lucide-react": "^1.21.0",
     "react": "^19.2.6",
@@ -32,6 +32,7 @@
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "firebase-admin": "^14.2.0",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.1",

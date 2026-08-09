@@ -9,6 +9,7 @@ import {
   ShoppingBag,
   Truck,
 } from 'lucide-react'
+import { opsStore as localStorage } from '../data/workspace'
 
 const STATUS = {
   ready: {

@@ -12,15 +12,15 @@
 ## Nguồn dữ liệu (quan trọng, dễ nhầm)
 - Dữ liệu "sống" của Đơn C / Đơn DTP lấy từ Google Sheets (CSV export, `useSheetData.js`).
 - Người dùng có thể **upload file Excel theo từng tuần** (`useWeeklyData.js`) — khi có tuần đang chọn (`activeWeek`), dữ liệu Excel ưu tiên hơn Google Sheets. Mỗi tuần có `id` riêng (`${type}_${timestamp}`).
-- **Quy ước bắt buộc**: mọi số liệu nhập tay/tính toán gắn với 1 tuần cụ thể (chưa giao, ghi chú, dữ liệu carrier...) PHẢI lưu localStorage theo key có gắn `weekId` (hoặc `'live'` khi không có tuần active), KHÔNG được dùng key chung — nếu không sẽ bị "ghi đè" giữa các tuần (đã từng là bug lớn, sửa nhiều lần).
+- **Quy ước bắt buộc**: mọi số liệu nhập tay/tính toán gắn với một tuần cụ thể (chưa giao, ghi chú, dữ liệu carrier...) PHẢI dùng key Supabase `ops_settings` có gắn `weekId` (hoặc `'live'` khi không có tuần active), KHÔNG dùng key chung — nếu không sẽ ghi đè giữa các tuần.
 - Excel upload (`ExcelUpload.jsx`) đọc cột ngày bằng `raw:true` lấy `Date` object thật, tự format lại `dd/mm/yyyy` — KHÔNG dùng chuỗi hiển thị của Excel vì có thể lệch định dạng Mỹ (m/d) vs Việt (d/m), từng gây sai lệch nghiêm trọng số liệu 24h/48h/72h.
 
-## Cloud sync (Firebase)
-- `src/firebase.js`: config Firebase project `huyen-duong-cpc1hn`.
-- `src/cloudSync.js`: monkey-patch `localStorage.setItem/removeItem` — mọi ghi/xoá localStorage tự động đồng bộ lên Firestore collection `kvstore` (key gốc → 1 document, ghi đè chứ không nhân bản).
-- Đăng nhập bắt buộc (`Login.jsx`, Firebase Auth email/password) — bảo mật vì config Firebase lộ công khai trong bundle JS của GitHub Pages. Firestore rules: `allow read, write: if request.auth != null`.
-- Nút "Đồng bộ toàn bộ dữ liệu" (sidebar) = đẩy toàn bộ localStorage hiện có lên cloud 1 lần (dùng khi máy có dữ liệu cũ chưa từng sync).
-- **Chuyển máy/tài khoản Claude khác**: code nằm trên GitHub, dữ liệu nằm trên Firebase — cả 2 đều độc lập với tài khoản Claude. Chỉ cần `git clone` + `npm install` là đủ code; đăng nhập đúng tài khoản là thấy đủ dữ liệu.
+## Cloud data (Supabase)
+- `src/supabase.js`: Supabase Auth dùng `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`; thiếu biến hiển thị màn hình cấu hình thay vì white-screen.
+- `src/data/*`: Postgres metadata và private Storage bucket `ops-files` là nguồn sự thật; không có monkey-patch hay fallback local/offline.
+- Đăng nhập bắt buộc qua Supabase email/password. RLS v1 cho shared org: mọi user `authenticated` cùng đọc/ghi dữ liệu vận hành.
+- Mất mạng hoặc Supabase lỗi: chặn workspace bằng thông báo tiếng Việt. Service role chỉ thuộc script migrate chạy local một lần.
+- **Chuyển máy/tài khoản Claude khác**: `git clone` + `npm install`, cấu hình env Supabase và đăng nhập đúng user để thấy dữ liệu chung.
 
 ## Cấu trúc phân loại đơn hàng
 - `src/utils/partnerType.js`: phân loại mỗi dòng đơn theo cột "Đối tác vận chuyển" → `'tructiep' | 'viettel' | 'spx' | 'chanhxe'`. Có `CHANHXE_EXCEPTIONS` cho vài tên đối tác chứa "Trực tiếp" nhưng thực chất là chành xe.
@@ -36,7 +36,7 @@
 
 ## Tab Tổng đơn — `src/components/TongDonTab.jsx`
 - "Tuần này" = tuần đang active ở Đơn C/DTP (mới nhất). "Tuần trước" = tuần liền kề trước đó. Đừng nhầm ngược lại (đã từng bị yêu cầu đổi 1 lần).
-- Có tính năng **lưu báo cáo cố định**: nút "Lưu báo cáo tuần này" đóng băng toàn bộ số liệu + nhận định/giải pháp thành 1 bản ghi trong `tongdon_reports` (localStorage), xem lại qua thanh "Lịch sử báo cáo", không bị ảnh hưởng khi dữ liệu sau này thay đổi.
+- Có tính năng **lưu báo cáo cố định**: nút "Lưu báo cáo tuần này" đóng băng toàn bộ số liệu + nhận định/giải pháp thành một bản ghi Postgres `tongdon_reports`, xem lại qua thanh "Lịch sử báo cáo", không bị ảnh hưởng khi dữ liệu sau này thay đổi.
 - Biểu đồ sản lượng dùng cột ngang (horizontal bar), có label số liệu hiện trực tiếp trên cột.
 
 ## Quy ước làm việc với người dùng

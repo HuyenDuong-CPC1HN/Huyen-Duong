@@ -1,4 +1,5 @@
 import { useState, useEffect, useId, useRef } from 'react'
+import { opsStore as localStorage } from '../data/workspace'
 import { toPng } from 'html-to-image'
 import { ClipboardList, ArrowRight, CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, ChevronDown, ChevronUp, RefreshCw, RotateCcw, XCircle, Download, Printer } from 'lucide-react'
 import { partnerType } from '../utils/partnerType'

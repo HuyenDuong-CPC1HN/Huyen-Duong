@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { opsStore as localStorage } from '../data/workspace'
 import { List, BarChart2, Truck, ChevronDown, ChevronUp } from 'lucide-react'
 import { useWeeklyData } from '../useWeeklyData'
 import DataTable, { VC_KEY } from './DataTable'

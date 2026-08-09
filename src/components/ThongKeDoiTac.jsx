@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { opsStore as localStorage } from '../data/workspace'
 import { ChevronDown, ChevronUp, Package, CheckCircle, TrendingUp } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 import { partnerType } from '../utils/partnerType'

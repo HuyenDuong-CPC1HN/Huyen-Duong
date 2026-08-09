@@ -1,14 +1,11 @@
 import { useState } from 'react'
-import { signInWithEmailAndPassword } from 'firebase/auth'
 import { Eye, EyeOff, LogIn, Loader2 } from 'lucide-react'
-import { auth } from '../firebase'
+import { supabase } from '../supabase'
 import cpcLogo from '../assets/cpc1hn_logo.png'
 
 const ERROR_MESSAGES = {
-  'auth/invalid-credential': 'Email hoặc mật khẩu không đúng.',
-  'auth/invalid-email': 'Email không hợp lệ.',
-  'auth/too-many-requests': 'Bạn đã thử sai quá nhiều lần, vui lòng thử lại sau.',
-  'auth/network-request-failed': 'Lỗi kết nối mạng, vui lòng kiểm tra lại internet.',
+  'invalid_credentials': 'Email hoặc mật khẩu không đúng.',
+  'email_not_confirmed': 'Email chưa được xác nhận. Vui lòng liên hệ quản trị viên.',
 }
 
 export default function Login() {
@@ -23,7 +20,8 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password)
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      if (signInError) throw signInError
     } catch (err) {
       setError(ERROR_MESSAGES[err.code] || 'Đăng nhập thất bại. Vui lòng thử lại.')
     } finally {

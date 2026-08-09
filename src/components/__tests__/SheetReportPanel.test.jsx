@@ -1,6 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SheetReportPanel from '../SheetReportPanel'
+
+const store = vi.hoisted(() => {
+  const values = new Map()
+  return { values, api: { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) } }
+})
+vi.mock('../../data/workspace', () => ({ opsStore: store.api }))
 
 const snapshot = {
   id: 'donC_week_1',
@@ -24,10 +30,10 @@ const snapshot = {
 
 describe('saved Đơn C report presentation', () => {
   beforeEach(() => {
-    localStorage.clear()
-    localStorage.setItem('sheet_reports_donC', JSON.stringify([snapshot]))
-    localStorage.setItem('chuagiao_kh_donC_tructIep_donC_week_1', JSON.stringify({ bv: 16, nt: 3 }))
-    localStorage.setItem('chuagiao_override_donC_chanhXe_donC_week_1_chuagui', '11')
+    store.values.clear()
+    store.api.setItem('sheet_reports_donC', JSON.stringify([snapshot]))
+    store.api.setItem('chuagiao_kh_donC_tructIep_donC_week_1', JSON.stringify({ bv: 16, nt: 3 }))
+    store.api.setItem('chuagiao_override_donC_chanhXe_donC_week_1_chuagui', '11')
   })
 
   it('preserves business totals and exposes report sections as disclosures', () => {
