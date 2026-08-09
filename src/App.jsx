@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose } from 'lucide-react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from './firebase'
 import { hydrateLocalStorageFromCloud, startCloudSync, pushAllLocalStorageToCloud } from './cloudSync'
@@ -8,6 +8,7 @@ import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
+import cpcLogo from './assets/cpc1hn_logo.png'
 
 const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
@@ -56,8 +57,10 @@ export default function App() {
 
   if (authState === 'checking') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <RefreshCw size={28} className="animate-spin text-gray-400" />
+      <div className="app-loading-state" role="status" aria-live="polite">
+        <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
+        <RefreshCw size={22} className="animate-spin" aria-hidden="true" />
+        <span>Đang khởi tạo ứng dụng...</span>
       </div>
     )
   }
@@ -68,9 +71,10 @@ export default function App() {
 
   if (authState === 'syncing') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 gap-3">
-        <RefreshCw size={28} className="animate-spin text-[#1e3a5f]" />
-        <p className="text-sm text-gray-500">Đang đồng bộ dữ liệu...</p>
+      <div className="app-loading-state" role="status" aria-live="polite">
+        <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
+        <RefreshCw size={22} className="animate-spin" aria-hidden="true" />
+        <span>Đang đồng bộ dữ liệu...</span>
       </div>
     )
   }
@@ -80,9 +84,17 @@ export default function App() {
 
 function AppContent({ user }) {
   const [active, setActive] = useState('donC')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 900,
+  )
   const [expanded, setExpanded] = useState({ baocao: true })
   const [pushStatus, setPushStatus] = useState('idle') // idle | pushing | done
+  const menuTriggerRef = useRef(null)
+
+  const closeSidebar = () => {
+    setSidebarOpen(false)
+    requestAnimationFrame(() => menuTriggerRef.current?.focus())
+  }
 
   const handlePushAll = async () => {
     setPushStatus('pushing')
@@ -93,6 +105,7 @@ function AppContent({ user }) {
   }
 
   const crumbs = BREADCRUMB[active] || []
+  const pageTitle = crumbs.at(-1) || 'CPC1HN'
 
   const handleNav = (id, hasChildren) => {
     if (hasChildren) {
@@ -103,51 +116,67 @@ function AppContent({ user }) {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="dashboard-shell">
+      <a className="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="dashboard-sidebar-scrim is-visible"
+          onClick={closeSidebar}
+          aria-label="Đóng menu"
+        />
+      )}
 
       {/* Sidebar */}
-      <aside className={`shrink-0 flex flex-col bg-[#1e3a5f] text-white transition-all duration-300 ${sidebarOpen ? 'w-56' : 'w-0 overflow-hidden'}`}>
+      <aside
+        id="primary-sidebar"
+        className={`dashboard-sidebar ${sidebarOpen ? 'is-open' : 'is-closed'}`}
+        aria-hidden={!sidebarOpen}
+        inert={!sidebarOpen}
+      >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
-          <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center shrink-0">
-            <span className="text-[#1e3a5f] font-bold text-xs">CPC</span>
-          </div>
-          <span className="font-bold text-base tracking-wide whitespace-nowrap">CPC1HN</span>
+        <div className="dashboard-brand">
+          <img src={cpcLogo} alt="CPC1HN" width="104" height="108" />
+          <button type="button" className="dashboard-sidebar-close" onClick={closeSidebar} aria-label="Đóng menu">
+            <X size={18} />
+          </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-3 overflow-y-auto">
+        <nav className="dashboard-nav" aria-label="Điều hướng chính">
           {NAV.map(item => {
             const Icon = item.icon
             const hasChildren = !!item.children
             const isExpanded = expanded[item.id]
             const isActive = active === item.id
+            const isSectionActive = isActive || item.children?.some(child => child.id === active)
 
             return (
-              <div key={item.id}>
+              <div key={item.id} className="dashboard-nav-group">
                 {/* Parent item */}
                 <button
                   type="button"
                   onClick={() => handleNav(item.id, hasChildren)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors whitespace-nowrap ${
-                    isActive
-                      ? 'bg-white/15 text-white font-medium border-l-4 border-teal-400'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white border-l-4 border-transparent'
-                  }`}
+                  className={`dashboard-nav-item ${isSectionActive ? 'is-active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-expanded={hasChildren ? isExpanded : undefined}
+                  aria-controls={hasChildren ? `nav-group-${item.id}` : undefined}
                 >
-                  <Icon size={16} className="shrink-0" />
-                  <span className="flex-1 text-left">{item.label}</span>
+                  <Icon size={18} className="shrink-0" aria-hidden="true" />
+                  <span>{item.label}</span>
                   {hasChildren && (
                     <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                      size={15}
+                      className={`dashboard-nav-chevron ${isExpanded ? 'is-expanded' : ''}`}
+                      aria-hidden="true"
                     />
                   )}
                 </button>
 
                 {/* Children */}
                 {hasChildren && isExpanded && (
-                  <div className="bg-black/20">
+                  <div id={`nav-group-${item.id}`} className="dashboard-nav-children">
                     {item.children.map(child => {
                       const ChildIcon = child.icon
                       const isChildActive = active === child.id
@@ -155,16 +184,12 @@ function AppContent({ user }) {
                         <button
                           type="button"
                           key={child.id}
-                          onClick={() => setActive(child.id)}
-                          className={`w-full flex items-center gap-3 pr-4 py-2 text-sm transition-colors whitespace-nowrap ${
-                            isChildActive
-                              ? 'bg-white/15 text-white font-medium border-l-4 border-teal-400'
-                              : 'text-white/60 hover:bg-white/10 hover:text-white border-l-4 border-transparent'
-                          }`}
+                          onClick={() => { setActive(child.id); if (window.innerWidth < 900) closeSidebar() }}
+                          className={`dashboard-nav-child ${isChildActive ? 'is-active' : ''}`}
+                          aria-current={isChildActive ? 'page' : undefined}
                         >
-                          <span style={{ width: 28, flexShrink: 0 }} />
-                          <ChildIcon size={14} className="shrink-0" />
-                          {child.label}
+                          <ChildIcon size={16} aria-hidden="true" />
+                          <span>{child.label}</span>
                         </button>
                       )
                     })}
@@ -175,51 +200,63 @@ function AppContent({ user }) {
           })}
         </nav>
 
-        <div className="px-4 py-3 border-t border-white/10">
-          <div className="text-xs text-white/40 truncate mb-2">{user?.email}</div>
+        <div className="dashboard-account">
+          <div className="dashboard-account-label">Đang đăng nhập</div>
+          <div className="dashboard-account-email">{user?.email}</div>
           <button
             type="button"
             onClick={handlePushAll}
             disabled={pushStatus === 'pushing'}
-            className="w-full flex items-center gap-2 text-xs text-white/50 hover:text-white/90 transition-colors mb-2 disabled:opacity-50"
+            className="dashboard-account-action"
             title="Đẩy toàn bộ dữ liệu trên máy này lên đám mây (dùng khi máy này có dữ liệu cũ chưa đồng bộ)"
           >
-            <RefreshCw size={13} className={pushStatus === 'pushing' ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={pushStatus === 'pushing' ? 'animate-spin' : ''} aria-hidden="true" />
             {pushStatus === 'pushing' ? 'Đang đồng bộ...' : 'Đồng bộ toàn bộ dữ liệu'}
           </button>
           <button
             type="button"
             onClick={() => signOut(auth)}
-            className="w-full flex items-center gap-2 text-xs text-white/50 hover:text-white/90 transition-colors"
+            className="dashboard-account-action is-logout"
           >
-            <LogOut size={13} /> Đăng xuất
+            <LogOut size={16} aria-hidden="true" /> Đăng xuất
           </button>
         </div>
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="dashboard-workspace">
         {/* Header */}
-        <header className="shrink-0 bg-white border-b border-gray-200 shadow-sm">
-          <div className="flex items-center gap-3 px-4 h-12">
-            <button type="button" onClick={() => setSidebarOpen(o => !o)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500">
-              {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+        <header className="dashboard-header">
+          <div className="dashboard-header-inner">
+            <button
+              ref={menuTriggerRef}
+              type="button"
+              onClick={() => setSidebarOpen(o => !o)}
+              className="dashboard-menu-trigger"
+              aria-controls="primary-sidebar"
+              aria-expanded={sidebarOpen}
+              aria-label={sidebarOpen ? 'Thu gọn menu' : 'Mở menu'}
+            >
+              {sidebarOpen ? <PanelLeftClose size={20} /> : <Menu size={20} />}
             </button>
-            <nav className="flex items-center gap-1 text-sm text-gray-500">
-              {crumbs.map((c, i) => (
-                <span key={c} className="flex items-center gap-1">
-                  {i > 0 && <ChevronRight size={13} className="text-gray-300" />}
-                  <span className={i === crumbs.length - 1 ? 'text-gray-800 font-medium' : ''}>{c}</span>
-                </span>
-              ))}
-            </nav>
+            <div className="dashboard-page-context">
+              <nav className="dashboard-breadcrumb" aria-label="Đường dẫn trang">
+                {crumbs.map((c, i) => (
+                  <span key={c} className="dashboard-breadcrumb-item">
+                    {i > 0 && <ChevronRight size={13} aria-hidden="true" />}
+                    <span aria-current={i === crumbs.length - 1 ? 'page' : undefined}>{c}</span>
+                  </span>
+                ))}
+              </nav>
+              <h1>{pageTitle}</h1>
+            </div>
           </div>
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto p-5">
+        <main id="main-content" className="dashboard-main" tabIndex="-1">
           {active === 'home' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="dashboard-home-grid">
               {NAV.find(n => n.id === 'baocao').children.map(item => {
                 const Icon = item.icon
                 return (
@@ -227,13 +264,13 @@ function AppContent({ user }) {
                     type="button"
                     key={item.id}
                     onClick={() => { setActive(item.id); setExpanded(e => ({ ...e, baocao: true })) }}
-                    className="bg-white rounded-xl border border-gray-200 p-6 text-left hover:shadow-md hover:border-blue-300 transition-all group"
+                    className="dashboard-home-card"
                   >
-                    <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center mb-3 group-hover:bg-blue-100">
-                      <Icon size={22} className="text-blue-600" />
+                    <div className="dashboard-home-icon">
+                      <Icon size={22} aria-hidden="true" />
                     </div>
-                    <div className="font-semibold text-gray-800">{item.label}</div>
-                    <div className="text-sm text-gray-400 mt-1">Xem danh sách đơn hàng →</div>
+                    <div className="dashboard-home-title">{item.label}</div>
+                    <div className="dashboard-home-copy">Xem báo cáo và danh sách đơn hàng</div>
                   </button>
                 )
               })}

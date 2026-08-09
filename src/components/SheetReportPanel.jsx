@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import { toPng } from 'html-to-image'
 import { ClipboardList, ArrowRight, CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, ChevronDown, ChevronUp, RefreshCw, RotateCcw, XCircle, Download, Printer } from 'lucide-react'
 import { partnerType } from '../utils/partnerType'
@@ -10,13 +10,13 @@ import {
 } from './CarrierStats'
 
 const CARRIER_STAT_CARDS = [
-  { key: '24h',           label: '≤ 24 giờ',        icon: CheckCircle, cls: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
-  { key: '48h',           label: '≤ 48 giờ',        icon: CheckCircle, cls: 'text-teal-600',   bg: 'bg-teal-50 border-teal-200' },
-  { key: '72h',           label: '≤ 72 giờ',        icon: Clock,       cls: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  { key: 'dangVanChuyen', label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200' },
-  { key: 'choLay',        label: 'Chờ lấy',         icon: Package,     cls: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
-  { key: 'giaoLai',       label: 'Đang giao hàng',  icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
-  { key: 'hoanHang',      label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
+  { key: '24h',           label: '≤ 24 giờ',        icon: CheckCircle, cls: 'text-green-600' },
+  { key: '48h',           label: '≤ 48 giờ',        icon: CheckCircle, cls: 'text-teal-600' },
+  { key: '72h',           label: '≤ 72 giờ',        icon: Clock,       cls: 'text-blue-600' },
+  { key: 'dangVanChuyen', label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600' },
+  { key: 'choLay',        label: 'Chờ lấy',         icon: Package,     cls: 'text-purple-600' },
+  { key: 'giaoLai',       label: 'Đang giao hàng',  icon: RotateCcw,   cls: 'text-orange-600' },
+  { key: 'hoanHang',      label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600' },
 ]
 
 // Hiển thị khi dòng dữ liệu gốc của file VTP/SPX đã bị xoá (đóng băng) — số liệu tĩnh, không tương tác được nữa
@@ -30,7 +30,7 @@ function FrozenCarrierCards({ label, frozen }) {
       </div>
       <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
         {CARRIER_STAT_CARDS.map(c => (
-          <StatCard key={c.key} icon={c.icon} value={frozen.stats[c.key] || 0} label={c.label} cls={c.cls} bg={c.bg} pctOfTotal={pct(frozen.stats[c.key] || 0, frozen.total)} />
+          <StatCard key={c.key} icon={c.icon} value={frozen.stats[c.key] || 0} label={c.label} cls={c.cls} pctOfTotal={pct(frozen.stats[c.key] || 0, frozen.total)} />
         ))}
       </div>
     </div>
@@ -79,25 +79,25 @@ function readChanhXeChuaGui(weekId) {
 
 function pct(part, total) { return total ? Math.round((part / total) * 100) : 0 }
 
-function KpiTile({ icon: Icon, value, label, sub, pctOfTotal, cls, bg }) {
+function KpiTile({ icon: Icon, value, label, sub, pctOfTotal, cls }) {
   return (
-    <div className={`rounded-xl border px-4 py-3 ${bg} flex flex-col gap-2`}>
-      <div className="flex items-center gap-3">
-        <Icon size={18} className={cls} />
-        <div>
-          <div className={`text-lg font-bold ${cls} flex items-baseline gap-1.5`}>
+    <div className="report-kpi">
+      <div className="report-kpi-main">
+        <span className={`report-kpi-icon ${cls}`}><Icon size={18} aria-hidden="true" /></span>
+        <div className="min-w-0">
+          <div className="report-kpi-label">{label}</div>
+          <div className={`report-kpi-value ${cls}`}>
             {value.toLocaleString('vi-VN')}
-            {pctOfTotal !== undefined && <span className="text-xs font-medium text-gray-400">({pctOfTotal}%)</span>}
+            {pctOfTotal !== undefined && <span>({pctOfTotal}%)</span>}
           </div>
-          <div className="text-xs text-gray-500">{label}</div>
         </div>
       </div>
       {sub && (
-        <div className="pt-2 border-t border-current/10 space-y-1">
+        <div className="report-kpi-breakdown">
           {sub.map(s => (
-            <div key={s.label} className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">{s.label}</span>
-              <span className={`font-semibold ${cls}`}>{s.value.toLocaleString('vi-VN')} <span className="text-gray-400 font-normal">({s.pct}%)</span></span>
+            <div key={s.label}>
+              <span>{s.label}</span>
+              <strong>{s.value.toLocaleString('vi-VN')} <small>({s.pct}%)</small></strong>
             </div>
           ))}
         </div>
@@ -106,22 +106,22 @@ function KpiTile({ icon: Icon, value, label, sub, pctOfTotal, cls, bg }) {
   )
 }
 
-function StatCard({ icon: Icon, value, label, cls, bg, pctOfTotal }) {
+function StatCard({ icon: Icon, value, label, cls, pctOfTotal }) {
   return (
-    <div className={`rounded-xl border p-3 ${bg} text-center`}>
-      <Icon size={16} className={`${cls} mx-auto mb-1`} />
-      <div className={`text-xl font-bold ${cls}`}>
+    <div className="report-stat">
+      <Icon size={16} className={cls} aria-hidden="true" />
+      <div className={`report-stat-value ${cls}`}>
         {value.toLocaleString('vi-VN')}
-        {pctOfTotal !== undefined && <span className="text-xs font-medium text-gray-400 ml-1">({pctOfTotal}%)</span>}
+        {pctOfTotal !== undefined && <span>({pctOfTotal}%)</span>}
       </div>
-      <div className="text-xs text-gray-500 mt-0.5 leading-tight">{label}</div>
+      <div className="report-stat-label">{label}</div>
     </div>
   )
 }
 
 function OrderBadge({ value }) {
   return (
-    <span className="ml-auto bg-teal-600 px-3 py-1 rounded text-sm font-bold text-white">
+    <span className="report-section-count">
       {value.toLocaleString('vi-VN')} đơn
     </span>
   )
@@ -129,19 +129,23 @@ function OrderBadge({ value }) {
 
 function SectionCard({ title, total, children }) {
   const [open, setOpen] = useState(true)
+  const contentId = useId()
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4 last:mb-0">
-      <div
-        className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer"
+    <section className="report-section">
+      <button
+        type="button"
+        className="report-section-trigger"
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-controls={contentId}
       >
-        <Truck size={16} className="text-gray-500" />
-        <span className="font-semibold text-gray-700">{title}</span>
+        <Truck size={17} aria-hidden="true" />
+        <span className="report-section-title">{title}</span>
         <OrderBadge value={total} />
-        {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
-      </div>
-      {open && <div className="p-4">{children}</div>}
-    </div>
+        {open ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
+      </button>
+      {open && <div id={contentId} className="report-section-content">{children}</div>}
+    </section>
   )
 }
 
@@ -176,13 +180,13 @@ function SnapshotView({ type, snapshot, onClearCarrierNow }) {
   const chuaGiaoPct = pct(chuaGiao, tructiepTotal)
 
   return (
-    <div>
+    <div className="saved-report">
       {/* KPI strip */}
-      <div className={`grid gap-3 mb-4 ${type === 'donC' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
-        <KpiTile icon={Package} value={grandTotal} label="Tổng đơn" cls="text-[#1e3a5f]" bg="bg-blue-50 border-blue-200" />
-        <KpiTile icon={CheckCircle} value={tructiepTotal} label="Giao hàng trực tiếp" pctOfTotal={pct(tructiepTotal, grandTotal)} cls="text-green-700" bg="bg-green-50 border-green-200" />
+      <div className={`report-kpi-grid ${type === 'donC' ? 'is-four-column' : 'is-three-column'}`}>
+        <KpiTile icon={Package} value={grandTotal} label="Tổng đơn" cls="text-[#1e3a5f]" />
+        <KpiTile icon={CheckCircle} value={tructiepTotal} label="Giao hàng trực tiếp" pctOfTotal={pct(tructiepTotal, grandTotal)} cls="text-green-700" />
         {type === 'donC' && (
-          <KpiTile icon={TrendingUp} value={chanhXeTotal} label="Giao qua Chành xe" pctOfTotal={pct(chanhXeTotal, grandTotal)} cls="text-orange-700" bg="bg-orange-50 border-orange-200" />
+          <KpiTile icon={TrendingUp} value={chanhXeTotal} label="Giao qua Chành xe" pctOfTotal={pct(chanhXeTotal, grandTotal)} cls="text-orange-700" />
         )}
         <KpiTile
           icon={TrendingUp} value={doitacTotal} label="Giao qua đối tác vận chuyển" pctOfTotal={pct(doitacTotal, grandTotal)}
@@ -197,10 +201,10 @@ function SnapshotView({ type, snapshot, onClearCarrierNow }) {
       {/* Giao hàng trực tiếp */}
       <SectionCard title="Giao hàng trực tiếp" total={tructiepTotal}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <StatCard icon={CheckCircle} value={snapshot.b24} label="≤ 24 giờ" cls="text-green-600" bg="bg-green-50 border-green-200" pctOfTotal={pct(snapshot.b24, tructiepTotal)} />
-          <StatCard icon={CheckCircle} value={snapshot.b48} label="≤ 48 giờ" cls="text-teal-600" bg="bg-teal-50 border-teal-200" pctOfTotal={pct(snapshot.b48, tructiepTotal)} />
-          <StatCard icon={Clock} value={snapshot.b72} label="≤ 72 giờ" cls="text-blue-600" bg="bg-blue-50 border-blue-200" pctOfTotal={pct(snapshot.b72, tructiepTotal)} />
-          <StatCard icon={AlertCircle} value={chuaGiao} label="Chưa giao" cls="text-yellow-600" bg="bg-yellow-50 border-yellow-200" pctOfTotal={pct(chuaGiao, tructiepTotal)} />
+          <StatCard icon={CheckCircle} value={snapshot.b24} label="≤ 24 giờ" cls="text-green-600" pctOfTotal={pct(snapshot.b24, tructiepTotal)} />
+          <StatCard icon={CheckCircle} value={snapshot.b48} label="≤ 48 giờ" cls="text-teal-600" pctOfTotal={pct(snapshot.b48, tructiepTotal)} />
+          <StatCard icon={Clock} value={snapshot.b72} label="≤ 72 giờ" cls="text-blue-600" pctOfTotal={pct(snapshot.b72, tructiepTotal)} />
+          <StatCard icon={AlertCircle} value={chuaGiao} label="Chưa giao" cls="text-yellow-600" pctOfTotal={pct(chuaGiao, tructiepTotal)} />
         </div>
 
         {chuaGiao > 0 && (
@@ -254,6 +258,7 @@ function SnapshotView({ type, snapshot, onClearCarrierNow }) {
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-semibold text-gray-700 text-sm">Viettel Post</span>
                   <button
+                    type="button"
                     onClick={() => onClearCarrierNow('viettel')}
                     className="text-xs text-gray-400 hover:text-red-500 underline"
                     title="Đóng băng số liệu và xoá dòng dữ liệu gốc của file này ngay (báo cáo này được lưu trước khi có tính năng tự xoá VTP/SPX)"
@@ -278,6 +283,7 @@ function SnapshotView({ type, snapshot, onClearCarrierNow }) {
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-gray-700 text-sm">SPX Express</span>
                     <button
+                      type="button"
                       onClick={() => onClearCarrierNow('spx')}
                       className="text-xs text-gray-400 hover:text-red-500 underline"
                       title="Đóng băng số liệu và xoá dòng dữ liệu gốc của file này ngay (báo cáo này được lưu trước khi có tính năng tự xoá VTP/SPX)"
@@ -414,31 +420,34 @@ export default function SheetReportPanel({ type, data, weekId, weekLabel, refere
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
+      <div className="report-actions">
         {!snapshot && !isPendingClear && weekId && (
-          <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f] flex-shrink-0">
+          <button type="button" onClick={handleSave} className="report-action is-primary">
             <ClipboardList size={13} /> Lưu số liệu tuần này
           </button>
         )}
         {snapshot && (
           <>
             <button
+              type="button"
               onClick={handleRelink}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white flex-shrink-0"
+              className="report-action"
               title="Nối lại đúng file Viettel Post/SPX theo ngày, dùng khi khung Giao qua đối tác vận chuyển hiện sai/0"
             >
               <RefreshCw size={13} /> Đối chiếu lại VTP/SPX
             </button>
             <button
+              type="button"
               onClick={handleExportImage}
               disabled={exporting}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white flex-shrink-0 disabled:opacity-50"
+              className="report-action"
             >
               <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh'}
             </button>
             <button
+              type="button"
               onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 bg-white flex-shrink-0"
+              className="report-action"
             >
               <Printer size={13} /> In / Xuất PDF
             </button>
@@ -454,14 +463,14 @@ export default function SheetReportPanel({ type, data, weekId, weekLabel, refere
               : 'Dòng dữ liệu gốc VTP/SPX sẽ tự xoá sau '}
             <strong>{formatRemaining(latestClearAt)}</strong> nữa. Kiểm tra lại số liệu nếu cần.
           </span>
-          <button onClick={handleUndo} className="flex items-center gap-1.5 px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 flex-shrink-0">
+          <button type="button" onClick={handleUndo} className="flex items-center gap-1.5 px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 shrink-0">
             <ArrowRight size={12} className="rotate-180" /> Hoàn tác
           </button>
         </div>
       )}
 
       {snapshot ? (
-        <div ref={exportRef} className="bg-[#f8fafc] p-2">
+        <div ref={exportRef} className="report-export-surface">
           <SnapshotView type={type} snapshot={snapshot} onClearCarrierNow={handleClearCarrierNow} />
         </div>
       ) : children}
