@@ -158,3 +158,16 @@ for update to authenticated using (bucket_id = 'ops-files') with check (bucket_i
 drop policy if exists ops_files_authenticated_delete on storage.objects;
 create policy ops_files_authenticated_delete on storage.objects
 for delete to authenticated using (bucket_id = 'ops-files');
+
+-- Table privileges (RLS still applies to authenticated/anon; service_role bypasses RLS
+-- but still needs GRANT or PostgREST returns "permission denied for table …")
+grant usage on schema public to anon, authenticated, service_role;
+grant all on table
+  public.report_weeks,
+  public.sheet_reports,
+  public.tongdon_reports,
+  public.tmdt_reports,
+  public.carrier_weeks,
+  public.carrier_hold_weeks,
+  public.ops_settings
+to anon, authenticated, service_role;

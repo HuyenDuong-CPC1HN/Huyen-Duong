@@ -12,15 +12,16 @@ export function assembleKvstore(documents, { withWarnings = false } = {}) {
   for (const [id, data] of byId) {
     if (id.includes('__chunk')) continue
     const key = decodeURIComponent(id)
-    if (data.chunked) {
+    if (data?.chunked) {
+      const chunkCount = Number(data.chunkCount) || 0
       let value = ''
-      for (let index = 0; index < data.chunkCount; index += 1) {
+      for (let index = 0; index < chunkCount; index += 1) {
         const chunk = byId.get(`${id}__chunk${index}`)
         if (chunk?.value === undefined) warnings.push(`Missing chunk: ${id}__chunk${index}`)
         else value += chunk.value
       }
       values.set(key, value)
-    } else if (data.value !== undefined) values.set(key, data.value)
+    } else if (data?.value !== undefined) values.set(key, data.value)
   }
   for (const id of byId.keys()) {
     if (id.includes('__chunk') && !byId.has(id.split('__chunk')[0])) warnings.push(`Orphan chunk: ${id}`)
@@ -32,10 +33,19 @@ function parseJson(value, fallback) {
   try { return JSON.parse(value) } catch { return fallback }
 }
 
+function asArray(value) {
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') {
+    const parsed = parseJson(value, [])
+    return Array.isArray(parsed) ? parsed : []
+  }
+  return []
+}
+
 export function mapKey(key, value) {
   if (key.startsWith('weeks_')) {
     const channel = key.slice('weeks_'.length)
-    const weeks = parseJson(value, [])
+    const weeks = asArray(value)
     return {
       kind: 'report_weeks',
       rows: weeks.filter(Boolean).map(week => ({
@@ -47,19 +57,19 @@ export function mapKey(key, value) {
   }
   if (key.startsWith('sheet_reports_')) {
     const channel = key.slice('sheet_reports_'.length)
-    const reports = parseJson(value, [])
+    const reports = asArray(value)
     return { kind: 'sheet_reports', rows: reports.filter(Boolean).map(report => ({ id: report.id, channel, week_id: report.id, label: report.label || report.id, payload: report })) }
   }
   if (key === 'tongdon_reports') {
-    return { kind: 'tongdon_reports', rows: parseJson(value, []).filter(Boolean).map(report => ({ id: String(report.id), label: report.label || null, payload: report })) }
+    return { kind: 'tongdon_reports', rows: asArray(value).filter(Boolean).map(report => ({ id: String(report.id), label: report.label || null, payload: report })) }
   }
   if (key === 'tmdt_reports') {
-    return { kind: 'tmdt_reports', rows: parseJson(value, []).filter(Boolean).map(report => ({ id: String(report.id), report_key: report.key, label: report.label || report.key, date_from: report.dateFrom, date_to: report.dateTo, payload: report })) }
+    return { kind: 'tmdt_reports', rows: asArray(value).filter(Boolean).map(report => ({ id: String(report.id), report_key: report.key, label: report.label || report.key, date_from: report.dateFrom, date_to: report.dateTo, payload: report })) }
   }
   if (key.startsWith('carrier_weeks_')) {
     const carrierKey = key.slice('carrier_weeks_'.length)
     const type = carrierKey.endsWith('_spx') ? 'spx' : 'viettel'
-    const weeks = parseJson(value, [])
+    const weeks = asArray(value)
     return {
       kind: 'carrier_weeks',
       rows: weeks.filter(Boolean).map(week => ({ id: week.id, carrier_key: carrierKey, carrier_type: type, file_name: week.fileName || null, uploaded_at: week.uploadedAt || new Date().toISOString(), storage_path: `carriers/${carrierKey}/${week.id}.json`, is_active: false })),
@@ -68,24 +78,29 @@ export function mapKey(key, value) {
   }
   if (key.startsWith('carrier_holdweeks_')) {
     const carrierKey = key.slice('carrier_holdweeks_'.length)
-    const weeks = parseJson(value, [])
+    const weeks = asArray(value)
     return {
       kind: 'carrier_hold_weeks',
       rows: weeks.filter(Boolean).map(week => ({ id: week.id, carrier_key: carrierKey, file_name: week.fileName || null, uploaded_at: week.uploadedAt || new Date().toISOString(), storage_path: `carrier-holds/${carrierKey}/${week.id}.json` })),
       files: weeks.filter(Boolean).map(week => ({ path: `carrier-holds/${carrierKey}/${week.id}.json`, value: week.data || week.rows || [] })),
     }
   }
-  return { kind: 'ops_settings', rows: [{ key, value: parseJson(value, value) }] }
+  return { kind: 'ops_settings', rows: [{ key, value: typeof value === 'string' ? parseJson(value, value) : value }] }
 }
 
 async function fetchFirestoreDocuments() {
   const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
   if (!rawServiceAccount) throw new Error('Thiếu FIREBASE_SERVICE_ACCOUNT_JSON. Script chỉ chạy local/offline.')
   const serviceAccount = JSON.parse(rawServiceAccount)
-  const admin = await import('firebase-admin')
-  const app = admin.apps.length ? admin.app() : admin.initializeApp({ credential: admin.cert(serviceAccount) })
-  const snapshot = await admin.getFirestore(app).collection('kvstore').get()
-  return snapshot.docs.map(document => ({ id: document.id, data: document.data() }))
+  // firebase-admin v12+ ESM: use modular entry points (default export no longer has .apps / .firestore)
+  const { cert, getApps, initializeApp } = await import('firebase-admin/app')
+  const { getFirestore } = await import('firebase-admin/firestore')
+  const existing = getApps()
+  const app = existing.length
+    ? existing[0]
+    : initializeApp({ credential: cert(serviceAccount) })
+  const snapshot = await getFirestore(app).collection('kvstore').get()
+  return snapshot.docs.map(document => ({ id: document.id, data: document.data() || {} }))
 }
 
 async function writeMapping(client, mapping, dryRun, counts) {
