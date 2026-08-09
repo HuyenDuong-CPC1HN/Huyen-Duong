@@ -1,0 +1,11 @@
+# Snyk policy for SheetJS releases distributed outside the npm registry.
+version: v1.25.0
+ignore:
+  'SNYK-JS-XLSX-6252523':
+    - 'xlsx@0.20.3':
+        reason: SheetJS 0.20.3 from the authoritative CDN includes the ReDoS fix released in 0.20.2.
+        expires: 2027-08-09T00:00:00.000Z
+  'SNYK-JS-XLSX-5457926':
+    - 'xlsx@0.20.3':
+        reason: SheetJS 0.20.3 from the authoritative CDN includes the Prototype Pollution fix released in 0.19.3.
+        expires: 2027-08-09T00:00:00.000Z
