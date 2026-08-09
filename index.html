@@ -1,13 +1,90 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>bao-cao-giao-hang</title>
+    <title>CPC1HN — Báo cáo giao hàng</title>
+    <style>
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #f4f7fb;
+        color: #1a2b3c;
+      }
+      #boot-fallback {
+        display: none;
+        max-width: 36rem;
+        margin: 12vh auto;
+        padding: 1.5rem 1.75rem;
+        background: #fff;
+        border: 1px solid #d9e3f0;
+        border-radius: 12px;
+        line-height: 1.5;
+      }
+      #boot-fallback[data-visible="true"] { display: block; }
+      #boot-fallback h1 { font-size: 1.15rem; margin: 0 0 0.75rem; }
+      #boot-fallback code {
+        display: block;
+        margin: 0.5rem 0;
+        padding: 0.65rem 0.75rem;
+        background: #edf4fc;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        white-space: pre-wrap;
+      }
+      #boot-fallback ol { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-fallback" role="alert">
+      <h1>Không mở được app từ file HTML</h1>
+      <p>
+        Đây là app Vite + React. Mở trực tiếp <code style="display:inline;padding:0.1rem 0.35rem">index.html</code>
+        (đường dẫn <code style="display:inline;padding:0.1rem 0.35rem">file://</code>) sẽ ra màn trắng/đen
+        vì trình duyệt không chạy được module <code style="display:inline;padding:0.1rem 0.35rem">/src/main.jsx</code>.
+      </p>
+      <ol>
+        <li>Trong thư mục project, chạy:</li>
+      </ol>
+      <code>npm install
+npm run dev</code>
+      <p>Rồi mở đúng URL Vite in ra (thường là):</p>
+      <code>http://localhost:5173/</code>
+      <p>
+        Local cần có <code style="display:inline;padding:0.1rem 0.35rem">.env.local</code> với
+        <code style="display:inline;padding:0.1rem 0.35rem">VITE_SUPABASE_URL</code> và
+        <code style="display:inline;padding:0.1rem 0.35rem">VITE_SUPABASE_ANON_KEY</code>
+        (copy từ Supabase / Vercel). Mẫu: <code style="display:inline;padding:0.1rem 0.35rem">.env.example</code>.
+      </p>
+    </div>
+    <script>
+      (function () {
+        var fallback = document.getElementById('boot-fallback')
+        var root = document.getElementById('root')
+        function showFallback() {
+          if (fallback) fallback.setAttribute('data-visible', 'true')
+        }
+        function hideFallback() {
+          if (fallback) fallback.removeAttribute('data-visible')
+        }
+        window.__hideBootFallback = hideFallback
+        if (location.protocol === 'file:') {
+          showFallback()
+          return
+        }
+        if (root && typeof MutationObserver !== 'undefined') {
+          new MutationObserver(function () {
+            if (root.childElementCount > 0) hideFallback()
+          }).observe(root, { childList: true })
+        }
+        // If the Vite module never mounts React, surface help instead of a blank page.
+        window.setTimeout(function () {
+          if (root && root.childElementCount === 0) showFallback()
+        }, 2500)
+      })()
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

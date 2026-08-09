@@ -93,8 +93,8 @@ export default function App() {
         <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
         <strong>Thiếu cấu hình Supabase</strong>
         <span>
-          Build production chưa có biến môi trường Vite. Thêm các key sau trên Vercel (Production)
-          rồi Redeploy:
+          Local: thêm các key sau vào <code>.env.local</code> (xem <code>.env.example</code>) rồi chạy lại
+          <code>npm run dev</code>. Production: thêm cùng key trên Vercel (Production) rồi Redeploy:
         </span>
         <ul style={{ textAlign: 'left', margin: 0, paddingLeft: 18, color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
           {supabaseMissingEnv.map((key) => (
@@ -125,7 +125,14 @@ export default function App() {
         <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
         <strong>Ứng dụng chỉ hoạt động khi có Internet</strong>
         <span>{blockingError}</span>
-        <span>Kiểm tra kết nối mạng và trạng thái Supabase, sau đó tải lại trang.</span>
+        {/reporting_cycles|schema cache/i.test(blockingError || '') ? (
+          <span>
+            Chưa chạy migration analytics trên Supabase. Mở SQL Editor, chạy toàn bộ file
+            {' '}<code>supabase/migrations/20260809_analytics_foundation.sql</code>, rồi tải lại trang.
+          </span>
+        ) : (
+          <span>Kiểm tra kết nối mạng và trạng thái Supabase, sau đó tải lại trang.</span>
+        )}
       </div>
     )
   }

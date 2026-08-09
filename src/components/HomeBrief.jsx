@@ -81,6 +81,9 @@ function deriveChannels() {
   const tongdonReports = readList('tongdon_reports')
   const tmdtReport = tmdtReports[0]
   const tongdonReport = tongdonReports[0]
+  const analyticsReady = Boolean(tongdonReport?.weekKey) && readList('reporting_cycles').some((cycle) => (
+    cycle.cycle_key === tongdonReport.weekKey && cycle.status === 'ready_for_analytics'
+  ))
   const hasSourceData = [
     donC.state !== 'missing',
     donDTP.state !== 'missing',
@@ -97,6 +100,7 @@ function deriveChannels() {
             state: 'ready',
             context: tongdonReport.label || tongdonReport.title || 'Báo cáo đã lưu',
             headline: formatOrders(tongdonReport.current?.grandTotal),
+            analyticsReady,
           }
         : {
             state: hasSourceData ? 'needsSave' : 'missing',
@@ -142,6 +146,9 @@ export default function HomeBrief({ onNavigate }) {
         <p className="home-brief-eyebrow">Tóm tắt vận hành</p>
         <p>
           Theo dõi nhanh dữ liệu đang hoạt động hoặc báo cáo gần nhất đã lưu của từng kênh.
+        </p>
+        <p className="home-brief-analytics-status">
+          {channels[0].analyticsReady ? 'Chu kỳ hiện tại: sẵn sàng phân tích' : 'Chu kỳ hiện tại: chưa công bố cho phân tích'}
         </p>
       </div>
 

@@ -21,6 +21,7 @@
 - Đăng nhập bắt buộc qua Supabase email/password. RLS v1 cho shared org: mọi user `authenticated` cùng đọc/ghi dữ liệu vận hành.
 - Mất mạng hoặc Supabase lỗi: chặn workspace bằng thông báo tiếng Việt. Service role chỉ thuộc script migrate chạy local một lần.
 - **Chuyển máy/tài khoản Claude khác**: `git clone` + `npm install`, cấu hình env Supabase và đăng nhập đúng user để thấy dữ liệu chung.
+- Analytics webapp-first: chỉ chu kỳ đã lưu Đơn C + Đơn DTP + Tổng đơn và được bấm **"Công bố cho phân tích"** mới là `ready_for_analytics`; KPI frozen ở `analytics_week_packages`. Xem `docs/contracts/2026-08-09-weekly-kpi-package.md`. Không thay đổi các công thức nghiệp vụ hiện có để tạo KPI mới.
 
 ## Cấu trúc phân loại đơn hàng
 - `src/utils/partnerType.js`: phân loại mỗi dòng đơn theo cột "Đối tác vận chuyển" → `'tructiep' | 'viettel' | 'spx' | 'chanhxe'`. Có `CHANHXE_EXCEPTIONS` cho vài tên đối tác chứa "Trực tiếp" nhưng thực chất là chành xe.

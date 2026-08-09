@@ -1,5 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { opsStore as localStorage } from '../data/workspace'
+import { opsStore as localStorage, refreshReportingCycles } from '../data/workspace'
+import { supabase } from '../supabase'
+import { createAnalyticsPackagesRepository } from '../data/analyticsPackages'
+import { evaluateCompletion } from '../analytics/completionGate'
+import { buildWeekKpiPackage } from '../analytics/buildWeekKpiPackage'
 import { RefreshCw, ClipboardList, ChevronDown, ChevronUp, Download, Printer, AlertCircle, Upload, RotateCcw } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { useWeeklyData } from '../useWeeklyData'
@@ -682,9 +686,21 @@ export default function TongDonTab({ onNavigate }) {
   // Mỗi tuần chỉ lưu 1 lần — hễ đúng weekKey đã lưu thì tự động khoá lại (read-only), không có nút quay lại
   // sửa tiếp; muốn làm báo cáo mới thì phải chuyển sang tuần khác (Upload tuần mới → Đơn C/DTP có tuần mới). ----
   const [reports, setReports] = useState(() => readJSON('tongdon_reports', []))
+  const [savingReport, setSavingReport] = useState(false)
+  const [reportingCycles, setReportingCycles] = useState(() => readJSON('reporting_cycles', []))
   const savedReport = reports[0] || null
   const isReadOnly = savedReport?.weekKey === weekKey
   const snapshot = isReadOnly ? savedReport : null
+  const completion = useMemo(() => evaluateCompletion({
+    tongdonReport: savedReport,
+    sheetReportsDonC: readSheetReports('donC'),
+    sheetReportsDonDTP: readSheetReports('donDTP'),
+  }), [savedReport])
+  const publishedCycle = reportingCycles.find((cycle) => (
+    cycle.cycle_key === savedReport?.weekKey && cycle.status === 'ready_for_analytics'
+  ))
+  const [publishing, setPublishing] = useState(false)
+  const [publishError, setPublishError] = useState('')
 
   // Xuất dashboard Tổng đơn thành 1 ảnh PNG để đính kèm/gửi báo cáo, không cần chụp màn hình tay
   const exportRef = useRef(null)
@@ -831,7 +847,7 @@ export default function TongDonTab({ onNavigate }) {
   // Lưu toàn bộ số liệu + nhận định đang xem (live) thành 1 báo cáo cố định, không đổi khi dữ liệu sau này thay đổi.
   // Chỉ giữ đúng 1 bản mới nhất (không lưu thành danh sách lịch sử) — lưu xong tự khoá (read-only) theo weekKey,
   // không quay lại sửa được nữa; muốn làm báo cáo mới thì phải sang tuần khác (weekKey khác).
-  const saveReport = () => {
+  const saveReport = async () => {
     const id = String(Date.now())
     const label = `${reportTitleLive || 'Báo cáo'} · ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
     const entry = {
@@ -844,8 +860,13 @@ export default function TongDonTab({ onNavigate }) {
       sol1: sol1Live, sol2: sol2Live, sol3: sol3Live, sol4: sol4Live, sol5: sol5Live,
     }
     const next = [entry]
-    setReports(next)
-    localStorage.setItem('tongdon_reports', JSON.stringify(next))
+    setSavingReport(true)
+    try {
+      await localStorage.setItem('tongdon_reports', JSON.stringify(next))
+      setReports(next)
+    } finally {
+      setSavingReport(false)
+    }
     // KHÔNG tự dọn bớt Excel các tuần cũ ở đây nữa — trước đây tự xoá ngay khi lưu (không hỏi, không ân hạn)
     // từng làm mất luôn cả những tuần đã "Lưu số liệu tuần này" riêng ở tab Đơn C/DTP khỏi "Lịch sử upload".
     // Muốn giảm dung lượng thì dùng đúng nút "Lưu số liệu tuần này" ở từng tab — có ân hạn 3 phút + Hoàn tác.
@@ -855,8 +876,39 @@ export default function TongDonTab({ onNavigate }) {
   // (khác với việc cho sửa tự do sau khi lưu: phải xoá hẳn rồi làm lại, có xác nhận trước để tránh xoá nhầm)
   const deleteReport = () => {
     if (!window.confirm('Xoá báo cáo đã lưu để chọn lại tuần so sánh và làm lại?\n\nSố liệu/nhận định đã lưu sẽ mất, cần lưu lại từ đầu.')) return
-    setReports([])
-    localStorage.removeItem('tongdon_reports')
+    const remove = async () => {
+      try {
+        if (publishedCycle) {
+          await createAnalyticsPackagesRepository(supabase).markStale(savedReport.weekKey)
+          setReportingCycles(await refreshReportingCycles())
+        }
+        setReports([])
+        await localStorage.removeItem('tongdon_reports')
+      } catch (error) {
+        setPublishError(error.message || 'Không thể chuyển chu kỳ về bản nháp. Báo cáo đã lưu chưa bị xóa.')
+      }
+    }
+    void remove()
+  }
+
+  const publishForAnalytics = async () => {
+    if (!savedReport || !completion.ok || publishing || publishedCycle) return
+    setPublishing(true)
+    setPublishError('')
+    try {
+      const { kpi_json, source_refs } = buildWeekKpiPackage({ tongdonReport: savedReport, sources: completion.sources })
+      await createAnalyticsPackagesRepository(supabase).publish({
+        cycleKey: completion.cycleKey,
+        tongdonReportId: savedReport.id,
+        kpiJson: kpi_json,
+        sourceRefs: source_refs,
+      })
+      setReportingCycles(await refreshReportingCycles())
+    } catch (error) {
+      setPublishError(error.message || 'Không thể công bố chu kỳ cho phân tích.')
+    } finally {
+      setPublishing(false)
+    }
   }
 
   if (loading) {
@@ -875,6 +927,16 @@ export default function TongDonTab({ onNavigate }) {
           {isReadOnly ? (
             <>
               <button
+                onClick={publishForAnalytics}
+                disabled={!completion.ok || publishing || Boolean(publishedCycle)}
+                title={completion.ok
+                  ? (publishedCycle ? 'Chu kỳ này đã được công bố cho phân tích.' : 'Công bố KPI đã đóng băng cho phân tích.')
+                  : `Chưa thể công bố: ${completion.missing.map((item) => item === 'sheet_report_donC' ? 'thiếu báo cáo Đơn C đã lưu' : item === 'sheet_report_donDTP' ? 'thiếu báo cáo Đơn DTP đã lưu' : 'thiếu khóa tuần của Tổng đơn').join(', ')}.`}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 text-white rounded-lg text-sm hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ClipboardList size={13} /> {publishedCycle ? 'Đã công bố cho phân tích' : publishing ? 'Đang công bố...' : 'Công bố cho phân tích'}
+              </button>
+              <button
                 onClick={deleteReport}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-200 text-amber-700 rounded-lg text-sm hover:bg-amber-50 bg-white"
                 title="Xoá báo cáo đã lưu để chọn lại tuần so sánh và làm lại (dùng khi lỡ chọn nhầm tuần)"
@@ -888,8 +950,8 @@ export default function TongDonTab({ onNavigate }) {
               )}
             </>
           ) : (
-            <button onClick={saveReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f]">
-              <ClipboardList size={13} /> Lưu báo cáo tuần này
+            <button onClick={() => { void saveReport() }} disabled={savingReport} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm hover:bg-[#16304f] disabled:opacity-50">
+              <ClipboardList size={13} /> {savingReport ? 'Đang lưu...' : 'Lưu báo cáo tuần này'}
             </button>
           )}
           <button
@@ -906,6 +968,7 @@ export default function TongDonTab({ onNavigate }) {
             <Printer size={13} /> In / Xuất PDF
           </button>
         </div>
+        {publishError && <p role="alert" className="text-sm text-red-700 -mt-5">{publishError}</p>}
 
         <div ref={exportRef} className="flex flex-col gap-8">
           <PageHeader

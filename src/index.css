@@ -400,6 +400,19 @@ body {
   text-transform: uppercase;
 }
 
+.home-brief-intro .home-brief-analytics-status {
+  max-width: none;
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius-pill);
+  background: var(--surface-subtle);
+  padding: 6px 10px;
+  color: var(--color-cpc-blue-dark);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
 .home-brief-section + .home-brief-section {
   margin-top: 34px;
 }

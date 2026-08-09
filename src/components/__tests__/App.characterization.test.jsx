@@ -113,6 +113,23 @@ describe('authenticated application shell', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Gửi lên n8n' })).toBeInTheDocument()
   })
 
+  it('shows analytics readiness only for an explicitly published current cycle', async () => {
+    workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 316 }]))
+    workspaceMocks.opsStore.setItem('sheet_reports_donDTP', JSON.stringify([{ id: 'd-1', b24: 144 }]))
+    workspaceMocks.opsStore.setItem(
+      'tongdon_reports',
+      JSON.stringify([{ id: 'all-1', weekKey: 'c-1_d-1', current: { grandTotal: 1450 } }]),
+    )
+    workspaceMocks.opsStore.setItem(
+      'reporting_cycles',
+      JSON.stringify([{ cycle_key: 'c-1_d-1', status: 'ready_for_analytics' }]),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('Chu kỳ hiện tại: sẵn sàng phân tích')).toBeInTheDocument()
+  })
+
   it('treats invalid storage entries as missing instead of crashing the brief', async () => {
     workspaceMocks.opsStore.setItem('weeks_donC', JSON.stringify([null]))
     workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([null]))

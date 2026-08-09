@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { createReportWeeksRepository } from '../reportWeeks'
 import { createOpsSettingsRepository } from '../opsSettings'
 import { createStorageFilesRepository } from '../storageFiles'
+import { createAnalyticsPackagesRepository } from '../analyticsPackages'
+import { createReportingCyclesRepository } from '../reportingCycles'
 
 function chain(result) {
   const api = {
@@ -66,5 +68,42 @@ describe('Supabase repositories', () => {
 
     await expect(createStorageFilesRepository(client).readJson('weeks/donC/missing.json'))
       .rejects.toThrow('Không tải được dữ liệu tuần từ kho tệp')
+  })
+
+  it('publishes and unpublishes a KPI package through the server-side completion gate', async () => {
+    const client = {
+      rpc: vi.fn()
+        .mockResolvedValueOnce({ data: { cycle_key: 'donC_32_donDTP_32', status: 'ready' }, error: null })
+        .mockResolvedValueOnce({ data: null, error: null }),
+    }
+    const repo = createAnalyticsPackagesRepository(client)
+
+    await expect(repo.publish({
+      cycleKey: 'donC_32_donDTP_32',
+      tongdonReportId: 'tongdon-32',
+      kpiJson: { schema_version: '1.0' },
+      sourceRefs: { tongdon_report_id: 'tongdon-32' },
+    })).resolves.toMatchObject({ cycle_key: 'donC_32_donDTP_32', status: 'ready' })
+    await expect(repo.markStale('donC_32_donDTP_32')).resolves.toBeUndefined()
+
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'publish_analytics_cycle', {
+      p_cycle_key: 'donC_32_donDTP_32',
+      p_tongdon_report_id: 'tongdon-32',
+      p_kpi_json: { schema_version: '1.0' },
+      p_source_refs: { tongdon_report_id: 'tongdon-32' },
+    })
+    expect(client.rpc).toHaveBeenNthCalledWith(2, 'unpublish_analytics_cycle', {
+      p_cycle_key: 'donC_32_donDTP_32',
+    })
+  })
+
+  it('loads cycle status for the shared workspace cache', async () => {
+    const table = chain({ data: [{ cycle_key: 'donC_32_donDTP_32', status: 'ready_for_analytics' }], error: null })
+    const client = { from: vi.fn(() => table) }
+
+    await expect(createReportingCyclesRepository(client).list()).resolves.toEqual([
+      { cycle_key: 'donC_32_donDTP_32', status: 'ready_for_analytics' },
+    ])
+    expect(client.from).toHaveBeenCalledWith('reporting_cycles')
   })
 })

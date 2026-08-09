@@ -8,3 +8,7 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )
+
+if (typeof window !== 'undefined' && typeof window.__hideBootFallback === 'function') {
+  window.__hideBootFallback()
+}

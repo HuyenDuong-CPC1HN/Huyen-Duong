@@ -6,6 +6,7 @@ import { createSheetReportsRepository } from './sheetReports'
 import { createTmdtReportsRepository } from './tmdtReports'
 import { createTongdonReportsRepository } from './tongdonReports'
 import { createStorageFilesRepository } from './storageFiles'
+import { createReportingCyclesRepository } from './reportingCycles'
 
 const values = new Map()
 const baselineIds = new Map()
@@ -100,15 +101,33 @@ export async function loadWorkspace(client = supabase) {
     client.from('ops_settings').select('key,value'),
   ])
   if (settingsResult.error) throw new Error(settingsResult.error.message)
+
+  let reportingCycles = []
+  try {
+    reportingCycles = await createReportingCyclesRepository(client).list()
+  } catch (error) {
+    const message = error?.message || String(error)
+    // Analytics migration may not be applied yet — do not block core ops workspace.
+    if (!/reporting_cycles|schema cache/i.test(message)) throw error
+    reportingCycles = []
+  }
+
   put('sheet_reports_donC', encode(donCReports))
   put('sheet_reports_donDTP', encode(donDtpReports))
   put('tongdon_reports', encode(tongdon))
   put('tmdt_reports', encode(tmdt))
+  put('reporting_cycles', encode(reportingCycles))
   setBaseline('sheet_reports_donC', donCReports)
   setBaseline('sheet_reports_donDTP', donDtpReports)
   setBaseline('tongdon_reports', tongdon)
   setBaseline('tmdt_reports', tmdt)
   for (const setting of settingsResult.data || []) put(setting.key, encode(setting.value))
+}
+
+export async function refreshReportingCycles(client = supabase) {
+  const reportingCycles = await createReportingCyclesRepository(client).list()
+  put('reporting_cycles', encode(reportingCycles))
+  return reportingCycles
 }
 
 export function clearWorkspaceCache() {
