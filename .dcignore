@@ -1,0 +1,3 @@
+# Snyk IDE: dependencies are assessed through the lockfile by Snyk Open Source,
+# not by Snyk Code's source analysis.
+node_modules/

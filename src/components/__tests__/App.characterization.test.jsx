@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
 
@@ -21,7 +21,107 @@ vi.mock('../../cloudSync', () => ({
 describe('authenticated application shell', () => {
   afterEach(() => {
     cleanup()
+    localStorage.clear()
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+  })
+
+  it('opens on a calm operations brief with status, exceptions, then actions', async () => {
+    localStorage.setItem('weeks_donC', '{malformed')
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual([
+      'Tình trạng tuần hiện tại',
+      'Ngoại lệ cần xử lý',
+      'Hành động tiếp theo',
+    ])
+
+    for (const channel of ['Tổng đơn', 'Đơn C', 'Đơn DTP', 'TMĐT']) {
+      expect(screen.getByRole('button', { name: `Mở ${channel}: Chưa có dữ liệu tuần` })).toBeInTheDocument()
+    }
+    expect(screen.queryByText(/^0 đơn$/)).not.toBeInTheDocument()
+    expect(screen.getAllByText('Chưa có dữ liệu tuần')).toHaveLength(4)
+    expect(screen.getByRole('button', { name: 'Bổ sung dữ liệu Đơn C' })).toBeInTheDocument()
+  })
+
+  it('shows only saved values and flags an active week that has not been saved', async () => {
+    localStorage.setItem(
+      'weeks_donC',
+      JSON.stringify([{ id: 'c-1', label: 'Tuần 32 · Đơn C', data: [{ id: 1 }] }]),
+    )
+    localStorage.setItem('activeWeek_donC', 'c-1')
+    localStorage.setItem(
+      'sheet_reports_donC',
+      JSON.stringify([{ id: 'c-1', label: 'Tuần 32 · Đơn C', b24: 316 }]),
+    )
+    localStorage.setItem(
+      'weeks_donDTP',
+      JSON.stringify([{ id: 'd-1', label: 'Tuần 32 · Đơn DTP', data: [{ id: 2 }] }]),
+    )
+    localStorage.setItem('activeWeek_donDTP', 'd-1')
+    localStorage.setItem(
+      'tmdt_reports',
+      JSON.stringify([{ id: 't-1', label: '04/08 – 10/08', total: 92 }]),
+    )
+    localStorage.setItem(
+      'tongdon_reports',
+      JSON.stringify([
+        { id: 'all-1', label: 'Tuần 32', current: { grandTotal: 1450 } },
+      ]),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('316 đơn')).toBeInTheDocument()
+    expect(screen.getByText('92 đơn')).toBeInTheDocument()
+    expect(screen.getByText('1.450 đơn')).toBeInTheDocument()
+    expect(screen.getByText('Chưa lưu số liệu tuần')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Đơn DTP' })).toBeInTheDocument()
+    const exceptions = screen.getByRole('region', { name: 'Ngoại lệ cần xử lý' })
+    expect(within(exceptions).getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('shows a clear week and offers n8n only when every channel has saved data', async () => {
+    localStorage.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 316 }]))
+    localStorage.setItem('sheet_reports_donDTP', JSON.stringify([{ id: 'd-1', b24: 144 }]))
+    localStorage.setItem('tmdt_reports', JSON.stringify([{ id: 't-1', total: 92 }]))
+    localStorage.setItem(
+      'tongdon_reports',
+      JSON.stringify([{ id: 'all-1', current: { grandTotal: 1450 } }]),
+    )
+
+    render(<App />)
+
+    expect(
+      await screen.findByText('Không có ngoại lệ từ trạng thái dữ liệu hiện có.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('list')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo lên n8n' }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Gửi lên n8n' })).toBeInTheDocument()
+  })
+
+  it('treats invalid storage entries as missing instead of crashing the brief', async () => {
+    localStorage.setItem('weeks_donC', JSON.stringify([null]))
+    localStorage.setItem('sheet_reports_donC', JSON.stringify([null]))
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })).toBeInTheDocument()
+    expect(screen.getAllByText('Chưa có dữ liệu tuần')).toHaveLength(4)
+  })
+
+  it.each([
+    ['Tổng đơn', 'Tổng đơn'],
+    ['Đơn C', 'Giao hàng Đơn C'],
+    ['Đơn DTP', 'Giao hàng Đơn DTP'],
+    ['TMĐT', 'Đơn hàng Sàn TMĐT'],
+  ])('opens the existing %s tab from its status card', async (channel, pageTitle) => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: `Mở ${channel}: Chưa có dữ liệu tuần` }))
+
+    expect(screen.getByRole('heading', { level: 1, name: pageTitle })).toBeInTheDocument()
   })
 
   it('uses official CPC1HN branding and exposes semantic navigation landmarks', async () => {

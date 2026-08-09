@@ -8,6 +8,7 @@ import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
+import HomeBrief from './components/HomeBrief'
 import cpcLogo from './assets/cpc1hn_logo.png'
 
 const NAV = [
@@ -83,7 +84,7 @@ export default function App() {
 }
 
 function AppContent({ user }) {
-  const [active, setActive] = useState('donC')
+  const [active, setActive] = useState('home')
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth >= 900,
   )
@@ -256,25 +257,14 @@ function AppContent({ user }) {
         {/* Content */}
         <main id="main-content" className="dashboard-main" tabIndex="-1">
           {active === 'home' && (
-            <div className="dashboard-home-grid">
-              {NAV.find(n => n.id === 'baocao').children.map(item => {
-                const Icon = item.icon
-                return (
-                  <button
-                    type="button"
-                    key={item.id}
-                    onClick={() => { setActive(item.id); setExpanded(e => ({ ...e, baocao: true })) }}
-                    className="dashboard-home-card"
-                  >
-                    <div className="dashboard-home-icon">
-                      <Icon size={22} aria-hidden="true" />
-                    </div>
-                    <div className="dashboard-home-title">{item.label}</div>
-                    <div className="dashboard-home-copy">Xem báo cáo và danh sách đơn hàng</div>
-                  </button>
-                )
-              })}
-            </div>
+            <HomeBrief
+              onNavigate={(id) => {
+                setActive(id)
+                if (['tongdon', 'donC', 'donDTP', 'tmdt'].includes(id)) {
+                  setExpanded((current) => ({ ...current, baocao: true }))
+                }
+              }}
+            />
           )}
           {active === 'tongdon'  && <TongDonTab onNavigate={setActive} />}
           {active === 'donC'    && <SheetTab type="donC" />}
