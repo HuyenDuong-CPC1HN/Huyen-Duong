@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
-import { LogIn, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, LogIn, Loader2 } from 'lucide-react'
 import { auth } from '../firebase'
+import cpcLogo from '../assets/cpc1hn_logo.png'
 
 const ERROR_MESSAGES = {
   'auth/invalid-credential': 'Email hoặc mật khẩu không đúng.',
@@ -15,6 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -30,55 +32,61 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 w-full max-w-sm">
-        <div className="flex flex-col items-center mb-6">
-          <div className="w-12 h-12 rounded-full bg-[#1e3a5f] flex items-center justify-center mb-3">
-            <span className="text-white font-bold text-sm">CPC</span>
-          </div>
-          <h1 className="text-lg font-bold text-gray-800">Báo cáo giao hàng</h1>
-          <p className="text-xs text-gray-400 mt-1">Đăng nhập để tiếp tục</p>
+    <div className="login-shell">
+      <main className="login-card">
+        <img className="login-logo" src={cpcLogo} alt="CPC1HN" width="100" height="100" />
+
+        <div className="login-heading">
+          <h1>Chào mừng quay trở lại</h1>
+          <p>Đăng nhập để tiếp tục vào Báo cáo giao hàng.</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <form onSubmit={handleSubmit} className="login-form">
+          <div className="login-floating-field">
             <input
+              id="email"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
               autoFocus
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="ban@cpc1hn.vn"
+              autoComplete="username"
+              placeholder=" "
             />
+            <label htmlFor="email">Email</label>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
+          <div className="login-floating-field login-password-field">
             <input
-              type="password"
+              id="password"
+              type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="••••••••"
+              autoComplete="current-password"
+              placeholder=" "
             />
+            <label htmlFor="password">Mật khẩu</label>
+            <button
+              type="button"
+              className="login-password-toggle"
+              aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword(value => !value)}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+            <p className="login-error" role="alert">{error}</p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-[#1e3a5f] hover:bg-[#16304f] disabled:opacity-60 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
-          >
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-            Đăng nhập
+          <button type="submit" disabled={loading} className="login-submit">
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
+            {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
         </form>
-      </div>
+      </main>
     </div>
   )
 }

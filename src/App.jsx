@@ -106,10 +106,10 @@ function AppContent({ user }) {
     <div className="flex h-screen bg-gray-100 overflow-hidden">
 
       {/* Sidebar */}
-      <aside className={`flex-shrink-0 flex flex-col bg-[#1e3a5f] text-white transition-all duration-300 ${sidebarOpen ? 'w-56' : 'w-0 overflow-hidden'}`}>
+      <aside className={`shrink-0 flex flex-col bg-[#1e3a5f] text-white transition-all duration-300 ${sidebarOpen ? 'w-56' : 'w-0 overflow-hidden'}`}>
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
-          <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center shrink-0">
             <span className="text-[#1e3a5f] font-bold text-xs">CPC</span>
           </div>
           <span className="font-bold text-base tracking-wide whitespace-nowrap">CPC1HN</span>
@@ -127,6 +127,7 @@ function AppContent({ user }) {
               <div key={item.id}>
                 {/* Parent item */}
                 <button
+                  type="button"
                   onClick={() => handleNav(item.id, hasChildren)}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors whitespace-nowrap ${
                     isActive
@@ -134,7 +135,7 @@ function AppContent({ user }) {
                       : 'text-white/70 hover:bg-white/10 hover:text-white border-l-4 border-transparent'
                   }`}
                 >
-                  <Icon size={16} className="flex-shrink-0" />
+                  <Icon size={16} className="shrink-0" />
                   <span className="flex-1 text-left">{item.label}</span>
                   {hasChildren && (
                     <ChevronDown
@@ -152,6 +153,7 @@ function AppContent({ user }) {
                       const isChildActive = active === child.id
                       return (
                         <button
+                          type="button"
                           key={child.id}
                           onClick={() => setActive(child.id)}
                           className={`w-full flex items-center gap-3 pr-4 py-2 text-sm transition-colors whitespace-nowrap ${
@@ -161,7 +163,7 @@ function AppContent({ user }) {
                           }`}
                         >
                           <span style={{ width: 28, flexShrink: 0 }} />
-                          <ChildIcon size={14} className="flex-shrink-0" />
+                          <ChildIcon size={14} className="shrink-0" />
                           {child.label}
                         </button>
                       )
@@ -176,6 +178,7 @@ function AppContent({ user }) {
         <div className="px-4 py-3 border-t border-white/10">
           <div className="text-xs text-white/40 truncate mb-2">{user?.email}</div>
           <button
+            type="button"
             onClick={handlePushAll}
             disabled={pushStatus === 'pushing'}
             className="w-full flex items-center gap-2 text-xs text-white/50 hover:text-white/90 transition-colors mb-2 disabled:opacity-50"
@@ -185,6 +188,7 @@ function AppContent({ user }) {
             {pushStatus === 'pushing' ? 'Đang đồng bộ...' : 'Đồng bộ toàn bộ dữ liệu'}
           </button>
           <button
+            type="button"
             onClick={() => signOut(auth)}
             className="w-full flex items-center gap-2 text-xs text-white/50 hover:text-white/90 transition-colors"
           >
@@ -196,14 +200,14 @@ function AppContent({ user }) {
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
+        <header className="shrink-0 bg-white border-b border-gray-200 shadow-sm">
           <div className="flex items-center gap-3 px-4 h-12">
-            <button onClick={() => setSidebarOpen(o => !o)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500">
+            <button type="button" onClick={() => setSidebarOpen(o => !o)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500">
               {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
             <nav className="flex items-center gap-1 text-sm text-gray-500">
               {crumbs.map((c, i) => (
-                <span key={i} className="flex items-center gap-1">
+                <span key={c} className="flex items-center gap-1">
                   {i > 0 && <ChevronRight size={13} className="text-gray-300" />}
                   <span className={i === crumbs.length - 1 ? 'text-gray-800 font-medium' : ''}>{c}</span>
                 </span>
@@ -220,6 +224,7 @@ function AppContent({ user }) {
                 const Icon = item.icon
                 return (
                   <button
+                    type="button"
                     key={item.id}
                     onClick={() => { setActive(item.id); setExpanded(e => ({ ...e, baocao: true })) }}
                     className="bg-white rounded-xl border border-gray-200 p-6 text-left hover:shadow-md hover:border-blue-300 transition-all group"
