@@ -680,6 +680,590 @@ body {
   color: var(--color-cpc-blue-dark);
 }
 
+/* ===== TONG DON: calm, one-viewport reporting workspace ===== */
+.tongdon-tab {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+}
+
+.tongdon-shell {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tongdon-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tongdon-action {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-warm);
+  border-radius: 9px;
+  background: #fff;
+  padding: 0 11px;
+  color: var(--color-cpc-blue-dark);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 720;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.tongdon-action:hover:not(:disabled) {
+  border-color: #b9cde8;
+  background: #f6f9fe;
+}
+
+.tongdon-action.is-primary,
+.tongdon-action.is-publish {
+  border-color: var(--color-cpc-blue);
+  background: var(--color-cpc-blue);
+  color: #fff;
+}
+
+.tongdon-action.is-primary:hover:not(:disabled),
+.tongdon-action.is-publish:hover:not(:disabled) {
+  border-color: var(--color-cpc-blue-dark);
+  background: var(--color-cpc-blue-dark);
+}
+
+.tongdon-action.is-reselect {
+  border-color: #ecd6ad;
+  color: #8a6116;
+}
+
+.tongdon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.tongdon-publish-error {
+  margin: 0;
+  color: #a2493c;
+  font-size: 0.75rem;
+}
+
+.tongdon-report {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tongdon-page-header,
+.tongdon-source-picker,
+.tongdon-kpi,
+.tongdon-week-summary,
+.tongdon-insight,
+.tongdon-carrier-panel {
+  box-shadow: none !important;
+}
+
+.tongdon-page-header {
+  padding-bottom: 12px;
+  border-color: var(--border-warm) !important;
+}
+
+.tongdon-page-header input,
+.tongdon-page-header h2 {
+  font-size: clamp(1.25rem, 2vw, 1.65rem) !important;
+}
+
+.tongdon-page-header > div:last-child {
+  gap: 12px;
+  font-size: 0.75rem;
+}
+
+.tongdon-source-picker {
+  border: 1px solid var(--border-warm);
+}
+
+.tongdon-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tongdon-kpi {
+  border-color: var(--border-warm) !important;
+  border-radius: 12px;
+  padding: 12px !important;
+}
+
+.tongdon-kpi > div:first-child {
+  margin-bottom: 3px;
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  line-height: 1.3;
+}
+
+.tongdon-kpi > div:nth-child(2) {
+  margin-bottom: 3px;
+  gap: 6px;
+}
+
+.tongdon-kpi > div:nth-child(2) > span:first-child {
+  color: var(--color-login-text) !important;
+  font-size: 1.35rem !important;
+}
+
+.tongdon-kpi > div:nth-child(2) > span:last-child,
+.tongdon-kpi > span {
+  font-size: 0.6875rem !important;
+}
+
+.tongdon-workspace-grid {
+  display: grid;
+  min-height: 0;
+  gap: 16px;
+}
+
+.tongdon-comparison,
+.tongdon-operations {
+  min-width: 0;
+}
+
+.tongdon-section-heading {
+  margin-bottom: 10px !important;
+}
+
+.tongdon-section-heading h3 {
+  color: var(--color-login-text) !important;
+  font-size: 1rem !important;
+  letter-spacing: -0.01em;
+}
+
+.tongdon-section-heading > div {
+  margin-bottom: 3px !important;
+  color: var(--color-cpc-blue) !important;
+  font-size: 0.625rem !important;
+}
+
+.tongdon-section-heading > p {
+  margin-top: 2px !important;
+  font-size: 0.6875rem !important;
+  line-height: 1.35;
+}
+
+.tongdon-period-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.tongdon-period {
+  min-width: 0;
+}
+
+.tongdon-week-summary {
+  border-color: var(--border-warm) !important;
+  border-radius: 12px;
+  padding: 12px !important;
+}
+
+.tongdon-week-summary > div:first-child {
+  margin-bottom: 8px;
+}
+
+.tongdon-week-summary > div:first-child > span:first-child {
+  font-size: 0.8125rem;
+}
+
+.tongdon-week-summary > div:nth-child(2) {
+  margin-bottom: 6px;
+  font-size: 0.625rem;
+}
+
+.tongdon-week-summary > div:nth-child(3) {
+  margin-bottom: 9px;
+  padding-bottom: 9px;
+}
+
+.tongdon-week-summary > div:nth-child(3) > span:first-child {
+  font-size: 1.65rem;
+}
+
+.tongdon-week-summary .mb-3 {
+  margin-bottom: 8px;
+}
+
+.tongdon-week-summary .grid {
+  grid-template-columns: minmax(70px, 1fr) minmax(48px, 1.25fr) 40px;
+  gap: 7px;
+}
+
+.tongdon-week-summary .pl-30\.5 {
+  padding-left: 0;
+}
+
+.tongdon-week-summary .mt-1\.5 {
+  margin-top: 4px;
+}
+
+.tongdon-week-summary .text-\[13px\] {
+  font-size: 0.6875rem;
+}
+
+.tongdon-week-summary .text-\[10px\],
+.tongdon-week-summary .text-xs {
+  font-size: 0.5625rem;
+}
+
+.tongdon-week-details {
+  margin-top: 8px;
+}
+
+.tongdon-period-details-toggle,
+.tongdon-insight-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--color-cpc-blue-dark);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 750;
+}
+
+.tongdon-period-details-toggle {
+  margin-top: 8px;
+  padding: 2px 0;
+}
+
+.tongdon-insight-toggle {
+  margin-top: 4px;
+  padding: 2px 0;
+}
+
+.tongdon-period-details-toggle:hover,
+.tongdon-insight-toggle:hover {
+  color: var(--color-cpc-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tongdon-carrier-panel {
+  border-color: var(--border-warm) !important;
+  border-radius: 10px;
+  padding: 10px !important;
+}
+
+.tongdon-carrier-panel .mb-2 {
+  margin-bottom: 5px;
+}
+
+.tongdon-carrier-panel .gap-2\.5 {
+  gap: 6px;
+}
+
+.tongdon-carrier-panel .mt-2 {
+  margin-top: 6px;
+}
+
+.tongdon-attention {
+  margin-bottom: 8px !important;
+  border-color: #ecd6ad !important;
+  padding: 8px 10px !important;
+  font-size: 0.6875rem !important;
+  line-height: 1.35;
+}
+
+.tongdon-operation-tabs {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-warm);
+}
+
+.tongdon-operation-tabs button {
+  min-height: 32px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 750;
+}
+
+.tongdon-operation-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--color-cpc-blue);
+  color: var(--color-cpc-blue-dark);
+}
+
+.tongdon-operations-scroll {
+  min-height: 0;
+  border: 1px solid var(--border-warm);
+  border-radius: 12px;
+  background: #fff;
+  padding: 9px;
+}
+
+.tongdon-insight-grid {
+  display: grid;
+  gap: 7px;
+}
+
+.tongdon-insight {
+  border-color: var(--border-warm) !important;
+  border-radius: 9px;
+  padding: 10px !important;
+}
+
+.tongdon-insight > span {
+  margin-bottom: 3px !important;
+  font-size: 0.5625rem !important;
+}
+
+.tongdon-insight > div:not(.tongdon-insight-body) {
+  margin-bottom: 3px !important;
+  font-size: 0.75rem !important;
+}
+
+.tongdon-insight-body {
+  margin-top: 5px;
+}
+
+.tongdon-insight p,
+.tongdon-insight textarea,
+.tongdon-verdict p,
+.tongdon-verdict textarea,
+.tongdon-plan-item p,
+.tongdon-plan-item textarea {
+  font-size: 0.6875rem !important;
+  line-height: 1.45 !important;
+}
+
+.tongdon-verdict {
+  margin-top: 7px;
+  border-radius: 9px;
+  padding: 10px 12px !important;
+}
+
+.tongdon-verdict > div {
+  margin-bottom: 4px;
+  font-size: 0.6875rem;
+}
+
+.tongdon-solution-list {
+  overflow: hidden;
+  padding: 0;
+}
+
+.tongdon-plan-item {
+  gap: 10px;
+  padding: 14px 12px !important;
+  grid-template-columns: 18px minmax(0, 1fr) 76px;
+}
+
+.tongdon-plan-item p,
+.tongdon-plan-item textarea {
+  font-size: 0.75rem !important;
+  line-height: 1.55 !important;
+}
+
+.tongdon-plan-item > span:last-child {
+  padding: 3px 5px;
+  font-size: 0.5625rem;
+}
+
+.tongdon-action:focus-visible,
+.tongdon-operation-tabs button:focus-visible,
+.tongdon-period-details-toggle:focus-visible,
+.tongdon-insight-toggle:focus-visible,
+.tongdon-operations-scroll:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Exports retain every detail even when the desktop workspace uses internal scroll. */
+.tongdon-report.is-exporting {
+  display: block !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.tongdon-report.is-exporting .tongdon-page-header,
+.tongdon-report.is-exporting .tongdon-source-picker,
+.tongdon-report.is-exporting .tongdon-kpi-strip {
+  margin-bottom: 16px;
+}
+
+.tongdon-report.is-exporting .tongdon-workspace-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(348px, 0.9fr);
+  overflow: visible;
+}
+
+.tongdon-report.is-exporting .tongdon-comparison,
+.tongdon-report.is-exporting .tongdon-operations,
+.tongdon-report.is-exporting .tongdon-period,
+.tongdon-report.is-exporting .tongdon-period-details,
+.tongdon-report.is-exporting .tongdon-week-details,
+.tongdon-report.is-exporting .tongdon-operations-scroll {
+  display: block;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.tongdon-report.is-exporting .tongdon-period-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tongdon-report.is-exporting .tongdon-period-details[hidden],
+.tongdon-report.is-exporting .tongdon-breakdown-sub[hidden],
+.tongdon-report.is-exporting .tongdon-breakdown-chips[hidden],
+.tongdon-report.is-exporting .tongdon-insight-body[hidden],
+.tongdon-report.is-exporting .tongdon-operations-scroll[hidden] {
+  display: block !important;
+}
+
+.tongdon-report.is-exporting .tongdon-operation-tabs {
+  display: none;
+}
+
+.tongdon-report.is-exporting .tongdon-period-details-toggle,
+.tongdon-report.is-exporting .tongdon-insight-toggle {
+  display: none;
+}
+
+.tongdon-report.is-exporting .tongdon-operations-scroll + .tongdon-operations-scroll {
+  margin-top: 10px;
+}
+
+@media (min-width: 1100px) {
+  .dashboard-main:has(.tongdon-tab.is-saved-report) {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tongdon-tab.is-saved-report {
+    display: flex;
+    height: calc(100dvh - 132px);
+    max-height: calc(100dvh - 132px);
+    min-height: 0;
+    flex: none;
+    overflow: hidden;
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-shell {
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-report {
+    display: grid;
+    flex: 1;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 12px;
+    overflow: hidden;
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-kpi-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-workspace-grid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(348px, 0.9fr);
+    overflow: hidden;
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-comparison,
+  .tongdon-tab.is-saved-report .tongdon-operations,
+  .tongdon-tab.is-saved-report .tongdon-period {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-period-grid {
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-period-details,
+  .tongdon-tab.is-saved-report .tongdon-operations-scroll {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-period-details .tongdon-week-details {
+    flex: none;
+    overflow: visible;
+  }
+}
+
+@media (min-width: 1280px) {
+  .tongdon-tab.is-saved-report .tongdon-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .tongdon-tab.is-saved-report .tongdon-shell .tongdon-report.is-exporting,
+  .tongdon-tab.is-saved-report .tongdon-shell .tongdon-report.is-exporting .tongdon-workspace-grid,
+  .tongdon-tab.is-saved-report .tongdon-shell .tongdon-report.is-exporting .tongdon-comparison,
+  .tongdon-tab.is-saved-report .tongdon-shell .tongdon-report.is-exporting .tongdon-operations,
+  .tongdon-tab.is-saved-report .tongdon-shell .tongdon-report.is-exporting .tongdon-period,
+  .tongdon-tab.is-saved-report .tongdon-shell .tongdon-report.is-exporting .tongdon-period-details,
+  .tongdon-tab.is-saved-report .tongdon-shell .tongdon-report.is-exporting .tongdon-week-details,
+  .tongdon-tab.is-saved-report .tongdon-shell .tongdon-report.is-exporting .tongdon-operations-scroll {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+@media print {
+  .tongdon-tab.is-saved-report,
+  .tongdon-tab.is-saved-report .tongdon-shell,
+  .tongdon-tab.is-saved-report .tongdon-report,
+  .tongdon-tab.is-saved-report .tongdon-workspace-grid,
+  .tongdon-tab.is-saved-report .tongdon-comparison,
+  .tongdon-tab.is-saved-report .tongdon-operations,
+  .tongdon-tab.is-saved-report .tongdon-period,
+  .tongdon-tab.is-saved-report .tongdon-period-details,
+  .tongdon-tab.is-saved-report .tongdon-week-details,
+  .tongdon-tab.is-saved-report .tongdon-operations-scroll {
+    display: block;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .tongdon-tab.is-saved-report .tongdon-period-details[hidden],
+  .tongdon-tab.is-saved-report .tongdon-breakdown-sub[hidden],
+  .tongdon-tab.is-saved-report .tongdon-breakdown-chips[hidden],
+  .tongdon-tab.is-saved-report .tongdon-insight-body[hidden],
+  .tongdon-tab.is-saved-report .tongdon-operations-scroll[hidden] {
+    display: block !important;
+  }
+
+  .tongdon-toolbar,
+  .tongdon-operation-tabs,
+  .tongdon-period-details-toggle,
+  .tongdon-insight-toggle {
+    display: none;
+  }
+}
+
 .dashboard-sidebar-scrim {
   display: none;
 }
