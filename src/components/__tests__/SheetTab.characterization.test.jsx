@@ -15,6 +15,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import SheetTab from '../SheetTab'
+import { useSheetReportActions } from '../useSheetReportActions'
 import { donCFixture } from './fixtures/sheetTabDonCFixture'
 import { donDTPFixture } from './fixtures/sheetTabDonDTPFixture'
 
@@ -44,6 +45,7 @@ vi.mock('../../utils/sheetReports', () => ({ readSheetReports: () => [], renameS
 vi.mock('../CarrierStats', () => ({
   getCarrierFileStats: vi.fn(),
   getCarrierFileTotal: vi.fn(() => null),
+  CarrierPanel: () => null,
   readHoldWeeks: vi.fn(() => []),
   pickCarrierWeekIdByDate: vi.fn(),
   carrierWeekHasRows: vi.fn(() => false),
@@ -156,6 +158,35 @@ describe('SheetTab Đơn C — layout and KPI invariants', () => {
     // Old toggles must be gone
     expect(screen.queryByRole('button', { name: /Thống kê giao hàng/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Đối tác VC/i })).not.toBeInTheDocument()
+  })
+
+  it('hides the live KPI strip when a saved snapshot is shown', () => {
+    const week = makeDonCWeek([])
+    mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(week))
+    vi.mocked(useSheetReportActions).mockReturnValueOnce({
+      snapshot: {
+        id: week.id,
+        createdAt: week.uploadedAt,
+        label: week.label,
+        b24: 316,
+        b48: 35,
+        b72: 1,
+        chanhXeCount: 215,
+      },
+      isPendingClear: false,
+      handleSave: vi.fn(),
+      handleUndo: vi.fn(),
+      handleRelink: vi.fn(),
+      handleExportImage: vi.fn(),
+      handlePrint: vi.fn(),
+      handleClearCarrierNow: vi.fn(),
+      exporting: false,
+      pendingBannerProps: null,
+      reports: [],
+    })
+    render(<SheetTab type="donC" />)
+    expect(document.querySelector('.sheet-tab-kpi')).not.toBeInTheDocument()
+    expect(screen.getByText('Bản đã lưu')).toBeInTheDocument()
   })
 })
 

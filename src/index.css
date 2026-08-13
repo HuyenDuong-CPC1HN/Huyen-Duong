@@ -1392,10 +1392,10 @@ body {
 }
 
 .sheet-tab.is-saved-report .sheet-tab-report {
-  background: var(--surface-canvas);
-  border: 1px solid #b8dcc4;
-  border-radius: 12px;
-  padding: 16px;
+  /* SnapshotView already paints the saved canvas; avoid a second nested box. */
+  background: transparent;
+  border: 0;
+  padding: 0;
 }
 
 .sheet-tab-section {
@@ -1450,6 +1450,12 @@ body {
   .sheet-tab.is-saved-report .sheet-tab-shell {
     height: 100%;
     overflow: hidden;
+  }
+
+  .sheet-tab.is-saved-report .sheet-tab-report {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .sheet-tab.is-saved-report .sheet-tab-col--right {

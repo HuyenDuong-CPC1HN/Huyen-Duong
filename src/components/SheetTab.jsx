@@ -211,8 +211,8 @@ export default function SheetTab({ type }) {
           </div>
         )}
 
-        {/* ── KPI strip ────────────────────────────────────────────────────── */}
-        <KpiStrip kpi={kpi} />
+        {/* ── KPI strip — live weeks only; saved weeks use SnapshotView KPIs ── */}
+        {!snapshot && <KpiStrip kpi={kpi} />}
 
         {/* ── Report body ─────────────────────────────────────────────────── */}
         <div className="sheet-tab-report">
