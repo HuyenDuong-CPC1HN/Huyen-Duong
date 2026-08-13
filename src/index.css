@@ -1268,6 +1268,215 @@ body {
   display: none;
 }
 
+/* ===== SHEET TAB: Đơn C / Đơn DTP no-scroll calm workspace ===== */
+.sheet-tab {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+}
+
+.sheet-tab-shell {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sheet-tab-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.sheet-tab-context > :first-child {
+  margin-right: auto;
+}
+
+.sheet-tab-kpi {
+  margin-bottom: 4px;
+}
+
+.sheet-tab-split {
+  display: grid;
+  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.sheet-tab-col--right {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sheet-tab-accordion {
+  margin-top: 8px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border-warm);
+  background: #fff;
+}
+
+.sheet-tab-accordion-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: var(--surface-subtle);
+  padding: 0 16px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: left;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.sheet-tab-accordion-trigger:hover {
+  background: #f1f5fa;
+  color: var(--color-cpc-blue-dark);
+}
+
+.sheet-tab-accordion-panel {
+  max-height: 35vh;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.sheet-tab-action {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-warm);
+  border-radius: 9px;
+  background: #fff;
+  padding: 0 11px;
+  color: var(--color-cpc-blue-dark);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 720;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.sheet-tab-action:hover:not(:disabled) {
+  border-color: #b9cde8;
+  background: #f6f9fe;
+}
+
+.sheet-tab-action.is-primary {
+  border-color: var(--color-cpc-blue);
+  background: var(--color-cpc-blue);
+  color: #fff;
+}
+
+.sheet-tab-action.is-primary:hover:not(:disabled) {
+  border-color: var(--color-cpc-blue-dark);
+  background: var(--color-cpc-blue-dark);
+}
+
+.sheet-tab-action:focus-visible {
+  outline: 2px solid var(--color-cpc-blue);
+  outline-offset: 2px;
+}
+
+.sheet-tab-report {
+  padding: 16px 0;
+}
+
+.sheet-tab.is-saved-report .sheet-tab-report {
+  background: var(--surface-canvas);
+  border: 1px solid #b8dcc4;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.sheet-tab-section {
+  border: 1px solid var(--border-warm);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  background: #fff;
+}
+
+.sheet-tab-section:last-child {
+  margin-bottom: 0;
+}
+
+.sheet-tab-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid #f0ede8;
+}
+
+.sheet-tab-stat-row:last-child {
+  border-bottom: 0;
+}
+
+/* Mobile: single column, allow scroll */
+@media (max-width: 1023px) {
+  .sheet-tab-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Desktop no-scroll lock (>= 1024px) */
+@media (min-width: 1024px) {
+  .dashboard-main:has(.sheet-tab.is-active-report) {
+    overflow: hidden;
+  }
+}
+
+/* Saved report locked viewport */
+@media (min-width: 1100px) {
+  .sheet-tab.is-saved-report {
+    display: flex;
+    height: calc(100dvh - 132px);
+    max-height: calc(100dvh - 132px);
+    min-height: 0;
+    flex: none;
+    overflow: hidden;
+  }
+
+  .sheet-tab.is-saved-report .sheet-tab-shell {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .sheet-tab.is-saved-report .sheet-tab-col--right {
+    overflow-y: auto;
+  }
+}
+
+/* Print: hide shell chrome, show full export surface */
+@media print {
+  .sheet-tab-context,
+  .sheet-tab-overflow,
+  .dashboard-sidebar {
+    display: none !important;
+  }
+
+  .sheet-tab {
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .sheet-tab-shell {
+    height: auto;
+    overflow: visible;
+  }
+}
+
 /* ===== REPORT CHECKPOINT: SAVED ĐƠN C / DTP ===== */
 .report-actions {
   display: flex;
@@ -1332,6 +1541,35 @@ body {
 
 .saved-report {
   color: var(--text-primary);
+}
+
+/* Eyebrow label — matches sheet-tab.is-saved-report surface treatment */
+.saved-report-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #3d8c5a;
+  margin-bottom: 12px;
+}
+
+.saved-report-eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3d8c5a;
+  flex-shrink: 0;
+}
+
+/* Surface class — mirrors sheet-tab.is-saved-report .sheet-tab-report */
+.sheet-tab-is-saved-report {
+  background: var(--surface-canvas);
+  border: 1px solid #b8dcc4;
+  border-radius: 12px;
+  padding: 16px;
 }
 
 .report-kpi-grid {

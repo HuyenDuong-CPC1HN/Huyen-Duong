@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
-import { List, BarChart2, Truck, ChevronDown, ChevronUp } from 'lucide-react'
+import { List, ChevronDown, ChevronUp, ClipboardList, Download, Printer, RefreshCw } from 'lucide-react'
 import { useWeeklyData } from '../useWeeklyData'
 import DataTable, { VC_KEY } from './DataTable'
 import ThongKeGiaoHang from './ThongKeGiaoHang'
@@ -9,28 +9,25 @@ import ExcelUpload from './ExcelUpload'
 import WeekSelector from './WeekSelector'
 import SheetReportPanel from './SheetReportPanel'
 import { readSheetReports, renameSheetReport, removeSheetReport } from '../utils/sheetReports'
+import { useSheetReportActions } from './useSheetReportActions'
 
-// Gộp Danh sách + Thống kê giao hàng + Đối tác VC thành 1 tab, danh sách chi tiết thu gọn mặc định
-const MERGE_LIST_PARTNER = type => type === 'donC' || type === 'donDTP'
+// Đơn C và Đơn DTP luôn dùng merged composition — không có view toggle
+const TYPE_LABEL = type => type === 'donC' ? 'Giao hàng Đơn C' : 'Giao hàng Đơn DTP'
 
 export default function SheetTab({ type }) {
-  const [view, setView] = useState(MERGE_LIST_PARTNER(type) ? 'partner' : 'list')
-  const merged = MERGE_LIST_PARTNER(type)
-  const [listExpanded, setListExpanded] = useState(false)
   const { weeks, activeWeek, activeId, addWeek, removeWeek, renameWeek, selectWeek, pendingClear, schedulePendingClear, cancelPendingClear } = useWeeklyData(type)
 
-  // Tuần nào đã bấm "Lưu số liệu tuần này" — hiện tag "Đã lưu" trong Lịch sử upload để dễ phân biệt.
-  // Giữ ở state riêng (không chỉ useMemo) để có thể cập nhật ngay sau khi đổi tên/xoá 1 tuần chỉ còn bản đã lưu
-  // (Excel gốc không còn nên không thể sửa qua renameWeek/removeWeek thường, phải sửa thẳng vào bản đã lưu).
-  const [savedReports, setSavedReports] = useState(() => (merged ? readSheetReports(type) : []))
-  // Khi Excel gốc của 1 tuần bị xoá sau ân hạn (weeks đổi), đọc lại để tag "Đã lưu"/danh sách gộp cập nhật đúng
-  useEffect(() => {
-    setSavedReports(merged ? readSheetReports(type) : [])
-  }, [merged, type, weeks])
+  // Đọc báo cáo đã lưu từ storage. Re-read khi type/weeks đổi (sau lưu/xoá Excel), không dùng effect.
+  const [savedReports, setSavedReports] = useState(() => readSheetReports(type))
+  const [savedReportsSource, setSavedReportsSource] = useState({ type, weeks })
+  if (savedReportsSource.type !== type || savedReportsSource.weeks !== weeks) {
+    setSavedReportsSource({ type, weeks })
+    setSavedReports(readSheetReports(type))
+  }
+
   const savedIds = useMemo(() => savedReports.map(r => r.id), [savedReports])
 
-  // Đổi tên/xoá: nếu tuần còn Excel gốc thì dùng đúng luồng cũ (renameWeek/removeWeek); nếu chỉ còn bản đã lưu
-  // (không có trong weeks) thì phải sửa/xoá thẳng trong sheet_reports_${type}, rồi cập nhật lại state để hiện ngay.
+  // Xử lý đổi tên/xoá: ưu tiên Excel gốc, nếu chỉ còn bản đã lưu thì sửa trực tiếp
   const existingWeekIds = useMemo(() => new Set(weeks.map(w => w.id)), [weeks])
   const renameAny = (id, label) => {
     if (existingWeekIds.has(id)) { renameWeek(id, label); return }
@@ -41,9 +38,7 @@ export default function SheetTab({ type }) {
     setSavedReports(removeSheetReport(type, id))
   }
 
-  // Gộp thêm các tuần CHỈ còn bản đã lưu (Excel gốc đã bị "Lưu báo cáo Tổng đơn" xoá bớt để đỡ tốn dung lượng,
-  // dù bản thân tuần đó đã "Lưu số liệu tuần này" — vẫn phải hiện & chọn lại được ngay từ tab này, không chỉ từ
-  // tab Tổng đơn) — nếu không sẽ trông như mất dữ liệu dù số liệu đã lưu vẫn còn nguyên.
+  // Gộp thêm tuần chỉ còn bản đã lưu
   const displayWeeks = useMemo(() => {
     const existingIds = new Set(weeks.map(w => w.id))
     const savedOnly = savedReports
@@ -54,32 +49,73 @@ export default function SheetTab({ type }) {
   }, [weeks, savedReports])
 
   const activeWeekDisplay = displayWeeks.find(w => w.id === activeId) || activeWeek
-
-  const rawData = activeWeekDisplay ? activeWeekDisplay.data : []
   const loading = false
   const error = null
 
+  // VC edits per invoice key
   const storageKey = `vc_edits_${type}`
   const [vcEdits, setVcEdits] = useState(() => {
     try { return JSON.parse(localStorage.getItem(storageKey) || '{}') } catch { return {} }
   })
-
   const onEditVC = (key, value) => {
     const next = { ...vcEdits, [key]: value }
     setVcEdits(next)
     localStorage.setItem(storageKey, JSON.stringify(next))
   }
+  const activeData = useMemo(() => {
+    const rows = activeWeekDisplay?.data ?? []
+    return rows.map(row => {
+      const key = row['Mã hóa đơn'] || ''
+      return vcEdits[key] !== undefined ? { ...row, [VC_KEY]: vcEdits[key] } : row
+    })
+  }, [activeWeekDisplay, vcEdits])
 
-  const activeData = useMemo(() => rawData.map(row => {
-    const key = row['Mã hóa đơn'] || ''
-    return vcEdits[key] !== undefined ? { ...row, [VC_KEY]: vcEdits[key] } : row
-  }), [rawData, vcEdits])
-
-  // Ngày upload của tuần Excel đang chọn — dùng để khớp đúng file VTP/SPX có ngày upload gần nhất
-  // (đáng tin cậy hơn đếm vị trí, vì 2 danh sách Excel & VTP/SPX là 2 danh sách upload độc lập)
   const referenceDate = activeWeekDisplay?.uploadedAt || null
 
-  if (displayWeeks.length === 0) {
+  // ─── Actions from extracted hook ─────────────────────────────────────────────
+  const exportRef = useRef(null)
+  const [listExpanded, setListExpanded] = useState(false)
+
+  const {
+    snapshot,
+    isPendingClear,
+    handleSave,
+    handleUndo,
+    handleRelink,
+    handleExportImage,
+    handlePrint,
+    handleClearCarrierNow,
+    exporting,
+    pendingBannerProps,
+  } = useSheetReportActions({
+    type,
+    data: activeData,
+    weekId: activeId,
+    weekLabel: activeWeekDisplay?.label,
+    referenceDate,
+    pendingClear,
+    onSaved: schedulePendingClear,
+    onUndoClear: cancelPendingClear,
+    exportRef,
+    listExpanded,
+    setListExpanded,
+  })
+
+  const isSaved = savedIds.includes(activeId)
+  const hasData = displayWeeks.length > 0
+
+  // ─── KPI computation (R12 — existing formula only) ───────────────────────────
+  const kpi = useMemo(() => {
+    const valid = activeData.filter(r => String(r['Mã kiện hàng'] ?? '').trim())
+    const delivered = valid.filter(r => r['Trạng thái'] === 'Đã giao').length
+    const total = valid.length
+    const rate = total ? Math.round((delivered / total) * 100) : 0
+    const pending = total - delivered
+    return { total, delivered, rate, pending }
+  }, [activeData])
+
+  // ─── Empty state ────────────────────────────────────────────────────────────
+  if (!hasData) {
     return (
       <div>
         <ExcelUpload onData={addWeek} fileName="" onClear={() => {}} />
@@ -88,43 +124,13 @@ export default function SheetTab({ type }) {
   }
 
   return (
-    <div>
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        {/* View toggle */}
-        <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          {!MERGE_LIST_PARTNER(type) && (
-            <button
-              onClick={() => setView('list')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                view === 'list' ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <List size={14} /> Danh sách
-            </button>
-          )}
-          {!merged && (
-            <button
-              onClick={() => setView('stats')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                view === 'stats' ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <BarChart2 size={14} /> Thống kê giao hàng
-            </button>
-          )}
-          <button
-            onClick={() => setView('partner')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all ${
-              view === 'partner' ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Truck size={14} /> {merged ? 'Thống kê & Danh sách' : 'Đối tác VC'}
-          </button>
-        </div>
+    <div className={`sheet-tab ${hasData ? 'is-active-report' : ''} ${isSaved ? 'is-saved-report' : ''}`}>
+      <div className="sheet-tab-shell">
 
-        {/* Week selector */}
-        {displayWeeks.length > 0 && (
+        {/* ── Context bar ──────────────────────────────────────────────────── */}
+        <header className="sheet-tab-context" aria-label="Thao tác báo cáo">
+          <span>{TYPE_LABEL(type)}</span>
+
           <WeekSelector
             weeks={displayWeeks}
             activeId={activeId}
@@ -133,70 +139,200 @@ export default function SheetTab({ type }) {
             onRemove={removeAny}
             onRename={renameAny}
           />
+
+          {isSaved && (
+            <span className="sheet-tab-saved-pill" aria-label="Tuần đã lưu">
+              Đã lưu
+            </span>
+          )}
+
+          {/* Actions — right side */}
+          <div className="flex items-center gap-2 ml-auto">
+            {!snapshot && (
+              <ExcelUpload onData={addWeek} fileName="" onClear={() => {}} compact />
+            )}
+            {!snapshot && !isPendingClear && activeId && (
+              <button
+                type="button"
+                onClick={handleSave}
+                className="sheet-tab-action is-primary"
+              >
+                <ClipboardList size={13} />
+                Lưu số liệu tuần này
+              </button>
+            )}
+            {snapshot && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleRelink}
+                  className="sheet-tab-action"
+                  title="Nối lại đúng file Viettel Post/SPX theo ngày"
+                >
+                  <RefreshCw size={13} />
+                  Đối chiếu lại
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportImage}
+                  disabled={exporting}
+                  className="sheet-tab-action"
+                >
+                  <Download size={13} />
+                  {exporting ? 'Đang xuất...' : 'Xuất ảnh'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="sheet-tab-action"
+                >
+                  <Printer size={13} />
+                  In
+                </button>
+              </>
+            )}
+          </div>
+        </header>
+
+        {/* ── Pending-clear banner ──────────────────────────────────────────── */}
+        {pendingBannerProps && (
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-sm">
+            <span className="text-amber-800">
+              {pendingBannerProps.message}
+              <strong>{pendingBannerProps.timeRemaining}</strong> nữa.
+            </span>
+            <button
+              type="button"
+              onClick={handleUndo}
+              className="flex items-center gap-1.5 px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700"
+            >
+              Hoàn tác
+            </button>
+          </div>
         )}
 
-        {/* Upload badge hoặc nút upload tuần mới */}
-        <ExcelUpload onData={addWeek} fileName="" onClear={() => {}} compact />
+        {/* ── KPI strip ────────────────────────────────────────────────────── */}
+        <KpiStrip kpi={kpi} />
+
+        {/* ── Report body ─────────────────────────────────────────────────── */}
+        <div className="sheet-tab-report">
+          <SheetReportPanel
+            type={type}
+            reportSnapshot={snapshot}
+            onClearCarrierNow={handleClearCarrierNow}
+            exportRef={exportRef}
+          >
+            <div className="sheet-tab-split">
+              {/* Left: Đối tác VC */}
+              <div className="sheet-tab-col sheet-tab-col--left">
+                <ThongKeDoiTac
+                  data={activeData}
+                  type={type}
+                  weekKey={activeId || 'live'}
+                  referenceDate={referenceDate}
+                />
+              </div>
+              {/* Right: Giao hàng */}
+              <div className="sheet-tab-col sheet-tab-col--right">
+                <ThongKeGiaoHang
+                  data={activeData}
+                  type={type}
+                  weekKey={activeId || 'live'}
+                  referenceDate={referenceDate}
+                />
+              </div>
+            </div>
+
+            {/* Detail accordion */}
+            <div className="sheet-tab-accordion">
+              <button
+                type="button"
+                className="sheet-tab-accordion-trigger"
+                onClick={() => setListExpanded(v => !v)}
+                aria-expanded={listExpanded}
+                aria-controls="sheet-tab-accordion-panel"
+                data-sheet-tab-accordion="true"
+              >
+                <List size={15} className="text-gray-500" aria-hidden="true" />
+                <span>Danh sách chi tiết đơn hàng</span>
+                {listExpanded
+                  ? <ChevronUp size={15} className="text-gray-400 ml-auto" aria-hidden="true" />
+                  : <ChevronDown size={15} className="text-gray-400 ml-auto" aria-hidden="true" />
+                }
+              </button>
+              <div
+                id="sheet-tab-accordion-panel"
+                className="sheet-tab-accordion-panel"
+                hidden={!listExpanded}
+              >
+                <DataTable
+                  data={activeData}
+                  loading={loading}
+                  error={error}
+                  onEditVC={onEditVC}
+                />
+              </div>
+            </div>
+          </SheetReportPanel>
+        </div>
+
       </div>
+    </div>
+  )
+}
 
-      {/* Nội dung */}
-      {view === 'list' && (
-        <DataTable
-          data={activeData}
-          loading={loading}
-          error={error}
-          onEditVC={onEditVC}
-        />
-      )}
-      {view === 'stats' && (
-        loading
-          ? <div className="text-center py-20 text-gray-400">Đang tải dữ liệu...</div>
-          : <ThongKeGiaoHang data={activeData} type={type} weekKey={activeId || 'live'} referenceDate={referenceDate} />
-      )}
-      {view === 'partner' && (
-        loading
-          ? <div className="text-center py-20 text-gray-400">Đang tải dữ liệu...</div>
-          : merged ? (
-            <SheetReportPanel
-              type={type}
-              data={activeData}
-              weekId={activeId}
-              weekLabel={activeWeekDisplay?.label}
-              referenceDate={referenceDate}
-              pendingClear={pendingClear}
-              onSaved={id => schedulePendingClear(id)}
-              onUndoClear={cancelPendingClear}
-            >
-              <ThongKeDoiTac data={activeData} type={type} weekKey={activeId || 'live'} referenceDate={referenceDate} />
-              <div className="mt-5">
-                <ThongKeGiaoHang data={activeData} type={type} weekKey={activeId || 'live'} referenceDate={referenceDate} />
-              </div>
-
-              <div className="mt-5 bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <button
-                  onClick={() => setListExpanded(v => !v)}
-                  className="w-full flex items-center gap-2 px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-                >
-                  <List size={15} className="text-gray-500" />
-                  <span className="font-semibold text-gray-700 text-sm">Danh sách chi tiết đơn hàng</span>
-                  {listExpanded ? <ChevronUp size={15} className="text-gray-400 ml-auto" /> : <ChevronDown size={15} className="text-gray-400 ml-auto" />}
-                </button>
-                {listExpanded && (
-                  <div className="p-4">
-                    <DataTable
-                      data={activeData}
-                      loading={loading}
-                      error={error}
-                      onEditVC={onEditVC}
-                    />
-                  </div>
-                )}
-              </div>
-            </SheetReportPanel>
-          ) : (
-            <ThongKeDoiTac data={activeData} type={type} weekKey={activeId || 'live'} referenceDate={referenceDate} />
-          )
-      )}
+// ─── KPI Strip ────────────────────────────────────────────────────────────────
+function KpiStrip({ kpi }) {
+  return (
+    <div className="report-kpi-grid is-three-column sheet-tab-kpi">
+      <div className="report-kpi">
+        <div className="report-kpi-main">
+          <div className="report-kpi-icon" style={{ background: '#f2f6fc' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" strokeWidth="2" width="18" height="18" aria-hidden="true">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            </svg>
+          </div>
+          <div>
+            <div className="report-kpi-label">Tổng đơn</div>
+            <div className="report-kpi-value" style={{ color: 'var(--color-login-text)' }}>
+              {kpi.total.toLocaleString('vi-VN')}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="report-kpi">
+        <div className="report-kpi-main">
+          <div className="report-kpi-icon" style={{ background: '#ecfdf5' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2" width="18" height="18" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <div>
+            <div className="report-kpi-label">Đã giao</div>
+            <div className="report-kpi-value" style={{ color: '#15803d' }}>
+              {kpi.delivered.toLocaleString('vi-VN')}
+              <span>({kpi.rate}%)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="report-kpi">
+        <div className="report-kpi-main">
+          <div className="report-kpi-icon" style={{ background: '#fefce8' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#a16207" strokeWidth="2" width="18" height="18" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div>
+            <div className="report-kpi-label">Chưa giao</div>
+            <div className="report-kpi-value" style={{ color: '#a16207' }}>
+              {kpi.pending.toLocaleString('vi-VN')}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

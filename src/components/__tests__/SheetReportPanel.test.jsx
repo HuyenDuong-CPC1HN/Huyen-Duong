@@ -31,7 +31,6 @@ const snapshot = {
 describe('saved Đơn C report presentation', () => {
   beforeEach(() => {
     store.values.clear()
-    store.api.setItem('sheet_reports_donC', JSON.stringify([snapshot]))
     store.api.setItem('chuagiao_kh_donC_tructIep_donC_week_1', JSON.stringify({ bv: 16, nt: 3 }))
     store.api.setItem('chuagiao_override_donC_chanhXe_donC_week_1_chuagui', '11')
   })
@@ -40,9 +39,8 @@ describe('saved Đơn C report presentation', () => {
     render(
       <SheetReportPanel
         type="donC"
-        data={[]}
-        weekId="donC_week_1"
-        weekLabel="Đơn C - Tuần 1.8"
+        reportSnapshot={snapshot}
+        onClearCarrierNow={vi.fn()}
       />,
     )
 

@@ -1,13 +1,8 @@
-import { useState, useEffect, useId, useRef } from 'react'
+import { useState, useId, useRef } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
-import { toPng } from 'html-to-image'
-import { ClipboardList, ArrowRight, CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, ChevronDown, ChevronUp, RefreshCw, RotateCcw, XCircle, Download, Printer } from 'lucide-react'
-import { partnerType } from '../utils/partnerType'
-import { deliveryBucket } from '../utils/deliveryDays'
-import { readSheetReports, saveSheetReport, removeSheetReport, relinkSheetReportCarrier } from '../utils/sheetReports'
+import { CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, ChevronDown, ChevronUp, RotateCcw, XCircle } from 'lucide-react'
 import {
-  pickCarrierWeekIdByDate, snapshotCarrierLookup, getCarrierFileStats, CarrierPanel,
-  carrierWeekHasRows, useCarrierRowsPendingClear,
+  getCarrierFileStats, CarrierPanel, carrierWeekHasRows,
 } from './CarrierStats'
 
 const CARRIER_STAT_CARDS = [
@@ -51,23 +46,6 @@ const KH_TYPES = {
   ],
 }
 
-function computeBuckets(data) {
-  const validData = data.filter(r => String(r['Mã kiện hàng'] ?? '').trim())
-  let b24 = 0, b48 = 0, b72 = 0, chanhXeCount = 0
-  for (const row of validData) {
-    const t = partnerType(row)
-    if (t === 'tructiep') {
-      const bucket = deliveryBucket(row)
-      if (bucket === '24') b24++
-      else if (bucket === '48') b48++
-      else if (bucket === '72') b72++
-    } else if (t === 'chanhxe') {
-      chanhXeCount++
-    }
-  }
-  return { b24, b48, b72, chanhXeCount }
-}
-
 // "Phân loại đơn chưa giao theo khách hàng" và "chưa gửi chành" là số nhập tay lưu riêng theo weekId
 // (không nằm trong file Excel) — vẫn còn nguyên sau khi Excel gốc bị xoá nên đọc thẳng từ đây.
 function readKhBreakdown(type, weekId) {
@@ -78,7 +56,45 @@ function readChanhXeChuaGui(weekId) {
   return v === null ? 0 : Number(v)
 }
 
-function pct(part, total) { return total ? Math.round((part / total) * 100) : 0 }
+const pct = (part, total) => total ? Math.round((part / total) * 100) : 0
+
+/** Live file rows if still present; otherwise the frozen snapshot. No week → null. */
+function resolveCarrierStats(weekId, hasLiveRows, liveStats, frozen) {
+  if (!weekId) return null
+  if (hasLiveRows) return liveStats
+  return frozen
+}
+
+function SnapshotCarrierBlock({
+  label, weekId, hasLiveRows, frozen, onClear, livePanel, missingClassName = 'text-sm text-gray-400 mb-4',
+}) {
+  if (!weekId) {
+    return <p className={missingClassName}>Chưa có file {label} tương ứng với tuần này.</p>
+  }
+  if (!hasLiveRows) {
+    return (
+      <div className="mb-4">
+        <FrozenCarrierCards label={label} frozen={frozen} />
+      </div>
+    )
+  }
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-semibold text-gray-700 text-sm">{label}</span>
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs text-gray-400 hover:text-red-500 underline"
+          title="Đóng băng số liệu và xoá dòng dữ liệu gốc của file này ngay (báo cáo này được lưu trước khi có tính năng tự xoá VTP/SPX)"
+        >
+          Xoá dòng dữ liệu gốc
+        </button>
+      </div>
+      {livePanel}
+    </div>
+  )
+}
 
 function KpiTile({ icon: Icon, value, label, sub, pctOfTotal, cls }) {
   return (
@@ -158,30 +174,44 @@ function SnapshotView({ type, snapshot, onClearCarrierNow }) {
   const chuaGiao = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
   const delivered = snapshot.b24 + snapshot.b48 + snapshot.b72
   const tructiepTotal = delivered + chuaGiao
-
   const chanhXeChuaGui = type === 'donC' ? readChanhXeChuaGui(snapshot.id) : 0
   const chanhXeTotal = snapshot.chanhXeCount + chanhXeChuaGui
 
-  // Dòng dữ liệu gốc VTP/SPX còn thì tính trực tiếp (luôn mới nhất); đã xoá rồi thì dùng đúng số đã đóng băng —
-  // KHÔNG được gọi getCarrierFileStats khi rows đã rỗng, vì sẽ tính ra 0 (không phải số liệu thật).
-  const viettelStats = snapshot.viettelWeekId
-    ? (carrierWeekHasRows(`${type}_viettel`, snapshot.viettelWeekId)
-        ? getCarrierFileStats(`${type}_viettel`, 'viettel', [], snapshot.viettelWeekId, snapshot.carrierLookup)
-        : snapshot.viettelFrozen)
-    : null
-  const spxStats = type === 'donC' && snapshot.spxWeekId
-    ? (carrierWeekHasRows('donC_spx', snapshot.spxWeekId)
-        ? getCarrierFileStats('donC_spx', 'spx', [], snapshot.spxWeekId, snapshot.carrierLookup)
-        : snapshot.spxFrozen)
-    : null
+  // Dòng dữ liệu gốc VTP/SPX còn thì tính trực tiếp (luôn mới nhất); đã xoá rồi thì dùng đúng số đã đóng băng
+  const viettelHasRows = Boolean(
+    snapshot.viettelWeekId && carrierWeekHasRows(`${type}_viettel`, snapshot.viettelWeekId),
+  )
+  const viettelStats = resolveCarrierStats(
+    snapshot.viettelWeekId,
+    viettelHasRows,
+    viettelHasRows
+      ? getCarrierFileStats(`${type}_viettel`, 'viettel', [], snapshot.viettelWeekId, snapshot.carrierLookup)
+      : null,
+    snapshot.viettelFrozen,
+  )
+  const spxHasRows = Boolean(
+    type === 'donC' && snapshot.spxWeekId && carrierWeekHasRows('donC_spx', snapshot.spxWeekId),
+  )
+  const spxStats = resolveCarrierStats(
+    type === 'donC' ? snapshot.spxWeekId : null,
+    spxHasRows,
+    spxHasRows
+      ? getCarrierFileStats('donC_spx', 'spx', [], snapshot.spxWeekId, snapshot.carrierLookup)
+      : null,
+    snapshot.spxFrozen,
+  )
   const doitacTotal = (viettelStats?.total || 0) + (spxStats?.total || 0)
-
   const grandTotal = tructiepTotal + (type === 'donC' ? chanhXeTotal : 0) + doitacTotal
   const deliveredPct = pct(delivered, tructiepTotal)
   const chuaGiaoPct = pct(chuaGiao, tructiepTotal)
 
   return (
-    <div className="saved-report">
+    <div className="saved-report sheet-tab-is-saved-report">
+      {/* Eyebrow */}
+      <div className="saved-report-eyebrow">
+        <span className="saved-report-eyebrow-dot" aria-hidden="true" />
+        <span>Bản đã lưu</span>
+      </div>
       {/* KPI strip */}
       <div className={`report-kpi-grid ${type === 'donC' ? 'is-four-column' : 'is-three-column'}`}>
         <KpiTile icon={Package} value={grandTotal} label="Tổng đơn" cls="text-[#1e3a5f]" />
@@ -252,237 +282,67 @@ function SnapshotView({ type, snapshot, onClearCarrierNow }) {
       {/* Giao qua đối tác vận chuyển — VTP/SPX vẫn còn dữ liệu thật vì lưu riêng, không phụ thuộc Excel Đơn C/DTP,
           trừ khi dòng dữ liệu gốc của chính file VTP/SPX đó cũng đã được xoá (thì hiện số liệu tĩnh đã đóng băng) */}
       <SectionCard title="Giao qua đối tác vận chuyển" total={doitacTotal}>
-        {snapshot.viettelWeekId ? (
-          <div className="mb-4">
-            {carrierWeekHasRows(`${type}_viettel`, snapshot.viettelWeekId) ? (
-              <>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-gray-700 text-sm">Viettel Post</span>
-                  <button
-                    type="button"
-                    onClick={() => onClearCarrierNow('viettel')}
-                    className="text-xs text-gray-400 hover:text-red-500 underline"
-                    title="Đóng băng số liệu và xoá dòng dữ liệu gốc của file này ngay (báo cáo này được lưu trước khi có tính năng tự xoá VTP/SPX)"
-                  >
-                    Xoá dòng dữ liệu gốc
-                  </button>
-                </div>
-                <CarrierPanel carrierKey={`${type}_viettel`} label="Viettel Post" carrierType="viettel" weekId={snapshot.viettelWeekId} frozenLookup={snapshot.carrierLookup} />
-              </>
-            ) : (
-              <FrozenCarrierCards label="Viettel Post" frozen={snapshot.viettelFrozen} />
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 mb-4">Chưa có file Viettel Post tương ứng với tuần này.</p>
-        )}
+        <SnapshotCarrierBlock
+          label="Viettel Post"
+          weekId={snapshot.viettelWeekId}
+          hasLiveRows={viettelHasRows}
+          frozen={snapshot.viettelFrozen}
+          onClear={() => onClearCarrierNow('viettel')}
+          livePanel={(
+            <CarrierPanel
+              carrierKey={`${type}_viettel`}
+              label="Viettel Post"
+              carrierType="viettel"
+              weekId={snapshot.viettelWeekId}
+              frozenLookup={snapshot.carrierLookup}
+            />
+          )}
+        />
         {type === 'donC' && (
-          snapshot.spxWeekId ? (
-            <div>
-              {carrierWeekHasRows('donC_spx', snapshot.spxWeekId) ? (
-                <>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-gray-700 text-sm">SPX Express</span>
-                    <button
-                      type="button"
-                      onClick={() => onClearCarrierNow('spx')}
-                      className="text-xs text-gray-400 hover:text-red-500 underline"
-                      title="Đóng băng số liệu và xoá dòng dữ liệu gốc của file này ngay (báo cáo này được lưu trước khi có tính năng tự xoá VTP/SPX)"
-                    >
-                      Xoá dòng dữ liệu gốc
-                    </button>
-                  </div>
-                  <CarrierPanel carrierKey="donC_spx" label="SPX Express" carrierType="spx" weekId={snapshot.spxWeekId} frozenLookup={snapshot.carrierLookup} />
-                </>
-              ) : (
-                <FrozenCarrierCards label="SPX Express" frozen={snapshot.spxFrozen} />
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400">Chưa có file SPX Express tương ứng với tuần này.</p>
-          )
+          <SnapshotCarrierBlock
+            label="SPX Express"
+            weekId={snapshot.spxWeekId}
+            hasLiveRows={spxHasRows}
+            frozen={snapshot.spxFrozen}
+            onClear={() => onClearCarrierNow('spx')}
+            missingClassName="text-sm text-gray-400"
+            livePanel={(
+              <CarrierPanel
+                carrierKey="donC_spx"
+                label="SPX Express"
+                carrierType="spx"
+                weekId={snapshot.spxWeekId}
+                frozenLookup={snapshot.carrierLookup}
+              />
+            )}
+          />
         )}
       </SectionCard>
     </div>
   )
 }
 
-// Nút "Lưu số liệu tuần này" + lịch sử các tuần đã lưu cho tab Đơn C / Đơn DTP.
-// Khi lưu: đóng băng mốc giao 24h/48h/72h (Giao trực tiếp) + số đơn Chành xe + tuần VTP/SPX đang khớp,
-// rồi xoá file Excel gốc của tuần đó (VTP/SPX không bị xoá, vẫn hiển thị đầy đủ trong bản đã lưu).
-export default function SheetReportPanel({ type, data, weekId, weekLabel, referenceDate = null, pendingClear = null, onSaved, onUndoClear, children }) {
-  const [reports, setReports] = useState(() => readSheetReports(type))
-  const viettelPending = useCarrierRowsPendingClear(`${type}_viettel`)
-  const spxPending = useCarrierRowsPendingClear(type === 'donC' ? 'donC_spx' : null)
-  const exportRef = useRef(null)
-  const [exporting, setExporting] = useState(false)
-
-  // Xuất báo cáo đã lưu thành 1 ảnh PNG để đính kèm/gửi báo cáo, không cần chụp màn hình tay
-  const handleExportImage = async () => {
-    if (!exportRef.current) return
-    setExporting(true)
-    try {
-      const dataUrl = await toPng(exportRef.current, { backgroundColor: '#ffffff', pixelRatio: 2 })
-      const a = document.createElement('a')
-      a.href = dataUrl
-      a.download = `${type === 'donC' ? 'DonC' : 'DonDTP'}_${weekLabel || weekId}.png`
-      a.click()
-    } catch {
-      window.alert('Không xuất được ảnh, vui lòng thử lại.')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  // Tuần đang chọn (ở ô chọn tuần trên cùng) đã bấm "Lưu" (Excel gốc rỗng) thì tự động hiện báo cáo đã lưu —
-  // chọn tuần khác nào đã có tag "Đã lưu" trong ô chọn tuần cũng sẽ tự hiện báo cáo tương ứng, không cần thanh riêng nữa
-  const snapshot = (!data || data.length === 0) ? reports.find(r => r.id === weekId) : null
-
-  // Đang trong thời gian ân hạn — có thể là Excel gốc, hoặc dòng dữ liệu VTP/SPX (bấm "Xoá dòng dữ liệu gốc"
-  // riêng cho báo cáo cũ) — vẫn còn cơ hội Hoàn tác. Hiện đồng hồ đếm ngược của mốc xoá muộn nhất trong 3 cái.
-  const excelPending = pendingClear && pendingClear.weekId === weekId ? pendingClear : null
-  const viettelCarrierPending = snapshot && viettelPending.pendingClear?.weekId === snapshot.viettelWeekId ? viettelPending.pendingClear : null
-  const spxCarrierPending = snapshot && spxPending.pendingClear?.weekId === snapshot.spxWeekId ? spxPending.pendingClear : null
-  const activePendings = [excelPending, viettelCarrierPending, spxCarrierPending].filter(Boolean)
-  const isPendingClear = activePendings.length > 0
-  const latestClearAt = isPendingClear ? Math.max(...activePendings.map(p => p.clearAt)) : null
-
-  // Tự làm mới để đồng hồ đếm ngược trong banner không bị đứng yên
-  const [, forceTick] = useState(0)
-  useEffect(() => {
-    if (!isPendingClear) return
-    const timer = setInterval(() => forceTick(t => t + 1), 5000)
-    return () => clearInterval(timer)
-  }, [isPendingClear])
-
-  const handleSave = () => {
-    if (!weekId) return
-    const buckets = computeBuckets(data)
-    const viettelWeekId = pickCarrierWeekIdByDate(`${type}_viettel`, referenceDate)
-    const spxWeekId = type === 'donC' ? pickCarrierWeekIdByDate('donC_spx', referenceDate) : null
-    // Đóng băng bảng đối chiếu "Mã vận đơn" + toàn bộ 7 số liệu VTP/SPX lúc Excel/file gốc còn sống —
-    // để sau khi xoá cả 2, số liệu vẫn đếm đúng như lúc đang xem trực tiếp, không bị lệch.
-    const carrierLookup = snapshotCarrierLookup(data)
-    const viettelFrozen = viettelWeekId ? getCarrierFileStats(`${type}_viettel`, 'viettel', data, viettelWeekId) : null
-    const spxFrozen = spxWeekId ? getCarrierFileStats('donC_spx', 'spx', data, spxWeekId) : null
-    const label = weekLabel || new Date().toLocaleDateString('vi-VN')
-    const next = saveSheetReport(type, weekId, label, { ...buckets, viettelWeekId, spxWeekId, carrierLookup, viettelFrozen, spxFrozen })
-    setReports(next)
-    onSaved?.(weekId)
-    // Dòng dữ liệu gốc của file VTP/SPX cũng sẽ tự xoá sau thời gian ân hạn, giống Excel gốc
-    if (viettelWeekId) viettelPending.scheduleClear(viettelWeekId)
-    if (spxWeekId) spxPending.scheduleClear(spxWeekId)
-  }
-
-  // Hoàn tác trong thời gian ân hạn.
-  // - Nếu vừa bấm "Lưu số liệu tuần này": huỷ hết (Excel + VTP/SPX) và xoá luôn bản đã lưu, coi như chưa bấm Lưu.
-  // - Nếu chỉ đang chờ xoá VTP/SPX của báo cáo cũ (bấm nút "Xoá dòng dữ liệu gốc" riêng): chỉ huỷ đúng phần đó,
-  //   giữ nguyên báo cáo đã lưu (vì Excel gốc đã mất từ trước, xoá cả báo cáo sẽ mất trắng, không đúng ý).
-  const handleUndo = () => {
-    if (excelPending) {
-      onUndoClear?.()
-      viettelPending.cancelClear()
-      spxPending.cancelClear()
-      const next = removeSheetReport(type, weekId)
-      setReports(next)
-    } else {
-      if (viettelCarrierPending) viettelPending.cancelClear()
-      if (spxCarrierPending) spxPending.cancelClear()
-    }
-  }
-
-  // Nối lại đúng file VTP/SPX theo ngày (dùng khi bản đã lưu trước đó bị lệch file vì lý do khác) —
-  // không cần Excel gốc vì chỉ cập nhật tham chiếu, giữ nguyên b24/b48/b72 đã đóng băng
-  const handleRelink = () => {
-    if (!weekId) return
-    const viettelWeekId = pickCarrierWeekIdByDate(`${type}_viettel`, referenceDate)
-    const spxWeekId = type === 'donC' ? pickCarrierWeekIdByDate('donC_spx', referenceDate) : null
-    const next = relinkSheetReportCarrier(type, weekId, { viettelWeekId, spxWeekId })
-    setReports(next)
-  }
-
-  // Dành cho báo cáo đã lưu TRƯỚC KHI có tính năng tự xoá VTP/SPX (nên chưa từng được lên lịch xoá) —
-  // đóng băng đủ 7 số liệu ngay bây giờ rồi lên lịch xoá dòng dữ liệu gốc như bình thường (có ân hạn + Hoàn tác)
-  const handleClearCarrierNow = (which) => {
-    const snap = reports.find(r => r.id === weekId)
-    if (!snap) return
-    if (which === 'viettel' && snap.viettelWeekId) {
-      const viettelFrozen = getCarrierFileStats(`${type}_viettel`, 'viettel', [], snap.viettelWeekId, snap.carrierLookup)
-      const next = relinkSheetReportCarrier(type, weekId, { viettelWeekId: snap.viettelWeekId, spxWeekId: snap.spxWeekId, viettelFrozen })
-      setReports(next)
-      viettelPending.scheduleClear(snap.viettelWeekId)
-    } else if (which === 'spx' && snap.spxWeekId) {
-      const spxFrozen = getCarrierFileStats('donC_spx', 'spx', [], snap.spxWeekId, snap.carrierLookup)
-      const next = relinkSheetReportCarrier(type, weekId, { viettelWeekId: snap.viettelWeekId, spxWeekId: snap.spxWeekId, spxFrozen })
-      setReports(next)
-      spxPending.scheduleClear(snap.spxWeekId)
-    }
-  }
+// SheetReportPanel — layout wrapper for the Đơn C / Đơn DTP merged view.
+// SnapshotView + onClearCarrierNow are rendered here; actions live in useSheetReportActions (SheetTab).
+// accept exportRef as prop from SheetTab (not local ref).
+export default function SheetReportPanel({
+  type,
+  reportSnapshot,
+  onClearCarrierNow,
+  exportRef: externalExportRef,
+  children,
+}) {
+  // Use external exportRef from SheetTab; fallback to a local ref if not provided (backward compat)
+  const localExportRef = useRef(null)
+  const exportRef = externalExportRef ?? localExportRef
 
   return (
     <div>
-      <div className="report-actions">
-        {!snapshot && !isPendingClear && weekId && (
-          <button type="button" onClick={handleSave} className="report-action is-primary">
-            <ClipboardList size={13} /> Lưu số liệu tuần này
-          </button>
-        )}
-        {snapshot && (
-          <>
-            <button
-              type="button"
-              onClick={handleRelink}
-              className="report-action"
-              title="Nối lại đúng file Viettel Post/SPX theo ngày, dùng khi khung Giao qua đối tác vận chuyển hiện sai/0"
-            >
-              <RefreshCw size={13} /> Đối chiếu lại VTP/SPX
-            </button>
-            <button
-              type="button"
-              onClick={handleExportImage}
-              disabled={exporting}
-              className="report-action"
-            >
-              <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh'}
-            </button>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="report-action"
-            >
-              <Printer size={13} /> In / Xuất PDF
-            </button>
-          </>
-        )}
-      </div>
-
-      {isPendingClear && (
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-sm">
-          <span className="text-amber-800">
-            {excelPending
-              ? 'Đã lưu số liệu — Excel gốc và dòng dữ liệu chi tiết Viettel Post/SPX Express sẽ tự xoá sau '
-              : 'Dòng dữ liệu gốc VTP/SPX sẽ tự xoá sau '}
-            <strong>{formatRemaining(latestClearAt)}</strong> nữa. Kiểm tra lại số liệu nếu cần.
-          </span>
-          <button type="button" onClick={handleUndo} className="flex items-center gap-1.5 px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 shrink-0">
-            <ArrowRight size={12} className="rotate-180" /> Hoàn tác
-          </button>
-        </div>
-      )}
-
-      {snapshot ? (
+      {reportSnapshot ? (
         <div ref={exportRef} className="report-export-surface">
-          <SnapshotView type={type} snapshot={snapshot} onClearCarrierNow={handleClearCarrierNow} />
+          <SnapshotView type={type} snapshot={reportSnapshot} onClearCarrierNow={onClearCarrierNow} />
         </div>
       ) : children}
     </div>
   )
-}
-
-function formatRemaining(clearAt) {
-  const ms = Math.max(0, clearAt - Date.now())
-  const totalSec = Math.ceil(ms / 1000)
-  const min = Math.floor(totalSec / 60)
-  const sec = totalSec % 60
-  return min > 0 ? `${min} phút ${sec} giây` : `${sec} giây`
 }
