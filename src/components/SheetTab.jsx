@@ -64,8 +64,9 @@ export default function SheetTab({ type }) {
   }
   const activeData = useMemo(() => {
     const rows = activeWeekDisplay?.data ?? []
-    return rows.map(row => {
-      const key = row['Mã hóa đơn'] || ''
+    return rows.map((row, i) => {
+      // Align with DataTable fallback (DataTable.jsx:416: row['Mã hóa đơn'] || String(i))
+      const key = row['Mã hóa đơn'] || String(i)
       return vcEdits[key] !== undefined ? { ...row, [VC_KEY]: vcEdits[key] } : row
     })
   }, [activeWeekDisplay, vcEdits])

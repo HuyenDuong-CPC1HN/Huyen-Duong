@@ -9,10 +9,11 @@
  *  - Saved-mode class applied when weekId is in savedIds
  *  - Old view toggle buttons are removed (R11)
  *  - Empty state shows upload zone (R6)
+ *  - VC edit overlay key alignment (rows without Mã hóa đơn use index fallback)
  *
  * All counting logic is PRESERVED — no business rules change.
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import SheetTab from '../SheetTab'
 import { useSheetReportActions } from '../useSheetReportActions'
@@ -217,6 +218,92 @@ describe('SheetTab Đơn DTP — layout and DTP-specific invariants', () => {
     mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(week))
     render(<SheetTab type="donDTP" />)
     expect(screen.getByText('Giao hàng Đơn DTP')).toBeInTheDocument()
+  })
+})
+
+// ─── VC edit overlay key alignment (T2 bug fix) ───────────────────────────────
+// Bug: DataTable calls onEditVC(key = row['Mã hóa đơn'] || String(i), v).
+// SheetTab activeData looked up vcEdits[key] with fallback '' instead of String(i).
+// Row without 'Mã hóa đơn' → save key "0", lookup key '' → overlay never shows.
+// Fix: align SheetTab lookup with DataTable fallback (String(i)).
+describe('SheetTab VC edit overlay key alignment', () => {
+  afterEach(() => {
+    cleanup()
+    store.clear()
+  })
+
+  it('activeData reflects VC edit when row has no Mã hóa đơn (index fallback)', () => {
+    // Row WITHOUT 'Mã hóa đơn' — DataTable saves with String(i) key
+    // Bug: SheetTab looked up vcEdits[''] instead of vcEdits['0'] → overlay never showed
+    const rowWithoutMaHD = {
+      'Mã kiện hàng': 'K999',
+      // NO 'Mã hóa đơn'
+      'Tên khách hàng': 'Test Customer',
+      'Thành phố': 'HCM',
+      'Trạng thái': 'Đã giao',
+      'Ngày tạo kiện': '01/08/2026',
+      'Ngày giao hàng': '02/08/2026',
+      'Đối tác vận chuyển': 'Viettel Post',
+      'Thu hộ': '',
+    }
+    const week = makeDonCWeek([rowWithoutMaHD])
+    mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(week))
+
+    // Pre-seed localStorage as SheetTab reads it once on init
+    store.opsStore.setItem('vc_edits_donC', JSON.stringify({ '0': 'SPX Express' }))
+
+    render(<SheetTab type="donC" />)
+
+    // Open accordion to trigger DataTable render
+    const btn = screen.getByRole('button', { name: /Danh sách chi tiết đơn hàng/i })
+    fireEvent.click(btn)
+
+    // Scope to DataTable container to avoid KPI/header matches
+    const table = document.querySelector('[data-sheet-tab-accordion] + *')
+    const tableContainer = table ? within(table) : screen
+
+    // After fix: activeData maps row index 0 → key '0' → vcEdits['0'] = 'SPX Express'
+    // Bug (before fix): SheetTab looked up vcEdits[''] → undefined → original value
+    const spxElements = tableContainer.getAllByText('SPX Express')
+    expect(spxElements.length).toBeGreaterThan(0)
+    // Verify original value NOT in table cell
+    const viettelCell = tableContainer.queryByText('Viettel Post')
+    expect(viettelCell).not.toBeInTheDocument()
+  })
+
+  it('activeData reflects VC edit when row has Mã hóa đơn (invoice key)', () => {
+    // Row WITH 'Mã hóa đơn' — DataTable saves with invoice key
+    const rowWithMaHD = {
+      'Mã kiện hàng': 'K999',
+      'Mã hóa đơn': 'HD001',
+      'Tên khách hàng': 'Test Customer',
+      'Thành phố': 'HCM',
+      'Trạng thái': 'Đã giao',
+      'Ngày tạo kiện': '01/08/2026',
+      'Ngày giao hàng': '02/08/2026',
+      'Đối tác vận chuyển': 'Viettel Post',
+      'Thu hộ': '',
+    }
+    const week = makeDonCWeek([rowWithMaHD])
+    mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(week))
+
+    // Pre-seed localStorage with invoice-keyed edit
+    store.opsStore.setItem('vc_edits_donC', JSON.stringify({ 'HD001': 'Chành xe' }))
+
+    render(<SheetTab type="donC" />)
+
+    const btn = screen.getByRole('button', { name: /Danh sách chi tiết đơn hàng/i })
+    fireEvent.click(btn)
+
+    // Scope to DataTable container
+    const table = document.querySelector('[data-sheet-tab-accordion] + *')
+    const tableContainer = table ? within(table) : screen
+
+    // Invoice-keyed rows work correctly (key = 'HD001')
+    const chanhXeCells = tableContainer.getAllByText('Chành xe')
+    expect(chanhXeCells.length).toBeGreaterThan(0)
+    const viettelCell = tableContainer.queryByText('Viettel Post')
+    expect(viettelCell).not.toBeInTheDocument()
   })
 })
 
