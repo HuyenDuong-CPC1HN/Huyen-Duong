@@ -1,6 +1,7 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
+import { loadWorkspace } from '../../data/workspace'
 
 const authMocks = vi.hoisted(() => ({ getSession: vi.fn(), onAuthStateChange: vi.fn() }))
 vi.mock('../../supabase', () => ({
@@ -27,6 +28,15 @@ vi.mock('../../data/workspace', () => ({
 }))
 
 describe('authenticated application shell', () => {
+  const stubAuthListener = () => {
+    const auth = { fire: undefined }
+    authMocks.onAuthStateChange.mockImplementation((callback) => {
+      auth.fire = callback
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    return auth
+  }
+
   beforeEach(() => {
     authMocks.getSession.mockResolvedValue({ data: { session: { user: { email: 'operations@cpc1hn.com' } } }, error: null })
     authMocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
@@ -34,6 +44,8 @@ describe('authenticated application shell', () => {
   afterEach(() => {
     cleanup()
     workspaceMocks.clear()
+    loadWorkspace.mockReset()
+    loadWorkspace.mockResolvedValue(undefined)
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
   })
 
@@ -151,6 +163,39 @@ describe('authenticated application shell', () => {
     fireEvent.click(await screen.findByRole('button', { name: `Mở ${channel}: Chưa có dữ liệu tuần` }))
 
     expect(screen.getByRole('heading', { level: 1, name: pageTitle })).toBeInTheDocument()
+  })
+
+  it('keeps the current tab when Supabase refreshes the token on tab focus', async () => {
+    const auth = stubAuthListener()
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Đơn hàng Sàn TMĐT' }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Đơn hàng Sàn TMĐT' })).toBeInTheDocument()
+
+    // Giữ loadWorkspace pending để trạng thái 'syncing' commit thật (giống mạng chậm ngoài thực tế)
+    let releaseWorkspace
+    loadWorkspace.mockImplementationOnce(() => new Promise((resolve) => { releaseWorkspace = resolve }))
+
+    // Supabase bắn TOKEN_REFRESHED khi tab trình duyệt được focus lại
+    act(() => { auth.fire('TOKEN_REFRESHED', { user: { email: 'operations@cpc1hn.com' } }) })
+    await act(async () => { releaseWorkspace?.() })
+
+    expect(screen.queryByText('Đang tải không gian làm việc trên đám mây...')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Đơn hàng Sàn TMĐT' })).toBeInTheDocument()
+  })
+
+  it('returns to the login screen when the session signs out', async () => {
+    const auth = stubAuthListener()
+
+    render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })
+
+    await act(async () => {
+      auth.fire('SIGNED_OUT', null)
+    })
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Chào mừng quay trở lại' })).toBeInTheDocument()
   })
 
   it('uses official CPC1HN branding and exposes semantic navigation landmarks', async () => {

@@ -83,7 +83,15 @@ export default function App() {
       }
     }
     void boot()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { void openWorkspace(session) })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Refresh token khi tab được focus lại chỉ cập nhật user, không tải lại workspace
+      // để tránh unmount màn hình hiện tại (mất tab đang mở).
+      if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (active && session) setUser(session.user)
+        return
+      }
+      void openWorkspace(session)
+    })
     return () => { active = false; subscription.unsubscribe() }
   }, [])
 
@@ -93,7 +101,7 @@ export default function App() {
         <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
         <strong>Thiếu cấu hình Supabase</strong>
         <span>
-          Local: thêm các key sau vào <code>.env.local</code> (xem <code>.env.example</code>) rồi chạy lại
+          Local: thêm các key sau vào <code>.env.local</code> (xem <code>.env.example</code>) rồi chạy lại{' '}
           <code>npm run dev</code>. Production: thêm cùng key trên Vercel (Production) rồi Redeploy:
         </span>
         <ul style={{ textAlign: 'left', margin: 0, paddingLeft: 18, color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
