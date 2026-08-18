@@ -3,6 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
 import { loadWorkspace } from '../../data/workspace'
 
+const sessionStorageMock = (() => {
+  const store = new Map()
+  return {
+    clear: () => store.clear(),
+    getItem: key => store.get(key) ?? null,
+    setItem: (key, value) => { store.set(key, String(value)) },
+    removeItem: key => store.delete(key),
+  }
+})()
+vi.stubGlobal('sessionStorage', sessionStorageMock)
+
 const authMocks = vi.hoisted(() => ({ getSession: vi.fn(), onAuthStateChange: vi.fn() }))
 vi.mock('../../supabase', () => ({
   supabaseConfigReady: true,
@@ -44,6 +55,7 @@ describe('authenticated application shell', () => {
   afterEach(() => {
     cleanup()
     workspaceMocks.clear()
+    sessionStorageMock.clear()
     loadWorkspace.mockReset()
     loadWorkspace.mockResolvedValue(undefined)
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })

@@ -159,7 +159,13 @@ export default function App() {
 }
 
 function AppContent({ user }) {
-  const [active, setActive] = useState('home')
+  const [active, setActive] = useState(() => {
+    try {
+      return sessionStorage.getItem('appActiveTab') || 'home'
+    } catch {
+      return 'home'
+    }
+  })
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth >= 900,
   )
@@ -170,6 +176,15 @@ function AppContent({ user }) {
     setSidebarOpen(false)
     requestAnimationFrame(() => menuTriggerRef.current?.focus())
   }
+
+  // Persist active tab to sessionStorage so it survives tab visibility changes
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('appActiveTab', active)
+    } catch {
+      // sessionStorage unavailable (private mode, quota exceeded, etc.)
+    }
+  }, [active])
 
   const crumbs = BREADCRUMB[active] || []
   const pageTitle = crumbs.at(-1) || 'CPC1HN'
