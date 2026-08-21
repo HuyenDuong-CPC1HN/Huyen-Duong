@@ -1,10 +1,11 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
-import { Truck, CheckCircle, Clock, RotateCcw, XCircle, AlertCircle, Package, Users, ChevronUp, ChevronDown } from 'lucide-react'
+import { CheckCircle, Clock, RotateCcw, XCircle, AlertCircle, Package, Users, ChevronUp, ChevronDown } from 'lucide-react'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
 import { CarrierPanel, getCarrierFileTotal } from './CarrierStats'
 import { DetailTable } from './ThongKeDoiTac'
+import { StatCard, SectionCard } from './ReportCards'
 
 function parseDate(str) {
   if (!str || str === '—') return null
@@ -120,10 +121,10 @@ function EditableStatCard({ col, value, override, onCommit, label }) {
   const displayVal = override !== '' ? override : value
 
   return (
-    <div className="rounded-lg border border-gray-200 p-2 text-center relative">
+    <div className="report-stat text-center">
       <div className="flex items-center justify-center gap-1 mb-1">
-        <Icon size={12} className={`${col.cls}`} />
-        <span className="text-[10px] text-gray-500">{label}</span>
+        <Icon size={12} className={col.cls} />
+        <span className="report-stat-label" style={{ margin: 0 }}>{label}</span>
       </div>
       {editing ? (
         <input
@@ -136,12 +137,13 @@ function EditableStatCard({ col, value, override, onCommit, label }) {
             if (e.key === 'Enter') e.target.blur()
             if (e.key === 'Escape') setEditing(false)
           }}
-          className={`text-lg font-bold ${col.cls} bg-transparent border-b-2 border-current w-14 text-center focus:outline-none`}
+          className={`report-stat-value ${col.cls} bg-transparent border-b-2 border-current w-14 text-center focus:outline-none`}
         />
       ) : (
         <div
           onDoubleClick={() => setEditing(true)}
-          className={`text-lg font-bold ${col.cls} cursor-pointer`}
+          className={`report-stat-value ${col.cls} cursor-pointer`}
+          style={{ justifyContent: 'center' }}
           title="Bấm đúp để nhập tay"
         >
           {displayVal}
@@ -294,31 +296,6 @@ const PARTNERS = {
 
 const CARRIER_KEY_MAP = { viettelPost: 'viettel', spx: 'spx' }
 
-function OrderBadge({ value }) {
-  return (
-    <span className="ml-auto flex items-baseline gap-2 bg-teal-600 px-15 py-8 rounded shadow-sm">
-      <span className="text-base font-bold text-white leading-none">{value.toLocaleString('vi-VN')}</span>
-      <span className="text-xs text-teal-100 leading-none">đơn</span>
-    </span>
-  )
-}
-
-function CollapsibleHeader({ open, onToggle, label, badge, headerClassName = 'bg-gray-50', iconClassName = 'text-gray-500', labelClassName = 'text-gray-700' }) {
-  return (
-    <button
-      type="button"
-      className={`w-full flex items-center gap-3 px-5 py-3 ${headerClassName} border-b border-gray-200 cursor-pointer text-left`}
-      onClick={onToggle}
-      aria-expanded={open}
-    >
-      <Truck size={16} className={iconClassName} />
-      <span className={`font-semibold ${labelClassName}`}>{label}</span>
-      <OrderBadge value={badge} />
-      {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
-    </button>
-  )
-}
-
 function ChanhXeDetail({ rows }) {
   const [showDetail, setShowDetail] = useState(false)
   if (rows.length === 0) return null
@@ -341,7 +318,6 @@ function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
   const [override, commitOverride] = useChuaGiaoOverride(scopedKey)
   const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${scopedKey}_chuagui`)
   const [khValues, setKhValue] = useKhBreakdownValues(scopedKey)
-  const [open, setOpen] = useState(false)
 
   // "Chưa giao" = tổng các ô phân loại khách hàng (Bệnh viện + Nhà thuốc + KH ONL...) khi có nhập
   const khBreakdownSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
@@ -352,64 +328,44 @@ function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
     const fileData = getCarrierFileTotal(`${type}_${carrierType}`, carrierType, internalData, referenceDate)
     const badgeValue = fileData ? fileData.total : g.rows.length
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <CollapsibleHeader
-          open={open}
-          onToggle={() => setOpen(o => !o)}
+      <SectionCard title={g.label} total={badgeValue} defaultOpen={false}>
+        <CarrierPanel
+          carrierKey={`${type}_${CARRIER_KEY_MAP[g.key]}`}
           label={g.label}
-          badge={badgeValue}
+          carrierType={CARRIER_KEY_MAP[g.key]}
+          internalData={internalData}
+          referenceDate={referenceDate}
         />
-        {open && (
-          <div className="p-4">
-            <CarrierPanel
-              carrierKey={`${type}_${CARRIER_KEY_MAP[g.key]}`}
-              label={g.label}
-              carrierType={CARRIER_KEY_MAP[g.key]}
-              internalData={internalData}
-              referenceDate={referenceDate}
-            />
-          </div>
-        )}
-      </div>
+      </SectionCard>
     )
   }
 
   if (!g.detailed) {
     const chuaGuiVal = chuaGuiChanh !== '' ? Number(chuaGuiChanh) : 0
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <CollapsibleHeader
-          open={open}
-          onToggle={() => setOpen(o => !o)}
-          label={g.label}
-          badge={g.rows.length + chuaGuiVal}
-        />
-        {open && (
-          <>
-            <div className="px-5 py-4 text-sm text-gray-500 flex items-center gap-2">
-              <Package size={15} className="text-gray-400" />
-              Tổng số đơn đã gửi qua chành: <strong className="text-gray-800 ml-1">{g.rows.length} đơn</strong>
-            </div>
-            <div className="px-5 pb-4 flex items-center gap-2">
-              <label className="text-sm text-gray-500 flex items-center gap-2">
-                <span>Số đơn chưa gửi chành:</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={chuaGuiChanh}
-                  onChange={e => setChuaGuiChanh(e.target.value)}
-                  placeholder="0"
-                  className="w-20 text-center font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                />
-                <span>đơn</span>
-              </label>
-            </div>
-            <div className="px-5 pb-4">
-              <ChanhXeDetail rows={g.rows} />
-            </div>
-          </>
-        )}
-      </div>
+      <SectionCard title={g.label} total={g.rows.length + chuaGuiVal} defaultOpen={false}>
+        <div className="text-sm text-gray-500 flex items-center gap-2">
+          <Package size={15} className="text-gray-400" />
+          Tổng số đơn đã gửi qua chành: <strong className="text-gray-800 ml-1">{g.rows.length} đơn</strong>
+        </div>
+        <div className="pt-3 flex items-center gap-2">
+          <label className="text-sm text-gray-500 flex items-center gap-2">
+            <span>Số đơn chưa gửi chành:</span>
+            <input
+              type="number"
+              min="0"
+              value={chuaGuiChanh}
+              onChange={e => setChuaGuiChanh(e.target.value)}
+              placeholder="0"
+              className="w-20 text-center font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+            />
+            <span>đơn</span>
+          </label>
+        </div>
+        <div className="pt-3">
+          <ChanhXeDetail rows={g.rows} />
+        </div>
+      </SectionCard>
     )
   }
 
@@ -424,84 +380,62 @@ function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
   const pct = totalWithOverride > 0 ? Math.round((delivered / totalWithOverride) * 100) : 0
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <CollapsibleHeader
-        open={open}
-        onToggle={() => setOpen(o => !o)}
-        label={g.label}
-        badge={totalWithOverride}
-      />
-
-      {open && <div className="p-4">
-        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: `repeat(${g.cols.length}, minmax(0, 1fr))` }}>
-          {STAT_COLS.filter(col => g.cols.includes(col.key)).map(col => {
-            const Icon = col.icon
-            const val = g.stats[col.key]
-            const label = g.labelMap?.[col.key] || col.label
-            if (col.key === 'chuaGiao' && g.showKhBreakdown) {
-              return (
-                <div key={col.key} className="rounded-lg border border-gray-200 p-2 text-center" title="Bằng tổng phân loại khách hàng bên dưới">
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <Icon size={12} className={col.cls} />
-                    <span className="text-[10px] text-gray-500">{label}</span>
-                  </div>
-                  <div className={`text-lg font-bold ${col.cls}`}>{khBreakdownSum}</div>
-                </div>
-              )
-            }
-            if (col.key === 'chuaGiao') {
-              return (
-                <EditableStatCard
-                  key={col.key}
-                  col={col}
-                  value={val}
-                  override={override}
-                  onCommit={commitOverride}
-                  label={label}
-                />
-              )
-            }
+    <SectionCard title={g.label} total={totalWithOverride} defaultOpen={false}>
+      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: `repeat(${g.cols.length}, minmax(0, 1fr))` }}>
+        {STAT_COLS.filter(col => g.cols.includes(col.key)).map(col => {
+          const val = g.stats[col.key]
+          const label = g.labelMap?.[col.key] || col.label
+          if (col.key === 'chuaGiao' && g.showKhBreakdown) {
             return (
-              <div key={col.key} className="rounded-lg border border-gray-200 p-2 text-center">
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  <Icon size={12} className={col.cls} />
-                  <span className="text-[10px] text-gray-500">{label}</span>
-                </div>
-                <div className={`text-lg font-bold ${col.cls}`}>{val}</div>
+              <div key={col.key} title="Bằng tổng phân loại khách hàng bên dưới">
+                <StatCard icon={col.icon} value={khBreakdownSum} label={label} cls={col.cls} />
               </div>
             )
-          })}
-        </div>
+          }
+          if (col.key === 'chuaGiao') {
+            return (
+              <EditableStatCard
+                key={col.key}
+                col={col}
+                value={val}
+                override={override}
+                onCommit={commitOverride}
+                label={label}
+              />
+            )
+          }
+          return <StatCard key={col.key} icon={col.icon} value={val} label={label} cls={col.cls} />
+        })}
+      </div>
 
-        {/* Chi tiết Giao 24/48/72 giờ — chỉ giao trực tiếp */}
-        {g.key === 'tructIep' && <TrucTiepBucketTable rows={g.rows} />}
+      {/* Chi tiết Giao 24/48/72 giờ — chỉ giao trực tiếp */}
+      {g.key === 'tructIep' && <TrucTiepBucketTable rows={g.rows} />}
 
-        {/* Phân loại khách hàng chưa giao — chỉ giao trực tiếp */}
-        {g.showKhBreakdown && (
-          <ChuaGiaoBreakdown type={type} values={khValues} onChange={setKhValue} />
-        )}
+      {/* Phân loại khách hàng chưa giao — chỉ giao trực tiếp */}
+      {g.showKhBreakdown && (
+        <ChuaGiaoBreakdown type={type} values={khValues} onChange={setKhValue} />
+      )}
 
-        {totalWithOverride > 0 && (() => {
-          const chuaGiaoPct = Math.round((effectiveChuaGiao / totalWithOverride) * 100)
-          return (
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <div className="flex items-center justify-between mb-1.5 text-xs">
-                <span className="flex items-center gap-1.5 text-green-700 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-green-500" /> Đã giao: {delivered} đơn ({pct}%)
-                </span>
-                <span className="flex items-center gap-1.5 text-yellow-700 font-medium">
-                  Chưa giao: {effectiveChuaGiao} đơn ({chuaGiaoPct}%) <span className="w-2 h-2 rounded-full bg-yellow-400" />
-                </span>
-              </div>
-              <div className="flex bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
-                <div className="h-full bg-yellow-400" style={{ width: `${chuaGiaoPct}%` }} />
-              </div>
+      {totalWithOverride > 0 && (() => {
+        const chuaGiaoPct = Math.round((effectiveChuaGiao / totalWithOverride) * 100)
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-1.5 text-xs">
+              <span className="flex items-center gap-1.5 text-green-700 font-medium">
+                <span className="w-2 h-2 rounded-full bg-green-500" /> Đã giao: {delivered} đơn ({pct}%)
+              </span>
+              <span className="flex items-center gap-1.5 text-yellow-700 font-medium">
+                Chưa giao: {effectiveChuaGiao} đơn ({chuaGiaoPct}%) <span className="w-2 h-2 rounded-full bg-yellow-400" />
+              </span>
             </div>
-          )
-        })()}
-      </div>}
-    </div>
+            <div className="flex bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
+              <div className="h-full bg-yellow-400" style={{ width: `${chuaGiaoPct}%` }} />
+            </div>
+          </div>
+        )
+      })()}
+    </SectionCard>
   )
 }
 
@@ -553,25 +487,11 @@ function CarrierCompareSummary({ carrierGroups, type, internalData, referenceDat
 }
 
 function CarrierParentGroup({ label, children, total, carrierGroups, type, internalData, referenceDate = null }) {
-  const [open, setOpen] = useState(true)
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <CollapsibleHeader
-        open={open}
-        onToggle={() => setOpen(o => !o)}
-        label={label}
-        badge={total}
-        headerClassName="bg-blue-50/60"
-        iconClassName="text-[#1e3a5f]"
-        labelClassName="text-[#1e3a5f]"
-      />
-      {open && (
-        <div className="p-3 pl-8 bg-gray-50/50 border-l-4 border-blue-200 ml-4">
-          <CarrierCompareSummary carrierGroups={carrierGroups} type={type} internalData={internalData} referenceDate={referenceDate} />
-          <div className="space-y-3">{children}</div>
-        </div>
-      )}
-    </div>
+    <SectionCard title={label} total={total}>
+      <CarrierCompareSummary carrierGroups={carrierGroups} type={type} internalData={internalData} referenceDate={referenceDate} />
+      <div className="space-y-3">{children}</div>
+    </SectionCard>
   )
 }
 

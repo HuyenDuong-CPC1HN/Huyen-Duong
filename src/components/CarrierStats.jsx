@@ -4,15 +4,16 @@ import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCir
 import { parseCarrierFile, computeCarrierStats, getCarrierColumns, buildInternalOrderLookup, buildTrackingSet, reconcileViettelOrders, isHoldStatusRow, getTrackingCode } from '../utils/parseCarrierExport'
 import * as XLSX from 'xlsx'
 import { ColumnFilter, ResizeHandle } from './DataTable'
+import { StatCard } from './ReportCards'
 
 const STAT_CARDS = [
-  { key: '24h',          label: '≤ 24 giờ',        icon: CheckCircle, cls: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
-  { key: '48h',          label: '≤ 48 giờ',        icon: CheckCircle, cls: 'text-teal-600',   bg: 'bg-teal-50 border-teal-200' },
-  { key: '72h',          label: '≤ 72 giờ',        icon: Clock,       cls: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200' },
-  { key: 'choLay',       label: 'Chờ lấy',         icon: Package,     cls: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
-  { key: 'giaoLai',      label: 'Đang giao hàng',  icon: RotateCcw,   cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
-  { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
+  { key: '24h',          label: '≤ 24 giờ',        icon: CheckCircle, cls: 'text-green-600' },
+  { key: '48h',          label: '≤ 48 giờ',        icon: CheckCircle, cls: 'text-teal-600' },
+  { key: '72h',          label: '≤ 72 giờ',        icon: Clock,       cls: 'text-blue-600' },
+  { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600' },
+  { key: 'choLay',       label: 'Chờ lấy',         icon: Package,     cls: 'text-purple-600' },
+  { key: 'giaoLai',      label: 'Đang giao hàng',  icon: RotateCcw,   cls: 'text-orange-600' },
+  { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600' },
 ]
 
 // ---- Lưu trữ dữ liệu upload theo TỪNG TUẦN, cố định/không bị ghi đè khi upload file mới ----
@@ -623,20 +624,16 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       )}
 
       <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-4">
-        {STAT_CARDS.map(c => {
-          const Icon = c.icon
-          const cardPct = effectiveTotal ? Math.round((stats[c.key] / effectiveTotal) * 100) : 0
-          return (
-            <div key={c.key} className={`rounded-xl border p-3 ${c.bg} text-center`}>
-              <Icon size={16} className={`${c.cls} mx-auto mb-1`} />
-              <div className={`text-xl font-bold ${c.cls}`}>
-                {stats[c.key]}
-                <span className="text-xs font-medium text-gray-400 ml-1">({cardPct}%)</span>
-              </div>
-              <div className="text-xs text-gray-500 mt-0.5 leading-tight">{c.label}</div>
-            </div>
-          )
-        })}
+        {STAT_CARDS.map(c => (
+          <StatCard
+            key={c.key}
+            icon={c.icon}
+            value={stats[c.key]}
+            label={c.label}
+            cls={c.cls}
+            pctOfTotal={effectiveTotal ? Math.round((stats[c.key] / effectiveTotal) * 100) : 0}
+          />
+        ))}
       </div>
 
       <div className="flex items-center gap-2 mb-5 flex-wrap">
