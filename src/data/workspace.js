@@ -67,7 +67,7 @@ async function loadCarriers(client) {
     id: record.id,
     fileName: record.file_name,
     uploadedAt: record.uploaded_at,
-    data: await repo.loadRows(record),
+    rows: await repo.loadRows(record),
     isActive: record.is_active,
   }]))
   const byKey = new Map()
