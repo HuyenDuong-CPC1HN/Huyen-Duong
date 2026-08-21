@@ -52,11 +52,14 @@ export default function App() {
   useEffect(() => {
     if (!supabaseConfigReady || !supabase) return undefined
     let active = true
+    const currentUserIdRef = { current: null }
     const openWorkspace = async (session) => {
       if (!session) {
+        currentUserIdRef.current = null
         if (active) { setUser(null); setAuthState('loggedOut') }
         return
       }
+      currentUserIdRef.current = session.user.id
       if (active) { setUser(session.user); setAuthState('syncing') }
       try {
         await assertCloudAvailable(supabase)
@@ -88,6 +91,13 @@ export default function App() {
       // để tránh unmount màn hình hiện tại (mất tab đang mở).
       if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         if (active && session) setUser(session.user)
+        return
+      }
+      // Supabase co the phat lai SIGNED_IN cho cung 1 phien khi tab duoc
+      // focus lai (khong phai dang nhap moi) - bo qua de khong tai lai
+      // workspace va mat man hinh dang xem.
+      if (event === 'SIGNED_IN' && session && currentUserIdRef.current === session.user.id) {
+        if (active) setUser(session.user)
         return
       }
       void openWorkspace(session)
