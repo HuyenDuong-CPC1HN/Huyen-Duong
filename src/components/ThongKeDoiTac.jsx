@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import { opsStore as localStorage } from '../data/workspace'
 import { Package, CheckCircle, TrendingUp, Truck, AlertTriangle } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 import { partnerType } from '../utils/partnerType'
@@ -88,7 +87,7 @@ export function DetailTable({ rows }) {
  *
  * Counting logic is PRESERVED verbatim (R26) — only the CSS classes change.
  */
-function SummaryBar({ data, groups, showChanhXe, type, weekKey, referenceDate = null }) {
+function SummaryBar({ data, groups, showChanhXe, type, referenceDate = null }) {
   // Ưu tiên lấy theo file VTP/SPX đã upload (khớp theo ngày tuần Đơn C/DTP đang chọn); chưa có file thì tạm dùng số đếm từ Excel nội bộ
   const viettelFile = getCarrierFileTotal(`${type}_viettel`, 'viettel', data, referenceDate)
   const spxFile = getCarrierFileTotal(`${type}_spx`, 'spx', data, referenceDate)
@@ -96,18 +95,11 @@ function SummaryBar({ data, groups, showChanhXe, type, weekKey, referenceDate = 
   const spxCount = spxFile ? spxFile.total : groups.doitac.sub.spx.rows.length
   const doitacTotal = viettelCount + spxCount
 
-  // Kế thừa đúng số từ khung "Giao hàng trực tiếp" chi tiết (24h+48h+72h + Chưa giao nhập tay theo khách hàng), đúng theo tuần đang xem
-  const trucTiepDelivered = groups.tructiep.sub[24].length + groups.tructiep.sub[48].length + groups.tructiep.sub[72].length
-  let khSum = 0
-  try {
-    const khValues = JSON.parse(localStorage.getItem(`chuagiao_kh_${type}_tructIep_${weekKey}`) || '{}')
-    khSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
-  } catch { /* ignore */ }
-  const trucTiepTotal = trucTiepDelivered + khSum
-
-  // Số đơn chành xe "chưa gửi" nhập tay ở khung Thống kê giao hàng — cùng nguồn, đúng theo tuần
-  const chuaGuiChanh = Number(localStorage.getItem(`chuagiao_override_${type}_chanhXe_${weekKey}_chuagui`) || 0)
-  const chanhXeTotal = groups.chanhxe.rows.length + chuaGuiChanh
+  // Đếm thẳng số dòng Excel đã phân loại — khớp với accordion bên dưới và cột Thống kê giao hàng,
+  // không cộng thêm số "chưa giao"/"chưa gửi chành" nhập tay (số đó dễ lệch nếu file được upload lại
+  // với nhiều/ít dòng hơn mà chưa kịp cập nhật lại phần nhập tay tương ứng)
+  const trucTiepTotal = groups.tructiep.rows.length
+  const chanhXeTotal = groups.chanhxe.rows.length
 
   const total = trucTiepTotal + (showChanhXe ? chanhXeTotal : 0) + doitacTotal
   const pct = (part) => total ? Math.round((part / total) * 100) : 0
@@ -211,13 +203,13 @@ function DtpHoldBlock({ viettelRows }) {
   )
 }
 
-export default function ThongKeDoiTac({ data, type, weekKey = 'live', referenceDate = null }) {
+export default function ThongKeDoiTac({ data, type, referenceDate = null }) {
   const groups = useMemo(() => buildGroups(data), [data])
   if (!data.length) return <div className="text-center py-20 text-gray-400">Không có dữ liệu</div>
 
   return (
     <div>
-      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} type={type} weekKey={weekKey} referenceDate={referenceDate} />
+      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} type={type} referenceDate={referenceDate} />
       <GroupBreakdownSection
         groups={groups}
         type={type}

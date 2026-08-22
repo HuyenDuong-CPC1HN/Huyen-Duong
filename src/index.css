@@ -1294,10 +1294,6 @@ body {
   margin-right: auto;
 }
 
-.sheet-tab-kpi {
-  margin-bottom: 4px;
-}
-
 .sheet-tab-split {
   display: grid;
   grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);

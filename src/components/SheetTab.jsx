@@ -105,16 +105,6 @@ export default function SheetTab({ type }) {
   const isSaved = savedIds.includes(activeId)
   const hasData = displayWeeks.length > 0
 
-  // ─── KPI computation (R12 — existing formula only) ───────────────────────────
-  const kpi = useMemo(() => {
-    const valid = activeData.filter(r => String(r['Mã kiện hàng'] ?? '').trim())
-    const delivered = valid.filter(r => r['Trạng thái'] === 'Đã giao').length
-    const total = valid.length
-    const rate = total ? Math.round((delivered / total) * 100) : 0
-    const pending = total - delivered
-    return { total, delivered, rate, pending }
-  }, [activeData])
-
   // ─── Empty state ────────────────────────────────────────────────────────────
   if (!hasData) {
     return (
@@ -210,9 +200,6 @@ export default function SheetTab({ type }) {
           </div>
         )}
 
-        {/* ── KPI strip — live weeks only; saved weeks use SnapshotView KPIs ── */}
-        {!snapshot && <KpiStrip kpi={kpi} />}
-
         {/* ── Report body ─────────────────────────────────────────────────── */}
         <div className="sheet-tab-report">
           <SheetReportPanel
@@ -280,58 +267,3 @@ export default function SheetTab({ type }) {
   )
 }
 
-// ─── KPI Strip ────────────────────────────────────────────────────────────────
-function KpiStrip({ kpi }) {
-  return (
-    <div className="report-kpi-grid is-three-column sheet-tab-kpi">
-      <div className="report-kpi">
-        <div className="report-kpi-main">
-          <div className="report-kpi-icon" style={{ background: '#f2f6fc' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" strokeWidth="2" width="18" height="18" aria-hidden="true">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            </svg>
-          </div>
-          <div>
-            <div className="report-kpi-label">Tổng đơn</div>
-            <div className="report-kpi-value" style={{ color: 'var(--color-login-text)' }}>
-              {kpi.total.toLocaleString('vi-VN')}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="report-kpi">
-        <div className="report-kpi-main">
-          <div className="report-kpi-icon" style={{ background: '#ecfdf5' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2" width="18" height="18" aria-hidden="true">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-          </div>
-          <div>
-            <div className="report-kpi-label">Đã giao</div>
-            <div className="report-kpi-value" style={{ color: '#15803d' }}>
-              {kpi.delivered.toLocaleString('vi-VN')}
-              <span>({kpi.rate}%)</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="report-kpi">
-        <div className="report-kpi-main">
-          <div className="report-kpi-icon" style={{ background: '#fefce8' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="#a16207" strokeWidth="2" width="18" height="18" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
-          </div>
-          <div>
-            <div className="report-kpi-label">Chưa giao</div>
-            <div className="report-kpi-value" style={{ color: '#a16207' }}>
-              {kpi.pending.toLocaleString('vi-VN')}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
