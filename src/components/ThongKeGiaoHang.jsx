@@ -319,6 +319,9 @@ function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
   const [chuaGuiChanh, setChuaGuiChanh] = useChuaGiaoOverride(`${scopedKey}_chuagui`)
   const [khValues, setKhValue] = useKhBreakdownValues(scopedKey)
 
+  // "Chưa giao" = tổng các ô phân loại khách hàng (Bệnh viện + Nhà thuốc + KH ONL...) khi có nhập
+  const khBreakdownSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
+
   // Viettel Post / SPX Express: nhúng trực tiếp khung đối soát (upload file xuất, thống kê thật) — khớp đúng tuần đang chọn
   if (CARRIER_KEY_MAP[g.key]) {
     const carrierType = CARRIER_KEY_MAP[g.key]
@@ -367,11 +370,9 @@ function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
     )
   }
 
-  // Chưa giao luôn lấy theo số tính tự động từ dữ liệu (ngày tạo/ngày giao) — không dùng tổng
-  // "Phân loại theo khách hàng" nhập tay nữa, vì số đó dễ bị cũ sau khi Excel được upload lại
-  // với nhiều/ít đơn hơn mà chưa kịp nhập lại cho khớp.
   let effectiveChuaGiao = g.stats.chuaGiao
-  if (override !== '') effectiveChuaGiao = Number(override)
+  if (g.showKhBreakdown) effectiveChuaGiao = khBreakdownSum
+  else if (override !== '') effectiveChuaGiao = Number(override)
   const totalWithOverride = g.stats['24h'] + g.stats['48h'] + g.stats['72h'] + effectiveChuaGiao
     + (g.cols.includes('giaoLai') ? g.stats.giaoLai : 0)
     + (g.cols.includes('hoanHang') ? g.stats.hoanHang : 0)
@@ -390,8 +391,8 @@ function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
           const label = g.labelMap?.[col.key] || col.label
           if (col.key === 'chuaGiao' && g.showKhBreakdown) {
             return (
-              <div key={col.key} title="Tính tự động từ ngày tạo/ngày giao — xem chi tiết theo khách hàng bên dưới">
-                <StatCard icon={col.icon} value={val} label={label} cls={col.cls} />
+              <div key={col.key} title="Bằng tổng phân loại khách hàng bên dưới">
+                <StatCard icon={col.icon} value={khBreakdownSum} label={label} cls={col.cls} />
               </div>
             )
           }
