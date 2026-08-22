@@ -10,8 +10,8 @@ const STAT_CARDS = [
   { key: '24h',          label: '≤ 24 giờ',        icon: CheckCircle, cls: 'text-green-600' },
   { key: '48h',          label: '≤ 48 giờ',        icon: CheckCircle, cls: 'text-teal-600' },
   { key: '72h',          label: '≤ 72 giờ',        icon: Clock,       cls: 'text-blue-600' },
-  { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600' },
   { key: 'choLay',       label: 'Chờ lấy',         icon: Package,     cls: 'text-purple-600' },
+  { key: 'dangVanChuyen',label: 'Đang vận chuyển', icon: Truck,       cls: 'text-yellow-600' },
   { key: 'giaoLai',      label: 'Đang giao hàng',  icon: RotateCcw,   cls: 'text-orange-600' },
   { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600' },
 ]
