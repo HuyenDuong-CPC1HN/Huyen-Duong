@@ -341,10 +341,11 @@ function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
   }
 
   if (!g.detailed) {
-    // Badge tren tieu de luon la so dong Excel thuc te — khop voi cot Doi tac VC va khong bi lech
-    // khi upload lai file moi ma chua kip cap nhat lai "so don chua gui chanh" nhap tay.
+    const chuaGuiVal = chuaGuiChanh !== '' ? Number(chuaGuiChanh) : 0
+    // Badge = so dong Excel + so don "chua gui chanh" nhap tay (don that nhung chua co trong Excel),
+    // khop voi cot Doi tac VC ben trai.
     return (
-      <SectionCard title={g.label} total={g.rows.length} defaultOpen={false}>
+      <SectionCard title={g.label} total={g.rows.length + chuaGuiVal} defaultOpen={false}>
         <div className="text-sm text-gray-500 flex items-center gap-2">
           <Package size={15} className="text-gray-400" />
           Tổng số đơn đã gửi qua chành: <strong className="text-gray-800 ml-1">{g.rows.length} đơn</strong>
@@ -381,10 +382,9 @@ function GroupCard({ g, type, internalData, weekKey, referenceDate = null }) {
   const pct = totalWithOverride > 0 ? Math.round((delivered / totalWithOverride) * 100) : 0
 
   return (
-    // Badge tren tieu de la so dong Excel thuc te (g.rows.length), khop voi cot Doi tac VC —
-    // totalWithOverride (giao + chua giao nhap tay) chi dung cho thanh Da giao/Chua giao ben trong,
-    // vi no de bi lech khi file duoc upload lai ma chua cap nhat lai phan nhap tay tuong ung.
-    <SectionCard title={g.label} total={g.rows.length} defaultOpen={false}>
+    // Badge = so dong Excel + so don "chua giao" nhap tay (don that nhung chua co trong Excel),
+    // khop voi cot Doi tac VC ben trai.
+    <SectionCard title={g.label} total={g.rows.length + effectiveChuaGiao} defaultOpen={false}>
       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: `repeat(${g.cols.length}, minmax(0, 1fr))` }}>
         {STAT_COLS.filter(col => g.cols.includes(col.key)).map(col => {
           const val = g.stats[col.key]

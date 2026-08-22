@@ -1,10 +1,24 @@
 import { useMemo } from 'react'
+import { opsStore as localStorage } from '../data/workspace'
 import { Package, CheckCircle, TrendingUp, Truck, AlertTriangle } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
 import { getCarrierFileTotal, getCarrierFileStats, readHoldWeeks } from './CarrierStats'
 import { KpiTile, SectionCard } from './ReportCards'
+
+// Số "chưa giao"/"chưa gửi chành" nhập tay ở cột Thống kê giao hàng — đây là các đơn THỰC TẾ tồn tại
+// nhưng CHƯA có trong file Excel Đơn C/DTP (vd đơn chưa kịp lên hệ thống), nên phải CỘNG THÊM vào số
+// dòng Excel để ra đúng tổng đơn thật — không phải số cũ/dư, phải khớp với cột bên phải.
+function readManualChuaGiao(type, weekKey) {
+  let khSum = 0
+  try {
+    const khValues = JSON.parse(localStorage.getItem(`chuagiao_kh_${type}_tructIep_${weekKey}`) || '{}')
+    khSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
+  } catch { /* ignore */ }
+  const chuaGuiChanh = Number(localStorage.getItem(`chuagiao_override_${type}_chanhXe_${weekKey}_chuagui`) || 0)
+  return { khSum, chuaGuiChanh }
+}
 
 function trucTiepSubKey(bucket) {
   if (bucket === '24') return '24'
@@ -87,7 +101,7 @@ export function DetailTable({ rows }) {
  *
  * Counting logic is PRESERVED verbatim (R26) — only the CSS classes change.
  */
-function SummaryBar({ data, groups, showChanhXe, type, referenceDate = null }) {
+function SummaryBar({ data, groups, showChanhXe, type, weekKey, referenceDate = null }) {
   // Ưu tiên lấy theo file VTP/SPX đã upload (khớp theo ngày tuần Đơn C/DTP đang chọn); chưa có file thì tạm dùng số đếm từ Excel nội bộ
   const viettelFile = getCarrierFileTotal(`${type}_viettel`, 'viettel', data, referenceDate)
   const spxFile = getCarrierFileTotal(`${type}_spx`, 'spx', data, referenceDate)
@@ -95,11 +109,11 @@ function SummaryBar({ data, groups, showChanhXe, type, referenceDate = null }) {
   const spxCount = spxFile ? spxFile.total : groups.doitac.sub.spx.rows.length
   const doitacTotal = viettelCount + spxCount
 
-  // Đếm thẳng số dòng Excel đã phân loại — khớp với accordion bên dưới và cột Thống kê giao hàng,
-  // không cộng thêm số "chưa giao"/"chưa gửi chành" nhập tay (số đó dễ lệch nếu file được upload lại
-  // với nhiều/ít dòng hơn mà chưa kịp cập nhật lại phần nhập tay tương ứng)
-  const trucTiepTotal = groups.tructiep.rows.length
-  const chanhXeTotal = groups.chanhxe.rows.length
+  // Số dòng Excel + số đơn "chưa giao"/"chưa gửi chành" nhập tay (đơn thật nhưng chưa có trong Excel) —
+  // khớp với accordion bên dưới và cột Thống kê giao hàng bên phải
+  const { khSum, chuaGuiChanh } = readManualChuaGiao(type, weekKey)
+  const trucTiepTotal = groups.tructiep.rows.length + khSum
+  const chanhXeTotal = groups.chanhxe.rows.length + chuaGuiChanh
 
   const total = trucTiepTotal + (showChanhXe ? chanhXeTotal : 0) + doitacTotal
   const pct = (part) => total ? Math.round((part / total) * 100) : 0
@@ -127,7 +141,7 @@ function SummaryBar({ data, groups, showChanhXe, type, referenceDate = null }) {
  * Renders for each carrier group: eyebrow label, total badge, expandable detail table.
  * Groups are open by default for convenience but section title is collapsed.
  */
-function GroupBreakdownSection({ groups, type, referenceDate, data }) {
+function GroupBreakdownSection({ groups, type, weekKey, referenceDate, data }) {
   const viettelRows = groups.doitac.sub.viettel.rows
   const spxRows = groups.doitac.sub.spx.rows
   const chanhxeRows = groups.chanhxe.rows
@@ -135,13 +149,14 @@ function GroupBreakdownSection({ groups, type, referenceDate, data }) {
   // VTP file stats
   const viettelFileStats = getCarrierFileStats(`${type}_viettel`, 'viettel', data, referenceDate)
   const spxFileStats = getCarrierFileStats(`${type}_spx`, 'spx', data, referenceDate)
+  const { khSum, chuaGuiChanh } = readManualChuaGiao(type, weekKey)
 
   const groupItems = [
     {
       key: 'tructiep',
       label: 'Giao hàng trực tiếp',
       icon: CheckCircle,
-      count: groups.tructiep.rows.length,
+      count: groups.tructiep.rows.length + khSum,
       rows: groups.tructiep.rows,
       show: true,
     },
@@ -149,7 +164,7 @@ function GroupBreakdownSection({ groups, type, referenceDate, data }) {
       key: 'chanhxe',
       label: 'Giao qua Chành xe',
       icon: Truck,
-      count: chanhxeRows.length,
+      count: chanhxeRows.length + chuaGuiChanh,
       rows: chanhxeRows,
       show: type !== 'donDTP',
     },
@@ -203,16 +218,17 @@ function DtpHoldBlock({ viettelRows }) {
   )
 }
 
-export default function ThongKeDoiTac({ data, type, referenceDate = null }) {
+export default function ThongKeDoiTac({ data, type, weekKey = 'live', referenceDate = null }) {
   const groups = useMemo(() => buildGroups(data), [data])
   if (!data.length) return <div className="text-center py-20 text-gray-400">Không có dữ liệu</div>
 
   return (
     <div>
-      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} type={type} referenceDate={referenceDate} />
+      <SummaryBar data={data} groups={groups} showChanhXe={type !== 'donDTP'} type={type} weekKey={weekKey} referenceDate={referenceDate} />
       <GroupBreakdownSection
         groups={groups}
         type={type}
+        weekKey={weekKey}
         referenceDate={referenceDate}
         data={data}
       />
