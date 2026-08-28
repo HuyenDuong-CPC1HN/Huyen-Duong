@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose } from 'lucide-react'
+import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import SheetTab from './components/SheetTab'
 import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
+import ExpiryStockTab from './components/ExpiryStockTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
@@ -23,6 +24,7 @@ const NAV = [
       { id: 'tmdt',    label: 'Đơn hàng Sàn TMĐT',  icon: ShoppingBag },
     ],
   },
+  { id: 'tonkhocandate', label: 'Tồn kho cận date', icon: CalendarClock },
   { id: 'guilen8n', label: 'Gửi lên n8n', icon: Send },
 ]
 
@@ -32,6 +34,7 @@ const BREADCRUMB = {
   donC:     ['Trang chủ', 'Báo cáo giao hàng', 'Giao hàng Đơn C'],
   donDTP:   ['Trang chủ', 'Báo cáo giao hàng', 'Giao hàng Đơn DTP'],
   tmdt:     ['Trang chủ', 'Báo cáo giao hàng', 'Đơn hàng Sàn TMĐT'],
+  tonkhocandate: ['Trang chủ', 'Tồn kho cận date'],
   guilen8n: ['Trang chủ', 'Gửi lên n8n'],
 }
 
@@ -143,7 +146,12 @@ export default function App() {
         <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
         <strong>Ứng dụng chỉ hoạt động khi có Internet</strong>
         <span>{blockingError}</span>
-        {/reporting_cycles|schema cache/i.test(blockingError || '') ? (
+        {/expiry_stock_months/i.test(blockingError || '') ? (
+          <span>
+            Chưa chạy migration tồn kho cận date trên Supabase. Mở SQL Editor, chạy toàn bộ file
+            {' '}<code>supabase/migrations/20260828_expiry_stock.sql</code>, rồi tải lại trang.
+          </span>
+        ) : /reporting_cycles|schema cache/i.test(blockingError || '') ? (
           <span>
             Chưa chạy migration analytics trên Supabase. Mở SQL Editor, chạy toàn bộ file
             {' '}<code>supabase/migrations/20260809_analytics_foundation.sql</code>, rồi tải lại trang.
@@ -351,6 +359,7 @@ function AppContent({ user }) {
           {active === 'donC'    && <SheetTab type="donC" />}
           {active === 'donDTP'  && <SheetTab type="donDTP" />}
           {active === 'tmdt'    && <TmdtTab />}
+          {active === 'tonkhocandate' && <ExpiryStockTab />}
           {active === 'guilen8n' && <N8nWebhookForm />}
         </main>
       </div>

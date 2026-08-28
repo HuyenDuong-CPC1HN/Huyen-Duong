@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { createCarrierWeeksRepository } from './carrierWeeks'
+import { createExpiryStockMonthsRepository } from './expiryStockMonths'
 import { createOpsSettingsRepository } from './opsSettings'
 import { createReportWeeksRepository } from './reportWeeks'
 import { createSheetReportsRepository } from './sheetReports'
@@ -89,10 +90,34 @@ async function loadCarriers(client) {
   }
 }
 
+async function loadExpiryStock(client) {
+  const repo = createExpiryStockMonthsRepository(client)
+  const records = await repo.list()
+  const months = await Promise.all(records.map(async record => ({
+    id: record.id,
+    fileName: record.file_name,
+    uploadedAt: record.uploaded_at,
+    rows: await repo.loadRows(record),
+  })))
+  put('expiry_stock_months', encode(months))
+  setBaseline('expiry_stock_months', months)
+  put('expiry_stock_active', records.find(record => record.is_active)?.id || months[0]?.id || '')
+}
+
 export async function loadWorkspace(client = supabase) {
   if (!client) throw new Error('Thiếu cấu hình Supabase.')
   values.clear()
   await Promise.all([loadWeeks(client, 'donC'), loadWeeks(client, 'donDTP'), loadCarriers(client)])
+  try {
+    await loadExpiryStock(client)
+  } catch (error) {
+    const message = error?.message || String(error)
+    // Migration tồn kho cận date có thể chưa được áp dụng — không chặn workspace chính vì việc này.
+    if (!/expiry_stock_months|schema cache/i.test(message)) throw error
+    put('expiry_stock_months', encode([]))
+    setBaseline('expiry_stock_months', [])
+    put('expiry_stock_active', '')
+  }
   const [donCReports, donDtpReports, tongdon, tmdt, settingsResult] = await Promise.all([
     createSheetReportsRepository(client).list('donC'),
     createSheetReportsRepository(client).list('donDTP'),
@@ -225,6 +250,26 @@ async function syncHoldWeeks(key) {
   setBaseline(key, weeks)
 }
 
+async function syncExpiryStockMonths(key) {
+  const repo = createExpiryStockMonthsRepository(supabase)
+  const months = decode(values.get(key) || '[]')
+  const changes = consumeChanges(key)
+  if (!changes.upserts.size && !changes.deletes.size) return
+  const current = await repo.list()
+  const currentById = new Map(current.map(month => [String(month.id), month]))
+  for (const month of months.filter(item => changes.upserts.has(String(item.id)))) {
+    await repo.save({
+      id: month.id,
+      fileName: month.fileName,
+      uploadedAt: month.uploadedAt,
+      rows: month.rows || [],
+      isActive: values.get('expiry_stock_active') === month.id,
+    })
+  }
+  await Promise.all([...changes.deletes].map(id => currentById.get(id)).filter(Boolean).map(month => repo.remove(month)))
+  setBaseline(key, months)
+}
+
 async function persist(key) {
   if (key.startsWith('weeks_')) return syncWeeks(key)
   if (key.startsWith('activeWeek_')) return createReportWeeksRepository(supabase).setActive(key.replace('activeWeek_', ''), values.get(key) || '')
@@ -233,6 +278,8 @@ async function persist(key) {
   if (key === 'tmdt_reports') return syncReports(key, createTmdtReportsRepository(supabase))
   if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
   if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
+  if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
+  if (key === 'expiry_stock_active') return createExpiryStockMonthsRepository(supabase).setActive(values.get(key) || '')
   return createOpsSettingsRepository(supabase).set(key, decode(values.get(key)))
 }
 
@@ -262,6 +309,7 @@ export const opsStore = {
       if (key.startsWith('weeks_')) return syncWeeks(key)
       if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
       if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
+      if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
       return createOpsSettingsRepository(supabase).remove(key)
     }).catch(notifyError)
     return writeChain
