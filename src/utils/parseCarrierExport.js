@@ -108,8 +108,10 @@ const CARRIER_CONFIG = {
     // vào Đang giao hàng (chờ xử lý tiếp), không phải Hoàn hàng.
     giaoLaiStatuses: ['Chờ phát lại', 'Phát tiếp', 'Chờ xử lý'],
     hoanHangStatuses: [],
-    // Đơn shop tự huỷ hoặc không lấy được hàng trước khi giao — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
-    cancelStatuses: ['Shop hủy lấy', 'Shop huỷ lấy', 'Tồn - Lấy không thành công'],
+    // Đơn shop tự huỷ lấy — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
+    cancelStatuses: ['Shop hủy lấy', 'Shop huỷ lấy'],
+    // "Tồn - Lấy không thành công": vẫn là đơn thật, chỉ là chưa lấy được — tính vào Chờ lấy, không loại khỏi tổng
+    pickupFailStatuses: ['Tồn - Lấy không thành công'],
     // "Đang lấy hàng": đối chiếu Mã Vận Đơn (file VTP) với cột "Mã vận đơn VT" trong file
     // "Chờ giao Logistics" upload thêm — khớp thì tính vào Đang vận chuyển, không khớp thì bỏ qua
     holdStatuses: ['Đang lấy hàng'],
