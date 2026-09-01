@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
+import { resetActiveTabCache } from '../../utils/activeTabCache'
 import { loadWorkspace } from '../../data/workspace'
 
 const sessionStorageMock = (() => {
@@ -56,6 +57,7 @@ describe('authenticated application shell', () => {
     cleanup()
     workspaceMocks.clear()
     sessionStorageMock.clear()
+    resetActiveTabCache()
     loadWorkspace.mockReset()
     loadWorkspace.mockResolvedValue(undefined)
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })

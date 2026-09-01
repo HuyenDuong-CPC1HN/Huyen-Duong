@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
+import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
 import SheetTab from './components/SheetTab'
 import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
@@ -159,13 +160,7 @@ export default function App() {
 }
 
 function AppContent({ user }) {
-  const [active, setActive] = useState(() => {
-    try {
-      return sessionStorage.getItem('appActiveTab') || 'home'
-    } catch {
-      return 'home'
-    }
-  })
+  const [active, setActive] = useState(() => getCachedActiveTab('home'))
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth >= 900,
   )
@@ -179,10 +174,11 @@ function AppContent({ user }) {
 
   // Persist active tab to sessionStorage so it survives tab visibility changes
   useEffect(() => {
+    setCachedActiveTab(active)
     try {
       sessionStorage.setItem('appActiveTab', active)
     } catch {
-      // sessionStorage unavailable (private mode, quota exceeded, etc.)
+      // sessionStorage unavailable
     }
   }, [active])
 
