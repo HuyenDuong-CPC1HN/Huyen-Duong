@@ -142,24 +142,29 @@ export default function App() {
   }
 
   if (authState === 'blocked') {
+    let remediationHint = <span>Kiểm tra kết nối mạng và trạng thái Supabase, sau đó tải lại trang.</span>
+    if (/expiry_stock_months/i.test(blockingError || '')) {
+      remediationHint = (
+        <span>
+          Chưa chạy migration tồn kho cận date trên Supabase. Mở SQL Editor, chạy toàn bộ file
+          {' '}<code>supabase/migrations/20260828_expiry_stock.sql</code>, rồi tải lại trang.
+        </span>
+      )
+    } else if (/reporting_cycles|schema cache/i.test(blockingError || '')) {
+      remediationHint = (
+        <span>
+          Chưa chạy migration analytics trên Supabase. Mở SQL Editor, chạy toàn bộ file
+          {' '}<code>supabase/migrations/20260809_analytics_foundation.sql</code>, rồi tải lại trang.
+        </span>
+      )
+    }
+
     return (
       <div className="app-loading-state" role="alert">
         <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
         <strong>Ứng dụng chỉ hoạt động khi có Internet</strong>
         <span>{blockingError}</span>
-        {/expiry_stock_months/i.test(blockingError || '') ? (
-          <span>
-            Chưa chạy migration tồn kho cận date trên Supabase. Mở SQL Editor, chạy toàn bộ file
-            {' '}<code>supabase/migrations/20260828_expiry_stock.sql</code>, rồi tải lại trang.
-          </span>
-        ) : /reporting_cycles|schema cache/i.test(blockingError || '') ? (
-          <span>
-            Chưa chạy migration analytics trên Supabase. Mở SQL Editor, chạy toàn bộ file
-            {' '}<code>supabase/migrations/20260809_analytics_foundation.sql</code>, rồi tải lại trang.
-          </span>
-        ) : (
-          <span>Kiểm tra kết nối mạng và trạng thái Supabase, sau đó tải lại trang.</span>
-        )}
+        {remediationHint}
       </div>
     )
   }
