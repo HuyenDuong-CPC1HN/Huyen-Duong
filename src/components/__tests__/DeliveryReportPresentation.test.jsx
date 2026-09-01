@@ -39,6 +39,10 @@ vi.mock('../CarrierStats', () => ({
     scheduleClear: vi.fn(),
     cancelClear: vi.fn(),
   })),
+  // Referenced by ThongKeGiaoHang's carrier GroupCard branch — passed as SectionCard
+  // children, so the JSX element is created (and this identifier read) even when the
+  // section is collapsed by default and never actually mounted.
+  CarrierPanel: vi.fn(() => null),
 }))
 
 describe('ThongKeDoiTac — renders without crashing', () => {

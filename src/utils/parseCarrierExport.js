@@ -104,14 +104,24 @@ const CARRIER_CONFIG = {
     createdKey: 'Ngày tạo',
     deliveredAtKey: 'Ngày chuyển trạng thái',
     deliveredStatus: 'Giao thành công',
-    giaoLaiStatuses: ['Chờ phát lại', 'Phát tiếp'],
+    // "Chờ xử lý" kèm cờ Đơn chuyển hoàn=x: đơn mới được đánh dấu chuyển hoàn, CHƯA thực sự hoàn — tính
+    // vào Đang giao hàng (chờ xử lý tiếp), không phải Hoàn hàng.
+    giaoLaiStatuses: ['Chờ phát lại', 'Phát tiếp', 'Chờ xử lý'],
     hoanHangStatuses: [],
-    // Đơn shop tự huỷ hoặc không lấy được hàng trước khi giao — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
-    cancelStatuses: ['Shop hủy lấy', 'Shop huỷ lấy', 'Tồn - Lấy không thành công'],
+    // Đơn shop tự huỷ lấy — không phải đơn thực sự cần giao, loại hẳn khỏi tổng
+    cancelStatuses: ['Shop hủy lấy', 'Shop huỷ lấy'],
+    // "Tồn - Lấy không thành công": vẫn là đơn thật, chỉ là chưa lấy được — tính vào Chờ lấy, không loại khỏi tổng
+    pickupFailStatuses: ['Tồn - Lấy không thành công'],
     // "Đang lấy hàng": đối chiếu Mã Vận Đơn (file VTP) với cột "Mã vận đơn VT" trong file
     // "Chờ giao Logistics" upload thêm — khớp thì tính vào Đang vận chuyển, không khớp thì bỏ qua
     holdStatuses: ['Đang lấy hàng'],
-    isHoanHang: row => row['Đơn chuyển hoàn'].toLowerCase() === 'x',
+    // Chỉ tính "Hoàn hàng" khi Trạng Thái xác nhận đã/đang thực sự chuyển hoàn ("Đang chuyển hoàn"/"Đã trả...") —
+    // không dựa vào cờ "Đơn chuyển hoàn" nữa vì cờ này có thể bật trước khi Trạng Thái cập nhật theo (vd còn
+    // "Chờ xử lý", xem giaoLaiStatuses ở trên) hoặc ngược lại Trạng Thái đã "Đang chuyển hoàn" mà cờ chưa bật.
+    isHoanHang: row => {
+      const status = row['Trạng Thái']
+      return status === 'Đang chuyển hoàn' || status.includes('Đã trả')
+    },
     orderCounter: viettelOrderCount,
   },
   spx: {

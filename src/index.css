@@ -1294,10 +1294,6 @@ body {
   margin-right: auto;
 }
 
-.sheet-tab-kpi {
-  margin-bottom: 4px;
-}
-
 .sheet-tab-split {
   display: grid;
   grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
@@ -1429,9 +1425,12 @@ body {
   }
 }
 
-/* Desktop no-scroll lock (>= 1024px) */
+/* Desktop no-scroll lock (>= 1024px) — chỉ áp dụng cho bản đã lưu, vì chỉ
+   .sheet-tab.is-saved-report mới có chiều cao cố định + panel cuộn nội bộ
+   (xem "Saved report locked viewport" bên dưới). Tuần đang làm việc (live)
+   không có cơ chế cuộn nội bộ đó nên phải để trang ngoài cuộn bình thường. */
 @media (min-width: 1024px) {
-  .dashboard-main:has(.sheet-tab.is-active-report) {
+  .dashboard-main:has(.sheet-tab.is-saved-report) {
     overflow: hidden;
   }
 }

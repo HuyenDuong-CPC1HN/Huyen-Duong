@@ -1,7 +1,7 @@
 # Supabase schema
 
 1. Create a Supabase project.
-2. In **SQL Editor**, run `migrations/20260809_init_ops_schema.sql` once, then run `migrations/20260809_analytics_foundation.sql`. The migrations are safe to re-run for their tables, indexes, trigger names, bucket, and policies.
+2. In **SQL Editor**, run `migrations/20260809_init_ops_schema.sql` once, then run `migrations/20260809_analytics_foundation.sql`, then `migrations/20260828_expiry_stock.sql`. The migrations are safe to re-run for their tables, indexes, trigger names, bucket, and policies.
 3. Copy the project URL and anon/publishable key into `.env.local` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
 `ops-files` is private. The SQL policies intentionally grant every authenticated

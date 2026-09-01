@@ -123,13 +123,11 @@ describe('SheetTab Đơn C — layout and KPI invariants', () => {
     store.clear()
   })
 
-  it('renders with .sheet-tab class and shows KPI strip when data is loaded', () => {
+  it('renders with .sheet-tab class when data is loaded', () => {
     const week = makeDonCWeek()
     mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(week))
     render(<SheetTab type="donC" />)
     expect(document.querySelector('.sheet-tab')).toBeInTheDocument()
-    // KPI strip must be present — use the container class
-    expect(document.querySelector('.sheet-tab-kpi')).toBeInTheDocument()
   })
 
   it('detail accordion defaults to closed (aria-expanded=false)', () => {
@@ -161,7 +159,7 @@ describe('SheetTab Đơn C — layout and KPI invariants', () => {
     expect(screen.queryByRole('button', { name: /Đối tác VC/i })).not.toBeInTheDocument()
   })
 
-  it('hides the live KPI strip when a saved snapshot is shown', () => {
+  it('shows the saved snapshot view instead of the live report body', () => {
     const week = makeDonCWeek([])
     mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(week))
     vi.mocked(useSheetReportActions).mockReturnValueOnce({
@@ -186,7 +184,6 @@ describe('SheetTab Đơn C — layout and KPI invariants', () => {
       reports: [],
     })
     render(<SheetTab type="donC" />)
-    expect(document.querySelector('.sheet-tab-kpi')).not.toBeInTheDocument()
     expect(screen.getByText('Bản đã lưu')).toBeInTheDocument()
   })
 })
