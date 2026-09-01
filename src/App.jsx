@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock } from 'lucide-react'
+import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -7,6 +7,7 @@ import SheetTab from './components/SheetTab'
 import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
 import ExpiryStockTab from './components/ExpiryStockTab'
+import NhapHangTab from './components/NhapHangTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
@@ -26,6 +27,7 @@ const NAV = [
     ],
   },
   { id: 'tonkhocandate', label: 'Tồn kho cận date', icon: CalendarClock },
+  { id: 'nhaphang', label: 'Nhập hàng', icon: PackagePlus },
   { id: 'guilen8n', label: 'Gửi lên n8n', icon: Send },
 ]
 
@@ -36,6 +38,7 @@ const BREADCRUMB = {
   donDTP:   ['Trang chủ', 'Báo cáo giao hàng', 'Giao hàng Đơn DTP'],
   tmdt:     ['Trang chủ', 'Báo cáo giao hàng', 'Đơn hàng Sàn TMĐT'],
   tonkhocandate: ['Trang chủ', 'Tồn kho cận date'],
+  nhaphang: ['Trang chủ', 'Nhập hàng'],
   guilen8n: ['Trang chủ', 'Gửi lên n8n'],
 }
 
@@ -148,6 +151,13 @@ export default function App() {
         <span>
           Chưa chạy migration tồn kho cận date trên Supabase. Mở SQL Editor, chạy toàn bộ file
           {' '}<code>supabase/migrations/20260828_expiry_stock.sql</code>, rồi tải lại trang.
+        </span>
+      )
+    } else if (/goods_receipt_batches|goods_receipt_lines/i.test(blockingError || '')) {
+      remediationHint = (
+        <span>
+          Chưa chạy migration nhập hàng trên Supabase. Mở SQL Editor, chạy toàn bộ file
+          {' '}<code>supabase/migrations/20260901_goods_receipt.sql</code>, rồi tải lại trang.
         </span>
       )
     } else if (/reporting_cycles|schema cache/i.test(blockingError || '')) {
@@ -361,6 +371,7 @@ function AppContent({ user }) {
           {active === 'donDTP'  && <SheetTab type="donDTP" />}
           {active === 'tmdt'    && <TmdtTab />}
           {active === 'tonkhocandate' && <ExpiryStockTab />}
+          {active === 'nhaphang' && <NhapHangTab />}
           {active === 'guilen8n' && <N8nWebhookForm />}
         </main>
       </div>

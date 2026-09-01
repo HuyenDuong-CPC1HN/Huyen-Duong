@@ -1,6 +1,7 @@
 import { supabase } from '../supabase'
 import { createCarrierWeeksRepository } from './carrierWeeks'
 import { createExpiryStockMonthsRepository } from './expiryStockMonths'
+import { createGoodsReceiptBatchesRepository } from './goodsReceiptBatches'
 import { createOpsSettingsRepository } from './opsSettings'
 import { createReportWeeksRepository } from './reportWeeks'
 import { createSheetReportsRepository } from './sheetReports'
@@ -10,7 +11,6 @@ import { createStorageFilesRepository } from './storageFiles'
 import { createReportingCyclesRepository } from './reportingCycles'
 
 const values = new Map()
-const baselineIds = new Map()
 const pendingCollectionChanges = new Map()
 let writeChain = Promise.resolve()
 
@@ -19,7 +19,6 @@ function decode(value) {
   try { return JSON.parse(value) } catch { return value }
 }
 function put(key, value) { values.set(key, value) }
-function setBaseline(key, rows) { baselineIds.set(key, new Set(rows.map(row => String(row.id)))) }
 function trackCollectionChanges(key, previousValue, nextValue) {
   const previous = decode(previousValue || '[]')
   const next = decode(nextValue || '[]')
@@ -53,7 +52,6 @@ async function loadWeeks(client, channel) {
     data: await repo.loadRows(record),
   })))
   put(`weeks_${channel}`, encode(weeks))
-  setBaseline(`weeks_${channel}`, weeks)
   put(`activeWeek_${channel}`, records.find(record => record.is_active)?.id || weeks.at(-1)?.id || '')
 }
 
@@ -75,7 +73,6 @@ async function loadCarriers(client) {
   for (const [key, entry] of entries) byKey.set(key, [...(byKey.get(key) || []), entry])
   for (const [key, weeks] of byKey) {
     put(`carrier_weeks_${key}`, encode(weeks))
-    setBaseline(`carrier_weeks_${key}`, weeks)
     put(`carrier_active_${key}`, weeks.find(week => week.isActive)?.id || weeks[0]?.id || '')
   }
   const files = createStorageFilesRepository(client)
@@ -86,7 +83,6 @@ async function loadCarriers(client) {
   }
   for (const [key, weeks] of holdsByKey) {
     put(`carrier_holdweeks_${key}`, encode(weeks))
-    setBaseline(`carrier_holdweeks_${key}`, weeks)
   }
 }
 
@@ -100,8 +96,26 @@ async function loadExpiryStock(client) {
     rows: await repo.loadRows(record),
   })))
   put('expiry_stock_months', encode(months))
-  setBaseline('expiry_stock_months', months)
   put('expiry_stock_active', records.find(record => record.is_active)?.id || months[0]?.id || '')
+}
+
+async function loadGoodsReceipt(client) {
+  const repo = createGoodsReceiptBatchesRepository(client)
+  const records = await repo.list()
+  const batches = await Promise.all(records.map(async record => {
+    const payload = await repo.loadBatch(record)
+    return {
+      id: record.id,
+      processedAt: record.processed_at,
+      pdfFileName: record.pdf_file_name,
+      excelCFileName: record.excel_c_file_name,
+      excelLgtFileName: record.excel_lgt_file_name,
+      khoC: payload.khoC || [],
+      khoLgt: payload.khoLgt || [],
+    }
+  }))
+  put('goods_receipt_batches', encode(batches))
+  put('goods_receipt_active', batches[0]?.id || '')
 }
 
 export async function loadWorkspace(client = supabase) {
@@ -115,8 +129,15 @@ export async function loadWorkspace(client = supabase) {
     // Migration tồn kho cận date có thể chưa được áp dụng — không chặn workspace chính vì việc này.
     if (!/expiry_stock_months|schema cache/i.test(message)) throw error
     put('expiry_stock_months', encode([]))
-    setBaseline('expiry_stock_months', [])
     put('expiry_stock_active', '')
+  }
+  try {
+    await loadGoodsReceipt(client)
+  } catch (error) {
+    const message = error?.message || String(error)
+    if (!/goods_receipt_batches|goods_receipt_lines|schema cache/i.test(message)) throw error
+    put('goods_receipt_batches', encode([]))
+    put('goods_receipt_active', '')
   }
   const [donCReports, donDtpReports, tongdon, tmdt, settingsResult] = await Promise.all([
     createSheetReportsRepository(client).list('donC'),
@@ -142,10 +163,6 @@ export async function loadWorkspace(client = supabase) {
   put('tongdon_reports', encode(tongdon))
   put('tmdt_reports', encode(tmdt))
   put('reporting_cycles', encode(reportingCycles))
-  setBaseline('sheet_reports_donC', donCReports)
-  setBaseline('sheet_reports_donDTP', donDtpReports)
-  setBaseline('tongdon_reports', tongdon)
-  setBaseline('tmdt_reports', tmdt)
   for (const setting of settingsResult.data || []) put(setting.key, encode(setting.value))
 }
 
@@ -157,7 +174,6 @@ export async function refreshReportingCycles(client = supabase) {
 
 export function clearWorkspaceCache() {
   values.clear()
-  baselineIds.clear()
   pendingCollectionChanges.clear()
 }
 
@@ -181,7 +197,6 @@ async function syncWeeks(key) {
     })
   }
   await Promise.all([...changes.deletes].map(id => currentById.get(id)).filter(Boolean).map(week => repo.remove(week)))
-  setBaseline(key, weeks)
 }
 
 async function syncSheetReports(key) {
@@ -191,7 +206,6 @@ async function syncSheetReports(key) {
   const changes = consumeChanges(key)
   for (const report of reports.filter(item => changes.upserts.has(String(item.id)))) await repo.save(channel, report)
   await Promise.all([...changes.deletes].map(id => repo.remove(channel, id)))
-  setBaseline(key, reports)
 }
 
 async function syncReports(key, repo) {
@@ -199,7 +213,6 @@ async function syncReports(key, repo) {
   const changes = consumeChanges(key)
   for (const report of reports.filter(item => changes.upserts.has(String(item.id)))) await repo.save(report)
   await Promise.all([...changes.deletes].map(id => repo.remove(id)))
-  setBaseline(key, reports)
 }
 
 async function syncCarrierWeeks(key) {
@@ -222,7 +235,6 @@ async function syncCarrierWeeks(key) {
     })
   }
   await Promise.all([...changes.deletes].map(id => existingById.get(id)).filter(Boolean).map(week => repo.remove(week)))
-  setBaseline(key, weeks)
 }
 
 async function syncHoldWeeks(key) {
@@ -247,7 +259,6 @@ async function syncHoldWeeks(key) {
     if (error) throw new Error(error.message)
     await files.remove(week.storage_path)
   }
-  setBaseline(key, weeks)
 }
 
 async function syncExpiryStockMonths(key) {
@@ -267,7 +278,27 @@ async function syncExpiryStockMonths(key) {
     })
   }
   await Promise.all([...changes.deletes].map(id => currentById.get(id)).filter(Boolean).map(month => repo.remove(month)))
-  setBaseline(key, months)
+}
+
+async function syncGoodsReceiptBatches(key) {
+  const repo = createGoodsReceiptBatchesRepository(supabase)
+  const batches = decode(values.get(key) || '[]')
+  const changes = consumeChanges(key)
+  if (!changes.upserts.size && !changes.deletes.size) return
+  const current = await repo.list()
+  const currentById = new Map(current.map(batch => [String(batch.id), batch]))
+  for (const batch of batches.filter(item => changes.upserts.has(String(item.id)))) {
+    await repo.save({
+      id: batch.id,
+      processedAt: batch.processedAt,
+      pdfFileName: batch.pdfFileName,
+      excelCFileName: batch.excelCFileName,
+      excelLgtFileName: batch.excelLgtFileName,
+      khoC: batch.khoC || [],
+      khoLgt: batch.khoLgt || [],
+    })
+  }
+  await Promise.all([...changes.deletes].map(id => currentById.get(id)).filter(Boolean).map(batch => repo.remove(batch)))
 }
 
 async function persist(key) {
@@ -280,6 +311,7 @@ async function persist(key) {
   if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
   if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
   if (key === 'expiry_stock_active') return createExpiryStockMonthsRepository(supabase).setActive(values.get(key) || '')
+  if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
   return createOpsSettingsRepository(supabase).set(key, decode(values.get(key)))
 }
 
@@ -310,6 +342,7 @@ export const opsStore = {
       if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
       if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
       if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
+      if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
       return createOpsSettingsRepository(supabase).remove(key)
     }).catch(notifyError)
     return writeChain
