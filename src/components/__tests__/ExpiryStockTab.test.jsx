@@ -85,8 +85,12 @@ describe('ExpiryStockTab', () => {
 
     const [wb, fileName] = writeFileMock.mock.calls[0]
     expect(fileName).toMatch(/^TonKhoCanDate_CanDate_.*\.xlsx$/)
-    const exported = XLSX.utils.sheet_to_json(wb.Sheets['Ton kho can date'])
+    const ws = wb.Sheets['Ton kho can date']
+    const exported = XLSX.utils.sheet_to_json(ws)
     expect(exported.map(r => r['Mã vật tư'])).toEqual(['X001', 'X002', 'X003'])
+    // Mỗi cột phải có độ rộng riêng — tránh chữ cột này dính vào cột kế bên khi mở bằng Excel
+    expect(ws['!cols']).toHaveLength(13)
+    expect(ws['!cols'].every(c => c.wch >= 8)).toBe(true)
     expect(exported.map(r => Object.keys(r))).toEqual(exported.map(() => [
       'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô',
       'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối',

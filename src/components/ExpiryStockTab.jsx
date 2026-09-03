@@ -74,6 +74,13 @@ function exportRowsToExcel(rows, active, tab) {
     'Tồn cuối': r.tonCuoi,
   }))
   const ws = XLSX.utils.json_to_sheet(data)
+  // json_to_sheet không tự đặt độ rộng cột — mặc định quá hẹp khiến 2 cột liền nhau bị dính chữ vào nhau
+  // khi mở bằng Excel/LibreOffice, nên tự tính theo nội dung dài nhất của từng cột (kể cả tiêu đề).
+  const headers = Object.keys(data[0] || {})
+  ws['!cols'] = headers.map(h => {
+    const maxLen = data.reduce((max, row) => Math.max(max, String(row[h] ?? '').length), h.length)
+    return { wch: Math.min(Math.max(maxLen + 2, 8), 40) }
+  })
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Ton kho can date')
   const monthLabel = new Date(active.uploadedAt).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' }).replace('/', '-')
