@@ -6,6 +6,8 @@ const DEFAULT_RETURN_REASON = 'Hàng hóa thất lạc trong quá trình vận c
 const DEFAULT_VERIFY_RESULT = 'Kiểm tra hàng đúng lô, đúng hạn dùng, đúng số lượng.'
 const DEFAULT_VERIFY_LOCATION = 'CN.Hồ Chí Minh'
 
+const KE_TOAN_LIST = ['Phạm Thị Tuyết Trinh', 'Trần Thị Ái Lâm', 'Lưu Thị Thuỳ', 'Võ Thị Ly', 'Nguyễn Thị Tú Anh', 'Đỗ Thị Bông']
+
 const EMPTY_INVOICE = { mauSo: '', kyHieu: '', soHoaDon: '', ngayLapHD: '', khachHangMua: '', diaChi: '', mst: '', tenHangHoa: '', soLuong: '', giaTri: '' }
 const EMPTY_PRODUCT = { tenHang: '', soLo: '', hanDung: '', donViTinh: '', soLuong: '', quyCach: '', tinhTrang: 'Hàng nguyên vẹn' }
 
@@ -190,7 +192,12 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
               <input value={customerMst} onChange={e => handleCustomerMstChange(e.target.value)} className={inputCls} />
             </Field>
             <Field label="Đại diện kế toán (Bên A)">
-              <input value={repAccounting} onChange={e => setRepAccounting(e.target.value)} className={inputCls} />
+              <select value={repAccounting} onChange={e => setRepAccounting(e.target.value)} className={inputCls}>
+                <option value="">— Chọn kế toán —</option>
+                {KE_TOAN_LIST.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Đại diện kinh doanh (Bên C)">
               <input value={repSales} onChange={e => setRepSales(e.target.value)} className={inputCls} />
