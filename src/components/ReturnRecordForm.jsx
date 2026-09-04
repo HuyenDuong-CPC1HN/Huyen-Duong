@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
+import { soTienBangChu, parseMoneyString } from '../utils/numberToVietnameseWords'
 
 const DEFAULT_RETURN_REASON = 'Hàng hóa thất lạc trong quá trình vận chuyển. Bộ phận kế toán và kho đã kiểm tra lại thông tin, phát hiện sai sót, tại thời điểm phát hiện hàng hóa chưa giao cho khách hàng.'
 const DEFAULT_VERIFY_RESULT = 'Kiểm tra hàng đúng lô, đúng hạn dùng, đúng số lượng.'
@@ -88,7 +89,10 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
   const [customerPhone, setCustomerPhone] = useState(record?.customerPhone || '')
   const [customerMst, setCustomerMst] = useState(record?.customerMst || '')
   const [returnReason, setReturnReason] = useState(record?.returnReason ?? DEFAULT_RETURN_REASON)
-  const [giaTriBangChu, setGiaTriBangChu] = useState(record?.giaTriBangChu || '')
+  // Tự động tính "Giá trị hóa đơn bằng chữ" theo tổng cột Giá trị (VNĐ) của các hóa đơn — null nghĩa là
+  // đang ở chế độ tự động; chỉ chuyển sang giá trị cố định ngay khi người dùng tự gõ vào ô này (để không
+  // ghi đè lên nội dung họ đã sửa tay). Bản ghi đã có sẵn giá trị lưu trước đó được coi như đã tự sửa tay.
+  const [giaTriBangChuManual, setGiaTriBangChuManual] = useState(record?.giaTriBangChu || null)
   const [verifyDatetime, setVerifyDatetime] = useState(toLocalInputValue(record?.verifyDatetime) || toLocalInputValue(new Date().toISOString()))
   const [verifyLocation, setVerifyLocation] = useState(record?.verifyLocation ?? DEFAULT_VERIFY_LOCATION)
   const [verifyResult, setVerifyResult] = useState(record?.verifyResult ?? DEFAULT_VERIFY_RESULT)
@@ -112,6 +116,12 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
     setInvoices(prev => prev.map(inv => (inv.mst ? inv : { ...inv, mst: value })))
   }
   const makeEmptyInvoiceRow = () => ({ ...EMPTY_INVOICE, khachHangMua: customerName, diaChi: customerAddress, mst: customerMst })
+
+  const giaTriBangChuAuto = giaTriBangChuManual === null
+  const giaTriBangChuComputed = invoices.reduce((sum, inv) => sum + parseMoneyString(inv.giaTri), 0)
+  const giaTriBangChu = giaTriBangChuAuto
+    ? (giaTriBangChuComputed ? soTienBangChu(giaTriBangChuComputed) : '')
+    : giaTriBangChuManual
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -189,8 +199,8 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
 
         <div className="report-section">
           <div className="report-section-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12 }}>
-            <Field label="Giá trị hóa đơn bằng chữ">
-              <input value={giaTriBangChu} onChange={e => setGiaTriBangChu(e.target.value)} className={inputCls} placeholder="VD: Một trăm nghìn đồng chẵn" />
+            <Field label={`Giá trị hóa đơn bằng chữ${giaTriBangChuAuto ? ' (tự động theo tổng hóa đơn)' : ''}`}>
+              <input value={giaTriBangChu} onChange={e => setGiaTriBangChuManual(e.target.value)} className={inputCls} placeholder="VD: Một trăm nghìn đồng chẵn" />
             </Field>
             <Field label="Lý do trả hàng / huỷ hóa đơn">
               <textarea value={returnReason} onChange={e => setReturnReason(e.target.value)} className={inputCls} rows={2} />
