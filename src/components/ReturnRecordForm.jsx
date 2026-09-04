@@ -24,7 +24,7 @@ function RowTable({ title, columns, rows, onChange, emptyRow }) {
     const next = rows.map((r, idx) => (idx === i ? { ...r, [key]: value } : r))
     onChange(next)
   }
-  const addRow = () => onChange([...rows, { ...emptyRow }])
+  const addRow = () => onChange([...rows, typeof emptyRow === 'function' ? emptyRow() : { ...emptyRow }])
   const removeRow = (i) => onChange(rows.filter((_, idx) => idx !== i))
 
   return (
@@ -97,6 +97,22 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
   const [invoices, setInvoices] = useState(record?.invoices?.length ? record.invoices : [{ ...EMPTY_INVOICE }])
   const [products, setProducts] = useState(record?.products?.length ? record.products : [{ ...EMPTY_PRODUCT }])
 
+  // Tự động điền Khách hàng mua/Địa chỉ/MST cho các dòng hóa đơn còn trống theo thông tin khách hàng ở trên —
+  // không ghi đè nếu dòng đó đã được sửa riêng.
+  const handleCustomerNameChange = (value) => {
+    setCustomerName(value)
+    setInvoices(prev => prev.map(inv => (inv.khachHangMua ? inv : { ...inv, khachHangMua: value })))
+  }
+  const handleCustomerAddressChange = (value) => {
+    setCustomerAddress(value)
+    setInvoices(prev => prev.map(inv => (inv.diaChi ? inv : { ...inv, diaChi: value })))
+  }
+  const handleCustomerMstChange = (value) => {
+    setCustomerMst(value)
+    setInvoices(prev => prev.map(inv => (inv.mst ? inv : { ...inv, mst: value })))
+  }
+  const makeEmptyInvoiceRow = () => ({ ...EMPTY_INVOICE, khachHangMua: customerName, diaChi: customerAddress, mst: customerMst })
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!customerName.trim()) return
@@ -132,16 +148,16 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
         <div className="report-section">
           <div className="report-section-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 12 }}>
             <Field label="Khách hàng *" className="col-span-1">
-              <input required value={customerName} onChange={e => setCustomerName(e.target.value)} className={inputCls} />
+              <input required value={customerName} onChange={e => handleCustomerNameChange(e.target.value)} className={inputCls} />
             </Field>
             <Field label="Địa chỉ">
-              <input value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} className={inputCls} />
+              <input value={customerAddress} onChange={e => handleCustomerAddressChange(e.target.value)} className={inputCls} />
             </Field>
             <Field label="Số điện thoại">
               <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} className={inputCls} />
             </Field>
             <Field label="MST (nếu có)">
-              <input value={customerMst} onChange={e => setCustomerMst(e.target.value)} className={inputCls} />
+              <input value={customerMst} onChange={e => handleCustomerMstChange(e.target.value)} className={inputCls} />
             </Field>
             <Field label="Đại diện kế toán (Bên A)">
               <input value={repAccounting} onChange={e => setRepAccounting(e.target.value)} className={inputCls} />
@@ -156,7 +172,7 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
           title="Hóa đơn cần trả (mỗi hóa đơn 1 dòng)"
           rows={invoices}
           onChange={setInvoices}
-          emptyRow={EMPTY_INVOICE}
+          emptyRow={makeEmptyInvoiceRow}
           columns={[
             { key: 'mauSo', label: 'Mẫu số' },
             { key: 'kyHieu', label: 'Ký hiệu' },
