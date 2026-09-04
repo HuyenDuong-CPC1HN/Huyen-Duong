@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
-import { ChevronDown, ChevronRight, Plus, Trash2, FileDown, Pencil, FolderOpen } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, FileDown, Pencil, FolderOpen, Eye } from 'lucide-react'
 import ReturnRecordForm from './ReturnRecordForm'
+import ReturnRecordView from './ReturnRecordView'
 import { exportTraHang, exportXacMinh } from '../utils/exportReturnReport'
 
 const STORAGE_KEY = 'return_records'
@@ -37,6 +38,7 @@ export default function ReturnTrackingTab({ type }) {
   const [openYears, setOpenYears] = useState(() => new Set([now.getFullYear()]))
   const [selected, setSelected] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 })
   const [formState, setFormState] = useState(null) // null | 'new' | record object (editing)
+  const [viewingId, setViewingId] = useState(null)
   const [exportingId, setExportingId] = useState(null)
 
   const entityRecords = useMemo(() => allRecords.filter(r => r.entity === type), [allRecords, type])
@@ -92,6 +94,8 @@ export default function ReturnTrackingTab({ type }) {
     }
   }
 
+  const viewingRecord = viewingId ? allRecords.find(r => r.id === viewingId) : null
+
   if (formState) {
     return (
       <div className="sheet-tab">
@@ -104,6 +108,18 @@ export default function ReturnTrackingTab({ type }) {
           onCancel={() => setFormState(null)}
         />
       </div>
+    )
+  }
+
+  if (viewingRecord) {
+    return (
+      <ReturnRecordView
+        record={viewingRecord}
+        onClose={() => setViewingId(null)}
+        onEdit={() => { setViewingId(null); setFormState(viewingRecord) }}
+        onExport={handleExport}
+        exportingId={exportingId}
+      />
     )
   }
 
@@ -199,6 +215,9 @@ export default function ReturnTrackingTab({ type }) {
                           </td>
                           <td className="px-2 py-2">
                             <div className="flex items-center gap-1 flex-wrap">
+                              <button type="button" onClick={() => setViewingId(r.id)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700" title="Xem">
+                                <Eye size={13} />
+                              </button>
                               <button type="button" onClick={() => handleExport(r, 'traHang')} disabled={exportingId === `${r.id}_traHang`}
                                 className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Xuất Biên bản trả hàng">
                                 <FileDown size={12} /> Trả hàng
