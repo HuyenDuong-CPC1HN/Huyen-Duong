@@ -101,21 +101,41 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
   const [invoices, setInvoices] = useState(record?.invoices?.length ? record.invoices : [{ ...EMPTY_INVOICE }])
   const [products, setProducts] = useState(record?.products?.length ? record.products : [{ ...EMPTY_PRODUCT }])
 
-  // Tự động điền Khách hàng mua/Địa chỉ/MST cho các dòng hóa đơn còn trống theo thông tin khách hàng ở trên —
-  // không ghi đè nếu dòng đó đã được sửa riêng.
+  // Đồng bộ 1 trường trong tất cả dòng hóa đơn theo giá trị tự động mới nhất — chỉ cập nhật dòng nào đang
+  // trống HOẶC vẫn đang khớp với giá trị tự động lần trước (nghĩa là chưa bị người dùng tự sửa riêng);
+  // dòng nào đã có nội dung khác (do người dùng tự gõ) thì giữ nguyên, không ghi đè.
+  const syncInvoiceField = (field, prevValue, nextValue) => {
+    setInvoices(prev => prev.map(inv => (
+      !inv[field] || inv[field] === prevValue ? { ...inv, [field]: nextValue } : inv
+    )))
+  }
+
   const handleCustomerNameChange = (value) => {
+    syncInvoiceField('khachHangMua', customerName, value)
     setCustomerName(value)
-    setInvoices(prev => prev.map(inv => (inv.khachHangMua ? inv : { ...inv, khachHangMua: value })))
   }
   const handleCustomerAddressChange = (value) => {
+    syncInvoiceField('diaChi', customerAddress, value)
     setCustomerAddress(value)
-    setInvoices(prev => prev.map(inv => (inv.diaChi ? inv : { ...inv, diaChi: value })))
   }
   const handleCustomerMstChange = (value) => {
+    syncInvoiceField('mst', customerMst, value)
     setCustomerMst(value)
-    setInvoices(prev => prev.map(inv => (inv.mst ? inv : { ...inv, mst: value })))
   }
-  const makeEmptyInvoiceRow = () => ({ ...EMPTY_INVOICE, khachHangMua: customerName, diaChi: customerAddress, mst: customerMst })
+
+  const summarizeProducts = (list) => list.map(p => p.tenHang.trim()).filter(Boolean).join(' / ')
+  const handleProductsChange = (next) => {
+    syncInvoiceField('tenHangHoa', summarizeProducts(products), summarizeProducts(next))
+    setProducts(next)
+  }
+
+  const makeEmptyInvoiceRow = () => ({
+    ...EMPTY_INVOICE,
+    khachHangMua: customerName,
+    diaChi: customerAddress,
+    mst: customerMst,
+    tenHangHoa: summarizeProducts(products),
+  })
 
   const giaTriBangChuAuto = giaTriBangChuManual === null
   const giaTriBangChuComputed = invoices.reduce((sum, inv) => sum + parseMoneyString(inv.giaTri), 0)
@@ -211,7 +231,7 @@ export default function ReturnRecordForm({ type, year, month, record, defaultRep
         <RowTable
           title="Xác minh tình trạng hàng hoá (mỗi sản phẩm 1 dòng)"
           rows={products}
-          onChange={setProducts}
+          onChange={handleProductsChange}
           emptyRow={EMPTY_PRODUCT}
           columns={[
             { key: 'tenHang', label: 'Tên hàng hoá' },
