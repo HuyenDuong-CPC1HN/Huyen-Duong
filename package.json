@@ -14,9 +14,11 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
     "@tanstack/react-table": "^8.21.3",
+    "docxtemplater": "^3.69.3",
     "html-to-image": "^1.11.13",
     "lucide-react": "^1.21.0",
     "pdfjs-dist": "^4.10.38",
+    "pizzip": "^3.2.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "recharts": "^3.8.1",

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus } from 'lucide-react'
+import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -8,6 +8,7 @@ import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
 import ExpiryStockTab from './components/ExpiryStockTab'
 import NhapHangTab from './components/NhapHangTab'
+import ReturnTrackingTab from './components/ReturnTrackingTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
@@ -28,6 +29,15 @@ const NAV = [
   },
   { id: 'tonkhocandate', label: 'Tồn kho cận date', icon: CalendarClock },
   { id: 'nhaphang', label: 'Nhập hàng', icon: PackagePlus },
+  {
+    id: 'traHang',
+    label: 'Theo dõi nhập trả lại',
+    icon: RotateCcw,
+    children: [
+      { id: 'traHangC', label: 'Đơn C', icon: Truck },
+      { id: 'traHangDTP', label: 'Đơn DTP', icon: Package },
+    ],
+  },
   { id: 'guilen8n', label: 'Gửi lên n8n', icon: Send },
 ]
 
@@ -39,6 +49,8 @@ const BREADCRUMB = {
   tmdt:     ['Trang chủ', 'Báo cáo giao hàng', 'Đơn hàng Sàn TMĐT'],
   tonkhocandate: ['Trang chủ', 'Tồn kho cận date'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
+  traHangC:   ['Trang chủ', 'Theo dõi nhập trả lại', 'Đơn C'],
+  traHangDTP: ['Trang chủ', 'Theo dõi nhập trả lại', 'Đơn DTP'],
   guilen8n: ['Trang chủ', 'Gửi lên n8n'],
 }
 
@@ -158,6 +170,13 @@ export default function App() {
         <span>
           Chưa chạy migration nhập hàng trên Supabase. Mở SQL Editor, chạy toàn bộ file
           {' '}<code>supabase/migrations/20260901_goods_receipt.sql</code>, rồi tải lại trang.
+        </span>
+      )
+    } else if (/return_records|return_record_invoices|return_record_products/i.test(blockingError || '')) {
+      remediationHint = (
+        <span>
+          Chưa chạy migration theo dõi nhập trả lại trên Supabase. Mở SQL Editor, chạy toàn bộ file
+          {' '}<code>supabase/migrations/20260904_return_records.sql</code>, rồi tải lại trang.
         </span>
       )
     } else if (/reporting_cycles|schema cache/i.test(blockingError || '')) {
@@ -372,6 +391,8 @@ function AppContent({ user }) {
           {active === 'tmdt'    && <TmdtTab />}
           {active === 'tonkhocandate' && <ExpiryStockTab />}
           {active === 'nhaphang' && <NhapHangTab />}
+          {active === 'traHangC'   && <ReturnTrackingTab type="donC" />}
+          {active === 'traHangDTP' && <ReturnTrackingTab type="donDTP" />}
           {active === 'guilen8n' && <N8nWebhookForm />}
         </main>
       </div>

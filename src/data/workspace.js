@@ -9,6 +9,7 @@ import { createTmdtReportsRepository } from './tmdtReports'
 import { createTongdonReportsRepository } from './tongdonReports'
 import { createStorageFilesRepository } from './storageFiles'
 import { createReportingCyclesRepository } from './reportingCycles'
+import { createReturnRecordsRepository } from './returnRecords'
 
 const values = new Map()
 const pendingCollectionChanges = new Map()
@@ -99,6 +100,11 @@ async function loadExpiryStock(client) {
   put('expiry_stock_active', records.find(record => record.is_active)?.id || months[0]?.id || '')
 }
 
+async function loadReturnRecords(client) {
+  const records = await createReturnRecordsRepository(client).listAll()
+  put('return_records', encode(records))
+}
+
 async function loadGoodsReceipt(client) {
   const repo = createGoodsReceiptBatchesRepository(client)
   const records = await repo.list()
@@ -138,6 +144,14 @@ export async function loadWorkspace(client = supabase) {
     if (!/goods_receipt_batches|goods_receipt_lines|schema cache/i.test(message)) throw error
     put('goods_receipt_batches', encode([]))
     put('goods_receipt_active', '')
+  }
+  try {
+    await loadReturnRecords(client)
+  } catch (error) {
+    const message = error?.message || String(error)
+    // Migration theo dõi nhập trả lại có thể chưa được áp dụng — không chặn workspace chính vì việc này.
+    if (!/return_records|return_record_invoices|return_record_products|schema cache/i.test(message)) throw error
+    put('return_records', encode([]))
   }
   const [donCReports, donDtpReports, tongdon, tmdt, settingsResult] = await Promise.all([
     createSheetReportsRepository(client).list('donC'),
@@ -301,6 +315,17 @@ async function syncGoodsReceiptBatches(key) {
   await Promise.all([...changes.deletes].map(id => currentById.get(id)).filter(Boolean).map(batch => repo.remove(batch)))
 }
 
+async function syncReturnRecords(key) {
+  const repo = createReturnRecordsRepository(supabase)
+  const records = decode(values.get(key) || '[]')
+  const changes = consumeChanges(key)
+  if (!changes.upserts.size && !changes.deletes.size) return
+  for (const record of records.filter(item => changes.upserts.has(String(item.id)))) {
+    await repo.save(record)
+  }
+  await Promise.all([...changes.deletes].map(id => repo.remove(id)))
+}
+
 async function persist(key) {
   if (key.startsWith('weeks_')) return syncWeeks(key)
   if (key.startsWith('activeWeek_')) return createReportWeeksRepository(supabase).setActive(key.replace('activeWeek_', ''), values.get(key) || '')
@@ -312,6 +337,7 @@ async function persist(key) {
   if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
   if (key === 'expiry_stock_active') return createExpiryStockMonthsRepository(supabase).setActive(values.get(key) || '')
   if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
+  if (key === 'return_records') return syncReturnRecords(key)
   return createOpsSettingsRepository(supabase).set(key, decode(values.get(key)))
 }
 
@@ -343,6 +369,7 @@ export const opsStore = {
       if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
       if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
       if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
+      if (key === 'return_records') return syncReturnRecords(key)
       return createOpsSettingsRepository(supabase).remove(key)
     }).catch(notifyError)
     return writeChain
