@@ -169,4 +169,38 @@ describe('parseGoodsReceipt', () => {
     expect(warnings[0]).toContain('khai tổng 33 kiện')
     expect(warnings[0]).toContain('tách được 1 kiện')
   })
+
+  it('keeps multi-token số lô intact (vd "1 14") instead of chopping it down to 1 token', () => {
+    // Số lô thật ghi 2 token cách nhau bởi khoảng trắng — trước đây bị cắt mất token đầu.
+    const pdfText = '9 L01021 Liproin - Hộp 1 tuýp 5g 1 14 1 1 867 167h thùng số 1 '
+      + '10 L01021 Liproin - Hộp 1 tuýp 5g 1 15 0 3 2100'
+    const rows = parsePdfDeliveryNote(pdfText)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ maHang: 'L01021', tenHang: 'Liproin - Hộp 1 tuýp 5g', soLo: '1 14', kienLe: 1, kienNguyen: 1, tongSl: 867 })
+    expect(rows[1]).toMatchObject({ soLo: '1 15', kienNguyen: 3, tongSl: 2100 })
+  })
+
+  it('does not auto-fill "SL thực tế" or flag "Lệch SL" for a mã hàng shared by both kho (PDF ghi 1 dòng tổng gộp cả 2 kho)', () => {
+    // D02124: Kho C 312 + Kho DTP 468 = PDF 780 — khớp, không phải sai lệch thật, nên không auto-fill
+    // và không ghi chú cho dòng nào cả.
+    const pdfText = '7 D02124 Dung dịch xịt mũi Nebusal spray baby - Hộp 1 lọ 50ml 07626G01 0 5 780'
+    const { khoC, khoLgt, warnings } = buildReceiptFromFiles({
+      khoCRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 2, kienLe: 0, slHoaDon: 312 }],
+      khoLgtRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 3, kienLe: 0, slHoaDon: 468 }],
+      pdfTexts: [pdfText],
+    })
+    expect(khoC[0]).toMatchObject({ slThucTe: null, ghiChu: '' })
+    expect(khoLgt[0]).toMatchObject({ slThucTe: null, ghiChu: '' })
+    expect(warnings).toHaveLength(0)
+  })
+
+  it('warns on the combined total when a shared mã hàng does NOT reconcile between both kho', () => {
+    const pdfText = '7 D02124 Dung dịch xịt mũi Nebusal spray baby - Hộp 1 lọ 50ml 07626G01 0 5 780'
+    const { warnings } = buildReceiptFromFiles({
+      khoCRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 2, kienLe: 0, slHoaDon: 300 }],
+      khoLgtRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 3, kienLe: 0, slHoaDon: 468 }],
+      pdfTexts: [pdfText],
+    })
+    expect(warnings.some(w => w.includes('D02124') && w.includes('300') && w.includes('768'))).toBe(true)
+  })
 })

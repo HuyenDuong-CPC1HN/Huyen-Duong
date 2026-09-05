@@ -82,8 +82,16 @@ function parsePdfSegment(segment) {
   }
   if (numRunStart === -1) return null
   const [sKienLe, sKienNguyen, sTongSl] = tokens.slice(numRunStart, numRunStart + 3)
-  const soLo = tokens[numRunStart - 1]
-  const tenHang = tokens.slice(0, numRunStart - 1).join(' ').trim()
+  // Số lô thuần số đôi khi gồm nhiều token cách nhau bởi khoảng trắng (vd "1 14", "1 15" — số lô thật,
+  // không phải lỗi đọc PDF) — gộp hết các token số liên tiếp NGAY TRƯỚC cụm Kiện lẻ/Kiện nguyên/Tổng SL
+  // vào Số lô thay vì chỉ lấy đúng 1 token. Số lô có chữ (vd "30926H01") vẫn luôn chỉ 1 token vì nó tự
+  // dừng ở token không thuần số ngay trước đó.
+  let lotStart = numRunStart - 1
+  while (lotStart - 1 >= 0 && /^\d+$/.test(tokens[lotStart]) && /^\d+$/.test(tokens[lotStart - 1])) {
+    lotStart -= 1
+  }
+  const soLo = tokens.slice(lotStart, numRunStart).join(' ')
+  const tenHang = tokens.slice(0, lotStart).join(' ').trim()
   if (!tenHang || !soLo) return null
   return {
     maHang: codeMatch[1],
@@ -177,7 +185,12 @@ export function parsePdfDeliveryNote(pdfText) {
   return rows
 }
 
-export function enrichRowsFromPdfCatalog(rows, pdfRows) {
+// sharedKeys: các cặp (mã hàng, số lô) xuất hiện ở CẢ 2 kho — với các mã này, PDF (phiếu xuất kho lẫn
+// biên bản giao nhận) chỉ ghi 1 dòng DUY NHẤT có SL là số CỘNG DỒN của cả 2 kho (vd mã D02124: Kho C 312
+// + Kho DTP 468 = PDF 780), không phải số riêng của kho đang enrich — nên bỏ qua auto-fill "SL thực tế"
+// và cảnh báo lệch cho các mã này, tránh báo sai/điền sai số (buildReceiptFromFiles đối chiếu tổng gộp
+// riêng, xem sharedKeys ở đó).
+export function enrichRowsFromPdfCatalog(rows, pdfRows, sharedKeys = new Set()) {
   const catalog = new Map()
   for (const item of pdfRows) catalog.set(rowKey(item), item)
 
@@ -192,6 +205,7 @@ export function enrichRowsFromPdfCatalog(rows, pdfRows) {
     if (!next.soLo) next.soLo = hit.soLo
     if (!next.hanDung && hit.hanDung) next.hanDung = hit.hanDung
     if (!next.dvt && hit.dvt) next.dvt = hit.dvt
+    if (sharedKeys.has(rowKey(row))) return next
     if (hit.source === 'bienBanGiaoNhan') {
       // Biên bản giao nhận = số kiểm đếm thực tế lúc nhận hàng — điền thẳng vào "SL thực tế" thay vì
       // bắt gõ tay; cột "Chênh lệch" đã tự so với SL hoá đơn nên không cần thêm ghi chú lệch riêng.
@@ -309,13 +323,36 @@ export function buildReceiptFromFiles({
 
   const khoCMerged = mergeWarehouseRows(khoCRows)
   const khoLgtMerged = mergeWarehouseRows(khoLgtRows)
-  const excelKeys = new Set([...khoCMerged, ...khoLgtMerged].map(rowKey))
+  const khoCKeys = new Set(khoCMerged.map(rowKey))
+  const khoLgtKeys = new Set(khoLgtMerged.map(rowKey))
+  // Mã hàng (+ số lô) có mặt ở CẢ 2 kho — PDF chỉ ghi 1 dòng tổng gộp cho cả 2, không phải số riêng
+  // từng kho (xem ghi chú ở enrichRowsFromPdfCatalog).
+  const sharedKeys = new Set([...khoCKeys].filter(key => khoLgtKeys.has(key)))
+  const excelKeys = new Set([...khoCKeys, ...khoLgtKeys])
   const missingRows = buildMissingRowsFromPdf(pdfRows, excelKeys)
 
-  const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...missingRows], pdfRows)
-  const khoLgt = enrichRowsFromPdfCatalog(khoLgtMerged, pdfRows)
+  const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...missingRows], pdfRows, sharedKeys)
+  const khoLgt = enrichRowsFromPdfCatalog(khoLgtMerged, pdfRows, sharedKeys)
 
   const warnings = []
+  // Đối chiếu riêng cho các mã dùng chung: tổng Kho C + Kho DTP (theo Excel) phải khớp với dòng gộp
+  // trên PDF — khớp thì im lặng (không cần ghi chú), chỉ báo khi thực sự lệch.
+  const pdfCatalog = new Map(pdfRows.map(item => [rowKey(item), item]))
+  for (const key of sharedKeys) {
+    const hit = pdfCatalog.get(key)
+    if (!hit || hit.soLuong === undefined) continue
+    const cRow = khoCMerged.find(row => rowKey(row) === key)
+    const lgtRow = khoLgtMerged.find(row => rowKey(row) === key)
+    const combined = (cRow?.slHoaDon ?? 0) + (lgtRow?.slHoaDon ?? 0)
+    if (hit.soLuong !== combined) {
+      warnings.push(
+        `Mã ${cRow?.maHang || lgtRow?.maHang} (số lô ${cRow?.soLo || lgtRow?.soLo}): PDF ghi tổng gộp `
+        + `${hit.soLuong} nhưng Kho C ${cRow?.slHoaDon ?? 0} + Kho DTP ${lgtRow?.slHoaDon ?? 0} = ${combined} `
+        + `(lệch ${hit.soLuong - combined}).`,
+      )
+    }
+  }
+
   const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
   if (declaredTotals.length > 0) {
     const declaredTotal = declaredTotals.reduce((a, b) => a + b, 0)
