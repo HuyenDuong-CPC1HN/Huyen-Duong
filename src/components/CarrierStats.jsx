@@ -492,8 +492,9 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
         const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true })
         const ws = wb.Sheets[wb.SheetNames.includes('Theo dõi kiện hàng') ? 'Theo dõi kiện hàng' : wb.SheetNames[0]]
         const fileRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
-        if (fileRows.length === 0 || !('Mã vận đơn' in fileRows[0]) || !('TG Đóng kiện' in fileRows[0])) {
-          setError('Không tìm thấy cột "Mã vận đơn"/"TG Đóng kiện" trong file. Vui lòng kiểm tra lại.')
+        const hasPackingTimeCol = 'TG Đóng kiện' in fileRows[0] || 'TG Đóng hàng' in fileRows[0]
+        if (fileRows.length === 0 || !('Mã vận đơn' in fileRows[0]) || !hasPackingTimeCol) {
+          setError('Không tìm thấy cột "Mã vận đơn"/"TG Đóng kiện"/"TG Đóng hàng" trong file. Vui lòng kiểm tra lại.')
           return
         }
         addPackingWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })

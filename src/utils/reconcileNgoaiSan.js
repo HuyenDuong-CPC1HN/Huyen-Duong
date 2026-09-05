@@ -64,14 +64,20 @@ export function buildSalesOrderLookup(weeks) {
   return map
 }
 
-// Gộp "Mã vận đơn" -> "TG Đóng kiện" (mốc 2) từ TOÀN BỘ các tuần file "bốc đóng" đã upload (tích luỹ dần)
+// Tên cột thời điểm đóng kiện đổi khác nhau tuỳ nguồn file: "TG Đóng kiện" (file bốc đóng đa kênh)
+// hoặc "TG Đóng hàng" (file "Đóng hàng website" — riêng kênh website/SPX).
+export function getPackingTimeRaw(row) {
+  return row['TG Đóng kiện'] ?? row['TG Đóng hàng']
+}
+
+// Gộp "Mã vận đơn" -> thời điểm đóng kiện (mốc 2) từ TOÀN BỘ các tuần file bốc đóng đã upload (tích luỹ dần)
 export function buildPackingLookup(weeks) {
   const map = new Map()
   for (const w of weeks || []) {
     for (const row of w.rows || []) {
       const code = clean(row['Mã vận đơn']).toUpperCase()
       if (!code) continue
-      const dongKien = parseVnDateTime(row['TG Đóng kiện'])
+      const dongKien = parseVnDateTime(getPackingTimeRaw(row))
       if (dongKien) map.set(code, dongKien)
     }
   }
