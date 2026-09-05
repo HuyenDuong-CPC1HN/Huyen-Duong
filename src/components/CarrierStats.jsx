@@ -407,9 +407,11 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
   const [weeks, setWeeks] = useState(() => readSalesOrderWeeks(carrierKey))
   const [expanded, setExpanded] = useState(false)
   const [onlyProblem, setOnlyProblem] = useState(false)
+  const [excluded, setExcludedEntry] = useNgoaiSanExcluded(carrierKey)
 
   const salesLookup = useMemo(() => buildSalesOrderLookup(weeks), [weeks])
-  const { rows, stats } = useMemo(() => reconcileNgoaiSan(spxRows, salesLookup), [spxRows, salesLookup])
+  const excludedSet = useMemo(() => new Set(excluded), [excluded])
+  const { rows, stats } = useMemo(() => reconcileNgoaiSan(spxRows, salesLookup, excludedSet), [spxRows, salesLookup, excludedSet])
 
   const parseFile = (file) => {
     setError('')
@@ -439,8 +441,9 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
   }
 
   const problemStatuses = new Set(['TRỄ LẤY HÀNG (>24h)', 'CHƯA LẤY — QUÁ 24H', 'TRỄ HẠN (>48h)', 'CHƯA GIAO — QUÁ 48H'])
-  const visibleRows = onlyProblem ? rows.filter(r => problemStatuses.has(r.tinhTrangLay) || problemStatuses.has(r.tinhTrangGiao)) : rows
-  const problemCount = rows.filter(r => problemStatuses.has(r.tinhTrangLay) || problemStatuses.has(r.tinhTrangGiao)).length
+  const isProblemRow = r => !r.excludedFromReport && (problemStatuses.has(r.tinhTrangLay) || problemStatuses.has(r.tinhTrangGiao))
+  const visibleRows = onlyProblem ? rows.filter(isProblemRow) : rows
+  const problemCount = rows.filter(isProblemRow).length
   const khongKhopRows = rows.filter(r => r.tinhTrangLay === 'Không khớp Mã đơn')
 
   return (
@@ -494,6 +497,7 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
             <span>{stats.total} đơn khớp Mã đơn</span>
             <span>· {stats.hoanHang} hoàn hàng</span>
             <span>· {stats.huy} đã huỷ (không đối soát)</span>
+            {stats.boQua > 0 && <span>· {stats.boQua} đã đánh dấu không cần tính (trùng đơn)</span>}
             {stats.khongKhop > 0 && <span className="text-amber-600">· {stats.khongKhop} đơn SPX không khớp Mã đơn</span>}
           </div>
 
@@ -541,6 +545,7 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">SPX lấy hàng</th>
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ chờ lấy</th>
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng 24h</th>
+                      <th className="px-3 py-2 text-center font-semibold whitespace-nowrap" title='Bỏ tick với đơn trùng/chỉ cần huỷ bên SPX — sẽ không tính vào thống kê "Chưa lấy/Chưa giao"'>Tính vào BC</th>
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">SPX giao hàng</th>
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ tổng</th>
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng 48h</th>
@@ -548,18 +553,30 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
                   </thead>
                   <tbody>
                     {visibleRows.length === 0 ? (
-                      <tr><td colSpan={9} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
+                      <tr><td colSpan={10} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
                     ) : visibleRows.map((r, i) => (
-                      <tr key={i} className="border-b border-gray-100 hover:bg-blue-50/40">
+                      <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
                         <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.taoLuc || '—'}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.layHang || '—'}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioLay === '' ? '—' : r.gioLay}</td>
-                        <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangLay) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangLay || '—'}</td>
+                        <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangLay) && !r.excludedFromReport ? 'text-red-600 font-medium' : ''}`}>
+                          {r.excludedFromReport ? 'Chưa lấy — quá 24h (đã bỏ qua)' : (r.tinhTrangLay || '—')}
+                        </td>
+                        <td className="px-3 py-2 border border-gray-200 text-center">
+                          {r.tinhTrangLay === 'CHƯA LẤY — QUÁ 24H' || r.excludedFromReport ? (
+                            <input
+                              type="checkbox"
+                              checked={!r.excludedFromReport}
+                              onChange={e => setExcludedEntry(r.maDon, !e.target.checked)}
+                              title={r.excludedFromReport ? 'Đang KHÔNG tính vào báo cáo (đơn trùng/huỷ SPX) — tick để tính lại' : 'Đang tính vào báo cáo — bỏ tick nếu đơn trùng/chỉ cần huỷ bên SPX'}
+                            />
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.giaoHang || '—'}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioGiao === '' ? '—' : r.gioGiao}</td>
-                        <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangGiao) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangGiao || '—'}</td>
+                        <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangGiao) && !r.excludedFromReport ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangGiao || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -595,6 +612,21 @@ function useHoldNotes(carrierKey) {
     localStorage.setItem(lsKey, JSON.stringify(next))
   }
   return [notes, setNote]
+}
+
+// Đánh dấu tay các đơn "Chưa lấy — quá 24h" là "không cần tính vào báo cáo" (vd đơn trùng, chỉ cần huỷ
+// bên SPX là xong) — loại khỏi thống kê chưa lấy/chưa giao nhưng vẫn hiện trong bảng chi tiết để theo dõi.
+function useNgoaiSanExcluded(carrierKey) {
+  const lsKey = `carrier_ngoaisan_excluded_${carrierKey}`
+  const [excluded, setExcluded] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(lsKey) || '[]') } catch { return [] }
+  })
+  const setEntry = (maDon, isExcluded) => {
+    const next = isExcluded ? [...new Set([...excluded, maDon])] : excluded.filter(c => c !== maDon)
+    setExcluded(next)
+    localStorage.setItem(lsKey, JSON.stringify(next))
+  }
+  return [excluded, setEntry]
 }
 
 function useColWidths(storageKey, columns) {

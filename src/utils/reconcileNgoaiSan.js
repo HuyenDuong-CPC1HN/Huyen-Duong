@@ -56,11 +56,13 @@ export function buildSalesOrderLookup(weeks) {
 // Đối soát "đơn ngoại sàn" (SPX COD): so "Mã đơn" (đội kinh doanh lên đơn, cột Tạo lúc) với "Mã khách hàng"
 // trong file xuất SPX — tính SLA lấy hàng 24h (Tạo lúc -> SPX lấy hàng) và SLA toàn trình 48h
 // (Tạo lúc -> SPX giao hàng thành công). Đơn "Đã hủy" bỏ qua đối soát; "Đang/Đã trả hàng" tính là Hoàn hàng.
-export function reconcileNgoaiSan(spxRows, salesLookup) {
+// excludedCodes: tập Mã đơn đã đánh dấu tay "không cần tính" khi đang ở trạng thái "Chưa lấy — quá 24h"
+// (vd đơn trùng, chỉ cần huỷ bên SPX) — loại khỏi cả 2 mục thống kê chưa lấy/chưa giao, không phải vấn đề thật.
+export function reconcileNgoaiSan(spxRows, salesLookup, excludedCodes = new Set()) {
   const now = new Date()
   const rows = []
   const stats = {
-    total: 0, khongKhop: 0, huy: 0, hoanHang: 0,
+    total: 0, khongKhop: 0, huy: 0, hoanHang: 0, boQua: 0,
     dungHan24h: 0, treLay24h: 0, choLay24h: 0,
     dungHan48h: 0, treHan48h: 0, choGiao48h: 0,
   }
@@ -101,9 +103,13 @@ export function reconcileNgoaiSan(spxRows, salesLookup) {
       gioLay = (now - taoLuc) / 3600000
       tinhTrangLay = gioLay <= 24 ? 'Đang chờ, còn trong hạn' : 'CHƯA LẤY — QUÁ 24H'
     }
+    const isExcluded = tinhTrangLay === 'CHƯA LẤY — QUÁ 24H' && excludedCodes.has(maDon)
     if (tinhTrangLay === 'Đúng hạn (≤24h)') stats.dungHan24h++
     else if (tinhTrangLay === 'TRỄ LẤY HÀNG (>24h)') stats.treLay24h++
-    else if (tinhTrangLay === 'CHƯA LẤY — QUÁ 24H') stats.choLay24h++
+    else if (tinhTrangLay === 'CHƯA LẤY — QUÁ 24H') {
+      if (isExcluded) stats.boQua++
+      else stats.choLay24h++
+    }
 
     let gioGiao, tinhTrangGiao
     if (isHoanHangStatus(spx, 'spx')) {
@@ -118,7 +124,7 @@ export function reconcileNgoaiSan(spxRows, salesLookup) {
     } else {
       gioGiao = (now - taoLuc) / 3600000
       tinhTrangGiao = gioGiao <= 48 ? 'Đang xử lý, còn trong hạn' : 'CHƯA GIAO — QUÁ 48H'
-      if (tinhTrangGiao === 'CHƯA GIAO — QUÁ 48H') stats.choGiao48h++
+      if (tinhTrangGiao === 'CHƯA GIAO — QUÁ 48H' && !isExcluded) stats.choGiao48h++
     }
 
     rows.push({
@@ -130,6 +136,7 @@ export function reconcileNgoaiSan(spxRows, salesLookup) {
       giaoHang: fmtDateTime(giaoHang),
       gioGiao: Math.round(gioGiao * 10) / 10,
       tinhTrangGiao,
+      excludedFromReport: isExcluded,
     })
   }
 
