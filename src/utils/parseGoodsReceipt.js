@@ -175,8 +175,62 @@ export function enrichRowsFromPdfCatalog(rows, pdfRows) {
     }
     if (!next.tenHang) next.tenHang = hit.tenHang
     if (!next.soLo) next.soLo = hit.soLo
+    if (!next.hanDung && hit.hanDung) next.hanDung = hit.hanDung
+    if (!next.dvt && hit.dvt) next.dvt = hit.dvt
+    if (hit.soLuong !== undefined && hit.soLuong !== (next.slHoaDon ?? 0) && !next.ghiChu) {
+      next.ghiChu = `Lệch SL so PDF — PDF: ${hit.soLuong}, Excel: ${next.slHoaDon ?? 0}`
+    }
     return next
   })
+}
+
+// Mẫu "PHIẾU XUẤT KHO" (02-VT) của DTP — khác hẳn định dạng "biên bản giao nhận" ở parsePdfDeliveryNote.
+// Thứ tự trích xuất từ PDF theo dòng dữ liệu thật là: Stt, Tên vật tư, Mã vật tư, Đvt, Số lượng
+// ("272,000"/"1.440,000" — lấy phần nguyên trước dấu ",", bỏ dấu "." phân cách nghìn), Nước SX (bỏ qua),
+// Lô, Hạn dùng — KHÔNG theo đúng thứ tự cột tiêu đề (PDF xuất tên trước mã, ngược thứ tự header).
+function parsePhieuXuatKhoPdf(pdfText) {
+  if (!pdfText) return []
+  const compact = String(pdfText).replace(/\s+/g, ' ').trim()
+  let afterHeader = compact.split(/Vị trí/i).pop() || ''
+  // Bỏ dòng mã cột ẩn cố định của mẫu form ("A B C D 2 3 5 1 4") ngay sau "Vị trí", trước Stt=1 thật —
+  // nếu không bỏ, dòng đầu tiên sẽ bị nhặt nhầm 1 trong các số lẻ này làm Stt, cuốn theo rác vào tên hàng.
+  afterHeader = afterHeader.replace(/^\s*A\s+B\s*C\s+D\s+2\s+3\s+5\s*1\s+4\s*/i, '')
+
+  const rows = []
+  const re = /(\d{1,3})\s+([\s\S]+?)\s+([A-Z]\d{4,5})\s+(\S+)\s+([\d.,]+)\s+\S+\s+(\S+)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/g
+  let m
+  while ((m = re.exec(afterHeader))) {
+    const [, , tenHangRaw, maHang, dvt, qtyRaw, soLo, dd, mo, yyyy] = m
+    const soLuong = Number(qtyRaw.split(',')[0].replaceAll('.', ''))
+    if (!Number.isFinite(soLuong)) continue
+    rows.push({
+      maHang,
+      tenHang: tenHangRaw.trim(),
+      dvt,
+      soLuong,
+      soLo,
+      hanDung: `${yyyy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}`,
+    })
+  }
+  return rows
+}
+
+// Đọc PDF theo cả 2 định dạng đã biết — thử mẫu "Phiếu xuất kho" (thường gặp nhất hiện nay) trước,
+// nếu không khớp dòng nào thì thử mẫu "biên bản giao nhận" cũ (parsePdfDeliveryNote).
+export function parsePdfItems(pdfText) {
+  const viaPhieuXuatKho = parsePhieuXuatKhoPdf(pdfText)
+  if (viaPhieuXuatKho.length > 0) return viaPhieuXuatKho
+  return parsePdfDeliveryNote(pdfText).map(row => ({ ...row, soLuong: row.tongSl }))
+}
+
+// File "Phiếu xuất kho" tự ghi rõ xuất đi kho nào ở dòng "Địa điểm"/"Lý do xuất kho" (vd "...Kho C..."
+// hoặc "...Kho DTP LGT..."). Dùng để CẢNH BÁO nếu người dùng lỡ thả nhầm file vào vùng kho khác — không
+// tự động phân loại lại, vì cơ sở phân loại chính vẫn là người dùng thả file vào vùng nào.
+export function detectPhieuXuatKhoWarehouse(pdfText) {
+  const text = String(pdfText || '')
+  if (/kho\s*dtp\s*lgt|kho\s*lgt/i.test(text)) return 'LGT'
+  if (/kho\s*c\b/i.test(text)) return 'C'
+  return null
 }
 
 // khoCRows/khoLgtRows: mảng row đã đọc sẵn (nối từ NHIỀU file Excel — mỗi kho có thể nhận nhiều phiếu
@@ -188,7 +242,7 @@ export function buildReceiptFromFiles({
   khoLgtRows = [],
   pdfTexts = [],
 }) {
-  const pdfRows = pdfTexts.flatMap(text => parsePdfDeliveryNote(text))
+  const pdfRows = pdfTexts.flatMap(text => parsePdfItems(text))
 
   const khoC = enrichRowsFromPdfCatalog(mergeWarehouseRows(khoCRows), pdfRows)
   const khoLgt = enrichRowsFromPdfCatalog(mergeWarehouseRows(khoLgtRows), pdfRows)

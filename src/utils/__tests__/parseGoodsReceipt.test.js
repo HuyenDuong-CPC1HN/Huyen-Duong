@@ -3,9 +3,11 @@ import * as XLSX from 'xlsx'
 import {
   buildReceiptFromFiles,
   calcChenhLech,
+  detectPhieuXuatKhoWarehouse,
   enrichRowsFromPdfCatalog,
   mergeWarehouseRows,
   parsePdfDeliveryNote,
+  parsePdfItems,
   readWarehouseExportRows,
 } from '../parseGoodsReceipt'
 
@@ -55,6 +57,33 @@ describe('parseGoodsReceipt', () => {
     const rows = parsePdfDeliveryNote(pdfText)
     expect(rows).toHaveLength(2)
     expect(rows[1]).toMatchObject({ maHang: 'A01259', soLo: '010426', kienNguyen: 1, tongSl: 7920 })
+  })
+
+  it('parses real "Phiếu xuất kho" PDF layout (Tên trước Mã, số lượng có dấu phẩy/chấm)', () => {
+    const pdfText = 'Địa điểm: DH030926/03507_Dự trù SO Kho C - Chi nhánh HCM - 0903114623 '
+      + 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
+      + '1   Arica Folicus Cream - Hộp 1 tuýp 30g A01840   TUBE   272,000 DTP-VNM   612   21/06/2029 '
+      + '2   Hexami Cap - Lọ 60 viên H05005   VIEN   1.440,000 DTP-VNM   010826   31/07/2029'
+    const rows = parsePdfItems(pdfText)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ maHang: 'A01840', tenHang: 'Arica Folicus Cream - Hộp 1 tuýp 30g', dvt: 'TUBE', soLuong: 272, soLo: '612', hanDung: '2029-06-21' })
+    expect(rows[1]).toMatchObject({ maHang: 'H05005', soLuong: 1440, hanDung: '2029-07-31' })
+  })
+
+  it('detects target warehouse from Phiếu xuất kho "Địa điểm" line', () => {
+    expect(detectPhieuXuatKhoWarehouse('...Địa điểm: DH030926/03507_Dự trù SO Kho C - Chi nhánh HCM...')).toBe('C')
+    expect(detectPhieuXuatKhoWarehouse('...Địa điểm: DH030926/03506_Chi nhánh HCM - Kho DTP LGT...')).toBe('LGT')
+    expect(detectPhieuXuatKhoWarehouse('không có thông tin kho')).toBeNull()
+  })
+
+  it('fills missing hạn dùng/dvt from pdf catalog and flags quantity mismatch in ghi chú', () => {
+    const rows = enrichRowsFromPdfCatalog(
+      [{ maHang: 'A01840', soLo: '612', slHoaDon: 300, dvt: '', hanDung: null }],
+      [{ maHang: 'A01840', soLo: '612', tenHang: 'Arica', dvt: 'TUBE', hanDung: '2029-06-21', soLuong: 272 }],
+    )
+    expect(rows[0]).toMatchObject({ dvt: 'TUBE', hanDung: '2029-06-21' })
+    expect(rows[0].ghiChu).toContain('272')
+    expect(rows[0].ghiChu).toContain('300')
   })
 
   it('merges multiple excel files (already-parsed rows) per warehouse into one table', () => {

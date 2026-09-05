@@ -7,6 +7,7 @@ import { opsStore as localStorage } from '../data/workspace'
 import {
   buildReceiptFromFiles,
   calcChenhLech,
+  detectPhieuXuatKhoWarehouse,
   extractPdfText,
   parsePdfMetadata,
   readWarehouseExportRows,
@@ -267,14 +268,15 @@ export default function NhapHangTab() {
     return rows
   }
 
+  // Trả về {name, text} thay vì chỉ text — cần tên file để báo lỗi/cảnh báo đúng chỗ.
   const readPdfTextsFromFiles = async (files, fileErrors) => {
     const results = await Promise.allSettled(files.map(async file => extractPdfText(await file.arrayBuffer())))
-    const texts = []
+    const items = []
     results.forEach((res, i) => {
-      if (res.status === 'fulfilled') texts.push(res.value)
+      if (res.status === 'fulfilled') items.push({ name: files[i].name, text: res.value })
       else fileErrors.push(`${files[i].name}: ${res.reason?.message || 'không đọc được file'}`)
     })
-    return texts
+    return items
   }
 
   const processFiles = async () => {
@@ -291,7 +293,20 @@ export default function NhapHangTab() {
       const fileErrors = []
       const khoCRows = await readWarehouseRowsFromFiles(khoCExcelFiles, fileErrors)
       const khoLgtRows = usedSharedExcel ? khoCRows : await readWarehouseRowsFromFiles(khoLgtExcelFilesRaw, fileErrors)
-      const pdfTexts = await readPdfTextsFromFiles([...khoCPdfFiles, ...khoLgtPdfFiles], fileErrors)
+      const khoCPdfItems = await readPdfTextsFromFiles(khoCPdfFiles, fileErrors)
+      const khoLgtPdfItems = await readPdfTextsFromFiles(khoLgtPdfFiles, fileErrors)
+      const pdfTexts = [...khoCPdfItems, ...khoLgtPdfItems].map(item => item.text)
+
+      // File "Phiếu xuất kho" tự ghi rõ xuất đi kho nào — cảnh báo (không chặn) nếu thả nhầm vùng
+      const warehouseWarnings = []
+      for (const item of khoCPdfItems) {
+        const detected = detectPhieuXuatKhoWarehouse(item.text)
+        if (detected && detected !== 'C') warehouseWarnings.push(`${item.name}: nội dung PDF ghi Kho ${detected} nhưng đang ở vùng Kho C`)
+      }
+      for (const item of khoLgtPdfItems) {
+        const detected = detectPhieuXuatKhoWarehouse(item.text)
+        if (detected && detected !== 'LGT') warehouseWarnings.push(`${item.name}: nội dung PDF ghi Kho ${detected} nhưng đang ở vùng Kho LGT`)
+      }
 
       const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
       const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
@@ -310,7 +325,11 @@ export default function NhapHangTab() {
       setActiveId(entry.id)
       setPendingFiles({ khoC: [], khoLgt: [] })
       setEditing(false)
-      if (fileErrors.length > 0) setError(`Một số file không đọc được, các file còn lại vẫn xử lý bình thường:\n${fileErrors.join('\n')}`)
+      const warnings = [
+        ...fileErrors.map(m => `Không đọc được: ${m}`),
+        ...warehouseWarnings.map(m => `Cảnh báo: ${m}`),
+      ]
+      if (warnings.length > 0) setError(warnings.join('\n'))
     } catch (err) {
       setError(err.message || 'Không xử lý được dữ liệu nhập hàng.')
     } finally {
