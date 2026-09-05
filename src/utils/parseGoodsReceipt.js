@@ -228,6 +228,128 @@ export function parsePdfItems(pdfText) {
   return parsePdfDeliveryNote(pdfText).map(row => ({ ...row, soLuong: row.tongSl }))
 }
 
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const BBGN_HEADER_NAMES = ['STT', 'Mã hàng', 'Tên hàng', 'Số lô', 'Kiện lẻ', 'Kiện nguyên', 'Tổng SL', 'Ghi']
+
+function findBbgnColumns(items) {
+  const found = []
+  for (const name of BBGN_HEADER_NAMES) {
+    const hit = items.find(i => i.str.trim() === name)
+    if (hit) found.push({ name, x: hit.x })
+  }
+  found.sort((a, b) => a.x - b.x)
+  return found.map((f, i) => ({
+    name: f.name,
+    xStart: i === 0 ? -Infinity : (found[i - 1].x + f.x) / 2,
+    xEnd: i === found.length - 1 ? Infinity : (f.x + found[i + 1].x) / 2,
+  }))
+}
+
+// Dòng dữ liệu = khoảng giữa 2 mốc STT liên tiếp (1,2,3...) — đáng tin cậy hơn dò số bất kỳ vì cột
+// "Ghi chú"/"Tên hàng" cũng chứa nhiều số ngẫu nhiên dễ nhầm ranh giới dòng.
+function buildBbgnRowsForPage(items, columns, sttStartAt) {
+  const sttCol = columns.find(c => c.name === 'STT')
+  const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x)
+  const sttItems = sorted.filter(i => i.x >= sttCol.xStart && i.x < sttCol.xEnd && /^\d{1,3}$/.test(i.str.trim()))
+  const anchors = []
+  let expected = sttStartAt
+  for (const item of sttItems) {
+    if (Number(item.str.trim()) === expected) { anchors.push(item.y); expected += 1 }
+  }
+  const rows = []
+  for (let i = 0; i < anchors.length; i += 1) {
+    const yTop = anchors[i] + 2
+    const yBottom = i + 1 < anchors.length ? anchors[i + 1] + 2 : -Infinity
+    const rowItems = sorted.filter(it => it.y <= yTop && it.y > yBottom)
+    const cells = {}
+    for (const col of columns) {
+      cells[col.name] = rowItems
+        .filter(it => it.x >= col.xStart && it.x < col.xEnd)
+        .sort((a, b) => b.y - a.y || a.x - b.x)
+        .map(it => it.str)
+        .join(' ')
+        .trim()
+    }
+    rows.push(cells)
+  }
+  return { rows, nextExpected: expected }
+}
+
+// Cột "Tên hàng" hay lệch dòng khi bị wrap 2 dòng (do chỉ dựa toạ độ) — tra lại chính xác bằng cách tìm
+// đúng chuỗi "Mã hàng ... Số lô" (đã biết chắc từ toạ độ) trong text phẳng, lấy phần ở giữa làm Tên hàng.
+// searchFrom: con trỏ tăng dần theo thứ tự dòng — bắt buộc vì cùng 1 Mã hàng có thể lặp lại (nhiều lô).
+function refineBbgnTenHang(compact, maHang, soLoRaw, searchFrom) {
+  const soLoPattern = soLoRaw ? escapeRe(soLoRaw).replace(/\\ /g, '\\s+') : null
+  const re = soLoPattern
+    ? new RegExp(`${escapeRe(maHang)}\\s+([\\s\\S]+?)\\s+${soLoPattern}\\s`, 'g')
+    : new RegExp(`${escapeRe(maHang)}\\s+([\\s\\S]+?)\\s+\\d`, 'g')
+  re.lastIndex = searchFrom
+  const m = re.exec(compact)
+  return m ? { tenHang: m[1].trim(), nextFrom: m.index + m[0].length } : { tenHang: '', nextFrom: searchFrom }
+}
+
+// "Biên bản giao nhận" TỔNG (xuất PDF thật từ hệ thống bằng Chrome "Save as PDF" — có lớp chữ thật, khác
+// hẳn bản in qua máy in ảo Foxit không đọc được). Liệt kê TOÀN BỘ hàng hoá cả chuyến (không riêng theo
+// kho), dùng để đối chiếu: hàng có trong đây nhưng không thấy ở bất kỳ file Excel/PDF nào khác thì vẫn
+// phải điền vào biên bản nhập hàng (mặc định Kho C) để không bị bỏ sót — xem buildMissingRowsFromPdf.
+// pagesItems: mảng theo từng trang, mỗi trang là mảng {str,x,y} (toạ độ) — cần vị trí cột, không chỉ text.
+export function parseBienBanGiaoNhanTong(pagesItems, fullText) {
+  if (!pagesItems?.length) return []
+  const columns = findBbgnColumns(pagesItems[0])
+  if (columns.length < 4) return [] // không nhận diện được bảng — không phải đúng mẫu này
+  let nextExpected = 1
+  const rawRows = []
+  for (const items of pagesItems) {
+    const { rows, nextExpected: ne } = buildBbgnRowsForPage(items, columns, nextExpected)
+    rawRows.push(...rows)
+    nextExpected = ne
+  }
+
+  const compact = String(fullText || '').replace(/\s+/g, ' ')
+  let searchFrom = 0
+  const rows = []
+  for (const r of rawRows) {
+    const maHangMatch = /^[A-Z]\d{4,5}/.exec((r['Mã hàng'] || '').trim())
+    if (!maHangMatch) continue // dòng đặc biệt không có mã hàng thật (vd "HÀNG GỬI DTP") — bỏ qua
+    const maHang = maHangMatch[0]
+    const soLo = (r['Số lô'] || '').replace(/\s+/g, '')
+    const { tenHang, nextFrom } = refineBbgnTenHang(compact, maHang, r['Số lô'], searchFrom)
+    searchFrom = nextFrom
+    const soLuong = Number(r['Tổng SL'] || 0)
+    if (!(soLuong > 0)) continue
+    rows.push({ maHang, tenHang, dvt: '', soLuong, soLo, hanDung: null })
+  }
+  return rows
+}
+
+// Đọc PDF kèm vị trí (x,y) từng ký tự — cần cho parseBienBanGiaoNhanTong (dựng lại đúng cột bảng),
+// khác với extractPdfText (chỉ nối chữ thành 1 chuỗi, đủ dùng cho parsePdfItems/parsePdfMetadata).
+export async function extractPdfPositional(arrayBuffer) {
+  try {
+    const pdfjs = await import('pdfjs-dist/build/pdf.mjs')
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url,
+    ).toString()
+    const data = arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer)
+    const doc = await pdfjs.getDocument({ data }).promise
+    const pagesItems = []
+    const textChunks = []
+    for (let pageNum = 1; pageNum <= doc.numPages; pageNum += 1) {
+      const page = await doc.getPage(pageNum)
+      const content = await page.getTextContent()
+      const items = content.items
+        .filter(item => item.str.trim())
+        .map(item => ({ str: item.str, x: item.transform[4], y: item.transform[5] }))
+      pagesItems.push(items)
+      textChunks.push(items.map(item => item.str).join(' '))
+    }
+    return { pagesItems, fullText: textChunks.join(' ') }
+  } catch {
+    throw new Error('Không đọc được file PDF biên bản giao nhận tổng.')
+  }
+}
+
 // File "Phiếu xuất kho" tự ghi rõ xuất đi kho nào ở dòng "Địa điểm"/"Lý do xuất kho" (vd "...Kho C..."
 // hoặc "...Kho DTP LGT..."). Dùng để CẢNH BÁO nếu người dùng lỡ thả nhầm file vào vùng kho khác — không
 // tự động phân loại lại, vì cơ sở phân loại chính vẫn là người dùng thả file vào vùng nào.
@@ -240,17 +362,16 @@ export function detectPhieuXuatKhoWarehouse(pdfText) {
 
 // khoCRows/khoLgtRows: mảng row đã đọc sẵn (nối từ NHIỀU file Excel — mỗi kho có thể nhận nhiều phiếu
 // xuất kho cùng 1 chuyến hàng, xem readWarehouseExportRows), gộp lại thành 1 bảng theo maHang::soLo.
-// Đọc từng file riêng ở nơi gọi (NhapHangTab.jsx) để 1 file lỗi không làm hỏng cả batch. pdfTexts: mảng
-// text đã trích từ TẤT CẢ PDF của cả 2 kho — chỉ dùng để bổ sung tên hàng/số lô còn thiếu, không bắt buộc.
-// Hàng có trong PDF (biên bản giao nhận/phiếu xuất kho) nhưng KHÔNG khớp bất kỳ dòng Excel nào (cả 2 kho)
-// — tức chưa được ghi nhận ở đâu cả — vẫn phải điền vào biên bản, mặc định về Kho C để kiểm tra tay.
-function buildMissingRowsFromPdf(pdfRows, excelKeys) {
+// Đọc từng file riêng ở nơi gọi (NhapHangTab.jsx) để 1 file lỗi không làm hỏng cả batch.
+// Hàng có trong PDF nhưng KHÔNG khớp bất kỳ dòng đã biết nào (theo knownKeys truyền vào) — tức chưa được
+// ghi nhận ở đâu cả — vẫn phải điền vào biên bản để không bị bỏ sót, kèm ghi chú nguồn gốc cụ thể.
+function buildMissingRowsFromPdf(pdfRows, knownKeys, ghiChu) {
   const seen = new Set()
   const rows = []
   for (const item of pdfRows) {
     if (!(item.soLuong > 0)) continue
     const key = rowKey(item)
-    if (excelKeys.has(key) || seen.has(key)) continue
+    if (knownKeys.has(key) || seen.has(key)) continue
     seen.add(key)
     rows.push({
       maHang: item.maHang,
@@ -262,29 +383,41 @@ function buildMissingRowsFromPdf(pdfRows, excelKeys) {
       kienLe: 0,
       slHoaDon: item.soLuong,
       slThucTe: null,
-      ghiChu: 'Chỉ thấy trong PDF, không có trong file Excel nào — kiểm tra tay',
+      ghiChu,
       needsManual: !item.hanDung,
     })
   }
   return rows
 }
 
+// khoCPdfTexts/khoLgtPdfTexts: PDF "Phiếu xuất kho" đã thả ĐÚNG vào từng vùng kho — hàng trong đó mà
+// không có Excel nào (cả 2 kho) vẫn thuộc đúng kho của PDF đó (không phải "mất tích", giữ nguyên zone).
+// masterBbgnRows: hàng từ "Biên bản giao nhận" TỔNG (không phân biệt kho) — hàng ở đây mà không thấy
+// TRONG BẤT KỲ Excel/PDF-riêng-kho nào mới thật sự "bị bỏ sót", mặc định điền vào Kho C để kiểm tra tay.
 export function buildReceiptFromFiles({
   khoCRows = [],
   khoLgtRows = [],
-  pdfTexts = [],
+  khoCPdfTexts = [],
+  khoLgtPdfTexts = [],
+  masterBbgnRows = [],
 }) {
-  const pdfRows = pdfTexts.flatMap(text => parsePdfItems(text))
+  const khoCPdfRows = khoCPdfTexts.flatMap(text => parsePdfItems(text))
+  const khoLgtPdfRows = khoLgtPdfTexts.flatMap(text => parsePdfItems(text))
+  const allPdfRows = [...khoCPdfRows, ...khoLgtPdfRows, ...masterBbgnRows]
 
   const khoCMerged = mergeWarehouseRows(khoCRows)
   const khoLgtMerged = mergeWarehouseRows(khoLgtRows)
   const excelKeys = new Set([...khoCMerged, ...khoLgtMerged].map(rowKey))
-  const missingRows = buildMissingRowsFromPdf(pdfRows, excelKeys)
 
-  const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...missingRows], pdfRows)
-  const khoLgt = enrichRowsFromPdfCatalog(khoLgtMerged, pdfRows)
+  const khoCFromOwnPdf = buildMissingRowsFromPdf(khoCPdfRows, excelKeys, 'Chỉ thấy trong PDF Kho C, không có trong file Excel nào — kiểm tra tay')
+  const khoLgtFromOwnPdf = buildMissingRowsFromPdf(khoLgtPdfRows, excelKeys, 'Chỉ thấy trong PDF Kho LGT, không có trong file Excel nào — kiểm tra tay')
+  const knownAfterPdf = new Set([...excelKeys, ...khoCFromOwnPdf.map(rowKey), ...khoLgtFromOwnPdf.map(rowKey)])
+  const masterMissingRows = buildMissingRowsFromPdf(masterBbgnRows, knownAfterPdf, 'Chỉ thấy trong Biên bản giao nhận tổng, không có trong file Excel/PDF nào khác — kiểm tra tay')
 
-  return { khoC, khoLgt, pdfRows }
+  const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...khoCFromOwnPdf, ...masterMissingRows], allPdfRows)
+  const khoLgt = enrichRowsFromPdfCatalog([...khoLgtMerged, ...khoLgtFromOwnPdf], allPdfRows)
+
+  return { khoC, khoLgt, pdfRows: allPdfRows }
 }
 
 function extractDriverInfo(compact) {

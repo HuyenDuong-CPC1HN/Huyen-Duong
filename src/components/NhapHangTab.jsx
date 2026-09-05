@@ -8,7 +8,9 @@ import {
   buildReceiptFromFiles,
   calcChenhLech,
   detectPhieuXuatKhoWarehouse,
+  extractPdfPositional,
   extractPdfText,
+  parseBienBanGiaoNhanTong,
   parsePdfMetadata,
   readWarehouseExportRows,
 } from '../utils/parseGoodsReceipt'
@@ -242,7 +244,7 @@ export default function NhapHangTab() {
     return all[0]?.id || null
   })
 
-  const [pendingFiles, setPendingFiles] = useState({ khoC: [], khoLgt: [] })
+  const [pendingFiles, setPendingFiles] = useState({ khoC: [], khoLgt: [], masterBbgn: [] })
 
   const active = batches.find(batch => batch.id === activeId) || null
 
@@ -279,6 +281,22 @@ export default function NhapHangTab() {
     return items
   }
 
+  // Biên bản giao nhận TỔNG (PDF xuất thật từ hệ thống, có lớp chữ — khác bản in máy in ảo không đọc
+  // được) — dùng để dò hàng bị bỏ sót: có trong đây nhưng không thấy ở bất kỳ Excel/PDF nào khác.
+  const readMasterBbgnRowsFromFiles = async (files, fileErrors) => {
+    const results = await Promise.allSettled(files.map(async (file) => {
+      const buf = await file.arrayBuffer()
+      const { pagesItems, fullText } = await extractPdfPositional(buf)
+      return parseBienBanGiaoNhanTong(pagesItems, fullText)
+    }))
+    const rows = []
+    results.forEach((res, i) => {
+      if (res.status === 'fulfilled') rows.push(...res.value)
+      else fileErrors.push(`${files[i].name}: ${res.reason?.message || 'không đọc được file'}`)
+    })
+    return rows
+  }
+
   const processFiles = async () => {
     if (!canProcess) return
     setProcessing(true)
@@ -295,7 +313,9 @@ export default function NhapHangTab() {
       const khoLgtRows = usedSharedExcel ? khoCRows : await readWarehouseRowsFromFiles(khoLgtExcelFilesRaw, fileErrors)
       const khoCPdfItems = await readPdfTextsFromFiles(khoCPdfFiles, fileErrors)
       const khoLgtPdfItems = await readPdfTextsFromFiles(khoLgtPdfFiles, fileErrors)
-      const pdfTexts = [...khoCPdfItems, ...khoLgtPdfItems].map(item => item.text)
+      const khoCPdfTexts = khoCPdfItems.map(item => item.text)
+      const khoLgtPdfTexts = khoLgtPdfItems.map(item => item.text)
+      const masterBbgnRows = await readMasterBbgnRowsFromFiles(pendingFiles.masterBbgn.filter(isPdfFile), fileErrors)
 
       // File "Phiếu xuất kho" tự ghi rõ xuất đi kho nào — cảnh báo (không chặn) nếu thả nhầm vùng
       const warehouseWarnings = []
@@ -308,14 +328,15 @@ export default function NhapHangTab() {
         if (detected && detected !== 'LGT') warehouseWarnings.push(`${item.name}: nội dung PDF ghi Kho ${detected} nhưng đang ở vùng Kho LGT`)
       }
 
-      const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
-      const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
+      const pdfMetadata = parsePdfMetadata(khoCPdfTexts[0] || khoLgtPdfTexts[0] || '')
+      const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows, khoLgtRows, khoCPdfTexts, khoLgtPdfTexts, masterBbgnRows })
 
       const entry = addBatch({
         id: String(Date.now()),
         processedAt: new Date().toISOString(),
         khoCFileNames: pendingFiles.khoC.map(f => f.name),
         khoLgtFileNames: pendingFiles.khoLgt.map(f => f.name),
+        masterBbgnFileNames: pendingFiles.masterBbgn.map(f => f.name),
         usedSharedExcel,
         pdfMetadata,
         khoC,
@@ -323,7 +344,7 @@ export default function NhapHangTab() {
       })
       setBatches(readBatches())
       setActiveId(entry.id)
-      setPendingFiles({ khoC: [], khoLgt: [] })
+      setPendingFiles({ khoC: [], khoLgt: [], masterBbgn: [] })
       setEditing(false)
       const warnings = [
         ...fileErrors.map(m => `Không đọc được: ${m}`),
@@ -464,6 +485,14 @@ export default function NhapHangTab() {
           />
         </div>
 
+        <FileZone
+          label="Biên bản giao nhận tổng (toàn chuyến) — tuỳ chọn"
+          hint="PDF xuất bằng Chrome 'Save as PDF' từ hệ thống (có chữ đọc được) — dùng để dò hàng bị bỏ sót, tự điền vào Kho C nếu không thấy ở file nào khác"
+          files={pendingFiles.masterBbgn}
+          onAddFiles={(files) => addFiles('masterBbgn', files)}
+          onRemoveFile={(i) => removeFile('masterBbgn', i)}
+        />
+
         <div className="flex gap-2">
           <button
             type="button"
@@ -502,13 +531,16 @@ export default function NhapHangTab() {
       <div className="flex flex-wrap items-center gap-2">
         <div
           className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm"
-          title={`Kho C: ${(active.khoCFileNames || []).join(', ')}\nKho LGT: ${(active.khoLgtFileNames || []).join(', ') || '(dùng chung Kho C)'}`}
+          title={`Kho C: ${(active.khoCFileNames || []).join(', ')}\nKho LGT: ${(active.khoLgtFileNames || []).join(', ') || '(dùng chung Kho C)'}\nBiên bản giao nhận tổng: ${(active.masterBbgnFileNames || []).join(', ') || '(không có)'}`}
         >
           <FileSpreadsheet size={15} className="text-green-600" />
           <span className="text-green-700 font-medium">Kho C: {(active.khoCFileNames || []).length} file</span>
           <span className="text-green-500 text-xs">
             · Kho LGT: {active.usedSharedExcel ? 'dùng chung Kho C' : `${(active.khoLgtFileNames || []).length} file`}
           </span>
+          {(active.masterBbgnFileNames || []).length > 0 && (
+            <span className="text-green-500 text-xs">· BB giao nhận tổng: {active.masterBbgnFileNames.length} file</span>
+          )}
           <button type="button" onClick={removeActive} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xoá lần xử lý này">
             <X size={14} />
           </button>
