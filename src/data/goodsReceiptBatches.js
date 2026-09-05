@@ -37,8 +37,7 @@ export function createGoodsReceiptBatchesRepository(client) {
       pdfFileName = null,
       excelCFileName = null,
       excelLgtFileName = null,
-      bienBanTongFileName = null,
-      bienBanTongStoragePath = null,
+      bienBanFiles = [],
       khoC = [],
       khoLgt = [],
     }) {
@@ -60,8 +59,7 @@ export function createGoodsReceiptBatchesRepository(client) {
         pdf_file_name: pdfFileName,
         excel_c_file_name: excelCFileName,
         excel_lgt_file_name: excelLgtFileName,
-        bien_ban_tong_file_name: bienBanTongFileName,
-        bien_ban_tong_storage_path: bienBanTongStoragePath,
+        bien_ban_files: bienBanFiles,
         storage_path: storagePath,
       }
       const { error: batchError } = await batchTable().upsert(record)
@@ -92,10 +90,12 @@ export function createGoodsReceiptBatchesRepository(client) {
       fail((await lineTable().delete().eq('batch_id', batch.id)).error)
       fail((await batchTable().delete().eq('id', batch.id)).error)
       await files.remove(batch.storage_path)
-      if (batch.bien_ban_tong_storage_path) await files.remove(batch.bien_ban_tong_storage_path).catch(() => undefined)
+      for (const bb of batch.bien_ban_files || []) {
+        if (bb.storagePath) await files.remove(bb.storagePath).catch(() => undefined)
+      }
     },
 
-    async getBienBanTongUrl(storagePath) {
+    async getBienBanFileUrl(storagePath) {
       if (!storagePath) return null
       return files.getSignedUrl(storagePath)
     },

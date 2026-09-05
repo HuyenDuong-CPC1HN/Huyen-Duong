@@ -109,18 +109,32 @@ describe('parseGoodsReceipt', () => {
     expect(rows[0].maHang).toBe('A01259')
   })
 
-  it('adds pdf-only items (not found in any excel file) into Kho C for manual review', () => {
-    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '010426', 'Lượng cần': 20, ĐVT: 'VIEN' }])
-    const khoCRows = readWarehouseExportRows(excelC)
-    const pdfText = 'Địa điểm: Kho C '
+  it('routes "Phiếu xuất kho" rows by their OWN "Lý do xuất kho" content — not by which vùng the file was dropped in', () => {
+    // Bug thật (2 lần): (1) trước đây pdfTexts của cả 2 kho bị gộp chung nên hàng "chỉ thấy trong PDF"
+    // luôn mặc định về Kho C; (2) sau đó sửa theo VÙNG thả file — vẫn sai, vì bản chất 1 phiếu xuất kho
+    // (từ nhà máy DTP) TỰ quyết định đích đến qua "Lý do xuất kho", không phụ thuộc người dùng thả vào
+    // vùng nào. Test này cố tình đặt CẢ 2 phiếu vào chung 1 mảng pdfTexts (mô phỏng: không còn khái niệm
+    // "vùng" cho loại PDF này nữa) để xác nhận code tự tách đúng theo nội dung.
+    const pdfKhoC = 'Địa điểm: Kho C '
       + 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
       + '1   Arica Folicus Cream - Hộp 1 tuýp 30g A01840   TUBE   272,000 DTP-VNM   612   21/06/2029'
-    const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows, khoLgtRows: [], pdfTexts: [pdfText] })
-    expect(khoC).toHaveLength(2)
-    const missing = khoC.find(r => r.maHang === 'A01840')
-    expect(missing).toMatchObject({ soLo: '612', slHoaDon: 272, hanDung: '2029-06-21' })
-    expect(missing.ghiChu).toContain('không có trong file Excel')
+    const pdfKhoLgt = 'Địa điểm: Kho DTP LGT '
+      + 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
+      + '1   Hexami Cap - Lọ 60 viên H05005   VIEN   1.440,000 DTP-VNM   010826   31/07/2029'
+    const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows: [], khoLgtRows: [], pdfTexts: [pdfKhoC, pdfKhoLgt] })
+    expect(khoC).toHaveLength(1)
+    expect(khoC[0]).toMatchObject({ maHang: 'A01840', slHoaDon: 272, ghiChu: '' })
+    expect(khoLgt).toHaveLength(1)
+    expect(khoLgt[0]).toMatchObject({ maHang: 'H05005', slHoaDon: 1440, ghiChu: '' })
+  })
+
+  it('falls back to Kho C + cảnh báo when a "Phiếu xuất kho" PDF has no readable "Lý do xuất kho" line', () => {
+    const pdfNoLocation = 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
+      + '1   Arica Folicus Cream - Hộp 1 tuýp 30g A01840   TUBE   272,000 DTP-VNM   612   21/06/2029'
+    const { khoC, khoLgt, warnings } = buildReceiptFromFiles({ khoCRows: [], khoLgtRows: [], pdfTexts: [pdfNoLocation] })
+    expect(khoC).toHaveLength(1)
     expect(khoLgt).toHaveLength(0)
+    expect(warnings.some(w => w.includes('Lý do xuất kho'))).toBe(true)
   })
 
   it('calculates chenh lech from actual minus invoice quantity', () => {
@@ -133,5 +147,74 @@ describe('parseGoodsReceipt', () => {
       { maHang: 'X999', soLo: 'L1', hanDung: null },
     ], [])
     expect(rows[0].needsManual).toBe(true)
+  })
+
+  it('parses "biên bản giao nhận" rows even when a trailing Ghi chú follows Tổng SL', () => {
+    // Dòng thật có Ghi chú (vd "20h thùng số 2") — trước đây bị coi 3 token cuối (thùng/số/2) là
+    // Kiện lẻ/Kiện nguyên/Tổng SL nên rớt hẳn, không parse được.
+    const pdfText = '8 K00675 Ketorolac-BFS - Hộp 10 lọ 2ml 010126GMP 1 0 200 20h thùng số 2 '
+      + '9 L01021 Liproin - Hộp 1 tuýp 5g 1 15 0 3 2100'
+    const rows = parsePdfDeliveryNote(pdfText)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ maHang: 'K00675', soLo: '010126GMP', kienLe: 1, kienNguyen: 0, tongSl: 200 })
+  })
+
+  it('auto-fills "SL thực tế" from biên bản giao nhận (source bienBanGiaoNhan), leaves phiếu xuất kho as ghi chú only', () => {
+    const viaBienBan = enrichRowsFromPdfCatalog(
+      [{ maHang: 'F00464', soLo: '080326', slHoaDon: 5760, slThucTe: null, ghiChu: '' }],
+      [{ maHang: 'F00464', soLo: '080326', soLuong: 5760, source: 'bienBanGiaoNhan' }],
+    )
+    expect(viaBienBan[0].slThucTe).toBe(5760)
+    expect(viaBienBan[0].ghiChu).toBe('')
+
+    const viaPhieuXuatKho = enrichRowsFromPdfCatalog(
+      [{ maHang: 'F00464', soLo: '080326', slHoaDon: 300, slThucTe: null }],
+      [{ maHang: 'F00464', soLo: '080326', soLuong: 272, source: 'phieuXuatKho' }],
+    )
+    expect(viaPhieuXuatKho[0].slThucTe).toBeNull()
+    expect(viaPhieuXuatKho[0].ghiChu).toContain('Lệch SL so PDF')
+  })
+
+  it('warns when tổng kiện khai trong biên bản giao nhận lệch với tổng đã tách trong bảng', () => {
+    const pdfText = '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 1 272 Tổng cả đơn 33 Kiện'
+    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '612', 'Lượng cần': 272, 'Số kiện cần': 1, ĐVT: 'TUYP' }])
+    const { warnings } = buildReceiptFromFiles({ khoCRows: readWarehouseExportRows(excelC), khoLgtRows: [], pdfTexts: [pdfText] })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('khai tổng 33 kiện')
+    expect(warnings[0]).toContain('tách được 1 kiện')
+  })
+
+  it('keeps multi-token số lô intact (vd "1 14") instead of chopping it down to 1 token', () => {
+    // Số lô thật ghi 2 token cách nhau bởi khoảng trắng — trước đây bị cắt mất token đầu.
+    const pdfText = '9 L01021 Liproin - Hộp 1 tuýp 5g 1 14 1 1 867 167h thùng số 1 '
+      + '10 L01021 Liproin - Hộp 1 tuýp 5g 1 15 0 3 2100'
+    const rows = parsePdfDeliveryNote(pdfText)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ maHang: 'L01021', tenHang: 'Liproin - Hộp 1 tuýp 5g', soLo: '1 14', kienLe: 1, kienNguyen: 1, tongSl: 867 })
+    expect(rows[1]).toMatchObject({ soLo: '1 15', kienNguyen: 3, tongSl: 2100 })
+  })
+
+  it('does not auto-fill "SL thực tế" or flag "Lệch SL" for a mã hàng shared by both kho (PDF ghi 1 dòng tổng gộp cả 2 kho)', () => {
+    // D02124: Kho C 312 + Kho DTP 468 = PDF 780 — khớp, không phải sai lệch thật, nên không auto-fill
+    // và không ghi chú cho dòng nào cả.
+    const pdfText = '7 D02124 Dung dịch xịt mũi Nebusal spray baby - Hộp 1 lọ 50ml 07626G01 0 5 780'
+    const { khoC, khoLgt, warnings } = buildReceiptFromFiles({
+      khoCRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 2, kienLe: 0, slHoaDon: 312 }],
+      khoLgtRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 3, kienLe: 0, slHoaDon: 468 }],
+      pdfTexts: [pdfText],
+    })
+    expect(khoC[0]).toMatchObject({ slThucTe: null, ghiChu: '' })
+    expect(khoLgt[0]).toMatchObject({ slThucTe: null, ghiChu: '' })
+    expect(warnings).toHaveLength(0)
+  })
+
+  it('warns on the combined total when a shared mã hàng does NOT reconcile between both kho', () => {
+    const pdfText = '7 D02124 Dung dịch xịt mũi Nebusal spray baby - Hộp 1 lọ 50ml 07626G01 0 5 780'
+    const { warnings } = buildReceiptFromFiles({
+      khoCRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 2, kienLe: 0, slHoaDon: 300 }],
+      khoLgtRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 3, kienLe: 0, slHoaDon: 468 }],
+      pdfTexts: [pdfText],
+    })
+    expect(warnings.some(w => w.includes('D02124') && w.includes('300') && w.includes('768'))).toBe(true)
   })
 })
