@@ -273,10 +273,10 @@ export function detectPhieuXuatKhoWarehouse(pdfText) {
 // xuất kho cùng 1 chuyến hàng, xem readWarehouseExportRows), gộp lại thành 1 bảng theo maHang::soLo.
 // Đọc từng file riêng ở nơi gọi (NhapHangTab.jsx) để 1 file lỗi không làm hỏng cả batch.
 //
-// pdfRows truyền vào đây PHẢI là PDF của ĐÚNG 1 vùng kho (Kho C hoặc Kho LGT) — không gộp cả 2 vùng —
-// vì hàng có trong PDF nhưng không khớp dòng Excel nào của CHÍNH vùng đó vẫn được thêm vào bảng của vùng
-// này: file phiếu xuất kho tự ghi rõ xuất đi kho nào, cộng với việc người dùng đã thả đúng vùng, nên biết
-// chắc thuộc kho này — không cần đoán/mặc định về Kho C như trước (đó là lỗi cũ).
+// pdfRows truyền vào đây PHẢI đã được lọc đúng 1 kho (Kho C hoặc Kho LGT) — xem buildReceiptFromFiles:
+// hàng "Phiếu xuất kho" tự ghi rõ xuất đi kho nào (dòng "Lý do xuất kho"), route theo đúng nội dung đó,
+// không phụ thuộc người dùng thả file vào vùng UI nào — nên hàng không khớp Excel vẫn biết chắc thuộc
+// kho này, không cần mặc định về Kho C như lỗi cũ nữa.
 function buildMissingRowsFromPdf(pdfRows, excelKeys) {
   const seen = new Set()
   const rows = []
@@ -319,15 +319,37 @@ function sumKien(rows) {
 export function buildReceiptFromFiles({
   khoCRows = [],
   khoLgtRows = [],
-  khoCPdfTexts = [],
-  khoLgtPdfTexts = [],
+  pdfTexts = [],
 }) {
-  // Tách riêng theo vùng thả file (Kho C / Kho LGT) — KHÔNG gộp chung trước khi parse, vì hàng "chỉ thấy
-  // trong PDF, không có trong Excel" cần biết đúng nó đến từ PDF của vùng nào để xếp đúng kho đó
-  // (buildMissingRowsFromPdf), thay vì mặc định về Kho C như lỗi cũ.
-  const khoCPdfRows = khoCPdfTexts.flatMap(text => parsePdfItems(text))
-  const khoLgtPdfRows = khoLgtPdfTexts.flatMap(text => parsePdfItems(text))
-  const pdfRows = [...khoCPdfRows, ...khoLgtPdfRows]
+  // Phân loại từng PDF theo ĐÚNG bản chất, không theo vùng người dùng thả file:
+  // - "Phiếu xuất kho" (Loại 1, nguồn hàng từ nhà máy DTP — cùng cấp bậc với file Excel của CPC1) tự ghi
+  //   rõ đích đến ngay trong nội dung ở dòng "Lý do xuất kho" — đây là căn cứ DUY NHẤT để route hàng vào
+  //   Kho C hay Kho DTP LGT. Vùng thả file trên UI chỉ là quy ước/tự kiểm tra chéo của người dùng, không
+  //   quyết định kết quả — kể cả khi thả nhầm vùng, hàng vẫn vào đúng kho theo nội dung PDF.
+  // - "Biên bản giao nhận" (Loại 2) KHÔNG tự phân kho, không sinh hàng mới — chỉ dùng để đối chiếu ở bước
+  //   dưới (auto-fill "SL thực tế" cho dòng đã có, và so tổng kiện khai báo).
+  const khoCPdfRows = []
+  const khoLgtPdfRows = []
+  const bienBanPdfRows = []
+  const warnings = []
+  for (const text of pdfTexts) {
+    const items = parsePdfItems(text)
+    if (items.length === 0) continue
+    if (items[0].source !== 'phieuXuatKho') { bienBanPdfRows.push(...items); continue }
+    const declared = detectPhieuXuatKhoWarehouse(text)
+    if (declared === 'LGT') khoLgtPdfRows.push(...items)
+    else if (declared === 'C') khoCPdfRows.push(...items)
+    else {
+      // Không đọc được "Lý do xuất kho" — tạm xếp Kho C, không chặn xử lý cả chuyến, để người dùng tự
+      // kiểm tra/chuyển kho bằng chế độ Chỉnh sửa.
+      khoCPdfRows.push(...items)
+      warnings.push(
+        `Không đọc được dòng "Lý do xuất kho" ở 1 file phiếu xuất kho (mã ${items[0].maHang}...) — `
+        + `tạm xếp vào Kho C, kiểm tra lại bằng chế độ Chỉnh sửa.`,
+      )
+    }
+  }
+  const pdfRows = [...khoCPdfRows, ...khoLgtPdfRows, ...bienBanPdfRows]
 
   const khoCMerged = mergeWarehouseRows(khoCRows)
   const khoLgtMerged = mergeWarehouseRows(khoLgtRows)
@@ -342,7 +364,6 @@ export function buildReceiptFromFiles({
   const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...khoCMissing], pdfRows, sharedKeys)
   const khoLgt = enrichRowsFromPdfCatalog([...khoLgtMerged, ...khoLgtMissing], pdfRows, sharedKeys)
 
-  const warnings = []
   // Đối chiếu riêng cho các mã dùng chung: tổng Kho C + Kho DTP (theo Excel) phải khớp với dòng gộp
   // trên PDF — khớp thì im lặng (không cần ghi chú), chỉ báo khi thực sự lệch.
   const pdfCatalog = new Map(pdfRows.map(item => [rowKey(item), item]))
@@ -361,7 +382,7 @@ export function buildReceiptFromFiles({
     }
   }
 
-  const declaredTotals = [...khoCPdfTexts, ...khoLgtPdfTexts].map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
+  const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
   if (declaredTotals.length > 0) {
     const declaredTotal = declaredTotals.reduce((a, b) => a + b, 0)
     const actualTotal = sumKien(khoC) + sumKien(khoLgt)

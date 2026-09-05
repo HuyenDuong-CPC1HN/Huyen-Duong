@@ -89,7 +89,7 @@ function isSupportedFile(file) { return isExcelFile(file) || isPdfFile(file) }
 
 // Vùng upload đa file cho 1 kho vật lý — chuyến hàng thường có nhiều phiếu xuất kho (nhiều Excel) +
 // có thể kèm PDF phiếu xuất kho riêng, nên nhận bao nhiêu file cũng được thay vì đúng 1 file cố định.
-function FileZone({ label, hint, files, onAddFiles, onRemoveFile }) {
+function FileZone({ label, hint, files, onAddFiles, onRemoveFile, accept = '.xlsx,.xls,.pdf' }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
 
@@ -113,7 +113,7 @@ function FileZone({ label, hint, files, onAddFiles, onRemoveFile }) {
         ref={inputRef}
         type="file"
         multiple
-        accept=".xlsx,.xls,.pdf"
+        accept={accept}
         className="hidden"
         onChange={(e) => { onAddFiles([...e.target.files]); e.target.value = '' }}
       />
@@ -243,15 +243,19 @@ export default function NhapHangTab() {
     return all[0]?.id || null
   })
 
-  const [pendingFiles, setPendingFiles] = useState({ khoC: [], khoLgt: [] })
+  const [pendingFiles, setPendingFiles] = useState({ khoC: [], khoLgt: [], bienBan: [] })
 
   const active = batches.find(batch => batch.id === activeId) || null
 
   const canProcess = pendingFiles.khoC.some(isExcelFile)
 
+  // Vùng "Biên bản giao nhận" chỉ nhận PDF (không tách kho, không phải nguồn Excel/phiếu xuất kho).
   const addFiles = (warehouse, incoming) => {
-    const valid = incoming.filter(isSupportedFile)
-    setError(valid.length < incoming.length ? 'Chỉ nhận file .xlsx, .xls hoặc .pdf — các file khác đã bị bỏ qua.' : '')
+    const valid = warehouse === 'bienBan' ? incoming.filter(isPdfFile) : incoming.filter(isSupportedFile)
+    const rejectedMsg = warehouse === 'bienBan'
+      ? 'Chỉ nhận file .pdf — các file khác đã bị bỏ qua.'
+      : 'Chỉ nhận file .xlsx, .xls hoặc .pdf — các file khác đã bị bỏ qua.'
+    setError(valid.length < incoming.length ? rejectedMsg : '')
     setPendingFiles(current => ({ ...current, [warehouse]: [...current[warehouse], ...valid] }))
   }
   const removeFile = (warehouse, index) => {
@@ -289,6 +293,7 @@ export default function NhapHangTab() {
       const khoCPdfFiles = pendingFiles.khoC.filter(isPdfFile)
       const khoLgtExcelFilesRaw = pendingFiles.khoLgt.filter(isExcelFile)
       const khoLgtPdfFiles = pendingFiles.khoLgt.filter(isPdfFile)
+      const bienBanFilesRaw = pendingFiles.bienBan
       const usedSharedExcel = khoLgtExcelFilesRaw.length === 0
 
       const fileErrors = []
@@ -296,9 +301,13 @@ export default function NhapHangTab() {
       const khoLgtRows = usedSharedExcel ? khoCRows : await readWarehouseRowsFromFiles(khoLgtExcelFilesRaw, fileErrors)
       const khoCPdfItems = await readPdfTextsFromFiles(khoCPdfFiles, fileErrors)
       const khoLgtPdfItems = await readPdfTextsFromFiles(khoLgtPdfFiles, fileErrors)
-      const pdfTexts = [...khoCPdfItems, ...khoLgtPdfItems].map(item => item.text)
+      const bienBanPdfItems = await readPdfTextsFromFiles(bienBanFilesRaw, fileErrors)
+      // Gộp chung PDF của cả 2 vùng kho + vùng biên bản giao nhận — "Phiếu xuất kho" tự route theo đúng
+      // "Lý do xuất kho" trong chính nó (buildReceiptFromFiles), không phụ thuộc vùng thả file; "Biên bản
+      // giao nhận" chỉ dùng để đối chiếu, không quan tâm vùng nào.
+      const pdfTexts = [...khoCPdfItems, ...khoLgtPdfItems, ...bienBanPdfItems].map(item => item.text)
 
-      // File "Phiếu xuất kho" tự ghi rõ xuất đi kho nào — cảnh báo (không chặn) nếu thả nhầm vùng
+      // Cảnh báo (không chặn) nếu lỡ thả nhầm vùng thói quen — không ảnh hưởng kết quả phân kho.
       const warehouseWarnings = []
       for (const item of khoCPdfItems) {
         const detected = detectPhieuXuatKhoWarehouse(item.text)
@@ -310,33 +319,50 @@ export default function NhapHangTab() {
       }
 
       const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
-      const { khoC, khoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({
-        khoCRows,
-        khoLgtRows,
-        khoCPdfTexts: khoCPdfItems.map(item => item.text),
-        khoLgtPdfTexts: khoLgtPdfItems.map(item => item.text),
-      })
+      const { khoC, khoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
 
-      const entry = addBatch({
-        id: String(Date.now()),
-        processedAt: new Date().toISOString(),
-        khoCFileNames: pendingFiles.khoC.map(f => f.name),
-        khoLgtFileNames: pendingFiles.khoLgt.map(f => f.name),
-        usedSharedExcel,
-        pdfMetadata,
-        khoC,
-        khoLgt,
-      })
-      setBatches(readBatches())
-      setActiveId(entry.id)
-      setPendingFiles({ khoC: [], khoLgt: [] })
-      setEditing(false)
+      const batchId = String(Date.now())
+
+      // Lưu (các) file Biên bản giao nhận lên Storage ngay lúc xử lý — dùng chung 1 lần upload cho cả
+      // việc đối chiếu (ở trên) lẫn lưu trữ xem lại sau, không bắt upload lại lần 2.
+      const bienBanFiles = []
+      if (bienBanFilesRaw.length > 0) {
+        try {
+          const { createStorageFilesRepository } = await import('../data/storageFiles')
+          const { supabase } = await import('../supabase')
+          const repo = createStorageFilesRepository(supabase)
+          for (const file of bienBanFilesRaw) {
+            const path = `goods-receipt/${batchId}/${file.name}`
+            await repo.writeFile(path, file)
+            bienBanFiles.push({ fileName: file.name, storagePath: path })
+          }
+        } catch (err) {
+          fileErrors.push(`Lưu biên bản giao nhận lên kho tệp: ${err.message || err}`)
+        }
+      }
+
       const warnings = [
         ...fileErrors.map(m => `Không đọc được: ${m}`),
         ...warehouseWarnings.map(m => `Cảnh báo: ${m}`),
         ...(reconciliationWarnings || []).map(m => `Cảnh báo: ${m}`),
       ]
-      if (warnings.length > 0) setError(warnings.join('\n'))
+
+      const entry = addBatch({
+        id: batchId,
+        processedAt: new Date().toISOString(),
+        khoCFileNames: pendingFiles.khoC.map(f => f.name),
+        khoLgtFileNames: pendingFiles.khoLgt.map(f => f.name),
+        usedSharedExcel,
+        pdfMetadata,
+        bienBanFiles,
+        warnings,
+        khoC,
+        khoLgt,
+      })
+      setBatches(readBatches())
+      setActiveId(entry.id)
+      setPendingFiles({ khoC: [], khoLgt: [], bienBan: [] })
+      setEditing(false)
     } catch (err) {
       setError(err.message || 'Không xử lý được dữ liệu nhập hàng.')
     } finally {
@@ -389,49 +415,56 @@ export default function NhapHangTab() {
     }
   }
 
-  // Bản scan/ảnh biên bản giao nhận tổng của cả chuyến — file gốc nên lưu thẳng lên Storage,
-  // không đi qua localStorage như dữ liệu bảng (khoC/khoLgt), chỉ ghi lại tên + đường dẫn vào batch.
-  const uploadBienBanTong = async (file) => {
-    if (!active || !file) return
+  // File Biên bản giao nhận đã được lưu lên Storage ngay lúc xử lý (xem processFiles) — các hàm dưới
+  // đây chỉ để xem lại / xoá / thêm bổ sung sau đó, không phải luồng upload chính.
+  const viewBienBanFile = async (storagePath) => {
+    if (!storagePath) return
+    try {
+      const { createStorageFilesRepository } = await import('../data/storageFiles')
+      const { supabase } = await import('../supabase')
+      const url = await createStorageFilesRepository(supabase).getSignedUrl(storagePath)
+      window.open(url, '_blank', 'noopener')
+    } catch (err) {
+      setError(err.message || 'Không mở được biên bản giao nhận.')
+    }
+  }
+
+  const removeBienBanFile = async (storagePath) => {
+    if (!active) return
+    if (!window.confirm('Xoá biên bản giao nhận này?')) return
+    try {
+      const { createStorageFilesRepository } = await import('../data/storageFiles')
+      const { supabase } = await import('../supabase')
+      await createStorageFilesRepository(supabase).remove(storagePath)
+    } catch { /* xoá khỏi batch dù xoá file trên storage lỗi — tránh kẹt UI */ }
+    const nextFiles = (active.bienBanFiles || []).filter(bb => bb.storagePath !== storagePath)
+    updateBatch(active.id, { bienBanFiles: nextFiles })
+    setBatches(readBatches())
+  }
+
+  const addMoreBienBanFiles = async (incoming) => {
+    if (!active) return
+    const pdfs = incoming.filter(isPdfFile)
+    if (pdfs.length === 0) return
     setUploadingBienBan(true)
     setError('')
     try {
       const { createStorageFilesRepository } = await import('../data/storageFiles')
       const { supabase } = await import('../supabase')
-      const ext = extOf(file)
-      const path = `goods-receipt/${active.id}/bien-ban-tong.${ext}`
-      await createStorageFilesRepository(supabase).writeFile(path, file)
-      updateBatch(active.id, { bienBanTongFileName: file.name, bienBanTongStoragePath: path })
+      const repo = createStorageFilesRepository(supabase)
+      const added = []
+      for (const file of pdfs) {
+        const path = `goods-receipt/${active.id}/${file.name}`
+        await repo.writeFile(path, file)
+        added.push({ fileName: file.name, storagePath: path })
+      }
+      updateBatch(active.id, { bienBanFiles: [...(active.bienBanFiles || []), ...added] })
       setBatches(readBatches())
     } catch (err) {
-      setError(err.message || 'Không tải lên được biên bản giao nhận tổng.')
+      setError(err.message || 'Không tải lên được biên bản giao nhận.')
     } finally {
       setUploadingBienBan(false)
     }
-  }
-
-  const viewBienBanTong = async () => {
-    if (!active?.bienBanTongStoragePath) return
-    try {
-      const { createStorageFilesRepository } = await import('../data/storageFiles')
-      const { supabase } = await import('../supabase')
-      const url = await createStorageFilesRepository(supabase).getSignedUrl(active.bienBanTongStoragePath)
-      window.open(url, '_blank', 'noopener')
-    } catch (err) {
-      setError(err.message || 'Không mở được biên bản giao nhận tổng.')
-    }
-  }
-
-  const removeBienBanTong = async () => {
-    if (!active?.bienBanTongStoragePath) return
-    if (!window.confirm('Xoá biên bản giao nhận tổng đã tải lên?')) return
-    try {
-      const { createStorageFilesRepository } = await import('../data/storageFiles')
-      const { supabase } = await import('../supabase')
-      await createStorageFilesRepository(supabase).remove(active.bienBanTongStoragePath)
-    } catch { /* xoá khỏi batch dù xoá file trên storage lỗi — tránh kẹt UI */ }
-    updateBatch(active.id, { bienBanTongFileName: null, bienBanTongStoragePath: null })
-    setBatches(readBatches())
   }
 
   const searchHistory = async () => {
@@ -495,8 +528,9 @@ export default function NhapHangTab() {
         <div className="flex items-center gap-2">
           <PackagePlus size={18} className="text-gray-500" />
           <p className="text-sm text-gray-600">
-            Mỗi kho vật lý có thể nhận nhiều file (phiếu xuất kho Excel/PDF + biên bản giao nhận PDF nếu có) — thả tất cả file của kho nào vào đúng vùng của kho đó.
-            Biên bản giao nhận sẽ được dùng để tự điền "SL thực tế" và đối chiếu tổng số kiện.
+            Mỗi kho vật lý có thể nhận nhiều file (Excel + PDF phiếu xuất kho) — thả vào vùng nào cũng
+            được, PDF phiếu xuất kho tự ghi rõ đích đến (Kho C hay Kho DTP LGT) nên hệ thống tự tách đúng
+            kho theo nội dung, không phụ thuộc vùng bạn thả.
           </p>
         </div>
 
@@ -516,6 +550,15 @@ export default function NhapHangTab() {
             onRemoveFile={(i) => removeFile('khoLgt', i)}
           />
         </div>
+
+        <FileZone
+          label="Biên bản giao nhận — tuỳ chọn"
+          hint="Chỉ nhận .pdf — dùng để đối chiếu SL thực tế + tổng kiện, không phải nguồn tách kho"
+          accept=".pdf"
+          files={pendingFiles.bienBan}
+          onAddFiles={(files) => addFiles('bienBan', files)}
+          onRemoveFile={(i) => removeFile('bienBan', i)}
+        />
 
         <div className="flex gap-2">
           <button
@@ -593,39 +636,54 @@ export default function NhapHangTab() {
         </p>
       )}
 
+      {(active.warnings || []).length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-amber-600 text-base leading-none">⚠️</span>
+            <h3 className="font-semibold text-sm text-amber-800">Cảnh báo đối chiếu ({active.warnings.length})</h3>
+          </div>
+          <ul className="space-y-1 text-xs text-amber-800 list-disc list-inside">
+            {active.warnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+          <p className="text-xs text-amber-700 mt-2">Kiểm tra và sửa trực tiếp bằng nút "Chỉnh sửa" ở trên nếu cần.</p>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-3">
           <FileText size={16} className="text-gray-500" />
-          <h3 className="font-semibold text-sm">Biên bản giao nhận tổng</h3>
-          <span className="text-xs text-gray-400">bản scan/ảnh biên bản giấy ký giữa 2 bên, đính kèm cho cả chuyến</span>
+          <h3 className="font-semibold text-sm">Biên bản giao nhận</h3>
+          <span className="text-xs text-gray-400">dùng để đối chiếu SL thực tế + tổng kiện — đã tải lên lúc xử lý</span>
         </div>
-        {active.bienBanTongFileName ? (
-          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
-            <FileText size={15} className="text-green-600 shrink-0" />
-            <span className="text-green-700 font-medium truncate" title={active.bienBanTongFileName}>{active.bienBanTongFileName}</span>
-            <button type="button" onClick={() => void viewBienBanTong()} className="ml-1 text-blue-600 hover:underline text-xs shrink-0">Xem</button>
-            <button type="button" onClick={() => void removeBienBanTong()} className="ml-auto p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700 shrink-0" title="Xoá biên bản">
-              <X size={14} />
-            </button>
+        {(active.bienBanFiles || []).length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {active.bienBanFiles.map((bb) => (
+              <span key={bb.storagePath} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                <FileText size={12} className="shrink-0" />
+                <span className="max-w-40 truncate" title={bb.fileName}>{bb.fileName}</span>
+                <button type="button" onClick={() => void viewBienBanFile(bb.storagePath)} className="text-blue-600 hover:underline shrink-0">Xem</button>
+                <button type="button" onClick={() => void removeBienBanFile(bb.storagePath)} className="text-green-400 hover:text-red-500 shrink-0" title="Xoá">
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
           </div>
-        ) : (
-          <label
-            className={`flex flex-col items-center justify-center gap-1.5 w-full min-h-20 rounded-xl border-2 border-dashed cursor-pointer transition-colors p-3 text-center
-              ${uploadingBienBan ? 'opacity-60 pointer-events-none border-gray-300' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'}`}
-          >
-            <FileUp size={18} className="text-gray-400" />
-            <span className="text-xs text-gray-500">
-              {uploadingBienBan ? 'Đang tải lên...' : 'Click để chọn file — nhận PDF, JPG, PNG'}
-            </span>
-            <input
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              className="hidden"
-              disabled={uploadingBienBan}
-              onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadBienBanTong(file); e.target.value = '' }}
-            />
-          </label>
         )}
+        <label
+          className={`flex items-center justify-center gap-1.5 w-full min-h-11 rounded-lg border-2 border-dashed cursor-pointer transition-colors p-2 text-center
+            ${uploadingBienBan ? 'opacity-60 pointer-events-none border-gray-300' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'}`}
+        >
+          <FileUp size={14} className="text-gray-400" />
+          <span className="text-xs text-gray-500">{uploadingBienBan ? 'Đang tải lên...' : 'Thêm biên bản giao nhận (PDF)'}</span>
+          <input
+            type="file"
+            multiple
+            accept=".pdf"
+            className="hidden"
+            disabled={uploadingBienBan}
+            onChange={(e) => { void addMoreBienBanFiles([...e.target.files]); e.target.value = '' }}
+          />
+        </label>
       </div>
 
       <ReceiptTable title="Kho C" rows={active.khoC || []} editing={editing} onRowChange={(i, f, v) => patchRows('C', i, f, v)} />

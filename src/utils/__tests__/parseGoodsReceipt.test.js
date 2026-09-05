@@ -109,29 +109,32 @@ describe('parseGoodsReceipt', () => {
     expect(rows[0].maHang).toBe('A01259')
   })
 
-  it('adds pdf-only items (not found in excel) into the SAME kho vùng their PDF was dropped in — no "kiểm tra tay" note needed', () => {
-    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '010426', 'Lượng cần': 20, ĐVT: 'VIEN' }])
-    const khoCRows = readWarehouseExportRows(excelC)
-    const pdfText = 'Địa điểm: Kho C '
+  it('routes "Phiếu xuất kho" rows by their OWN "Lý do xuất kho" content — not by which vùng the file was dropped in', () => {
+    // Bug thật (2 lần): (1) trước đây pdfTexts của cả 2 kho bị gộp chung nên hàng "chỉ thấy trong PDF"
+    // luôn mặc định về Kho C; (2) sau đó sửa theo VÙNG thả file — vẫn sai, vì bản chất 1 phiếu xuất kho
+    // (từ nhà máy DTP) TỰ quyết định đích đến qua "Lý do xuất kho", không phụ thuộc người dùng thả vào
+    // vùng nào. Test này cố tình đặt CẢ 2 phiếu vào chung 1 mảng pdfTexts (mô phỏng: không còn khái niệm
+    // "vùng" cho loại PDF này nữa) để xác nhận code tự tách đúng theo nội dung.
+    const pdfKhoC = 'Địa điểm: Kho C '
       + 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
       + '1   Arica Folicus Cream - Hộp 1 tuýp 30g A01840   TUBE   272,000 DTP-VNM   612   21/06/2029'
-    const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows, khoLgtRows: [], khoCPdfTexts: [pdfText] })
-    expect(khoC).toHaveLength(2)
-    const missing = khoC.find(r => r.maHang === 'A01840')
-    expect(missing).toMatchObject({ soLo: '612', slHoaDon: 272, hanDung: '2029-06-21', ghiChu: '' })
-    expect(khoLgt).toHaveLength(0)
-  })
-
-  it('routes pdf-only items to Kho LGT (not defaulted to Kho C) when their PDF was dropped in the Kho LGT vùng', () => {
-    // Bug thật: trước đây pdfTexts của cả 2 kho bị gộp chung trước khi parse, nên hàng "chỉ thấy trong
-    // PDF" luôn bị mặc định vào Kho C — kể cả khi PDF ghi rõ "Lý do xuất kho: ... Kho DTP LGT".
-    const pdfTextLgt = 'Địa điểm: Kho DTP LGT '
+    const pdfKhoLgt = 'Địa điểm: Kho DTP LGT '
       + 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
       + '1   Hexami Cap - Lọ 60 viên H05005   VIEN   1.440,000 DTP-VNM   010826   31/07/2029'
-    const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows: [], khoLgtRows: [], khoLgtPdfTexts: [pdfTextLgt] })
-    expect(khoC).toHaveLength(0)
+    const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows: [], khoLgtRows: [], pdfTexts: [pdfKhoC, pdfKhoLgt] })
+    expect(khoC).toHaveLength(1)
+    expect(khoC[0]).toMatchObject({ maHang: 'A01840', slHoaDon: 272, ghiChu: '' })
     expect(khoLgt).toHaveLength(1)
     expect(khoLgt[0]).toMatchObject({ maHang: 'H05005', slHoaDon: 1440, ghiChu: '' })
+  })
+
+  it('falls back to Kho C + cảnh báo when a "Phiếu xuất kho" PDF has no readable "Lý do xuất kho" line', () => {
+    const pdfNoLocation = 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
+      + '1   Arica Folicus Cream - Hộp 1 tuýp 30g A01840   TUBE   272,000 DTP-VNM   612   21/06/2029'
+    const { khoC, khoLgt, warnings } = buildReceiptFromFiles({ khoCRows: [], khoLgtRows: [], pdfTexts: [pdfNoLocation] })
+    expect(khoC).toHaveLength(1)
+    expect(khoLgt).toHaveLength(0)
+    expect(warnings.some(w => w.includes('Lý do xuất kho'))).toBe(true)
   })
 
   it('calculates chenh lech from actual minus invoice quantity', () => {
@@ -175,7 +178,7 @@ describe('parseGoodsReceipt', () => {
   it('warns when tổng kiện khai trong biên bản giao nhận lệch với tổng đã tách trong bảng', () => {
     const pdfText = '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 1 272 Tổng cả đơn 33 Kiện'
     const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '612', 'Lượng cần': 272, 'Số kiện cần': 1, ĐVT: 'TUYP' }])
-    const { warnings } = buildReceiptFromFiles({ khoCRows: readWarehouseExportRows(excelC), khoLgtRows: [], khoCPdfTexts: [pdfText] })
+    const { warnings } = buildReceiptFromFiles({ khoCRows: readWarehouseExportRows(excelC), khoLgtRows: [], pdfTexts: [pdfText] })
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('khai tổng 33 kiện')
     expect(warnings[0]).toContain('tách được 1 kiện')
@@ -198,7 +201,7 @@ describe('parseGoodsReceipt', () => {
     const { khoC, khoLgt, warnings } = buildReceiptFromFiles({
       khoCRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 2, kienLe: 0, slHoaDon: 312 }],
       khoLgtRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 3, kienLe: 0, slHoaDon: 468 }],
-      khoCPdfTexts: [pdfText],
+      pdfTexts: [pdfText],
     })
     expect(khoC[0]).toMatchObject({ slThucTe: null, ghiChu: '' })
     expect(khoLgt[0]).toMatchObject({ slThucTe: null, ghiChu: '' })
@@ -210,7 +213,7 @@ describe('parseGoodsReceipt', () => {
     const { warnings } = buildReceiptFromFiles({
       khoCRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 2, kienLe: 0, slHoaDon: 300 }],
       khoLgtRows: [{ maHang: 'D02124', tenHang: 'Nebusal', dvt: 'HOP', soLo: '07626G01', hanDung: '2026-07-06', kienNguyen: 3, kienLe: 0, slHoaDon: 468 }],
-      khoCPdfTexts: [pdfText],
+      pdfTexts: [pdfText],
     })
     expect(warnings.some(w => w.includes('D02124') && w.includes('300') && w.includes('768'))).toBe(true)
   })
