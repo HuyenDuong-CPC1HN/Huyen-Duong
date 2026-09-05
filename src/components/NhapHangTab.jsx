@@ -235,6 +235,7 @@ export default function NhapHangTab() {
   const [exporting, setExporting] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [batches, setBatches] = useState(() => readBatches())
+  const [uploadingBienBan, setUploadingBienBan] = useState(false)
   const [activeId, setActiveId] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_KEY)
     const all = readBatches()
@@ -380,6 +381,51 @@ export default function NhapHangTab() {
     } finally {
       setExporting(false)
     }
+  }
+
+  // Bản scan/ảnh biên bản giao nhận tổng của cả chuyến — file gốc nên lưu thẳng lên Storage,
+  // không đi qua localStorage như dữ liệu bảng (khoC/khoLgt), chỉ ghi lại tên + đường dẫn vào batch.
+  const uploadBienBanTong = async (file) => {
+    if (!active || !file) return
+    setUploadingBienBan(true)
+    setError('')
+    try {
+      const { createStorageFilesRepository } = await import('../data/storageFiles')
+      const { supabase } = await import('../supabase')
+      const ext = extOf(file)
+      const path = `goods-receipt/${active.id}/bien-ban-tong.${ext}`
+      await createStorageFilesRepository(supabase).writeFile(path, file)
+      updateBatch(active.id, { bienBanTongFileName: file.name, bienBanTongStoragePath: path })
+      setBatches(readBatches())
+    } catch (err) {
+      setError(err.message || 'Không tải lên được biên bản giao nhận tổng.')
+    } finally {
+      setUploadingBienBan(false)
+    }
+  }
+
+  const viewBienBanTong = async () => {
+    if (!active?.bienBanTongStoragePath) return
+    try {
+      const { createStorageFilesRepository } = await import('../data/storageFiles')
+      const { supabase } = await import('../supabase')
+      const url = await createStorageFilesRepository(supabase).getSignedUrl(active.bienBanTongStoragePath)
+      window.open(url, '_blank', 'noopener')
+    } catch (err) {
+      setError(err.message || 'Không mở được biên bản giao nhận tổng.')
+    }
+  }
+
+  const removeBienBanTong = async () => {
+    if (!active?.bienBanTongStoragePath) return
+    if (!window.confirm('Xoá biên bản giao nhận tổng đã tải lên?')) return
+    try {
+      const { createStorageFilesRepository } = await import('../data/storageFiles')
+      const { supabase } = await import('../supabase')
+      await createStorageFilesRepository(supabase).remove(active.bienBanTongStoragePath)
+    } catch { /* xoá khỏi batch dù xoá file trên storage lỗi — tránh kẹt UI */ }
+    updateBatch(active.id, { bienBanTongFileName: null, bienBanTongStoragePath: null })
+    setBatches(readBatches())
   }
 
   const searchHistory = async () => {
@@ -539,6 +585,41 @@ export default function NhapHangTab() {
           Chưa có Excel riêng Kho LGT — đang hiển thị cùng dữ liệu với Kho C. Upload file LGT hoặc chỉnh sửa bảng Kho LGT nếu số liệu khác.
         </p>
       )}
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <FileText size={16} className="text-gray-500" />
+          <h3 className="font-semibold text-sm">Biên bản giao nhận tổng</h3>
+          <span className="text-xs text-gray-400">bản scan/ảnh biên bản giấy ký giữa 2 bên, đính kèm cho cả chuyến</span>
+        </div>
+        {active.bienBanTongFileName ? (
+          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
+            <FileText size={15} className="text-green-600 shrink-0" />
+            <span className="text-green-700 font-medium truncate" title={active.bienBanTongFileName}>{active.bienBanTongFileName}</span>
+            <button type="button" onClick={() => void viewBienBanTong()} className="ml-1 text-blue-600 hover:underline text-xs shrink-0">Xem</button>
+            <button type="button" onClick={() => void removeBienBanTong()} className="ml-auto p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700 shrink-0" title="Xoá biên bản">
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <label
+            className={`flex flex-col items-center justify-center gap-1.5 w-full min-h-20 rounded-xl border-2 border-dashed cursor-pointer transition-colors p-3 text-center
+              ${uploadingBienBan ? 'opacity-60 pointer-events-none border-gray-300' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'}`}
+          >
+            <FileUp size={18} className="text-gray-400" />
+            <span className="text-xs text-gray-500">
+              {uploadingBienBan ? 'Đang tải lên...' : 'Click để chọn file — nhận PDF, JPG, PNG'}
+            </span>
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              disabled={uploadingBienBan}
+              onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadBienBanTong(file); e.target.value = '' }}
+            />
+          </label>
+        )}
+      </div>
 
       <ReceiptTable title="Kho C" rows={active.khoC || []} editing={editing} onRowChange={(i, f, v) => patchRows('C', i, f, v)} />
       <ReceiptTable title="Kho LGT" rows={active.khoLgt || []} editing={editing} onRowChange={(i, f, v) => patchRows('LGT', i, f, v)} />
