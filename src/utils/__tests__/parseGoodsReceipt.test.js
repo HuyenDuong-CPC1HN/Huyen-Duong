@@ -134,4 +134,39 @@ describe('parseGoodsReceipt', () => {
     ], [])
     expect(rows[0].needsManual).toBe(true)
   })
+
+  it('parses "biên bản giao nhận" rows even when a trailing Ghi chú follows Tổng SL', () => {
+    // Dòng thật có Ghi chú (vd "20h thùng số 2") — trước đây bị coi 3 token cuối (thùng/số/2) là
+    // Kiện lẻ/Kiện nguyên/Tổng SL nên rớt hẳn, không parse được.
+    const pdfText = '8 K00675 Ketorolac-BFS - Hộp 10 lọ 2ml 010126GMP 1 0 200 20h thùng số 2 '
+      + '9 L01021 Liproin - Hộp 1 tuýp 5g 1 15 0 3 2100'
+    const rows = parsePdfDeliveryNote(pdfText)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ maHang: 'K00675', soLo: '010126GMP', kienLe: 1, kienNguyen: 0, tongSl: 200 })
+  })
+
+  it('auto-fills "SL thực tế" from biên bản giao nhận (source bienBanGiaoNhan), leaves phiếu xuất kho as ghi chú only', () => {
+    const viaBienBan = enrichRowsFromPdfCatalog(
+      [{ maHang: 'F00464', soLo: '080326', slHoaDon: 5760, slThucTe: null, ghiChu: '' }],
+      [{ maHang: 'F00464', soLo: '080326', soLuong: 5760, source: 'bienBanGiaoNhan' }],
+    )
+    expect(viaBienBan[0].slThucTe).toBe(5760)
+    expect(viaBienBan[0].ghiChu).toBe('')
+
+    const viaPhieuXuatKho = enrichRowsFromPdfCatalog(
+      [{ maHang: 'F00464', soLo: '080326', slHoaDon: 300, slThucTe: null }],
+      [{ maHang: 'F00464', soLo: '080326', soLuong: 272, source: 'phieuXuatKho' }],
+    )
+    expect(viaPhieuXuatKho[0].slThucTe).toBeNull()
+    expect(viaPhieuXuatKho[0].ghiChu).toContain('Lệch SL so PDF')
+  })
+
+  it('warns when tổng kiện khai trong biên bản giao nhận lệch với tổng đã tách trong bảng', () => {
+    const pdfText = '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 1 272 Tổng cả đơn 33 Kiện'
+    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '612', 'Lượng cần': 272, 'Số kiện cần': 1, ĐVT: 'TUYP' }])
+    const { warnings } = buildReceiptFromFiles({ khoCRows: readWarehouseExportRows(excelC), khoLgtRows: [], pdfTexts: [pdfText] })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('khai tổng 33 kiện')
+    expect(warnings[0]).toContain('tách được 1 kiện')
+  })
 })

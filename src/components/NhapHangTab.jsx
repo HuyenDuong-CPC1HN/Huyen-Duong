@@ -310,7 +310,7 @@ export default function NhapHangTab() {
       }
 
       const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
-      const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
+      const { khoC, khoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
 
       const entry = addBatch({
         id: String(Date.now()),
@@ -329,6 +329,7 @@ export default function NhapHangTab() {
       const warnings = [
         ...fileErrors.map(m => `Không đọc được: ${m}`),
         ...warehouseWarnings.map(m => `Cảnh báo: ${m}`),
+        ...(reconciliationWarnings || []).map(m => `Cảnh báo: ${m}`),
       ]
       if (warnings.length > 0) setError(warnings.join('\n'))
     } catch (err) {
@@ -489,7 +490,8 @@ export default function NhapHangTab() {
         <div className="flex items-center gap-2">
           <PackagePlus size={18} className="text-gray-500" />
           <p className="text-sm text-gray-600">
-            Mỗi kho vật lý có thể nhận nhiều file (nhiều phiếu xuất kho + PDF nếu có) — thả tất cả file của kho nào vào đúng vùng của kho đó.
+            Mỗi kho vật lý có thể nhận nhiều file (phiếu xuất kho Excel/PDF + biên bản giao nhận PDF nếu có) — thả tất cả file của kho nào vào đúng vùng của kho đó.
+            Biên bản giao nhận sẽ được dùng để tự điền "SL thực tế" và đối chiếu tổng số kiện.
           </p>
         </div>
 

@@ -70,10 +70,20 @@ function parsePdfSegment(segment) {
   if (!codeMatch) return null
   const tokens = codeMatch[2].trim().split(/\s+/)
   if (tokens.length < 5) return null
-  const [sKienLe, sKienNguyen, sTongSl] = tokens.slice(-3)
-  if (!/^\d+$/.test(sKienLe) || !/^\d+$/.test(sKienNguyen) || !/^\d+$/.test(sTongSl)) return null
-  const soLo = tokens.at(-4)
-  const tenHang = tokens.slice(0, -4).join(' ').trim()
+  // Cột "Ghi chú" (nếu có nội dung) nằm ngay sau Tổng SL nên không thể luôn giả định 3 token CUỐI CÙNG
+  // là Kiện lẻ/Kiện nguyên/Tổng SL — quét từ phải sang trái, lấy cụm 3 token số liên tiếp XA NHẤT về
+  // bên phải mà vẫn đứng trước ít nhất 1 token (Số lô); mọi thứ sau cụm đó (ghi chú) bị bỏ qua.
+  let numRunStart = -1
+  for (let i = tokens.length - 3; i >= 1; i -= 1) {
+    if (/^\d+$/.test(tokens[i]) && /^\d+$/.test(tokens[i + 1]) && /^\d+$/.test(tokens[i + 2])) {
+      numRunStart = i
+      break
+    }
+  }
+  if (numRunStart === -1) return null
+  const [sKienLe, sKienNguyen, sTongSl] = tokens.slice(numRunStart, numRunStart + 3)
+  const soLo = tokens[numRunStart - 1]
+  const tenHang = tokens.slice(0, numRunStart - 1).join(' ').trim()
   if (!tenHang || !soLo) return null
   return {
     maHang: codeMatch[1],
@@ -182,7 +192,11 @@ export function enrichRowsFromPdfCatalog(rows, pdfRows) {
     if (!next.soLo) next.soLo = hit.soLo
     if (!next.hanDung && hit.hanDung) next.hanDung = hit.hanDung
     if (!next.dvt && hit.dvt) next.dvt = hit.dvt
-    if (hit.soLuong !== undefined && hit.soLuong !== (next.slHoaDon ?? 0) && !next.ghiChu) {
+    if (hit.source === 'bienBanGiaoNhan') {
+      // Biên bản giao nhận = số kiểm đếm thực tế lúc nhận hàng — điền thẳng vào "SL thực tế" thay vì
+      // bắt gõ tay; cột "Chênh lệch" đã tự so với SL hoá đơn nên không cần thêm ghi chú lệch riêng.
+      if (next.slThucTe === null || next.slThucTe === undefined) next.slThucTe = hit.soLuong
+    } else if (hit.soLuong !== undefined && hit.soLuong !== (next.slHoaDon ?? 0) && !next.ghiChu) {
       next.ghiChu = `Lệch SL so PDF — PDF: ${hit.soLuong}, Excel: ${next.slHoaDon ?? 0}`
     }
     return next
@@ -221,11 +235,14 @@ function parsePhieuXuatKhoPdf(pdfText) {
 }
 
 // Đọc PDF theo cả 2 định dạng đã biết — thử mẫu "Phiếu xuất kho" (thường gặp nhất hiện nay) trước,
-// nếu không khớp dòng nào thì thử mẫu "biên bản giao nhận" cũ (parsePdfDeliveryNote).
+// nếu không khớp dòng nào thì thử mẫu "biên bản giao nhận" (parsePdfDeliveryNote). Gắn "source" để
+// enrichRowsFromPdfCatalog phân biệt: phiếu xuất kho là số theo chứng từ xuất ở nhà máy (chỉ dùng để
+// bổ sung thông tin/cảnh báo lệch so Excel), còn biên bản giao nhận là số kiểm đếm thực tế lúc nhận
+// hàng — dùng để tự điền thẳng vào "SL thực tế".
 export function parsePdfItems(pdfText) {
   const viaPhieuXuatKho = parsePhieuXuatKhoPdf(pdfText)
-  if (viaPhieuXuatKho.length > 0) return viaPhieuXuatKho
-  return parsePdfDeliveryNote(pdfText).map(row => ({ ...row, soLuong: row.tongSl }))
+  if (viaPhieuXuatKho.length > 0) return viaPhieuXuatKho.map(row => ({ ...row, source: 'phieuXuatKho' }))
+  return parsePdfDeliveryNote(pdfText).map(row => ({ ...row, soLuong: row.tongSl, source: 'bienBanGiaoNhan' }))
 }
 
 // File "Phiếu xuất kho" tự ghi rõ xuất đi kho nào ở dòng "Địa điểm"/"Lý do xuất kho" (vd "...Kho C..."
@@ -269,6 +286,20 @@ function buildMissingRowsFromPdf(pdfRows, excelKeys) {
   return rows
 }
 
+// "Tổng cả đơn ... Kiện" ghi ở cuối biên bản giao nhận — dùng để đối chiếu với tổng kiện đã tách được
+// trong bảng. Biên bản giao nhận đôi khi gộp cả hàng ký gửi kho khác vào 1 dòng không có mã hàng (vd
+// "HÀNG GỬI DTP" cho cả 32 kiện) — dòng đó không tự tách được, nên lệch giữa 2 tổng là dấu hiệu còn
+// hàng chưa được ghi nhận vào bảng, cần người dùng tự kiểm tra bằng chế độ Chỉnh sửa.
+function parseDeliveryNoteDeclaredTotal(pdfText) {
+  const compact = String(pdfText || '').replace(/\s+/g, ' ').trim()
+  const m = /Tổng cả đơn\s+(\d+)\s*Kiện/i.exec(compact)
+  return m ? Number(m[1]) : null
+}
+
+function sumKien(rows) {
+  return rows.reduce((sum, row) => sum + (row.kienNguyen ?? 0) + (row.kienLe ?? 0), 0)
+}
+
 export function buildReceiptFromFiles({
   khoCRows = [],
   khoLgtRows = [],
@@ -284,7 +315,21 @@ export function buildReceiptFromFiles({
   const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...missingRows], pdfRows)
   const khoLgt = enrichRowsFromPdfCatalog(khoLgtMerged, pdfRows)
 
-  return { khoC, khoLgt, pdfRows }
+  const warnings = []
+  const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
+  if (declaredTotals.length > 0) {
+    const declaredTotal = declaredTotals.reduce((a, b) => a + b, 0)
+    const actualTotal = sumKien(khoC) + sumKien(khoLgt)
+    if (declaredTotal !== actualTotal) {
+      warnings.push(
+        `Biên bản giao nhận khai tổng ${declaredTotal} kiện nhưng bảng đã tách được ${actualTotal} kiện `
+        + `(lệch ${declaredTotal - actualTotal}) — có thể do dòng gộp không ghi mã hàng cụ thể (vd hàng ký gửi kho khác). `
+        + `Kiểm tra lại bằng chế độ Chỉnh sửa.`,
+      )
+    }
+  }
+
+  return { khoC, khoLgt, pdfRows, warnings }
 }
 
 function extractDriverInfo(compact) {
