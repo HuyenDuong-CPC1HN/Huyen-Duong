@@ -310,7 +310,12 @@ export default function NhapHangTab() {
       }
 
       const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
-      const { khoC, khoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
+      const { khoC, khoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({
+        khoCRows,
+        khoLgtRows,
+        khoCPdfTexts: khoCPdfItems.map(item => item.text),
+        khoLgtPdfTexts: khoLgtPdfItems.map(item => item.text),
+      })
 
       const entry = addBatch({
         id: String(Date.now()),

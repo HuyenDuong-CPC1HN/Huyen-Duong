@@ -271,10 +271,12 @@ export function detectPhieuXuatKhoWarehouse(pdfText) {
 
 // khoCRows/khoLgtRows: mảng row đã đọc sẵn (nối từ NHIỀU file Excel — mỗi kho có thể nhận nhiều phiếu
 // xuất kho cùng 1 chuyến hàng, xem readWarehouseExportRows), gộp lại thành 1 bảng theo maHang::soLo.
-// Đọc từng file riêng ở nơi gọi (NhapHangTab.jsx) để 1 file lỗi không làm hỏng cả batch. pdfTexts: mảng
-// text đã trích từ TẤT CẢ PDF của cả 2 kho — chỉ dùng để bổ sung tên hàng/số lô còn thiếu, không bắt buộc.
-// Hàng có trong PDF (biên bản giao nhận/phiếu xuất kho) nhưng KHÔNG khớp bất kỳ dòng Excel nào (cả 2 kho)
-// — tức chưa được ghi nhận ở đâu cả — vẫn phải điền vào biên bản, mặc định về Kho C để kiểm tra tay.
+// Đọc từng file riêng ở nơi gọi (NhapHangTab.jsx) để 1 file lỗi không làm hỏng cả batch.
+//
+// pdfRows truyền vào đây PHẢI là PDF của ĐÚNG 1 vùng kho (Kho C hoặc Kho LGT) — không gộp cả 2 vùng —
+// vì hàng có trong PDF nhưng không khớp dòng Excel nào của CHÍNH vùng đó vẫn được thêm vào bảng của vùng
+// này: file phiếu xuất kho tự ghi rõ xuất đi kho nào, cộng với việc người dùng đã thả đúng vùng, nên biết
+// chắc thuộc kho này — không cần đoán/mặc định về Kho C như trước (đó là lỗi cũ).
 function buildMissingRowsFromPdf(pdfRows, excelKeys) {
   const seen = new Set()
   const rows = []
@@ -293,7 +295,7 @@ function buildMissingRowsFromPdf(pdfRows, excelKeys) {
       kienLe: 0,
       slHoaDon: item.soLuong,
       slThucTe: null,
-      ghiChu: 'Chỉ thấy trong PDF, không có trong file Excel nào — kiểm tra tay',
+      ghiChu: '',
       needsManual: !item.hanDung,
     })
   }
@@ -317,9 +319,15 @@ function sumKien(rows) {
 export function buildReceiptFromFiles({
   khoCRows = [],
   khoLgtRows = [],
-  pdfTexts = [],
+  khoCPdfTexts = [],
+  khoLgtPdfTexts = [],
 }) {
-  const pdfRows = pdfTexts.flatMap(text => parsePdfItems(text))
+  // Tách riêng theo vùng thả file (Kho C / Kho LGT) — KHÔNG gộp chung trước khi parse, vì hàng "chỉ thấy
+  // trong PDF, không có trong Excel" cần biết đúng nó đến từ PDF của vùng nào để xếp đúng kho đó
+  // (buildMissingRowsFromPdf), thay vì mặc định về Kho C như lỗi cũ.
+  const khoCPdfRows = khoCPdfTexts.flatMap(text => parsePdfItems(text))
+  const khoLgtPdfRows = khoLgtPdfTexts.flatMap(text => parsePdfItems(text))
+  const pdfRows = [...khoCPdfRows, ...khoLgtPdfRows]
 
   const khoCMerged = mergeWarehouseRows(khoCRows)
   const khoLgtMerged = mergeWarehouseRows(khoLgtRows)
@@ -328,11 +336,11 @@ export function buildReceiptFromFiles({
   // Mã hàng (+ số lô) có mặt ở CẢ 2 kho — PDF chỉ ghi 1 dòng tổng gộp cho cả 2, không phải số riêng
   // từng kho (xem ghi chú ở enrichRowsFromPdfCatalog).
   const sharedKeys = new Set([...khoCKeys].filter(key => khoLgtKeys.has(key)))
-  const excelKeys = new Set([...khoCKeys, ...khoLgtKeys])
-  const missingRows = buildMissingRowsFromPdf(pdfRows, excelKeys)
+  const khoCMissing = buildMissingRowsFromPdf(khoCPdfRows, khoCKeys)
+  const khoLgtMissing = buildMissingRowsFromPdf(khoLgtPdfRows, khoLgtKeys)
 
-  const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...missingRows], pdfRows, sharedKeys)
-  const khoLgt = enrichRowsFromPdfCatalog(khoLgtMerged, pdfRows, sharedKeys)
+  const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...khoCMissing], pdfRows, sharedKeys)
+  const khoLgt = enrichRowsFromPdfCatalog([...khoLgtMerged, ...khoLgtMissing], pdfRows, sharedKeys)
 
   const warnings = []
   // Đối chiếu riêng cho các mã dùng chung: tổng Kho C + Kho DTP (theo Excel) phải khớp với dòng gộp
@@ -353,7 +361,7 @@ export function buildReceiptFromFiles({
     }
   }
 
-  const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
+  const declaredTotals = [...khoCPdfTexts, ...khoLgtPdfTexts].map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
   if (declaredTotals.length > 0) {
     const declaredTotal = declaredTotals.reduce((a, b) => a + b, 0)
     const actualTotal = sumKien(khoC) + sumKien(khoLgt)
