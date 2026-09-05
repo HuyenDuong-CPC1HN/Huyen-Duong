@@ -2,6 +2,7 @@ import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
 import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp, AlertTriangle, Package } from 'lucide-react'
 import { parseCarrierFile, computeCarrierStats, getCarrierColumns, buildInternalOrderLookup, buildTrackingSet, reconcileViettelOrders, isHoldStatusRow, getTrackingCode } from '../utils/parseCarrierExport'
+import { reconcileNgoaiSan, buildSalesOrderLookup } from '../utils/reconcileNgoaiSan'
 import * as XLSX from 'xlsx'
 import { ColumnFilter, ResizeHandle } from './DataTable'
 import { StatCard } from './ReportCards'
@@ -201,6 +202,38 @@ export function removeHoldWeek(carrierKey, weekId) {
   const next = readHoldWeeks(carrierKey).filter(w => w.id !== weekId)
   localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(next))
 }
+
+// File "Danh sách thống kê" (đội kinh doanh lên đơn, cột Mã đơn/Tạo lúc) — dùng để đối soát "đơn ngoại sàn"
+// SPX COD (xem NgoaiSanPanel). Tích luỹ nhiều tuần giống hệt cơ chế Chờ giao Logistics ở trên.
+export function readSalesOrderWeeks(carrierKey) {
+  try {
+    const weeks = JSON.parse(localStorage.getItem(`carrier_salesorderweeks_${carrierKey}`) || '[]')
+    return Array.isArray(weeks) ? weeks : []
+  } catch {
+    return []
+  }
+}
+export function addSalesOrderWeek(carrierKey, entry) {
+  const weeks = readSalesOrderWeeks(carrierKey)
+  const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
+  let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
+  let triedFreeing = false
+  while (list.length > 0) {
+    try {
+      localStorage.setItem(`carrier_salesorderweeks_${carrierKey}`, JSON.stringify(list))
+      return withId
+    } catch (err) {
+      if (!triedFreeing) { triedFreeing = true; freeUpLocalStorageSpace(); continue }
+      if (list.length <= 1) throw err
+      list = list.slice(0, -1)
+    }
+  }
+  throw new Error('Không thể lưu — dữ liệu quá lớn ngay cả với 1 tuần.')
+}
+export function removeSalesOrderWeek(carrierKey, weekId) {
+  const next = readSalesOrderWeeks(carrierKey).filter(w => w.id !== weekId)
+  localStorage.setItem(`carrier_salesorderweeks_${carrierKey}`, JSON.stringify(next))
+}
 // Gộp mã tracking từ TOÀN BỘ các tuần đã upload (tích luỹ dần) để đối chiếu
 function getHoldLookupSet(carrierKey) {
   const weeks = readHoldWeeks(carrierKey)
@@ -357,11 +390,194 @@ function ReconcilePanel({ vtpRows, internalData }) {
   )
 }
 
+const NGOAI_SAN_STAT_CARDS = [
+  { key: 'dungHan24h', label: 'Lấy hàng đúng hạn (≤24h)', icon: CheckCircle,   cls: 'text-green-600' },
+  { key: 'treLay24h',  label: 'Trễ lấy hàng (>24h)',       icon: Clock,        cls: 'text-orange-600' },
+  { key: 'choLay24h',  label: 'Chưa lấy — quá 24h',        icon: AlertTriangle, cls: 'text-red-600' },
+  { key: 'dungHan48h', label: 'Giao đúng hạn (≤48h)',      icon: CheckCircle,   cls: 'text-green-600' },
+  { key: 'treHan48h',  label: 'Giao trễ hạn (>48h)',       icon: Clock,        cls: 'text-orange-600' },
+  { key: 'choGiao48h', label: 'Chưa giao — quá 48h',       icon: AlertTriangle, cls: 'text-red-600' },
+]
+
+// Đối soát "đơn ngoại sàn" (SPX COD): so "Mã đơn" (đội kinh doanh lên đơn) với "Mã khách hàng" trong file
+// SPX — tính SLA lấy hàng 24h và SLA toàn trình 48h. Chỉ hiển thị trong tab SPX (carrierType === 'spx').
+function NgoaiSanPanel({ carrierKey, spxRows }) {
+  const inputRef = useRef()
+  const [error, setError] = useState('')
+  const [weeks, setWeeks] = useState(() => readSalesOrderWeeks(carrierKey))
+  const [expanded, setExpanded] = useState(false)
+  const [onlyProblem, setOnlyProblem] = useState(false)
+
+  const salesLookup = useMemo(() => buildSalesOrderLookup(weeks), [weeks])
+  const { rows, stats } = useMemo(() => reconcileNgoaiSan(spxRows, salesLookup), [spxRows, salesLookup])
+
+  const parseFile = (file) => {
+    setError('')
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const fileRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+        if (fileRows.length === 0 || !('Mã đơn' in fileRows[0])) {
+          setError('Không tìm thấy cột "Mã đơn" trong file. Vui lòng kiểm tra lại.')
+          return
+        }
+        addSalesOrderWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })
+        setWeeks(readSalesOrderWeeks(carrierKey))
+      } catch {
+        setError('Không đọc được file Danh sách thống kê. Vui lòng kiểm tra lại.')
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  const removeWeekEntry = (weekId) => {
+    removeSalesOrderWeek(carrierKey, weekId)
+    setWeeks(readSalesOrderWeeks(carrierKey))
+  }
+
+  const problemStatuses = new Set(['TRỄ LẤY HÀNG (>24h)', 'CHƯA LẤY — QUÁ 24H', 'TRỄ HẠN (>48h)', 'CHƯA GIAO — QUÁ 48H'])
+  const visibleRows = onlyProblem ? rows.filter(r => problemStatuses.has(r.tinhTrangLay) || problemStatuses.has(r.tinhTrangGiao)) : rows
+  const problemCount = rows.filter(r => problemStatuses.has(r.tinhTrangLay) || problemStatuses.has(r.tinhTrangGiao)).length
+  const khongKhopRows = rows.filter(r => r.tinhTrangLay === 'Không khớp Mã đơn')
+
+  return (
+    <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex items-center gap-2 mb-1">
+        <Truck size={16} className="text-[#1e3a5f]" />
+        <h3 className="font-semibold text-gray-800 text-sm">Đối soát đơn ngoại sàn (SPX COD) — SLA 24h/48h</h3>
+      </div>
+      <p className="text-xs text-gray-400 mb-3">
+        So "Mã đơn" trong file Danh sách thống kê (giờ đội kinh doanh lên đơn) với "Mã khách hàng" trong file SPX ở trên,
+        để tính đúng SLA từ lúc lên đơn (không phải lúc SPX tạo vận đơn).
+      </p>
+
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <button
+          onClick={() => inputRef.current.click()}
+          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors"
+        >
+          <Upload size={14} />
+          Upload Danh sách thống kê
+        </button>
+        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
+        {weeks.length === 0 && (
+          <span className="text-xs text-gray-400">Chưa có file Danh sách thống kê để đối soát</span>
+        )}
+      </div>
+      {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
+
+      {weeks.length > 0 && (
+        <>
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {weeks.map(w => (
+              <span key={w.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                <FileSpreadsheet size={12} />
+                <span className="max-w-48 truncate" title={w.fileName}>{w.fileName}</span>
+                <span className="text-blue-400">· {new Date(w.uploadedAt).toLocaleDateString('vi-VN')}</span>
+                <button onClick={() => removeWeekEntry(w.id)} className="ml-0.5 text-blue-400 hover:text-red-500" title="Xoá tuần này">
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+            {NGOAI_SAN_STAT_CARDS.map(c => (
+              <StatCard key={c.key} icon={c.icon} value={stats[c.key]} label={c.label} cls={c.cls} />
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500 mb-3">
+            <span>{stats.total} đơn khớp Mã đơn</span>
+            <span>· {stats.hoanHang} hoàn hàng</span>
+            <span>· {stats.huy} đã huỷ (không đối soát)</span>
+            {stats.khongKhop > 0 && <span className="text-amber-600">· {stats.khongKhop} đơn SPX không khớp Mã đơn</span>}
+          </div>
+
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors text-left"
+          >
+            <List size={15} className="text-gray-500" />
+            <span className="font-medium text-gray-700 text-sm">Chi tiết đối soát</span>
+            {expanded ? <ChevronUp size={15} className="text-gray-400 ml-auto" /> : <ChevronDown size={15} className="text-gray-400 ml-auto" />}
+          </button>
+
+          {expanded && (
+            <div className="mt-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                {problemCount > 0 ? (
+                  <button
+                    onClick={() => setOnlyProblem(v => !v)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${
+                      onlyProblem ? 'bg-red-100 border-red-300 text-red-700' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
+                    }`}
+                  >
+                    <AlertTriangle size={14} />
+                    {onlyProblem ? 'Đang chỉ hiện đơn trễ/quá hạn — bấm để bỏ lọc' : `Chỉ hiện ${problemCount} đơn trễ/quá hạn`}
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1.5 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-600">
+                    <CheckCircle size={14} />
+                    Không có đơn trễ/quá hạn
+                  </span>
+                )}
+                {khongKhopRows.length > 0 && (
+                  <span className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                    {khongKhopRows.length} đơn SPX chưa tìm thấy Mã đơn tương ứng
+                  </span>
+                )}
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-[#1e3a5f] text-white">
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mã đơn</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trạng thái SPX</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tạo lúc (KD lên đơn)</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">SPX lấy hàng</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ chờ lấy</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng 24h</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">SPX giao hàng</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ tổng</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng 48h</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleRows.length === 0 ? (
+                      <tr><td colSpan={9} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
+                    ) : visibleRows.map((r, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-blue-50/40">
+                        <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
+                        <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
+                        <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.taoLuc || '—'}</td>
+                        <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.layHang || '—'}</td>
+                        <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioLay === '' ? '—' : r.gioLay}</td>
+                        <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangLay) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangLay || '—'}</td>
+                        <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.giaoHang || '—'}</td>
+                        <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioGiao === '' ? '—' : r.gioGiao}</td>
+                        <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangGiao) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangGiao || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 'all']
 const DEFAULT_COL_WIDTH = {
   'Mã Vận Đơn': 130, 'Mã đơn hàng': 130, 'Ngày tạo': 140, 'Người nhận': 200, 'Địa chỉ nhận': 260,
   'ĐT Nhận': 140, 'Tên hàng': 180, 'Trạng Thái': 130, 'Lý do': 200, 'Đơn chuyển hoàn': 110, 'Ngày chuyển trạng thái': 150,
-  'Mã vận đơn': 150, 'Thời gian tạo đơn': 140, 'Thời gian giao hàng': 140, 'Trạng thái hiện tại': 150,
+  'Mã vận đơn': 150, 'Thời gian tạo đơn': 140, 'Thời gian lấy hàng/gửi hàng': 160, 'Thời gian giao hàng': 140, 'Trạng thái hiện tại': 150,
   'Tên người nhận': 160, 'Số điện thoại người nhận': 140, 'Mã khách hàng': 140,
   'Thu COD (Có/Không)': 130, 'Số tiền COD': 120, 'Giá trị đơn hàng': 130,
 }
@@ -655,6 +871,8 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
         <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
         <span className="text-xs text-gray-400">Cập nhật: {new Date(state.uploadedAt).toLocaleString('vi-VN')}</span>
       </div>
+
+      {carrierType === 'spx' && <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} />}
 
       {showNoteCol && (
         <div className="mb-5">

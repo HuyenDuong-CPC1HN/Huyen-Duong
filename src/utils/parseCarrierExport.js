@@ -27,7 +27,7 @@ const VIETTEL_COLUMNS = [
 ]
 
 const SPX_COLUMNS = [
-  'Mã vận đơn', 'Thời gian tạo đơn', 'Thời gian giao hàng', 'Trạng thái hiện tại',
+  'Mã vận đơn', 'Thời gian tạo đơn', 'Thời gian lấy hàng/gửi hàng', 'Thời gian giao hàng', 'Trạng thái hiện tại',
   'Tên người nhận', 'Số điện thoại người nhận', 'Mã khách hàng',
   'Thu COD (Có/Không)', 'Số tiền COD', 'Giá trị đơn hàng',
 ]
@@ -181,6 +181,19 @@ export function isHoldStatusRow(row, carrierType = 'viettel') {
 export function getTrackingCode(row, carrierType = 'viettel') {
   const config = CARRIER_CONFIG[carrierType]
   return String(row[config.requiredHeaderCell] || '').trim().toUpperCase()
+}
+
+// Đơn bị huỷ trước khi giao (loại hẳn khỏi mọi thống kê/đối soát thời gian)
+export function isCancelledStatus(row, carrierType = 'viettel') {
+  const config = CARRIER_CONFIG[carrierType]
+  return !!config.cancelStatuses?.includes(row[config.statusKey])
+}
+
+// Đơn đã/đang chuyển hoàn — tính là "Hoàn hàng", không tính vào SLA giao đúng/trễ hạn
+export function isHoanHangStatus(row, carrierType = 'viettel') {
+  const config = CARRIER_CONFIG[carrierType]
+  const status = row[config.statusKey]
+  return config.hoanHangStatuses.includes(status) || config.isHoanHang(row)
 }
 
 function diffDaysBetween(fromStr, toStr) {
