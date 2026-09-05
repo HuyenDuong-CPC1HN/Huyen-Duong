@@ -394,6 +394,8 @@ async function syncGoodsReceiptBatches(key) {
       pdfFileName: batch.pdfFileName,
       excelCFileName: batch.excelCFileName,
       excelLgtFileName: batch.excelLgtFileName,
+      bienBanTongFileName: batch.bienBanTongFileName,
+      bienBanTongStoragePath: batch.bienBanTongStoragePath,
       khoC: batch.khoC || [],
       khoLgt: batch.khoLgt || [],
     })

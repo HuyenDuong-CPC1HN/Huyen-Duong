@@ -26,5 +26,16 @@ export function createStorageFilesRepository(client) {
       const { error } = await files.remove([path])
       fail(error, 'Không thể xóa dữ liệu trong kho tệp')
     },
+    // Lưu file gốc (PDF/ảnh...) thay vì JSON — dùng cho các bản scan đính kèm như biên bản giao nhận.
+    async writeFile(path, file) {
+      const { error } = await files.upload(path, file, { upsert: true, contentType: file.type || 'application/octet-stream' })
+      fail(error, 'Không thể tải tệp lên kho tệp')
+      return path
+    },
+    async getSignedUrl(path, expiresIn = 3600) {
+      const { data, error } = await files.createSignedUrl(path, expiresIn)
+      fail(error, 'Không tạo được liên kết xem tệp')
+      return data.signedUrl
+    },
   }
 }
