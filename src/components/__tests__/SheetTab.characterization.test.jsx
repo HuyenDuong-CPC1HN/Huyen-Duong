@@ -47,6 +47,7 @@ vi.mock('../CarrierStats', () => ({
   getCarrierFileStats: vi.fn(),
   getCarrierFileTotal: vi.fn(() => null),
   CarrierPanel: () => null,
+  FrozenNgoaiSanPanel: () => null,
   readHoldWeeks: vi.fn(() => []),
   pickCarrierWeekIdByDate: vi.fn(),
   carrierWeekHasRows: vi.fn(() => false),

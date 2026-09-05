@@ -717,6 +717,105 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
   )
 }
 
+// Bản đã đóng băng của NgoaiSanPanel — hiển thị đúng số liệu tại thời điểm "Lưu số liệu tuần này", không
+// đổi theo dữ liệu upload thêm sau này. Chỉ đọc (không có nút upload/xoá tuần, checkbox chỉ để xem).
+export function FrozenNgoaiSanPanel({ frozen }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!frozen) return null
+  const { rows, stats } = frozen
+  const problemStatuses = new Set(['TRỄ ĐÓNG KIỆN (>24h)', 'CHƯA ĐÓNG KIỆN — QUÁ 24H', 'TRỄ HẠN (>48h)', 'CHƯA GIAO — QUÁ 48H'])
+
+  return (
+    <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Truck size={16} className="text-[#1e3a5f]" />
+        <h3 className="font-semibold text-gray-800 text-sm">Đối soát đơn ngoại sàn (SPX COD) — đã đóng băng khi lưu báo cáo</h3>
+      </div>
+
+      <p className="text-xs font-semibold text-gray-500 mb-2">A) Đóng kiện (kho) — Mốc 1 → Mốc 2</p>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        {NGOAI_SAN_DONG_KIEN_CARDS.map(c => (
+          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls} />
+        ))}
+      </div>
+      <p className="text-xs font-semibold text-gray-500 mb-2">B) SPX lấy hàng — Mốc 2 → Mốc 3</p>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        {NGOAI_SAN_LAY_HANG_CARDS.map(c => (
+          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls} />
+        ))}
+      </div>
+      <p className="text-xs font-semibold text-gray-500 mb-2">C) Giao hàng thành công — Mốc 1 → Mốc 4</p>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        {NGOAI_SAN_GIAO_CARDS.map(c => (
+          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls} />
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500 mb-3">
+        <span>{stats.total} đơn khớp Mã đơn</span>
+        <span>· {stats.hoanHang} hoàn hàng</span>
+        <span>· {stats.huy} đã huỷ (không đối soát)</span>
+        {stats.boQua > 0 && <span>· {stats.boQua} đã đánh dấu không cần tính (trùng đơn)</span>}
+        {stats.khongKhop > 0 && <span className="text-amber-600">· {stats.khongKhop} đơn SPX không khớp Mã đơn</span>}
+      </div>
+
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors text-left"
+      >
+        <List size={15} className="text-gray-500" />
+        <span className="font-medium text-gray-700 text-sm">Chi tiết đối soát (đã đóng băng)</span>
+        {expanded ? <ChevronUp size={15} className="text-gray-400 ml-auto" /> : <ChevronDown size={15} className="text-gray-400 ml-auto" />}
+      </button>
+
+      {expanded && (
+        <div className="mt-3 overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-[#1e3a5f] text-white">
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mã đơn</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trạng thái SPX</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc1 - Tạo lúc</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc2 - Đóng kiện</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ đóng kiện</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng đóng kiện</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc3 - SPX lấy hàng</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ lấy sau đóng kiện</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Nhóm lấy hàng</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc4 - Giao hàng</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ giao tổng</th>
+                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng giao (≤48h)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={12} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
+              ) : rows.map((r, i) => (
+                <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
+                  <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
+                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
+                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc1 || '—'}</td>
+                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc2 || '—'}</td>
+                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioDongKien === '' || r.gioDongKien === undefined ? '—' : r.gioDongKien}</td>
+                  <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangDongKien) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangDongKien || '—'}</td>
+                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc3 || '—'}</td>
+                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioLaySauDongKien === '' || r.gioLaySauDongKien === undefined ? '—' : r.gioLaySauDongKien}</td>
+                  <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${!r.excludedFromReport && (r.nhomLay === '>72h' || r.nhomLay === 'Chưa lấy hàng') ? 'text-red-600 font-medium' : ''}`}>
+                    {r.excludedFromReport ? 'Chưa lấy hàng (đã bỏ qua)' : (r.nhomLay || '—')}
+                  </td>
+                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc4 || '—'}</td>
+                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioGiaoTong === '' || r.gioGiaoTong === undefined ? '—' : r.gioGiaoTong}</td>
+                  <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangGiao) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangGiao || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 'all']
 const DEFAULT_COL_WIDTH = {
   'Mã Vận Đơn': 130, 'Mã đơn hàng': 130, 'Ngày tạo': 140, 'Người nhận': 200, 'Địa chỉ nhận': 260,
@@ -743,17 +842,32 @@ function useHoldNotes(carrierKey) {
 
 // Đánh dấu tay các đơn "Chưa lấy — quá 24h" là "không cần tính vào báo cáo" (vd đơn trùng, chỉ cần huỷ
 // bên SPX là xong) — loại khỏi thống kê chưa lấy/chưa giao nhưng vẫn hiện trong bảng chi tiết để theo dõi.
+function ngoaiSanExcludedKey(carrierKey) { return `carrier_ngoaisan_excluded_${carrierKey}` }
+export function readNgoaiSanExcluded(carrierKey) {
+  try { return JSON.parse(localStorage.getItem(ngoaiSanExcludedKey(carrierKey)) || '[]') } catch { return [] }
+}
 function useNgoaiSanExcluded(carrierKey) {
-  const lsKey = `carrier_ngoaisan_excluded_${carrierKey}`
-  const [excluded, setExcluded] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(lsKey) || '[]') } catch { return [] }
-  })
+  const [excluded, setExcluded] = useState(() => readNgoaiSanExcluded(carrierKey))
   const setEntry = (maDon, isExcluded) => {
     const next = isExcluded ? [...new Set([...excluded, maDon])] : excluded.filter(c => c !== maDon)
     setExcluded(next)
-    localStorage.setItem(lsKey, JSON.stringify(next))
+    localStorage.setItem(ngoaiSanExcludedKey(carrierKey), JSON.stringify(next))
   }
   return [excluded, setEntry]
+}
+
+// Đóng băng kết quả đối soát "đơn ngoại sàn" tại thời điểm lưu báo cáo tuần — dùng khi bấm "Lưu số liệu
+// tuần này" để nội dung đối soát SPX không đổi theo thời gian/dữ liệu upload thêm sau này (xem SheetReportPanel).
+export function computeFrozenNgoaiSan(carrierKey, spxRows) {
+  const salesLookup = buildSalesOrderLookup(readSalesOrderWeeks(carrierKey))
+  const packingLookup = buildPackingLookup(readPackingWeeks(carrierKey))
+  const excludedSet = new Set(readNgoaiSanExcluded(carrierKey))
+  return reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedSet)
+}
+
+// Lấy đúng dòng dữ liệu 1 tuần VTP/SPX theo id — dùng khi cần snapshot số liệu (vd đóng băng đối soát SPX)
+export function getCarrierWeekRows(carrierKey, weekId) {
+  return readCarrierWeeks(carrierKey).find(w => w.id === weekId)?.rows || []
 }
 
 function useColWidths(storageKey, columns) {
@@ -779,7 +893,7 @@ function useColWidths(storageKey, columns) {
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => frozenLookup ? new Map(Object.entries(frozenLookup)) : buildInternalOrderLookup(internalData),
@@ -1031,7 +1145,11 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
         <span className="text-xs text-gray-400">Cập nhật: {new Date(state.uploadedAt).toLocaleString('vi-VN')}</span>
       </div>
 
-      {carrierType === 'spx' && <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} />}
+      {carrierType === 'spx' && (
+        frozenNgoaiSan
+          ? <FrozenNgoaiSanPanel frozen={frozenNgoaiSan} />
+          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} />
+      )}
 
       {showNoteCol && (
         <div className="mb-5">

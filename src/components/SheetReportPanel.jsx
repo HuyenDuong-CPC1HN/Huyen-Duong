@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
 import { CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, RotateCcw, XCircle } from 'lucide-react'
 import {
-  getCarrierFileStats, CarrierPanel, carrierWeekHasRows,
+  getCarrierFileStats, CarrierPanel, carrierWeekHasRows, FrozenNgoaiSanPanel,
 } from './CarrierStats'
 import { KpiTile, StatCard, SectionCard } from './ReportCards'
 
@@ -67,7 +67,7 @@ function resolveCarrierStats(weekId, hasLiveRows, liveStats, frozen) {
 }
 
 function SnapshotCarrierBlock({
-  label, weekId, hasLiveRows, frozen, onClear, livePanel, missingClassName = 'text-sm text-gray-400 mb-4',
+  label, weekId, hasLiveRows, frozen, onClear, livePanel, missingClassName = 'text-sm text-gray-400 mb-4', extraFrozenContent,
 }) {
   if (!weekId) {
     return <p className={missingClassName}>Chưa có file {label} tương ứng với tuần này.</p>
@@ -76,6 +76,7 @@ function SnapshotCarrierBlock({
     return (
       <div className="mb-4">
         <FrozenCarrierCards label={label} frozen={frozen} />
+        {extraFrozenContent}
       </div>
     )
   }
@@ -237,6 +238,7 @@ function SnapshotView({ type, snapshot, onClearCarrierNow }) {
             frozen={snapshot.spxFrozen}
             onClear={() => onClearCarrierNow('spx')}
             missingClassName="text-sm text-gray-400"
+            extraFrozenContent={<FrozenNgoaiSanPanel frozen={snapshot.ngoaiSanFrozen} />}
             livePanel={(
               <CarrierPanel
                 carrierKey="donC_spx"
@@ -244,6 +246,7 @@ function SnapshotView({ type, snapshot, onClearCarrierNow }) {
                 carrierType="spx"
                 weekId={snapshot.spxWeekId}
                 frozenLookup={snapshot.carrierLookup}
+                frozenNgoaiSan={snapshot.ngoaiSanFrozen}
               />
             )}
           />

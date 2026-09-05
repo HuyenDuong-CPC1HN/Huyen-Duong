@@ -14,6 +14,7 @@ import { deliveryBucket } from '../utils/deliveryDays'
 import {
   pickCarrierWeekIdByDate, snapshotCarrierLookup,
   getCarrierFileStats, useCarrierRowsPendingClear,
+  getCarrierWeekRows, computeFrozenNgoaiSan,
 } from './CarrierStats'
 import {
   readSheetReports, saveSheetReport, removeSheetReport,
@@ -109,6 +110,9 @@ export function useSheetReportActions({
     const spxFrozen = spxWeekId
       ? getCarrierFileStats('donC_spx', 'spx', data, spxWeekId)
       : null
+    const ngoaiSanFrozen = spxWeekId
+      ? computeFrozenNgoaiSan('donC_spx', getCarrierWeekRows('donC_spx', spxWeekId))
+      : null
     const label = weekLabel || new Date().toLocaleDateString('vi-VN')
     const next = saveSheetReport(type, weekId, label, {
       ...buckets,
@@ -117,6 +121,7 @@ export function useSheetReportActions({
       carrierLookup,
       viettelFrozen,
       spxFrozen,
+      ngoaiSanFrozen,
     })
     setReports(next)
     onSaved?.(weekId)
@@ -185,10 +190,12 @@ export function useSheetReportActions({
       viettelPending.scheduleClear(snap.viettelWeekId)
     } else if (which === 'spx' && snap.spxWeekId) {
       const spxFrozen = getCarrierFileStats('donC_spx', 'spx', [], snap.spxWeekId, snap.carrierLookup)
+      const ngoaiSanFrozen = computeFrozenNgoaiSan('donC_spx', getCarrierWeekRows('donC_spx', snap.spxWeekId))
       const next = relinkSheetReportCarrier(type, weekId, {
         viettelWeekId: snap.viettelWeekId,
         spxWeekId: snap.spxWeekId,
         spxFrozen,
+        ngoaiSanFrozen,
       })
       setReports(next)
       spxPending.scheduleClear(snap.spxWeekId)

@@ -13,11 +13,11 @@ export function readSheetReports(type) {
   try { return JSON.parse(localStorage.getItem(storageKey(type)) || '[]') } catch { return [] }
 }
 
-export function saveSheetReport(type, weekId, label, { b24, b48, b72, chanhXeCount, viettelWeekId, spxWeekId, carrierLookup, viettelFrozen, spxFrozen }) {
+export function saveSheetReport(type, weekId, label, { b24, b48, b72, chanhXeCount, viettelWeekId, spxWeekId, carrierLookup, viettelFrozen, spxFrozen, ngoaiSanFrozen }) {
   const reports = readSheetReports(type).filter(r => r.id !== weekId)
   const entry = {
     id: weekId, createdAt: new Date().toISOString(), label, b24, b48, b72, chanhXeCount,
-    viettelWeekId, spxWeekId, carrierLookup, viettelFrozen, spxFrozen,
+    viettelWeekId, spxWeekId, carrierLookup, viettelFrozen, spxFrozen, ngoaiSanFrozen,
   }
   const next = [entry, ...reports].slice(0, 52)
   localStorage.setItem(storageKey(type), JSON.stringify(next))
@@ -26,7 +26,7 @@ export function saveSheetReport(type, weekId, label, { b24, b48, b72, chanhXeCou
 
 // Nối/cập nhật lại liên kết file VTP/SPX cho 1 bản đã lưu — dùng khi lần lưu trước bị lệch file
 // (vd do đổi cách khớp tuần) mà không cần Excel gốc, vì chỉ sửa tham chiếu, không đụng tới b24/b48/b72 đã đóng băng.
-export function relinkSheetReportCarrier(type, weekId, { viettelWeekId, spxWeekId, viettelFrozen, spxFrozen }) {
+export function relinkSheetReportCarrier(type, weekId, { viettelWeekId, spxWeekId, viettelFrozen, spxFrozen, ngoaiSanFrozen }) {
   const reports = readSheetReports(type)
   const next = reports.map(r => r.id === weekId ? {
     ...r,
@@ -34,6 +34,7 @@ export function relinkSheetReportCarrier(type, weekId, { viettelWeekId, spxWeekI
     // Chỉ ghi đè nếu có truyền vào — tránh xoá mất số liệu đã đóng băng trước đó khi chỉ nối lại tham chiếu
     viettelFrozen: viettelFrozen !== undefined ? viettelFrozen : r.viettelFrozen,
     spxFrozen: spxFrozen !== undefined ? spxFrozen : r.spxFrozen,
+    ngoaiSanFrozen: ngoaiSanFrozen !== undefined ? ngoaiSanFrozen : r.ngoaiSanFrozen,
   } : r)
   localStorage.setItem(storageKey(type), JSON.stringify(next))
   return next
