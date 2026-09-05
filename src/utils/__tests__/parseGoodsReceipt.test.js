@@ -159,20 +159,28 @@ describe('parseGoodsReceipt', () => {
     expect(rows[0]).toMatchObject({ maHang: 'K00675', soLo: '010126GMP', kienLe: 1, kienNguyen: 0, tongSl: 200 })
   })
 
-  it('auto-fills "SL thực tế" from biên bản giao nhận (source bienBanGiaoNhan), leaves phiếu xuất kho as ghi chú only', () => {
+  it('never auto-fills "SL thực tế" (chỉ người dùng tự kiểm hàng điền tay) — biên bản giao nhận chỉ đối chiếu ngầm qua ghi chú khi lệch', () => {
     const viaBienBan = enrichRowsFromPdfCatalog(
-      [{ maHang: 'F00464', soLo: '080326', slHoaDon: 5760, slThucTe: null, ghiChu: '' }],
+      [{ maHang: 'F00464', soLo: '080326', slHoaDon: 300, slThucTe: null, ghiChu: '' }],
       [{ maHang: 'F00464', soLo: '080326', soLuong: 5760, source: 'bienBanGiaoNhan' }],
     )
-    expect(viaBienBan[0].slThucTe).toBe(5760)
-    expect(viaBienBan[0].ghiChu).toBe('')
+    expect(viaBienBan[0].slThucTe).toBeNull()
+    expect(viaBienBan[0].ghiChu).toContain('Lệch SL so biên bản giao nhận')
 
     const viaPhieuXuatKho = enrichRowsFromPdfCatalog(
       [{ maHang: 'F00464', soLo: '080326', slHoaDon: 300, slThucTe: null }],
       [{ maHang: 'F00464', soLo: '080326', soLuong: 272, source: 'phieuXuatKho' }],
     )
     expect(viaPhieuXuatKho[0].slThucTe).toBeNull()
-    expect(viaPhieuXuatKho[0].ghiChu).toContain('Lệch SL so PDF')
+    expect(viaPhieuXuatKho[0].ghiChu).toContain('Lệch SL so PDF phiếu xuất kho')
+  })
+
+  it('điền Kiện nguyên/Kiện lẻ từ biên bản giao nhận khi dòng chưa có số kiện thật (0/0, chỉ có nguồn Phiếu xuất kho)', () => {
+    const rows = enrichRowsFromPdfCatalog(
+      [{ maHang: 'H05005', soLo: '010826', slHoaDon: 1440, kienNguyen: 0, kienLe: 0, slThucTe: null, ghiChu: '' }],
+      [{ maHang: 'H05005', soLo: '010826', soLuong: 1440, kienNguyen: 1, kienLe: 0, source: 'bienBanGiaoNhan' }],
+    )
+    expect(rows[0]).toMatchObject({ kienNguyen: 1, kienLe: 0, slThucTe: null })
   })
 
   it('warns when tổng kiện khai trong biên bản giao nhận lệch với tổng đã tách trong bảng', () => {
