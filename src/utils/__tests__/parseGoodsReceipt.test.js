@@ -98,6 +98,31 @@ describe('parseGoodsReceipt', () => {
     expect(khoLgt[0].maHang).toBe('A01259')
   })
 
+  it('skips rows whose Số lô is "Hết" — item was never actually fulfilled', () => {
+    const buffer = makeWorkbook([
+      { Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': 'LOT1', 'Lượng cần': 20, ĐVT: 'VIEN' },
+      { Mã: 'A01497', Tên: 'B', 'Số lô đề nghị': 'Hết', 'Lượng cần': 30, ĐVT: 'LO' },
+      { Mã: 'B01418', Tên: 'C', 'Số lô đề nghị': 'ko lấy', 'Lượng cần': 1440, ĐVT: 'ONG' },
+    ])
+    const rows = readWarehouseExportRows(buffer)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].maHang).toBe('A01259')
+  })
+
+  it('adds pdf-only items (not found in any excel file) into Kho C for manual review', () => {
+    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '010426', 'Lượng cần': 20, ĐVT: 'VIEN' }])
+    const khoCRows = readWarehouseExportRows(excelC)
+    const pdfText = 'Địa điểm: Kho C '
+      + 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
+      + '1   Arica Folicus Cream - Hộp 1 tuýp 30g A01840   TUBE   272,000 DTP-VNM   612   21/06/2029'
+    const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows, khoLgtRows: [], pdfTexts: [pdfText] })
+    expect(khoC).toHaveLength(2)
+    const missing = khoC.find(r => r.maHang === 'A01840')
+    expect(missing).toMatchObject({ soLo: '612', slHoaDon: 272, hanDung: '2029-06-21' })
+    expect(missing.ghiChu).toContain('không có trong file Excel')
+    expect(khoLgt).toHaveLength(0)
+  })
+
   it('calculates chenh lech from actual minus invoice quantity', () => {
     expect(calcChenhLech({ slHoaDon: 10, slThucTe: 12 })).toBe(2)
     expect(calcChenhLech({ slHoaDon: 10, slThucTe: null })).toBeNull()

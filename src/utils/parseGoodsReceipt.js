@@ -13,6 +13,9 @@ const COLUMN_ALIASES = {
 
 const HEADER_CANDIDATES = new Set(['Mã hàng', 'Mã', 'Mã vật tư'])
 const SKIP_LOT = new Set(['hết', 'het', 'ko lấy', 'ko lay', ''])
+// Số lô ghi "Hết"/"Ko lấy": hàng không thực sự xuất được (hết hàng ở kho gửi) — không phải hàng đã nhập,
+// nên loại hẳn khỏi bảng/biên bản nhập hàng, không chỉ xoá mỗi số lô.
+const NOT_FULFILLED_LOT = new Set(['hết', 'het', 'ko lấy', 'ko lay'])
 const PRODUCT_CODE = /^[A-Z]\d{4,5}$/
 
 function normalizeHeader(value) {
@@ -92,10 +95,12 @@ export function readWarehouseExportRows(arrayBuffer) {
   }
 
   const fieldByCol = grid[headerRowIndex].map(cell => resolveField(cell))
+  const soLoColIndex = fieldByCol.indexOf('soLo')
   const rows = []
   for (let i = headerRowIndex + 1; i < grid.length; i += 1) {
     const line = grid[i]
     if (!line || line.every(cell => cell === null || cell === '')) continue
+    if (soLoColIndex !== -1 && NOT_FULFILLED_LOT.has(String(line[soLoColIndex] ?? '').trim().toLowerCase())) continue
     const row = {}
     fieldByCol.forEach((field, colIndex) => {
       if (!field) return
@@ -237,6 +242,33 @@ export function detectPhieuXuatKhoWarehouse(pdfText) {
 // xuất kho cùng 1 chuyến hàng, xem readWarehouseExportRows), gộp lại thành 1 bảng theo maHang::soLo.
 // Đọc từng file riêng ở nơi gọi (NhapHangTab.jsx) để 1 file lỗi không làm hỏng cả batch. pdfTexts: mảng
 // text đã trích từ TẤT CẢ PDF của cả 2 kho — chỉ dùng để bổ sung tên hàng/số lô còn thiếu, không bắt buộc.
+// Hàng có trong PDF (biên bản giao nhận/phiếu xuất kho) nhưng KHÔNG khớp bất kỳ dòng Excel nào (cả 2 kho)
+// — tức chưa được ghi nhận ở đâu cả — vẫn phải điền vào biên bản, mặc định về Kho C để kiểm tra tay.
+function buildMissingRowsFromPdf(pdfRows, excelKeys) {
+  const seen = new Set()
+  const rows = []
+  for (const item of pdfRows) {
+    if (!(item.soLuong > 0)) continue
+    const key = rowKey(item)
+    if (excelKeys.has(key) || seen.has(key)) continue
+    seen.add(key)
+    rows.push({
+      maHang: item.maHang,
+      tenHang: item.tenHang || '',
+      dvt: item.dvt || '',
+      soLo: item.soLo || '',
+      hanDung: item.hanDung || null,
+      kienNguyen: 0,
+      kienLe: 0,
+      slHoaDon: item.soLuong,
+      slThucTe: null,
+      ghiChu: 'Chỉ thấy trong PDF, không có trong file Excel nào — kiểm tra tay',
+      needsManual: !item.hanDung,
+    })
+  }
+  return rows
+}
+
 export function buildReceiptFromFiles({
   khoCRows = [],
   khoLgtRows = [],
@@ -244,8 +276,13 @@ export function buildReceiptFromFiles({
 }) {
   const pdfRows = pdfTexts.flatMap(text => parsePdfItems(text))
 
-  const khoC = enrichRowsFromPdfCatalog(mergeWarehouseRows(khoCRows), pdfRows)
-  const khoLgt = enrichRowsFromPdfCatalog(mergeWarehouseRows(khoLgtRows), pdfRows)
+  const khoCMerged = mergeWarehouseRows(khoCRows)
+  const khoLgtMerged = mergeWarehouseRows(khoLgtRows)
+  const excelKeys = new Set([...khoCMerged, ...khoLgtMerged].map(rowKey))
+  const missingRows = buildMissingRowsFromPdf(pdfRows, excelKeys)
+
+  const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...missingRows], pdfRows)
+  const khoLgt = enrichRowsFromPdfCatalog(khoLgtMerged, pdfRows)
 
   return { khoC, khoLgt, pdfRows }
 }
