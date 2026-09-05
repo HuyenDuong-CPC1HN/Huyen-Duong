@@ -99,6 +99,18 @@ async function loadSalesOrderWeeks(client) {
   for (const [key, weeks] of byKey) put(`carrier_salesorderweeks_${key}`, encode(weeks))
 }
 
+async function loadPackingWeeks(client) {
+  const { data, error } = await client.from('carrier_packing_weeks').select('*').order('uploaded_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  const files = createStorageFilesRepository(client)
+  const byKey = new Map()
+  for (const record of data || []) {
+    const week = { id: record.id, fileName: record.file_name, uploadedAt: record.uploaded_at, rows: await files.readJson(record.storage_path) }
+    byKey.set(record.carrier_key, [...(byKey.get(record.carrier_key) || []), week])
+  }
+  for (const [key, weeks] of byKey) put(`carrier_packingweeks_${key}`, encode(weeks))
+}
+
 async function loadExpiryStock(client) {
   const repo = createExpiryStockMonthsRepository(client)
   const records = await repo.list()
@@ -146,6 +158,13 @@ export async function loadWorkspace(client = supabase) {
     const message = error?.message || String(error)
     // Migration đối soát "đơn ngoại sàn" SPX COD có thể chưa được áp dụng — không chặn workspace chính vì việc này.
     if (!/carrier_sales_order_weeks|schema cache/i.test(message)) throw error
+  }
+  try {
+    await loadPackingWeeks(client)
+  } catch (error) {
+    const message = error?.message || String(error)
+    // Migration đối soát "đơn ngoại sàn" SPX COD (mốc đóng kiện) có thể chưa được áp dụng.
+    if (!/carrier_packing_weeks|schema cache/i.test(message)) throw error
   }
   try {
     await loadExpiryStock(client)
@@ -318,6 +337,30 @@ async function syncSalesOrderWeeks(key) {
   }
 }
 
+async function syncPackingWeeks(key) {
+  const carrierKey = key.replace('carrier_packingweeks_', '')
+  const weeks = decode(values.get(key) || '[]')
+  const changes = consumeChanges(key)
+  if (!changes.upserts.size && !changes.deletes.size) return
+  const { data: current, error: readError } = await supabase.from('carrier_packing_weeks').select('*').eq('carrier_key', carrierKey)
+  if (readError) throw new Error(readError.message)
+  const files = createStorageFilesRepository(supabase)
+  const currentById = new Map((current || []).map(week => [week.id, week]))
+  for (const week of weeks.filter(item => changes.upserts.has(String(item.id)))) {
+    const storagePath = `carrier-packing/${carrierKey}/${week.id}.json`
+    await files.writeJson(storagePath, week.rows || week.data || [])
+    const { error } = await supabase.from('carrier_packing_weeks').upsert({ id: week.id, carrier_key: carrierKey, file_name: week.fileName || null, uploaded_at: week.uploadedAt, storage_path: storagePath })
+    if (error) throw new Error(error.message)
+  }
+  for (const id of changes.deletes) {
+    const week = currentById.get(id)
+    if (!week) continue
+    const { error } = await supabase.from('carrier_packing_weeks').delete().eq('id', week.id)
+    if (error) throw new Error(error.message)
+    await files.remove(week.storage_path)
+  }
+}
+
 async function syncExpiryStockMonths(key) {
   const repo = createExpiryStockMonthsRepository(supabase)
   const months = decode(values.get(key) || '[]')
@@ -378,6 +421,7 @@ async function persist(key) {
   if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
   if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
   if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key)
+  if (key.startsWith('carrier_packingweeks_')) return syncPackingWeeks(key)
   if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
   if (key === 'expiry_stock_active') return createExpiryStockMonthsRepository(supabase).setActive(values.get(key) || '')
   if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
@@ -412,6 +456,7 @@ export const opsStore = {
       if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
       if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
   if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key)
+  if (key.startsWith('carrier_packingweeks_')) return syncPackingWeeks(key)
       if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
       if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
       if (key === 'return_records') return syncReturnRecords(key)

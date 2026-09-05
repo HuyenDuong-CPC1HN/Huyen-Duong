@@ -186,6 +186,13 @@ export default function App() {
           {' '}<code>supabase/migrations/20260905_carrier_sales_order_weeks.sql</code>, rồi tải lại trang.
         </span>
       )
+    } else if (/carrier_packing_weeks/i.test(blockingError || '')) {
+      remediationHint = (
+        <span>
+          Chưa chạy migration mốc đóng kiện (đối soát đơn ngoại sàn SPX) trên Supabase. Mở SQL Editor, chạy toàn bộ file
+          {' '}<code>supabase/migrations/20260905_carrier_packing_weeks.sql</code>, rồi tải lại trang.
+        </span>
+      )
     } else if (/reporting_cycles|schema cache/i.test(blockingError || '')) {
       remediationHint = (
         <span>
