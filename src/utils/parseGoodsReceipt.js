@@ -179,46 +179,19 @@ export function enrichRowsFromPdfCatalog(rows, pdfRows) {
   })
 }
 
-function buildLgtRowsFromPdf(pdfRows, excelKeys) {
-  return mergeWarehouseRows(
-    pdfRows
-      .filter(item => !excelKeys.has(rowKey(item)) && item.tongSl > 0)
-      .map(item => ({
-        maHang: item.maHang,
-        tenHang: item.tenHang,
-        dvt: '',
-        soLo: item.soLo,
-        hanDung: null,
-        kienNguyen: item.kienNguyen,
-        kienLe: item.kienLe,
-        slHoaDon: item.tongSl,
-      })),
-  ).map(row => ({ ...row, needsManual: !row.hanDung, ghiChu: row.ghiChu || '' }))
-}
-
+// khoCRows/khoLgtRows: mảng row đã đọc sẵn (nối từ NHIỀU file Excel — mỗi kho có thể nhận nhiều phiếu
+// xuất kho cùng 1 chuyến hàng, xem readWarehouseExportRows), gộp lại thành 1 bảng theo maHang::soLo.
+// Đọc từng file riêng ở nơi gọi (NhapHangTab.jsx) để 1 file lỗi không làm hỏng cả batch. pdfTexts: mảng
+// text đã trích từ TẤT CẢ PDF của cả 2 kho — chỉ dùng để bổ sung tên hàng/số lô còn thiếu, không bắt buộc.
 export function buildReceiptFromFiles({
-  excelCBuffer,
-  excelLgtBuffer = null,
-  pdfText = '',
-  sharedExcelForBoth = false,
-  deriveLgtFromPdf = false,
+  khoCRows = [],
+  khoLgtRows = [],
+  pdfTexts = [],
 }) {
-  const pdfRows = parsePdfDeliveryNote(pdfText)
-  const rawC = readWarehouseExportRows(excelCBuffer)
-  let rawLgt = []
-  if (excelLgtBuffer) {
-    rawLgt = readWarehouseExportRows(excelLgtBuffer)
-  } else if (sharedExcelForBoth) {
-    rawLgt = rawC
-  }
+  const pdfRows = pdfTexts.flatMap(text => parsePdfDeliveryNote(text))
 
-  const khoC = enrichRowsFromPdfCatalog(mergeWarehouseRows(rawC), pdfRows)
-  const excelKeys = new Set(khoC.map(rowKey))
-
-  let khoLgt = enrichRowsFromPdfCatalog(mergeWarehouseRows(rawLgt), pdfRows)
-  if (!excelLgtBuffer && !sharedExcelForBoth && deriveLgtFromPdf) {
-    khoLgt = enrichRowsFromPdfCatalog(buildLgtRowsFromPdf(pdfRows, excelKeys), pdfRows)
-  }
+  const khoC = enrichRowsFromPdfCatalog(mergeWarehouseRows(khoCRows), pdfRows)
+  const khoLgt = enrichRowsFromPdfCatalog(mergeWarehouseRows(khoLgtRows), pdfRows)
 
   return { khoC, khoLgt, pdfRows }
 }

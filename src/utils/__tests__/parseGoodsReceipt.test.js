@@ -57,10 +57,14 @@ describe('parseGoodsReceipt', () => {
     expect(rows[1]).toMatchObject({ maHang: 'A01259', soLo: '010426', kienNguyen: 1, tongSl: 7920 })
   })
 
-  it('duplicates kho C rows to kho LGT when shared excel flag is set', () => {
-    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '010426', 'Lượng cần': 7920, 'Số kiện cần': 1, ĐVT: 'VIEN' }])
-    const { khoC, khoLgt } = buildReceiptFromFiles({ excelCBuffer: excelC, pdfText: '', sharedExcelForBoth: true })
+  it('merges multiple excel files (already-parsed rows) per warehouse into one table', () => {
+    const excelC1 = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '010426', 'Lượng cần': 7920, 'Số kiện cần': 1, ĐVT: 'VIEN' }])
+    const excelC2 = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '010426', 'Lượng cần': 80, 'Số kiện cần': 0, ĐVT: 'VIEN' }])
+    const rowsC1 = readWarehouseExportRows(excelC1)
+    const rowsC2 = readWarehouseExportRows(excelC2)
+    const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows: [...rowsC1, ...rowsC2], khoLgtRows: rowsC1 })
     expect(khoC).toHaveLength(1)
+    expect(khoC[0].slHoaDon).toBe(8000)
     expect(khoLgt).toHaveLength(1)
     expect(khoLgt[0].maHang).toBe('A01259')
   })

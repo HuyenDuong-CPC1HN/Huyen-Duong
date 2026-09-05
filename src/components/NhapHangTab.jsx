@@ -9,6 +9,7 @@ import {
   calcChenhLech,
   extractPdfText,
   parsePdfMetadata,
+  readWarehouseExportRows,
 } from '../utils/parseGoodsReceipt'
 import { exportReceiptFromTemplate, loadReceiptTemplate } from '../utils/exportGoodsReceipt'
 
@@ -78,6 +79,58 @@ function getChenhLechColor(chenh) {
   if (chenh > 0) return 'text-green-600'
   if (chenh < 0) return 'text-red-600'
   return ''
+}
+
+function extOf(file) { return file.name.split('.').pop().toLowerCase() }
+function isExcelFile(file) { return ['xlsx', 'xls'].includes(extOf(file)) }
+function isPdfFile(file) { return extOf(file) === 'pdf' }
+function isSupportedFile(file) { return isExcelFile(file) || isPdfFile(file) }
+
+// Vùng upload đa file cho 1 kho vật lý — chuyến hàng thường có nhiều phiếu xuất kho (nhiều Excel) +
+// có thể kèm PDF phiếu xuất kho riêng, nên nhận bao nhiêu file cũng được thay vì đúng 1 file cố định.
+function FileZone({ label, hint, files, onAddFiles, onRemoveFile }) {
+  const inputRef = useRef(null)
+  const [dragging, setDragging] = useState(false)
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-3 bg-white">
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); onAddFiles([...e.dataTransfer.files]) }}
+        onClick={() => inputRef.current?.click()}
+        className={`flex flex-col items-center justify-center gap-2 w-full min-h-28 rounded-xl border-2 border-dashed cursor-pointer transition-all select-none p-4
+          ${dragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'}`}
+      >
+        <FileUp size={20} className={dragging ? 'text-blue-500' : 'text-gray-400'} />
+        <div className="text-center">
+          <p className="text-sm font-semibold text-gray-700">{label}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{hint}</p>
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept=".xlsx,.xls,.pdf"
+        className="hidden"
+        onChange={(e) => { onAddFiles([...e.target.files]); e.target.value = '' }}
+      />
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {files.map((file, i) => (
+            <span key={`${file.name}-${i}`} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+              {isPdfFile(file) ? <FileText size={12} /> : <FileSpreadsheet size={12} />}
+              <span className="max-w-40 truncate" title={file.name}>{file.name}</span>
+              <button type="button" onClick={() => onRemoveFile(i)} className="ml-0.5 text-blue-400 hover:text-red-500" title="Bỏ file này">
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function parseVietnameseDate(val) {
@@ -175,7 +228,6 @@ function ReceiptTable({ title, rows, editing, onRowChange }) {
 export default function NhapHangTab() {
   const [error, setError] = useState('')
   const [processing, setProcessing] = useState(false)
-  const [dragging, setDragging] = useState(false)
   const [editing, setEditing] = useState(false)
   const [historyQuery, setHistoryQuery] = useState('')
   const [historyRows, setHistoryRows] = useState([])
@@ -189,20 +241,40 @@ export default function NhapHangTab() {
     return all[0]?.id || null
   })
 
-  const uploadRef = useRef(null)
-  const [pendingFiles, setPendingFiles] = useState({ pdf: null, excelC: null, excelLgt: null })
+  const [pendingFiles, setPendingFiles] = useState({ khoC: [], khoLgt: [] })
 
   const active = batches.find(batch => batch.id === activeId) || null
 
-  const canProcess = pendingFiles.pdf && pendingFiles.excelC
+  const canProcess = pendingFiles.khoC.some(isExcelFile)
 
-  const assignFile = (kind, file) => {
-    if (!file) return
-    const ext = file.name.split('.').pop().toLowerCase()
-    if (kind === 'pdf' && ext !== 'pdf') { setError('File biên bản giao nhận phải là PDF.'); return }
-    if (kind !== 'pdf' && !['xlsx', 'xls'].includes(ext)) { setError('File Excel kho phải là .xlsx hoặc .xls.'); return }
-    setError('')
-    setPendingFiles(current => ({ ...current, [kind]: file }))
+  const addFiles = (warehouse, incoming) => {
+    const valid = incoming.filter(isSupportedFile)
+    setError(valid.length < incoming.length ? 'Chỉ nhận file .xlsx, .xls hoặc .pdf — các file khác đã bị bỏ qua.' : '')
+    setPendingFiles(current => ({ ...current, [warehouse]: [...current[warehouse], ...valid] }))
+  }
+  const removeFile = (warehouse, index) => {
+    setPendingFiles(current => ({ ...current, [warehouse]: current[warehouse].filter((_, i) => i !== index) }))
+  }
+
+  // Đọc từng file Excel riêng lẻ, gom lỗi theo tên file — 1 file hỏng không chặn các file còn lại
+  const readWarehouseRowsFromFiles = async (files, fileErrors) => {
+    const results = await Promise.allSettled(files.map(async file => readWarehouseExportRows(await file.arrayBuffer())))
+    const rows = []
+    results.forEach((res, i) => {
+      if (res.status === 'fulfilled') rows.push(...res.value)
+      else fileErrors.push(`${files[i].name}: ${res.reason?.message || 'không đọc được file'}`)
+    })
+    return rows
+  }
+
+  const readPdfTextsFromFiles = async (files, fileErrors) => {
+    const results = await Promise.allSettled(files.map(async file => extractPdfText(await file.arrayBuffer())))
+    const texts = []
+    results.forEach((res, i) => {
+      if (res.status === 'fulfilled') texts.push(res.value)
+      else fileErrors.push(`${files[i].name}: ${res.reason?.message || 'không đọc được file'}`)
+    })
+    return texts
   }
 
   const processFiles = async () => {
@@ -210,26 +282,25 @@ export default function NhapHangTab() {
     setProcessing(true)
     setError('')
     try {
-      const [pdfBuffer, excelCBuffer, excelLgtBuffer] = await Promise.all([
-        pendingFiles.pdf.arrayBuffer(),
-        pendingFiles.excelC.arrayBuffer(),
-        pendingFiles.excelLgt ? pendingFiles.excelLgt.arrayBuffer() : Promise.resolve(null),
-      ])
-      const pdfText = await extractPdfText(pdfBuffer)
-      const pdfMetadata = parsePdfMetadata(pdfText)
-      const { khoC, khoLgt } = buildReceiptFromFiles({
-        excelCBuffer,
-        excelLgtBuffer: excelLgtBuffer || undefined,
-        pdfText,
-        sharedExcelForBoth: !pendingFiles.excelLgt,
-      })
-      const usedSharedExcel = !pendingFiles.excelLgt
+      const khoCExcelFiles = pendingFiles.khoC.filter(isExcelFile)
+      const khoCPdfFiles = pendingFiles.khoC.filter(isPdfFile)
+      const khoLgtExcelFilesRaw = pendingFiles.khoLgt.filter(isExcelFile)
+      const khoLgtPdfFiles = pendingFiles.khoLgt.filter(isPdfFile)
+      const usedSharedExcel = khoLgtExcelFilesRaw.length === 0
+
+      const fileErrors = []
+      const khoCRows = await readWarehouseRowsFromFiles(khoCExcelFiles, fileErrors)
+      const khoLgtRows = usedSharedExcel ? khoCRows : await readWarehouseRowsFromFiles(khoLgtExcelFilesRaw, fileErrors)
+      const pdfTexts = await readPdfTextsFromFiles([...khoCPdfFiles, ...khoLgtPdfFiles], fileErrors)
+
+      const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
+      const { khoC, khoLgt } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
+
       const entry = addBatch({
         id: String(Date.now()),
         processedAt: new Date().toISOString(),
-        pdfFileName: pendingFiles.pdf.name,
-        excelCFileName: pendingFiles.excelC.name,
-        excelLgtFileName: pendingFiles.excelLgt?.name || (usedSharedExcel ? pendingFiles.excelC.name : null),
+        khoCFileNames: pendingFiles.khoC.map(f => f.name),
+        khoLgtFileNames: pendingFiles.khoLgt.map(f => f.name),
         usedSharedExcel,
         pdfMetadata,
         khoC,
@@ -237,8 +308,9 @@ export default function NhapHangTab() {
       })
       setBatches(readBatches())
       setActiveId(entry.id)
-      setPendingFiles({ pdf: null, excelC: null, excelLgt: null })
+      setPendingFiles({ khoC: [], khoLgt: [] })
       setEditing(false)
+      if (fileErrors.length > 0) setError(`Một số file không đọc được, các file còn lại vẫn xử lý bình thường:\n${fileErrors.join('\n')}`)
     } catch (err) {
       setError(err.message || 'Không xử lý được dữ liệu nhập hàng.')
     } finally {
@@ -349,53 +421,28 @@ export default function NhapHangTab() {
   if (!active) {
     return (
       <div className="space-y-4">
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
-          onDrop={(e) => {
-            e.preventDefault()
-            setDragging(false)
-            for (const file of e.dataTransfer.files) {
-              const ext = file.name.split('.').pop().toLowerCase()
-              if (ext === 'pdf') assignFile('pdf', file)
-              else if (ext === 'xlsx' || ext === 'xls') {
-                if (!pendingFiles.excelC) assignFile('excelC', file)
-                else assignFile('excelLgt', file)
-              }
-            }
-          }}
-          className={`flex flex-col items-center justify-center gap-3 w-full min-h-56 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none p-6
-            ${dragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'}`}
-        >
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${dragging ? 'bg-blue-100' : 'bg-gray-100'}`}>
-            {dragging ? <FileUp size={24} className="text-blue-500" /> : <PackagePlus size={24} className="text-gray-400" />}
-          </div>
-          <div className="text-center max-w-xl">
-            <p className="text-gray-700 font-semibold text-sm">Upload PDF biên bản giao nhận + Excel xuất kho (Kho C)</p>
-            <p className="text-gray-400 text-xs mt-1">Nếu chưa có Excel riêng cho Kho LGT, app sẽ dùng chung file Kho C — anh chỉnh lại số liệu Kho LGT sau nếu cần.</p>
-          </div>
+        <div className="flex items-center gap-2">
+          <PackagePlus size={18} className="text-gray-500" />
+          <p className="text-sm text-gray-600">
+            Mỗi kho vật lý có thể nhận nhiều file (nhiều phiếu xuất kho + PDF nếu có) — thả tất cả file của kho nào vào đúng vùng của kho đó.
+          </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-3">
-          {[
-            { key: 'pdf', label: 'PDF biên bản giao nhận', icon: FileText, file: pendingFiles.pdf },
-            { key: 'excelC', label: 'Excel xuất kho (Kho C)', icon: FileSpreadsheet, file: pendingFiles.excelC, required: true },
-            { key: 'excelLgt', label: 'Excel xuất kho (Kho LGT — tuỳ chọn)', icon: FileSpreadsheet, file: pendingFiles.excelLgt, required: false },
-          ].map(({ key, label, icon: Icon, file, required }) => (
-            <label key={key} className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 bg-white">
-              <Icon size={18} className="text-gray-500" />
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-medium text-gray-700">{label}{required ? ' *' : ''}</div>
-                <div className="text-xs text-gray-400 truncate">{file?.name || 'Chưa chọn file'}</div>
-              </div>
-              <input
-                type="file"
-                className="hidden"
-                accept={key === 'pdf' ? '.pdf' : '.xlsx,.xls'}
-                onChange={(e) => assignFile(key, e.target.files?.[0])}
-              />
-            </label>
-          ))}
+        <div className="grid md:grid-cols-2 gap-3">
+          <FileZone
+            label="Kho C *"
+            hint="Kéo/thả hoặc click — nhận nhiều file .xlsx, .xls, .pdf"
+            files={pendingFiles.khoC}
+            onAddFiles={(files) => addFiles('khoC', files)}
+            onRemoveFile={(i) => removeFile('khoC', i)}
+          />
+          <FileZone
+            label="Kho LGT (DTP) — tuỳ chọn"
+            hint="Nếu chưa có file riêng, app sẽ dùng chung dữ liệu Kho C"
+            files={pendingFiles.khoLgt}
+            onAddFiles={(files) => addFiles('khoLgt', files)}
+            onRemoveFile={(i) => removeFile('khoLgt', i)}
+          />
         </div>
 
         <div className="flex gap-2">
@@ -409,8 +456,7 @@ export default function NhapHangTab() {
           </button>
         </div>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        <input ref={uploadRef} type="file" className="hidden" />
+        {error && <p className="text-sm text-red-500 whitespace-pre-line">{error}</p>}
       </div>
     )
   }
@@ -435,10 +481,15 @@ export default function NhapHangTab() {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
+        <div
+          className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm"
+          title={`Kho C: ${(active.khoCFileNames || []).join(', ')}\nKho LGT: ${(active.khoLgtFileNames || []).join(', ') || '(dùng chung Kho C)'}`}
+        >
           <FileSpreadsheet size={15} className="text-green-600" />
-          <span className="text-green-700 font-medium truncate max-w-48">{active.excelCFileName}</span>
-          <span className="text-green-500 text-xs">+ {active.excelLgtFileName || active.excelCFileName}</span>
+          <span className="text-green-700 font-medium">Kho C: {(active.khoCFileNames || []).length} file</span>
+          <span className="text-green-500 text-xs">
+            · Kho LGT: {active.usedSharedExcel ? 'dùng chung Kho C' : `${(active.khoLgtFileNames || []).length} file`}
+          </span>
           <button type="button" onClick={removeActive} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xoá lần xử lý này">
             <X size={14} />
           </button>
@@ -464,7 +515,7 @@ export default function NhapHangTab() {
         </button>
       </div>
 
-      {!active.excelLgtFileName && active.usedSharedExcel && (
+      {active.usedSharedExcel && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
           Chưa có Excel riêng Kho LGT — đang hiển thị cùng dữ liệu với Kho C. Upload file LGT hoặc chỉnh sửa bảng Kho LGT nếu số liệu khác.
         </p>
