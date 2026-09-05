@@ -187,9 +187,13 @@ export function parsePdfDeliveryNote(pdfText) {
 
 // sharedKeys: các cặp (mã hàng, số lô) xuất hiện ở CẢ 2 kho — với các mã này, PDF (phiếu xuất kho lẫn
 // biên bản giao nhận) chỉ ghi 1 dòng DUY NHẤT có SL là số CỘNG DỒN của cả 2 kho (vd mã D02124: Kho C 312
-// + Kho DTP 468 = PDF 780), không phải số riêng của kho đang enrich — nên bỏ qua auto-fill "SL thực tế"
-// và cảnh báo lệch cho các mã này, tránh báo sai/điền sai số (buildReceiptFromFiles đối chiếu tổng gộp
-// riêng, xem sharedKeys ở đó).
+// + Kho DTP 468 = PDF 780), không phải số riêng của kho đang enrich — nên bỏ qua đối chiếu/điền số kiện
+// cho các mã này, tránh báo sai/điền sai số (buildReceiptFromFiles đối chiếu tổng gộp riêng, xem
+// sharedKeys ở đó).
+//
+// "SL thực tế" LUÔN để người dùng tự kiểm hàng rồi điền tay — không tự động điền từ bất kỳ nguồn PDF nào
+// (kể cả biên bản giao nhận). Biên bản giao nhận chỉ dùng để đối chiếu NGẦM: so số nó khai với SL hoá đơn
+// đã tách được, lệch thì ghi chú cảnh báo ngay trên dòng đó, giống hệt cách đối chiếu với phiếu xuất kho.
 export function enrichRowsFromPdfCatalog(rows, pdfRows, sharedKeys = new Set()) {
   const catalog = new Map()
   for (const item of pdfRows) catalog.set(rowKey(item), item)
@@ -206,12 +210,15 @@ export function enrichRowsFromPdfCatalog(rows, pdfRows, sharedKeys = new Set()) 
     if (!next.hanDung && hit.hanDung) next.hanDung = hit.hanDung
     if (!next.dvt && hit.dvt) next.dvt = hit.dvt
     if (sharedKeys.has(rowKey(row))) return next
-    if (hit.source === 'bienBanGiaoNhan') {
-      // Biên bản giao nhận = số kiểm đếm thực tế lúc nhận hàng — điền thẳng vào "SL thực tế" thay vì
-      // bắt gõ tay; cột "Chênh lệch" đã tự so với SL hoá đơn nên không cần thêm ghi chú lệch riêng.
-      if (next.slThucTe === null || next.slThucTe === undefined) next.slThucTe = hit.soLuong
-    } else if (hit.soLuong !== undefined && hit.soLuong !== (next.slHoaDon ?? 0) && !next.ghiChu) {
-      next.ghiChu = `Lệch SL so PDF — PDF: ${hit.soLuong}, Excel: ${next.slHoaDon ?? 0}`
+    // Phiếu xuất kho (Loại 1) không có cột Kiện lẻ/Kiện nguyên — dòng nào chưa có số kiện thật (0/0, tức
+    // nguồn duy nhất là Loại 1) thì điền từ biên bản giao nhận (Loại 2), vì đó mới là nơi ghi số kiện.
+    if (hit.source === 'bienBanGiaoNhan' && !next.kienNguyen && !next.kienLe && (hit.kienNguyen || hit.kienLe)) {
+      next.kienNguyen = hit.kienNguyen ?? 0
+      next.kienLe = hit.kienLe ?? 0
+    }
+    if (hit.soLuong !== undefined && hit.soLuong !== (next.slHoaDon ?? 0) && !next.ghiChu) {
+      const nguon = hit.source === 'bienBanGiaoNhan' ? 'biên bản giao nhận' : 'PDF phiếu xuất kho'
+      next.ghiChu = `Lệch SL so ${nguon} — ${nguon === 'biên bản giao nhận' ? 'Biên bản' : 'PDF'}: ${hit.soLuong}, Excel: ${next.slHoaDon ?? 0}`
     }
     return next
   })
