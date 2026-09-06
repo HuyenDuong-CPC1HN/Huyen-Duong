@@ -38,18 +38,33 @@ export function createGoodsReceiptBatchesRepository(client) {
       excelCFileName = null,
       excelLgtFileName = null,
       bienBanFiles = [],
+      khoCFileNames = [],
+      khoLgtFileNames = [],
+      usedSharedExcel = false,
+      pdfMetadata = {},
+      warnings = [],
       khoC = [],
       khoLgt = [],
     }) {
       // Năm/Tháng theo ngày xử lý (processedAt) — duyệt trong Supabase Storage theo Năm > Tháng > các
       // chuyến trong tháng, thay vì 1 danh sách phẳng.
       const storagePath = `goods-receipt/${monthFolder(processedAt)}/${id}.json`
+      // khoCFileNames/khoLgtFileNames/usedSharedExcel/pdfMetadata/warnings không có cột riêng trong bảng
+      // goods_receipt_batches — gộp vào cùng blob JSON trên Storage cho gọn (bảng chỉ giữ cột cần lọc/sắp
+      // xếp). Trước đây các trường này chỉ tồn tại tạm trong state của trang, KHÔNG được lưu lên Supabase
+      // nên mất ngay khi Lưu chỉnh sửa (ghi đè batch không kèm chúng) hoặc tải lại trang (đọc lại từ
+      // Supabase, vốn chưa từng có chúng).
       const payload = {
         id,
         processedAt,
         pdfFileName,
         excelCFileName,
         excelLgtFileName,
+        khoCFileNames,
+        khoLgtFileNames,
+        usedSharedExcel,
+        pdfMetadata,
+        warnings,
         khoC,
         khoLgt,
       }

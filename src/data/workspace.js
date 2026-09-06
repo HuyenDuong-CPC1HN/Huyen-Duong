@@ -140,6 +140,15 @@ async function loadGoodsReceipt(client) {
       pdfFileName: record.pdf_file_name,
       excelCFileName: record.excel_c_file_name,
       excelLgtFileName: record.excel_lgt_file_name,
+      // bien_ban_files có cột riêng trong bảng (đọc từ record); các trường còn lại nằm trong blob JSON
+      // trên Storage (xem goodsReceiptBatches.save) — thiếu 1 trong 2 nguồn này là mất "Kho C: X file",
+      // Cảnh báo đối chiếu, biên bản giao nhận... ngay khi tải lại trang.
+      bienBanFiles: record.bien_ban_files || [],
+      khoCFileNames: payload.khoCFileNames || [],
+      khoLgtFileNames: payload.khoLgtFileNames || [],
+      usedSharedExcel: payload.usedSharedExcel || false,
+      pdfMetadata: payload.pdfMetadata || {},
+      warnings: payload.warnings || [],
       khoC: payload.khoC || [],
       khoLgt: payload.khoLgt || [],
     }
@@ -395,6 +404,11 @@ async function syncGoodsReceiptBatches(key) {
       excelCFileName: batch.excelCFileName,
       excelLgtFileName: batch.excelLgtFileName,
       bienBanFiles: batch.bienBanFiles || [],
+      khoCFileNames: batch.khoCFileNames || [],
+      khoLgtFileNames: batch.khoLgtFileNames || [],
+      usedSharedExcel: batch.usedSharedExcel || false,
+      pdfMetadata: batch.pdfMetadata || {},
+      warnings: batch.warnings || [],
       khoC: batch.khoC || [],
       khoLgt: batch.khoLgt || [],
     })
