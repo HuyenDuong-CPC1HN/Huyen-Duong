@@ -4,6 +4,17 @@ function fail(error, action) {
   if (error) throw new Error(`${action}: ${error.message || error}`)
 }
 
+// Tổ chức file lưu trữ theo Năm/Tháng (vd "2026/09") để duyệt trong Supabase Storage dễ theo dõi các
+// chuyến trong tháng, thay vì 1 danh sách phẳng. Dùng ngày xử lý (processedAt) của batch, không phải
+// ngày hiện tại, để file luôn nằm đúng tháng của chuyến hàng đó dù xem lại sau này.
+export function monthFolder(isoDate) {
+  const d = isoDate ? new Date(isoDate) : new Date()
+  if (Number.isNaN(d.getTime())) return 'khac'
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  return `${year}/${month}`
+}
+
 export function createStorageFilesRepository(client) {
   const files = client.storage.from(BUCKET)
   return {
