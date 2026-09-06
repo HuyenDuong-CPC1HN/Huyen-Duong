@@ -10,6 +10,7 @@ const TEMPLATE_URL = '/templates/BIEN_BAN_NHAP_HANG.xlsx'
 const SHEET_PATH = 'xl/worksheets/sheet1.xml'
 const STRINGS_PATH = 'xl/sharedStrings.xml'
 const WORKBOOK_PATH = 'xl/workbook.xml'
+const STYLES_PATH = 'xl/styles.xml'
 const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 
 // Mẫu đã có sẵn đúng 12 dòng dữ liệu được style + đánh số STT sẵn (dòng 15-26), dòng 27 là chân ký tên.
@@ -17,11 +18,15 @@ const DATA_FIRST_ROW = 15
 const DATA_TEMPLATE_ROWS = 12
 const FOOTER_ROW_TEMPLATE = 27
 const CLONE_STYLE_ROW = 26 // dòng dữ liệu cuối cùng có sẵn trong mẫu — dùng làm khuôn khi cần thêm dòng
+// Các cột số lượng (Kiện nguyên/Kiện lẻ/Hoá đơn) trong mẫu vốn không đồng nhất định dạng giữa các dòng
+// (dòng thì có số thập phân, dòng thì không, có dòng còn tô đỏ) — ép về 1 kiểu số nguyên duy nhất, có dấu
+// phân cách nghìn, căn giữa, để mọi dòng nhìn giống nhau bất kể dòng đó vốn mang style nào trong mẫu.
+const QUANTITY_COLS = ['F', 'G', 'H']
 
-// 6 dòng thông tin đầu mẫu (B6:B11) mỗi dòng là 1 chuỗi gộp sẵn "Nhãn : ………" — điền giá trị thật bằng
-// cách nối thêm sau dấu ":", giữ nguyên phần nhãn.
+// 5 dòng thông tin đầu mẫu (B7:B11) mỗi dòng là 1 chuỗi gộp sẵn "Nhãn : ………" — điền giá trị thật bằng
+// cách nối thêm sau dấu ":", giữ nguyên phần nhãn. Riêng "Số hóa đơn" (B6) không lấy từ PDF mà tự sinh
+// theo mã nội bộ BBGNddmmyyyy (Biên bản giao nhận + ngày xử lý chuyến hàng) — xem formatBBGNCode().
 const HEADER_FIELDS = [
-  { row: 6, prefix: 'Số hóa đơn :', key: 'soHoaDon' },
   { row: 7, prefix: 'Số hợp đồng :', key: 'soHopDong' },
   { row: 8, prefix: 'Nơi nhận :', key: 'noiNhan' },
   { row: 9, prefix: 'Ngày, giờ nhận :', key: 'ngayGioNhan' },
@@ -34,6 +39,14 @@ function formatDateVi(iso) {
   const [y, m, d] = iso.split('-')
   if (!y || !m || !d) return ''
   return `${d}/${m}/${y}`
+}
+
+// Mã số hóa đơn nội bộ: BBGN + ngày xử lý chuyến hàng (ddmmyyyy), vd chuyến ngày 04/09/2026 -> BBGN04092026.
+function formatBBGNCode(date) {
+  const d = String(date.getDate()).padStart(2, '0')
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const y = date.getFullYear()
+  return `BBGN${d}${m}${y}`
 }
 
 function parseXml(text) {
@@ -94,17 +107,44 @@ function setCellNumber(doc, row, col, value) {
   ensureChild(doc, cell, 'v').textContent = String(value)
 }
 
-function setCellFormulaNumber(doc, row, col, formula, cachedValue) {
+function setCellStyle(doc, row, col, styleId) {
   const cell = cellAt(doc, row, col)
   if (!cell) return
-  cell.removeAttribute('t')
-  ensureChild(doc, cell, 'f', true).textContent = formula
-  ensureChild(doc, cell, 'v').textContent = cachedValue === '' || cachedValue === null || cachedValue === undefined ? '' : String(cachedValue)
+  cell.setAttribute('s', styleId)
 }
 
-function fillHeaderFields(doc, sstDoc, metadata) {
+// Thêm 1 cellXfs mới vào styles.xml (chỉ nối thêm, không sửa/xoá style có sẵn nào) cho các cột số lượng:
+// numFmtId=3 là định dạng dựng sẵn của Excel "#,##0" (số nguyên, có dấu phân cách nghìn, 0 hiện là "0"
+// chứ không ẩn hay hiện dấu "-" như các style rời rạc vốn có trong mẫu) — không cần khai báo numFmt tuỳ
+// chỉnh vì đây là ID dựng sẵn. Trả về chỉ số style (dạng chuỗi) để gán vào thuộc tính s="" của ô.
+function ensureQuantityStyle(stylesDoc) {
+  const cellXfs = stylesDoc.querySelector('cellXfs')
+  const xf = stylesDoc.createElementNS(NS, 'xf')
+  xf.setAttribute('numFmtId', '3')
+  xf.setAttribute('fontId', '2')
+  xf.setAttribute('fillId', '2')
+  xf.setAttribute('borderId', '5')
+  xf.setAttribute('xfId', '1')
+  xf.setAttribute('applyNumberFormat', '1')
+  xf.setAttribute('applyFont', '1')
+  xf.setAttribute('applyFill', '1')
+  xf.setAttribute('applyBorder', '1')
+  xf.setAttribute('applyAlignment', '1')
+  const alignment = stylesDoc.createElementNS(NS, 'alignment')
+  alignment.setAttribute('horizontal', 'center')
+  alignment.setAttribute('vertical', 'center')
+  alignment.setAttribute('wrapText', '1')
+  alignment.setAttribute('readingOrder', '1')
+  xf.appendChild(alignment)
+  cellXfs.appendChild(xf)
+  const index = cellXfs.getElementsByTagName('xf').length - 1
+  cellXfs.setAttribute('count', String(index + 1))
+  return String(index)
+}
+
+function fillHeaderFields(doc, sstDoc, metadata, processedAt) {
+  setCellString(doc, sstDoc, 6, 'B', `Số hóa đơn : ${formatBBGNCode(processedAt)}`)
   const meta = {
-    soHoaDon: metadata.soHoaDon || '',
     soHopDong: metadata.soHopDong || '',
     noiNhan: metadata.noiNhan || metadata.benNhanHang || '',
     ngayGioNhan: metadata.ngayGioNhan || metadata.ngayNhap || '',
@@ -167,7 +207,9 @@ function ensureDataRows(doc, rowCount) {
   return newFooterRowNum
 }
 
-function fillDataRows(doc, sstDoc, rows) {
+// Chỉ điền cột "Hóa đơn" trong nhóm Số lượng — "Thực tế", "Chênh lệch", "Hư hỏng", "Tình trạng" để trống
+// hẳn cho người kiểm hàng tự điền tay khi in ra, không tự suy diễn hay đối chiếu vào các cột này.
+function fillDataRows(doc, sstDoc, rows, quantityStyleId) {
   rows.forEach((r, index) => {
     const row = DATA_FIRST_ROW + index
     const hanDung = formatDateVi(r.hanDung)
@@ -177,16 +219,12 @@ function fillDataRows(doc, sstDoc, rows) {
     setCellString(doc, sstDoc, row, 'C', r.dvt)
     setCellString(doc, sstDoc, row, 'D', r.soLo)
     setCellString(doc, sstDoc, row, 'E', hanDung)
-    setCellNumber(doc, row, 'F', r.kienNguyen || '')
-    setCellNumber(doc, row, 'G', r.kienLe || '')
+    // Dùng ?? thay vì || — Kiện lẻ/Kiện nguyên = 0 là dữ liệu thật (vd đủ kiện nguyên, không có kiện
+    // lẻ), phải hiện "0" chứ không được bỏ trống như thể chưa có dữ liệu.
+    setCellNumber(doc, row, 'F', r.kienNguyen ?? '')
+    setCellNumber(doc, row, 'G', r.kienLe ?? '')
     setCellNumber(doc, row, 'H', r.slHoaDon ?? 0)
-    setCellNumber(doc, row, 'I', r.slThucTe ?? '')
-    // Chênh lệch (Thiếu) = Hoá đơn (H) − Thực tế (I), chỉ khi đã có SL thực tế và bị thiếu; "Hư hỏng"
-    // và "Tình trạng" (K, L) để trống — người kiểm hàng điền tay khi in ra, không tự suy diễn.
-    const hoaDon = Number(r.slHoaDon ?? 0)
-    const thucTe = r.slThucTe === null || r.slThucTe === undefined || r.slThucTe === '' ? null : Number(r.slThucTe)
-    const thieu = thucTe !== null && hoaDon > thucTe ? hoaDon - thucTe : (thucTe !== null ? 0 : '')
-    setCellFormulaNumber(doc, row, 'J', `IF(I${row}="","",IF(H${row}>I${row},H${row}-I${row},0))`, thieu)
+    QUANTITY_COLS.forEach(col => setCellStyle(doc, row, col, quantityStyleId))
     setCellString(doc, sstDoc, row, 'M', r.ghiChu)
   })
 }
@@ -202,21 +240,24 @@ function updatePrintArea(workbookDoc, footerRowNum) {
 }
 
 // Điền dữ liệu 1 kho vào file mẫu, trả về Uint8Array của file .xlsx hoàn chỉnh.
-export async function fillReceiptTemplate(templateBuffer, rows, { metadata = {} } = {}) {
+export async function fillReceiptTemplate(templateBuffer, rows, { metadata = {}, processedAt = new Date() } = {}) {
   const zip = new PizZip(templateBuffer.slice(0))
 
   const sstDoc = parseXml(zip.file(STRINGS_PATH).asText())
   const sheetDoc = parseXml(zip.file(SHEET_PATH).asText())
   const workbookDoc = parseXml(zip.file(WORKBOOK_PATH).asText())
+  const stylesDoc = parseXml(zip.file(STYLES_PATH).asText())
 
-  fillHeaderFields(sheetDoc, sstDoc, metadata)
+  const quantityStyleId = ensureQuantityStyle(stylesDoc)
+  fillHeaderFields(sheetDoc, sstDoc, metadata, processedAt)
   const footerRowNum = ensureDataRows(sheetDoc, rows.length)
-  fillDataRows(sheetDoc, sstDoc, rows)
+  fillDataRows(sheetDoc, sstDoc, rows, quantityStyleId)
   if (footerRowNum !== FOOTER_ROW_TEMPLATE) updatePrintArea(workbookDoc, footerRowNum)
 
   zip.file(STRINGS_PATH, serializeXml(sstDoc))
   zip.file(SHEET_PATH, serializeXml(sheetDoc))
   zip.file(WORKBOOK_PATH, serializeXml(workbookDoc))
+  zip.file(STYLES_PATH, serializeXml(stylesDoc))
 
   return zip.generate({ type: 'uint8array' })
 }
@@ -252,12 +293,12 @@ export async function exportReceiptFromTemplate({
   const templateBuffer = await loadTemplateBuffer()
 
   if (khoC?.length) {
-    const bytes = await fillReceiptTemplate(templateBuffer, khoC, { metadata })
+    const bytes = await fillReceiptTemplate(templateBuffer, khoC, { metadata, processedAt })
     triggerDownload(bytes, `BienBanNhapHang_KhoC_${label}.xlsx`)
   }
 
   if (khoLgt?.length) {
-    const bytes = await fillReceiptTemplate(templateBuffer, khoLgt, { metadata })
+    const bytes = await fillReceiptTemplate(templateBuffer, khoLgt, { metadata, processedAt })
     triggerDownload(bytes, `BienBanNhapHang_KhoLGT_${label}.xlsx`)
   }
 }
