@@ -140,6 +140,46 @@ function parseVietnameseDate(val) {
   return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`
 }
 
+// Ô Hạn dùng: gõ tay theo từng ký tự (2 -> 23 -> 23/0 -> 23/04 -> ...) — mọi bước trung gian đều KHÔNG
+// khớp "dd/mm/yyyy" đầy đủ nên parseVietnameseDate trả về null; nếu commit thẳng null lên row.hanDung
+// ngay mỗi ký tự (như EditableCell thường làm) thì ô hiện lại thành rỗng ngay sau mỗi lần gõ, coi như
+// không gõ được. Giữ text đang gõ dở ở state cục bộ, chỉ đẩy lên trên (parse ISO) khi đủ 1 ngày hợp lệ
+// hoặc khi xoá trắng; gõ dở dang thì cứ hiện nguyên như đã gõ.
+function DateCell({ value, onChange, className = '' }) {
+  const display = value ? value.split('-').reverse().join('/') : ''
+  const [draft, setDraft] = useState(display)
+  // "Điều chỉnh state khi prop đổi" ngay trong lúc render (theo khuyến nghị của React), KHÔNG dùng
+  // useEffect — so sánh với display của lần render trước để chỉ đồng bộ khi giá trị từ ngoài đổi thật
+  // (vd Lưu xong rồi mở lại), không bị reset draft đang gõ dở mỗi khi dòng/ô khác khiến component re-render.
+  const [prevDisplay, setPrevDisplay] = useState(display)
+  if (display !== prevDisplay) {
+    setPrevDisplay(display)
+    setDraft(display)
+  }
+
+  const handleChange = (e) => {
+    const text = e.target.value
+    setDraft(text)
+    const parsed = parseVietnameseDate(text)
+    if (parsed) onChange(parsed)
+    else if (text.trim() === '') onChange(null)
+    // else: đang gõ dở/chưa hợp lệ — chỉ giữ ở draft, chưa đẩy lên trên.
+  }
+
+  const handleBlur = () => setDraft(display) // rời ô khi còn gõ dở -> quay về giá trị đã lưu gần nhất
+
+  return (
+    <input
+      type="text"
+      value={draft}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      placeholder="dd/mm/yyyy"
+      className={`w-full min-w-18 px-1.5 py-1 text-xs border border-transparent rounded hover:border-gray-300 focus:border-blue-400 focus:outline-none bg-transparent ${className}`}
+    />
+  )
+}
+
 function ReceiptTableRow({ row, index, editing, onRowChange, onRemoveRow }) {
   const chenh = calcChenhLech(row)
   const highlight = row.needsManual || !row.hanDung
@@ -161,9 +201,9 @@ function ReceiptTableRow({ row, index, editing, onRowChange, onRemoveRow }) {
       </td>
       <td className="px-2 py-1.5">
         {editing ? (
-          <EditableCell
-            value={row.hanDung ? row.hanDung.split('-').reverse().join('/') : ''}
-            onChange={(v) => onRowChange(index, 'hanDung', parseVietnameseDate(v))}
+          <DateCell
+            value={row.hanDung}
+            onChange={(v) => onRowChange(index, 'hanDung', v)}
             className={!row.hanDung ? 'bg-amber-100' : ''}
           />
         ) : formatDateVi(row.hanDung)}
