@@ -58,6 +58,24 @@ function formatDateVi(iso) {
   return `${d}/${m}/${y}`
 }
 
+// Nhóm các chuyến đã lưu theo Tháng — khớp với cách tổ chức Kho C/LGT > Năm > Tháng trên Supabase Storage,
+// và giúp phân biệt 2 chuyến xử lý cùng ngày (trước đây chỉ hiện ngày/tháng/năm, trùng nhau không phân biệt được).
+function monthKeyOf(processedAt) {
+  const d = new Date(processedAt)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function monthLabelOf(monthKey) {
+  const [y, m] = monthKey.split('-')
+  return `Tháng ${Number(m)}/${y}`
+}
+
+function batchLabelOf(processedAt) {
+  return new Date(processedAt).toLocaleString('vi-VN', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 function EditableCell({ value, onChange, type = 'text', className = '' }) {
   const handleChange = (e) => {
     if (type === 'number') {
@@ -303,10 +321,30 @@ export default function NhapHangTab() {
     if (all.some(batch => batch.id === saved)) return saved
     return all[0]?.id || null
   })
+  // null = chưa tự chọn tháng nào — mặc định bám theo tháng của chuyến đang xem (active).
+  const [selectedMonthKey, setSelectedMonthKey] = useState(null)
 
   const [pendingFiles, setPendingFiles] = useState({ khoC: [], khoLgt: [], bienBan: [] })
 
   const active = batches.find(batch => batch.id === activeId) || null
+
+  const monthGroups = useMemo(() => {
+    const map = new Map()
+    for (const batch of batches) {
+      const key = monthKeyOf(batch.processedAt)
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push(batch)
+    }
+    for (const list of map.values()) list.sort((a, b) => new Date(b.processedAt) - new Date(a.processedAt))
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))
+  }, [batches])
+
+  // Mặc định bám theo tháng của chuyến đang xem; chỉ dùng lựa chọn tay khi tháng đó vẫn còn tồn tại
+  // (vd sau khi xoá hết chuyến trong tháng đang xem tay thì quay lại bám theo active).
+  const effectiveMonthKey = (selectedMonthKey && monthGroups.some(([key]) => key === selectedMonthKey))
+    ? selectedMonthKey
+    : (active ? monthKeyOf(active.processedAt) : monthGroups[0]?.[0] || null)
+  const batchesInMonth = monthGroups.find(([key]) => key === effectiveMonthKey)?.[1] || []
 
   const canProcess = pendingFiles.khoC.some(isExcelFile)
 
@@ -707,19 +745,30 @@ export default function NhapHangTab() {
   return (
     <div className="space-y-4">
       {batches.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {batches.map(batch => (
-            <button
-              key={batch.id}
-              type="button"
-              onClick={() => { localStorage.setItem(ACTIVE_KEY, batch.id); setActiveId(batch.id) }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                batch.id === activeId ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
-              }`}
-            >
-              {new Date(batch.processedAt).toLocaleDateString('vi-VN')}
-            </button>
-          ))}
+        <div className="space-y-1.5">
+          <select
+            value={effectiveMonthKey || ''}
+            onChange={(e) => setSelectedMonthKey(e.target.value)}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:border-blue-300 focus:outline-none focus:border-blue-400"
+          >
+            {monthGroups.map(([key, group]) => (
+              <option key={key} value={key}>{monthLabelOf(key)} ({group.length} chuyến)</option>
+            ))}
+          </select>
+          <div className="flex flex-wrap gap-1.5">
+            {batchesInMonth.map(batch => (
+              <button
+                key={batch.id}
+                type="button"
+                onClick={() => { localStorage.setItem(ACTIVE_KEY, batch.id); setActiveId(batch.id) }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                  batch.id === activeId ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                }`}
+              >
+                {batchLabelOf(batch.processedAt)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -737,7 +786,7 @@ export default function NhapHangTab() {
             <X size={14} />
           </button>
         </div>
-        <button type="button" onClick={() => { setActiveId(null); setBatches(readBatches()) }} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
+        <button type="button" onClick={() => { setActiveId(null); setSelectedMonthKey(null); setBatches(readBatches()) }} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
           <Upload size={14} /> Xử lý chuyến mới
         </button>
         <button type="button" onClick={() => setEditing(v => !v)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
