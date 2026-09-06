@@ -12,7 +12,7 @@ import {
   parsePdfMetadata,
   readWarehouseExportRows,
 } from '../utils/parseGoodsReceipt'
-import { exportReceiptFromTemplate, loadReceiptTemplate } from '../utils/exportGoodsReceipt'
+import { exportReceiptFromTemplate } from '../utils/exportGoodsReceipt'
 
 const STORAGE_KEY = 'goods_receipt_batches'
 const ACTIVE_KEY = 'goods_receipt_active'
@@ -400,9 +400,7 @@ export default function NhapHangTab() {
     setExporting(true)
     setError('')
     try {
-      const templateBuffer = await loadReceiptTemplate()
       await exportReceiptFromTemplate({
-        templateBuffer,
         khoC: active.khoC,
         khoLgt: active.khoLgt,
         metadata: active.pdfMetadata || {},
