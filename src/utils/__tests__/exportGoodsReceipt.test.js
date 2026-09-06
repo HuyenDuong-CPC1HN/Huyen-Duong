@@ -68,14 +68,15 @@ describe('exportGoodsReceipt', () => {
     })
 
     // styles.xml: mọi <xf> có sẵn phải còn nguyên vẹn theo đúng thứ tự (chỉ số cellXfs không đổi cho
-    // style cũ nào), chỉ nối thêm đúng 1 <xf> mới ở cuối — không style nào có sẵn bị sửa hay xoá.
+    // style cũ nào), chỉ nối thêm 4 <xf> mới ở cuối (số lượng + ĐVT + Số Lô + Hạn dùng, xem
+    // ensureUniformStyle/ensureQuantityStyle) — không style nào có sẵn bị sửa hay xoá.
     const originalStylesDoc = new DOMParser().parseFromString(original.file('xl/styles.xml').asText(), 'application/xml')
     const filledStylesDoc = new DOMParser().parseFromString(stylesOf(bytes), 'application/xml')
     const originalXfs = Array.from(originalStylesDoc.querySelector('cellXfs').children)
     const filledXfs = Array.from(filledStylesDoc.querySelector('cellXfs').children)
-    expect(filledXfs.length).toBe(originalXfs.length + 1)
+    expect(filledXfs.length).toBe(originalXfs.length + 4)
     originalXfs.forEach((xf, i) => expect(filledXfs[i].outerHTML).toBe(xf.outerHTML))
-    expect(filledXfs.at(-1).getAttribute('numFmtId')).toBe('3')
+    expect(filledXfs[originalXfs.length].getAttribute('numFmtId')).toBe('3')
   })
 
   it('điền đúng cột theo mẫu giấy — chỉ điền Hoá đơn trong nhóm Số lượng, Thực tế/Chênh lệch/Hư hỏng/Tình trạng để trống cho người kiểm hàng tự điền tay', async () => {
@@ -133,6 +134,27 @@ describe('exportGoodsReceipt', () => {
       ;['F', 'G', 'H'].forEach(col => styleIds.add(doc.querySelector(`c[r="${col}${row}"]`).getAttribute('s')))
     }
     expect(styleIds.size).toBe(1)
+  })
+
+  it('ĐVT/Số Lô/Hạn dùng cũng dùng chung 1 style mỗi cột, không còn lệch cỡ chữ/căn giữa giữa các dòng (theo file mẫu người dùng đã tự chỉnh và gửi lại làm chuẩn)', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    const rows = Array.from({ length: 15 }, (_, i) => makeRow({ maHang: `A0${i}`, soLo: `LOT${i}` }))
+    const bytes = await fillReceiptTemplate(templateBuffer, rows, { processedAt: PROCESSED_AT })
+    const doc = new DOMParser().parseFromString(sheetXmlOf(bytes), 'application/xml')
+
+    const stylesByCol = { C: new Set(), D: new Set(), E: new Set() }
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = 15 + i
+      Object.keys(stylesByCol).forEach(col => stylesByCol[col].add(doc.querySelector(`c[r="${col}${row}"]`).getAttribute('s')))
+    }
+    expect(stylesByCol.C.size).toBe(1)
+    expect(stylesByCol.D.size).toBe(1)
+    expect(stylesByCol.E.size).toBe(1)
+
+    // Cả 3 style đều khác style Kiện nguyên/Kiện lẻ/Hoá đơn (numFmt số) và khác nhau — mỗi cột 1 style riêng.
+    const quantityStyleId = doc.querySelector('c[r="F15"]').getAttribute('s')
+    const allIds = [...stylesByCol.C, ...stylesByCol.D, ...stylesByCol.E, quantityStyleId]
+    expect(new Set(allIds).size).toBe(4)
   })
 
   it('tự thêm dòng + dời chân ký tên khi số hàng vượt quá 12 dòng có sẵn trong mẫu', async () => {
