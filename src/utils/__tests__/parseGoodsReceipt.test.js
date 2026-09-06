@@ -230,6 +230,24 @@ describe('parseGoodsReceipt', () => {
     expect(warnings[0]).toContain('tách được 1 kiện')
   })
 
+  it('nhiều biên bản giao nhận cùng chuyến (file tổng + file riêng gửi kho khác): lấy số LỚN NHẤT, không cộng dồn kẻo đếm trùng', () => {
+    // File tổng (CPC1HN) đã gộp sẵn phần gửi DTP vào dòng không mã hàng ("HÀNG GỬI DTP") -> tổng 423 kiện
+    // đã bao gồm cả phần đó. File riêng của DTP (31 kiện) chỉ là xác nhận LẠI đúng phần đã gộp đó, không
+    // phải hàng thêm — cộng dồn (423+31=454) sẽ đếm trùng, đúng như lỗi thực tế người dùng gặp phải.
+    const pdfTongCPC1HN = '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 423 272 Tổng cả đơn 423 Kiện'
+    const pdfRiengDTP = '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 31 272 Tổng cả đơn 31 Kiện'
+    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '612', 'Lượng cần': 272, 'Số kiện cần': 423, ĐVT: 'TUYP' }])
+    const { warnings } = buildReceiptFromFiles({
+      khoCRows: readWarehouseExportRows(excelC),
+      khoLgtRows: [],
+      pdfTexts: [pdfTongCPC1HN, pdfRiengDTP],
+    })
+    expect(warnings).toHaveLength(0) // 423 (lớn nhất) khớp đúng 423 kiện đã tách -> không cảnh báo
+
+    const result = recheckKienTotal({ khoC: readWarehouseExportRows(excelC), khoLgt: [], pdfTexts: [pdfTongCPC1HN, pdfRiengDTP] })
+    expect(result).toMatchObject({ checked: true, matched: true, declaredTotal: 423 })
+  })
+
   it('keeps multi-token số lô intact (vd "1 14") instead of chopping it down to 1 token', () => {
     // Số lô thật ghi 2 token cách nhau bởi khoảng trắng — trước đây bị cắt mất token đầu.
     const pdfText = '9 L01021 Liproin - Hộp 1 tuýp 5g 1 14 1 1 867 167h thùng số 1 '
