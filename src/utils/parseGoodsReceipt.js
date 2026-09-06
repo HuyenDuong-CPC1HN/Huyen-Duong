@@ -409,9 +409,13 @@ export function buildReceiptFromFiles({
     }
   }
 
+  // Khi có nhiều biên bản giao nhận cho cùng chuyến (vd 1 file tổng của CPC1HN + 1 file riêng của DTP xác
+  // nhận phần hàng chuyển tiếp), file tổng thường đã gộp sẵn phần gửi đi DTP vào 1 dòng không mã hàng (vd
+  // "HÀNG GỬI DTP") — CỘNG DỒN tổng của tất cả các file sẽ đếm trùng đúng phần đó. Lấy số LỚN NHẤT trong
+  // các "Tổng cả đơn" (chính là file tổng/toàn chuyến) thay vì cộng dồn.
   const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
   if (declaredTotals.length > 0) {
-    const declaredTotal = declaredTotals.reduce((a, b) => a + b, 0)
+    const declaredTotal = Math.max(...declaredTotals)
     const actualTotal = sumKien(khoC) + sumKien(khoLgt)
     if (declaredTotal !== actualTotal) {
       warnings.push(
@@ -434,7 +438,9 @@ export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [] }) {
   if (declaredTotals.length === 0) {
     return { checked: false, message: 'Không đọc được "Tổng cả đơn ... Kiện" từ (các) biên bản giao nhận đã lưu.' }
   }
-  const declaredTotal = declaredTotals.reduce((a, b) => a + b, 0)
+  // Nhiều file cùng chuyến (vd tổng CPC1HN + riêng DTP) — file tổng đã gộp sẵn phần gửi đi kho khác vào 1
+  // dòng không mã hàng, cộng dồn sẽ đếm trùng. Lấy số lớn nhất (chính là file tổng/toàn chuyến).
+  const declaredTotal = Math.max(...declaredTotals)
   const actualTotal = sumKien(khoC) + sumKien(khoLgt)
   const matched = declaredTotal === actualTotal
   return {
