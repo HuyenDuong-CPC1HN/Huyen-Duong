@@ -4,6 +4,7 @@ import { createOpsSettingsRepository } from '../opsSettings'
 import { createStorageFilesRepository } from '../storageFiles'
 import { createAnalyticsPackagesRepository } from '../analyticsPackages'
 import { createReportingCyclesRepository } from '../reportingCycles'
+import { createGoodsReceiptBatchesRepository } from '../goodsReceiptBatches'
 
 function chain(result) {
   const api = {
@@ -12,6 +13,7 @@ function chain(result) {
     order: vi.fn(() => api),
     upsert: vi.fn(() => api),
     update: vi.fn(() => api),
+    insert: vi.fn(() => api),
     delete: vi.fn(() => api),
     single: vi.fn(() => api),
     then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
@@ -60,6 +62,40 @@ describe('Supabase repositories', () => {
 
     expect(table.upsert).toHaveBeenCalledWith({ key: 'chuagiao_donC_week_1', value: { bv: 4 } })
     expect(table.delete).toHaveBeenCalled()
+  })
+
+  it('lưu đủ khoCFileNames/khoLgtFileNames/usedSharedExcel/pdfMetadata/warnings vào blob JSON — không chỉ khoC/khoLgt (thiếu thì mất "Kho C: X file" + Cảnh báo đối chiếu ngay sau khi Lưu chỉnh sửa hoặc tải lại trang)', async () => {
+    const storage = { upload: vi.fn().mockResolvedValue({ error: null }) }
+    const table = chain({ data: null, error: null })
+    const client = { storage: { from: vi.fn(() => storage) }, from: vi.fn(() => table) }
+    const repo = createGoodsReceiptBatchesRepository(client)
+
+    await repo.save({
+      id: 'b1',
+      processedAt: '2026-09-04T00:00:00.000Z',
+      khoCFileNames: ['phieu_a.xlsx'],
+      khoLgtFileNames: [],
+      usedSharedExcel: true,
+      pdfMetadata: { soHoaDon: 'HD1' },
+      warnings: ['Lệch số kiện so biên bản giao nhận'],
+      bienBanFiles: [{ fileName: 'bb.pdf', storagePath: 'goods-receipt/2026/09/b1/bb.pdf' }],
+      khoC: [{ maHang: 'A1', slHoaDon: 10 }],
+      khoLgt: [],
+    })
+
+    const [, body] = storage.upload.mock.calls[0]
+    const payload = JSON.parse(await body.text())
+    expect(payload).toMatchObject({
+      khoCFileNames: ['phieu_a.xlsx'],
+      khoLgtFileNames: [],
+      usedSharedExcel: true,
+      pdfMetadata: { soHoaDon: 'HD1' },
+      warnings: ['Lệch số kiện so biên bản giao nhận'],
+    })
+    // bien_ban_files có cột riêng trên bảng, không nằm trong blob JSON.
+    expect(table.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      bien_ban_files: [{ fileName: 'bb.pdf', storagePath: 'goods-receipt/2026/09/b1/bb.pdf' }],
+    }))
   })
 
   it('turns a missing Storage object into a clear Vietnamese error', async () => {
