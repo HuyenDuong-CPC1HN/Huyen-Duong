@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import {
   Upload, FileUp, FileSpreadsheet, X, Download, Search, PackagePlus,
-  Pencil, Save, History, FileText,
+  Pencil, Save, History, FileText, Plus, Trash2,
 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import {
@@ -140,14 +140,16 @@ function parseVietnameseDate(val) {
   return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`
 }
 
-function ReceiptTableRow({ row, index, editing, onRowChange }) {
+function ReceiptTableRow({ row, index, editing, onRowChange, onRemoveRow }) {
   const chenh = calcChenhLech(row)
   const highlight = row.needsManual || !row.hanDung
 
   return (
     <tr className={highlight ? 'bg-amber-50/70' : 'border-t border-gray-50'}>
       <td className="px-2 py-1.5 text-gray-500">{index + 1}</td>
-      <td className="px-2 py-1.5 font-medium">{row.maHang}</td>
+      <td className="px-2 py-1.5 font-medium">
+        {editing ? <EditableCell value={row.maHang} onChange={(v) => onRowChange(index, 'maHang', v)} /> : row.maHang}
+      </td>
       <td className="px-2 py-1.5">
         {editing ? <EditableCell value={row.tenHang} onChange={(v) => onRowChange(index, 'tenHang', v)} /> : row.tenHang}
       </td>
@@ -172,7 +174,9 @@ function ReceiptTableRow({ row, index, editing, onRowChange }) {
       <td className="px-2 py-1.5 text-right">
         {editing ? <EditableCell type="number" value={row.kienLe} onChange={(v) => onRowChange(index, 'kienLe', v)} /> : row.kienLe}
       </td>
-      <td className="px-2 py-1.5 text-right">{row.slHoaDon}</td>
+      <td className="px-2 py-1.5 text-right">
+        {editing ? <EditableCell type="number" value={row.slHoaDon} onChange={(v) => onRowChange(index, 'slHoaDon', v)} /> : row.slHoaDon}
+      </td>
       <td className="px-2 py-1.5">
         {editing ? (
           <EditableCell
@@ -189,11 +193,18 @@ function ReceiptTableRow({ row, index, editing, onRowChange }) {
       <td className="px-2 py-1.5">
         {editing ? <EditableCell value={row.ghiChu} onChange={(v) => onRowChange(index, 'ghiChu', v)} className="bg-amber-100" /> : (row.ghiChu || '—')}
       </td>
+      {editing && (
+        <td className="px-2 py-1.5 text-center">
+          <button type="button" onClick={() => onRemoveRow(index)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá dòng này">
+            <Trash2 size={14} />
+          </button>
+        </td>
+      )}
     </tr>
   )
 }
 
-function ReceiptTable({ title, rows, editing, onRowChange }) {
+function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onAddRow }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -207,6 +218,7 @@ function ReceiptTable({ title, rows, editing, onRowChange }) {
               {['STT', 'Mã hàng', 'Tên hàng', 'ĐVT', 'Số lô', 'Hạn dùng', 'Kiện nguyên', 'Kiện lẻ', 'SL HĐ', 'SL TT', 'Chênh lệch', 'Ghi chú'].map(h => (
                 <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">{h}</th>
               ))}
+              {editing && <th className="px-2 py-2 w-8" />}
             </tr>
           </thead>
           <tbody>
@@ -217,11 +229,19 @@ function ReceiptTable({ title, rows, editing, onRowChange }) {
                 index={index}
                 editing={editing}
                 onRowChange={onRowChange}
+                onRemoveRow={onRemoveRow}
               />
             ))}
           </tbody>
         </table>
       </div>
+      {editing && (
+        <div className="px-4 py-2.5 border-t border-gray-100">
+          <button type="button" onClick={onAddRow} className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline">
+            <Plus size={14} /> Thêm dòng
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -384,6 +404,23 @@ export default function NhapHangTab() {
     nextRows[index] = { ...nextRows[index], [field]: value }
     if (field === 'hanDung' && value) nextRows[index].needsManual = false
     const next = { ...active, [key]: nextRows }
+    setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
+  }
+
+  // Dòng thêm tay không đến từ Excel/PDF nào — cần điền đủ Mã hàng/Hạn dùng nên đánh dấu needsManual để
+  // được tô vàng nhắc kiểm tra, giống các dòng "chỉ thấy trong PDF" trước đây.
+  const addRow = (warehouse) => {
+    if (!active) return
+    const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
+    const newRow = { maHang: '', tenHang: '', dvt: '', soLo: '', hanDung: null, kienNguyen: 0, kienLe: 0, slHoaDon: 0, slThucTe: null, ghiChu: '', needsManual: true }
+    const next = { ...active, [key]: [...(active[key] || []), newRow] }
+    setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
+  }
+
+  const removeRow = (warehouse, index) => {
+    if (!active) return
+    const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
+    const next = { ...active, [key]: (active[key] || []).filter((_, i) => i !== index) }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
   }
 
@@ -684,8 +721,22 @@ export default function NhapHangTab() {
         </label>
       </div>
 
-      <ReceiptTable title="Kho C" rows={active.khoC || []} editing={editing} onRowChange={(i, f, v) => patchRows('C', i, f, v)} />
-      <ReceiptTable title="Kho LGT" rows={active.khoLgt || []} editing={editing} onRowChange={(i, f, v) => patchRows('LGT', i, f, v)} />
+      <ReceiptTable
+        title="Kho C"
+        rows={active.khoC || []}
+        editing={editing}
+        onRowChange={(i, f, v) => patchRows('C', i, f, v)}
+        onRemoveRow={(i) => removeRow('C', i)}
+        onAddRow={() => addRow('C')}
+      />
+      <ReceiptTable
+        title="Kho LGT"
+        rows={active.khoLgt || []}
+        editing={editing}
+        onRowChange={(i, f, v) => patchRows('LGT', i, f, v)}
+        onRemoveRow={(i) => removeRow('LGT', i)}
+        onAddRow={() => addRow('LGT')}
+      />
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-3">
