@@ -62,6 +62,33 @@ describe('parseGoodsReceipt', () => {
     expect(rows[1]).toMatchObject({ kienNguyen: 0, kienLe: 1 })
   })
 
+  it('ghi chú lại số hộp lẻ gốc vào Ghi chú ("Kiện lẻ: X hộp") dù cột Kiện lẻ đã ép về 0/1', () => {
+    const buffer = makeWorkbook([
+      { Mã: 'G00898', Tên: 'Guacanyl', 'Số lô đề nghị': 'LOT1', 'Lượng cần': 3200, 'Số kiện cần': 2, 'Số hộp cần': 18, ĐVT: 'HOP' },
+    ])
+    const rows = mergeWarehouseRows(readWarehouseExportRows(buffer))
+    expect(rows[0]).toMatchObject({ kienLe: 1, ghiChu: 'Kiện lẻ: 18 hộp' })
+  })
+
+  it('cộng dồn số hộp lẻ khi gộp nhiều dòng cùng mã hàng + số lô', () => {
+    const buffer = makeWorkbook([
+      { Mã: 'G00898', Tên: 'Guacanyl', 'Số lô đề nghị': 'LOT1', 'Lượng cần': 3200, 'Số kiện cần': 2, 'Số hộp cần': 18, ĐVT: 'HOP' },
+      { Mã: 'G00898', Tên: 'Guacanyl', 'Số lô đề nghị': 'LOT1', 'Lượng cần': 1600, 'Số kiện cần': 1, 'Số hộp cần': 5, ĐVT: 'HOP' },
+    ])
+    const rows = mergeWarehouseRows(readWarehouseExportRows(buffer))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ kienLe: 2, ghiChu: 'Kiện lẻ: 23 hộp' })
+  })
+
+  it('không để ghi chú "Kiện lẻ: X hộp" chặn mất cảnh báo lệch SL — nối thêm chứ không đè', () => {
+    const rows = enrichRowsFromPdfCatalog(
+      [{ maHang: 'H05005', soLo: '010826', slHoaDon: 1000, kienNguyen: 1, kienLe: 1, ghiChu: 'Kiện lẻ: 18 hộp' }],
+      [{ maHang: 'H05005', soLo: '010826', soLuong: 1440, kienNguyen: 1, kienLe: 0, source: 'bienBanGiaoNhan' }],
+    )
+    expect(rows[0].ghiChu).toContain('Kiện lẻ: 18 hộp')
+    expect(rows[0].ghiChu).toContain('Lệch SL')
+  })
+
   it('parses pdf delivery note rows by stt + product code', () => {
     const pdfText = '3 F00507 Falgankid - Hộp 4 vỉ x 5 ống 10ml 010526 0 20 26400 44 A01259 Aricamun - 2 vỉ x 15 viên 010426 0 1 7920'
     const rows = parsePdfDeliveryNote(pdfText)
