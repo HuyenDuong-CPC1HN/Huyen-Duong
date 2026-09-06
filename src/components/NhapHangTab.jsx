@@ -204,7 +204,7 @@ function ReceiptTableRow({ row, index, editing, onRowChange, onRemoveRow }) {
   )
 }
 
-function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onAddRow }) {
+function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -235,13 +235,6 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onAddRow
           </tbody>
         </table>
       </div>
-      {editing && (
-        <div className="px-4 py-2.5 border-t border-gray-100">
-          <button type="button" onClick={onAddRow} className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline">
-            <Plus size={14} /> Thêm dòng
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -342,17 +335,19 @@ export default function NhapHangTab() {
       const { khoC, khoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
 
       const batchId = String(Date.now())
+      const processedAt = new Date().toISOString()
 
       // Lưu (các) file Biên bản giao nhận lên Storage ngay lúc xử lý — dùng chung 1 lần upload cho cả
-      // việc đối chiếu (ở trên) lẫn lưu trữ xem lại sau, không bắt upload lại lần 2.
+      // việc đối chiếu (ở trên) lẫn lưu trữ xem lại sau, không bắt upload lại lần 2. Theo Năm/Tháng (của
+      // ngày xử lý) để duyệt trong Storage theo Năm > Tháng > các chuyến trong tháng.
       const bienBanFiles = []
       if (bienBanFilesRaw.length > 0) {
         try {
-          const { createStorageFilesRepository } = await import('../data/storageFiles')
+          const { createStorageFilesRepository, monthFolder } = await import('../data/storageFiles')
           const { supabase } = await import('../supabase')
           const repo = createStorageFilesRepository(supabase)
           for (const file of bienBanFilesRaw) {
-            const path = `goods-receipt/${batchId}/${file.name}`
+            const path = `goods-receipt/${monthFolder(processedAt)}/${batchId}/${file.name}`
             await repo.writeFile(path, file)
             bienBanFiles.push({ fileName: file.name, storagePath: path })
           }
@@ -369,7 +364,7 @@ export default function NhapHangTab() {
 
       const entry = addBatch({
         id: batchId,
-        processedAt: new Date().toISOString(),
+        processedAt,
         khoCFileNames: pendingFiles.khoC.map(f => f.name),
         khoLgtFileNames: pendingFiles.khoLgt.map(f => f.name),
         usedSharedExcel,
@@ -408,12 +403,14 @@ export default function NhapHangTab() {
   }
 
   // Dòng thêm tay không đến từ Excel/PDF nào — cần điền đủ Mã hàng/Hạn dùng nên đánh dấu needsManual để
-  // được tô vàng nhắc kiểm tra, giống các dòng "chỉ thấy trong PDF" trước đây.
+  // được tô vàng nhắc kiểm tra, giống các dòng "chỉ thấy trong PDF" trước đây. Chèn lên ĐẦU bảng (không
+  // phải cuối) vì nút bấm nằm ở thanh công cụ trên cùng — bảng có thể dài hàng chục dòng, chèn cuối sẽ
+  // phải cuộn xuống mới thấy để điền.
   const addRow = (warehouse) => {
     if (!active) return
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
     const newRow = { maHang: '', tenHang: '', dvt: '', soLo: '', hanDung: null, kienNguyen: 0, kienLe: 0, slHoaDon: 0, slThucTe: null, ghiChu: '', needsManual: true }
-    const next = { ...active, [key]: [...(active[key] || []), newRow] }
+    const next = { ...active, [key]: [newRow, ...(active[key] || [])] }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
   }
 
@@ -484,12 +481,12 @@ export default function NhapHangTab() {
     setUploadingBienBan(true)
     setError('')
     try {
-      const { createStorageFilesRepository } = await import('../data/storageFiles')
+      const { createStorageFilesRepository, monthFolder } = await import('../data/storageFiles')
       const { supabase } = await import('../supabase')
       const repo = createStorageFilesRepository(supabase)
       const added = []
       for (const file of pdfs) {
-        const path = `goods-receipt/${active.id}/${file.name}`
+        const path = `goods-receipt/${monthFolder(active.processedAt)}/${active.id}/${file.name}`
         await repo.writeFile(path, file)
         added.push({ fileName: file.name, storagePath: path })
       }
@@ -655,6 +652,16 @@ export default function NhapHangTab() {
             <Save size={14} /> Lưu chỉnh sửa
           </button>
         )}
+        {editing && (
+          <>
+            <button type="button" onClick={() => addRow('C')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
+              <Plus size={14} /> Thêm dòng Kho C
+            </button>
+            <button type="button" onClick={() => addRow('LGT')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
+              <Plus size={14} /> Thêm dòng Kho LGT
+            </button>
+          </>
+        )}
         <button
           type="button"
           disabled={exporting}
@@ -727,7 +734,6 @@ export default function NhapHangTab() {
         editing={editing}
         onRowChange={(i, f, v) => patchRows('C', i, f, v)}
         onRemoveRow={(i) => removeRow('C', i)}
-        onAddRow={() => addRow('C')}
       />
       <ReceiptTable
         title="Kho LGT"
@@ -735,7 +741,6 @@ export default function NhapHangTab() {
         editing={editing}
         onRowChange={(i, f, v) => patchRows('LGT', i, f, v)}
         onRemoveRow={(i) => removeRow('LGT', i)}
-        onAddRow={() => addRow('LGT')}
       />
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">

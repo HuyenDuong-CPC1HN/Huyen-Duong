@@ -1,4 +1,4 @@
-import { createStorageFilesRepository } from './storageFiles'
+import { createStorageFilesRepository, monthFolder } from './storageFiles'
 
 function fail(error) { if (error) throw new Error(error.message || String(error)) }
 
@@ -41,7 +41,9 @@ export function createGoodsReceiptBatchesRepository(client) {
       khoC = [],
       khoLgt = [],
     }) {
-      const storagePath = `goods-receipt/${id}.json`
+      // Năm/Tháng theo ngày xử lý (processedAt) — duyệt trong Supabase Storage theo Năm > Tháng > các
+      // chuyến trong tháng, thay vì 1 danh sách phẳng.
+      const storagePath = `goods-receipt/${monthFolder(processedAt)}/${id}.json`
       const payload = {
         id,
         processedAt,
