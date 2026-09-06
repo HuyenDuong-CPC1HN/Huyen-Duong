@@ -113,7 +113,37 @@ function setCellStyle(doc, row, col, styleId) {
   cell.setAttribute('s', styleId)
 }
 
-// Thêm 1 cellXfs mới vào styles.xml (chỉ nối thêm, không sửa/xoá style có sẵn nào) cho các cột số lượng:
+// Thêm 1 cellXfs mới vào styles.xml (chỉ nối thêm, không sửa/xoá style có sẵn nào), dùng chung cho mọi cột
+// cần ép về 1 style duy nhất bất kể dòng đó vốn mang style rời rạc gì trong mẫu (xem QUANTITY_COLS, và
+// bảng đối chiếu STYLE_COLS bên dưới — người dùng đã tự sửa tay 1 bản xuất ra rồi gửi lại làm chuẩn, xác
+// nhận qua diff cell-by-cell với bản tự dựng: ĐVT/Số Lô/Hạn dùng cũng bị lệch font/căn giữa y như Kiện
+// nguyên/Kiện lẻ/Hoá đơn trước đây). fillId/borderId=2/5 khớp style ô dữ liệu chung của mẫu.
+// numFmtId mặc định 0 (General/text) — chỉ ensureQuantityStyle mới cần numFmtId=3 (số nguyên có phân cách
+// nghìn) nên giữ nguyên hàm cũ đó riêng, hàm này dùng cho các cột dạng chữ/ngày.
+function ensureUniformStyle(stylesDoc, { fontId, wrapText = false }) {
+  const cellXfs = stylesDoc.querySelector('cellXfs')
+  const xf = stylesDoc.createElementNS(NS, 'xf')
+  xf.setAttribute('numFmtId', '0')
+  xf.setAttribute('fontId', String(fontId))
+  xf.setAttribute('fillId', '2')
+  xf.setAttribute('borderId', '5')
+  xf.setAttribute('xfId', '1')
+  xf.setAttribute('applyFont', '1')
+  xf.setAttribute('applyFill', '1')
+  xf.setAttribute('applyBorder', '1')
+  xf.setAttribute('applyAlignment', '1')
+  const alignment = stylesDoc.createElementNS(NS, 'alignment')
+  alignment.setAttribute('horizontal', 'center')
+  alignment.setAttribute('vertical', 'center')
+  if (wrapText) alignment.setAttribute('wrapText', '1')
+  alignment.setAttribute('readingOrder', '1')
+  xf.appendChild(alignment)
+  cellXfs.appendChild(xf)
+  const index = cellXfs.getElementsByTagName('xf').length - 1
+  cellXfs.setAttribute('count', String(index + 1))
+  return String(index)
+}
+
 // numFmtId=3 là định dạng dựng sẵn của Excel "#,##0" (số nguyên, có dấu phân cách nghìn, 0 hiện là "0"
 // chứ không ẩn hay hiện dấu "-" như các style rời rạc vốn có trong mẫu) — không cần khai báo numFmt tuỳ
 // chỉnh vì đây là ID dựng sẵn. Trả về chỉ số style (dạng chuỗi) để gán vào thuộc tính s="" của ô.
@@ -209,7 +239,8 @@ function ensureDataRows(doc, rowCount) {
 
 // Chỉ điền cột "Hóa đơn" trong nhóm Số lượng — "Thực tế", "Chênh lệch", "Hư hỏng", "Tình trạng" để trống
 // hẳn cho người kiểm hàng tự điền tay khi in ra, không tự suy diễn hay đối chiếu vào các cột này.
-function fillDataRows(doc, sstDoc, rows, quantityStyleId) {
+function fillDataRows(doc, sstDoc, rows, styleIds) {
+  const { quantity: quantityStyleId, dvt: dvtStyleId, soLo: soLoStyleId, hanDung: hanDungStyleId } = styleIds
   rows.forEach((r, index) => {
     const row = DATA_FIRST_ROW + index
     const hanDung = formatDateVi(r.hanDung)
@@ -217,8 +248,11 @@ function fillDataRows(doc, sstDoc, rows, quantityStyleId) {
     setCellNumber(doc, row, 'A', index + 1)
     setCellString(doc, sstDoc, row, 'B', tenHang)
     setCellString(doc, sstDoc, row, 'C', r.dvt)
+    setCellStyle(doc, row, 'C', dvtStyleId)
     setCellString(doc, sstDoc, row, 'D', r.soLo)
+    setCellStyle(doc, row, 'D', soLoStyleId)
     setCellString(doc, sstDoc, row, 'E', hanDung)
+    setCellStyle(doc, row, 'E', hanDungStyleId)
     // Dùng ?? thay vì || — Kiện lẻ/Kiện nguyên = 0 là dữ liệu thật (vd đủ kiện nguyên, không có kiện
     // lẻ), phải hiện "0" chứ không được bỏ trống như thể chưa có dữ liệu.
     setCellNumber(doc, row, 'F', r.kienNguyen ?? '')
@@ -248,10 +282,17 @@ export async function fillReceiptTemplate(templateBuffer, rows, { metadata = {},
   const workbookDoc = parseXml(zip.file(WORKBOOK_PATH).asText())
   const stylesDoc = parseXml(zip.file(STYLES_PATH).asText())
 
-  const quantityStyleId = ensureQuantityStyle(stylesDoc)
+  // fontId 2 = Times New Roman 11 thường, fontId 3 = Times New Roman 11 đậm (xem xl/styles.xml gốc) —
+  // Số Lô vốn in đậm trong mẫu giấy nên giữ đậm, chỉ đồng bộ lại cỡ chữ/căn giữa.
+  const styleIds = {
+    quantity: ensureQuantityStyle(stylesDoc),
+    dvt: ensureUniformStyle(stylesDoc, { fontId: 2, wrapText: true }),
+    soLo: ensureUniformStyle(stylesDoc, { fontId: 3, wrapText: true }),
+    hanDung: ensureUniformStyle(stylesDoc, { fontId: 2, wrapText: true }),
+  }
   fillHeaderFields(sheetDoc, sstDoc, metadata, processedAt)
   const footerRowNum = ensureDataRows(sheetDoc, rows.length)
-  fillDataRows(sheetDoc, sstDoc, rows, quantityStyleId)
+  fillDataRows(sheetDoc, sstDoc, rows, styleIds)
   if (footerRowNum !== FOOTER_ROW_TEMPLATE) updatePrintArea(workbookDoc, footerRowNum)
 
   zip.file(STRINGS_PATH, serializeXml(sstDoc))
