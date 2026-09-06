@@ -224,7 +224,12 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow }) {
           <tbody>
             {rows.map((row, index) => (
               <ReceiptTableRow
-                key={`${row.maHang}-${row.soLo}-${index}`}
+                // Dùng index làm key, KHÔNG ghép Mã hàng/Số lô vào key — 2 ô đó chính là ô người dùng
+                // gõ tay khi Chỉnh sửa, nên key đổi theo từng ký tự khiến React coi dòng là component
+                // mới, unmount rồi mount lại <input> ngay sau mỗi ký tự -> mất focus, phải bấm lại liên
+                // tục. ReceiptTableRow không giữ state nội bộ (mọi giá trị đến từ prop row) nên key theo
+                // index là an toàn.
+                key={index}
                 row={row}
                 index={index}
                 editing={editing}
