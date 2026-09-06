@@ -127,8 +127,14 @@ export function readWarehouseExportRows(arrayBuffer) {
       else if (field === 'soLo') row[field] = normalizeLot(raw)
       // "Số hộp cần" là số HỘP lẻ (đơn vị nhỏ, có thể 1, 18, 72...), không phải số KIỆN — dù bao nhiêu hộp
       // lẻ của 1 mặt hàng cũng chỉ đóng gói thành đúng 1 kiện lẻ, nên ép về 0/1 ngay khi đọc, tránh cộng
-      // nhầm số hộp vào tổng kiện khi đối chiếu với biên bản giao nhận (Tổng cả đơn ... Kiện).
-      else if (field === 'kienLe') row[field] = toOptionalNumber(raw) > 0 ? 1 : 0
+      // nhầm số hộp vào tổng kiện khi đối chiếu với biên bản giao nhận (Tổng cả đơn ... Kiện). Vẫn giữ lại
+      // số hộp gốc ở soHopLe (chỉ dùng nội bộ để ghi chú "Kiện lẻ: X hộp" — xem mergeWarehouseRows), không
+      // dùng cho bất kỳ tính toán/đối chiếu nào khác.
+      else if (field === 'kienLe') {
+        const soHop = toOptionalNumber(raw)
+        row.kienLe = soHop > 0 ? 1 : 0
+        row.soHopLe = soHop
+      }
       else if (['kienNguyen', 'slHoaDon'].includes(field)) row[field] = toOptionalNumber(raw)
       else row[field] = raw === null || raw === undefined ? '' : String(raw).trim()
     })
@@ -153,6 +159,7 @@ export function mergeWarehouseRows(rows) {
         hanDung: row.hanDung || null,
         kienNguyen: row.kienNguyen ?? 0,
         kienLe: row.kienLe ?? 0,
+        soHopLe: row.soHopLe ?? 0,
         slHoaDon: row.slHoaDon ?? 0,
         slThucTe: null,
         ghiChu: '',
@@ -162,12 +169,18 @@ export function mergeWarehouseRows(rows) {
     }
     existing.kienNguyen = (existing.kienNguyen ?? 0) + (row.kienNguyen ?? 0)
     existing.kienLe = (existing.kienLe ?? 0) + (row.kienLe ?? 0)
+    existing.soHopLe = (existing.soHopLe ?? 0) + (row.soHopLe ?? 0)
     existing.slHoaDon = (existing.slHoaDon ?? 0) + (row.slHoaDon ?? 0)
     if (!existing.tenHang && row.tenHang) existing.tenHang = row.tenHang
     if (!existing.dvt && row.dvt) existing.dvt = row.dvt
     if (!existing.hanDung && row.hanDung) existing.hanDung = row.hanDung
   }
-  return [...merged.values()]
+  // soHopLe chỉ dùng để ghi chú "còn bao nhiêu hộp lẻ" cho người kiểm hàng dễ hình dung — không phải
+  // trường chính thức của 1 dòng nhập hàng nên bỏ khỏi kết quả trả về sau khi đã gộp vào ghiChu.
+  return [...merged.values()].map(({ soHopLe, ...row }) => {
+    if (soHopLe > 0) row.ghiChu = row.ghiChu ? `${row.ghiChu} | Kiện lẻ: ${soHopLe} hộp` : `Kiện lẻ: ${soHopLe} hộp`
+    return row
+  })
 }
 
 export function calcChenhLech(row) {
@@ -220,9 +233,12 @@ export function enrichRowsFromPdfCatalog(rows, pdfRows, sharedKeys = new Set()) 
       next.kienNguyen = hit.kienNguyen ?? 0
       next.kienLe = hit.kienLe ?? 0
     }
-    if (hit.soLuong !== undefined && hit.soLuong !== (next.slHoaDon ?? 0) && !next.ghiChu) {
+    if (hit.soLuong !== undefined && hit.soLuong !== (next.slHoaDon ?? 0)) {
       const nguon = hit.source === 'bienBanGiaoNhan' ? 'biên bản giao nhận' : 'PDF phiếu xuất kho'
-      next.ghiChu = `Lệch SL so ${nguon} — ${nguon === 'biên bản giao nhận' ? 'Biên bản' : 'PDF'}: ${hit.soLuong}, Excel: ${next.slHoaDon ?? 0}`
+      const note = `Lệch SL so ${nguon} — ${nguon === 'biên bản giao nhận' ? 'Biên bản' : 'PDF'}: ${hit.soLuong}, Excel: ${next.slHoaDon ?? 0}`
+      // Nối thêm chứ không đè — dòng có thể đã có sẵn ghi chú "Kiện lẻ: X hộp" (xem mergeWarehouseRows),
+      // trước đây dùng !next.ghiChu nên có ghi chú đó là bị chặn mất luôn cảnh báo lệch SL quan trọng hơn.
+      next.ghiChu = next.ghiChu ? `${next.ghiChu} | ${note}` : note
     }
     return next
   })
