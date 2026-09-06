@@ -46,15 +46,14 @@ export function createGoodsReceiptBatchesRepository(client) {
       khoC = [],
       khoLgt = [],
     }) {
-      // Năm/Tháng theo ngày xử lý (processedAt) — duyệt trong Supabase Storage theo Năm > Tháng > các
-      // chuyến trong tháng, thay vì 1 danh sách phẳng.
-      const storagePath = `goods-receipt/${monthFolder(processedAt)}/${id}.json`
-      // khoCFileNames/khoLgtFileNames/usedSharedExcel/pdfMetadata/warnings không có cột riêng trong bảng
-      // goods_receipt_batches — gộp vào cùng blob JSON trên Storage cho gọn (bảng chỉ giữ cột cần lọc/sắp
-      // xếp). Trước đây các trường này chỉ tồn tại tạm trong state của trang, KHÔNG được lưu lên Supabase
-      // nên mất ngay khi Lưu chỉnh sửa (ghi đè batch không kèm chúng) hoặc tải lại trang (đọc lại từ
-      // Supabase, vốn chưa từng có chúng).
-      const payload = {
+      // Tách file lưu trữ ra làm 2 theo kho — duyệt trong Supabase Storage theo Kho C/Kho LGT > Năm >
+      // Tháng > các chuyến trong tháng, thay vì gộp chung 1 file cho cả 2 kho. Các trường chung (không
+      // thuộc riêng kho nào — tên file nguồn, cảnh báo đối chiếu...) nhân đôi vào cả 2 file để mỗi file tự
+      // đủ thông tin khi duyệt/tải riêng lẻ trên Storage, không phải mở cả 2 mới biết chuyến này ngày nào.
+      // Biên bản giao nhận (bienBanFiles) KHÔNG tách theo kho — 1 biên bản thường dùng chung đối chiếu cả
+      // 2 kho nên vẫn để ở goods-receipt/{năm}/{tháng}/{chuyến}/... như cũ, không nhân đôi.
+      const month = monthFolder(processedAt)
+      const shared = {
         id,
         processedAt,
         pdfFileName,
@@ -65,10 +64,11 @@ export function createGoodsReceiptBatchesRepository(client) {
         usedSharedExcel,
         pdfMetadata,
         warnings,
-        khoC,
-        khoLgt,
       }
-      await files.writeJson(storagePath, payload)
+      const storagePathC = `goods-receipt/Kho C/${month}/${id}.json`
+      const storagePathLgt = `goods-receipt/Kho LGT/${month}/${id}.json`
+      await files.writeJson(storagePathC, { ...shared, khoC })
+      await files.writeJson(storagePathLgt, { ...shared, khoLgt })
 
       const record = {
         id,
@@ -77,11 +77,15 @@ export function createGoodsReceiptBatchesRepository(client) {
         excel_c_file_name: excelCFileName,
         excel_lgt_file_name: excelLgtFileName,
         bien_ban_files: bienBanFiles,
-        storage_path: storagePath,
+        storage_path: storagePathC,
+        storage_path_lgt: storagePathLgt,
       }
       const { error: batchError } = await batchTable().upsert(record)
       if (batchError) {
-        await files.remove(storagePath).catch(() => undefined)
+        await Promise.all([
+          files.remove(storagePathC).catch(() => undefined),
+          files.remove(storagePathLgt).catch(() => undefined),
+        ])
         fail(batchError)
       }
 
@@ -100,13 +104,21 @@ export function createGoodsReceiptBatchesRepository(client) {
     },
 
     async loadBatch(batch) {
-      return files.readJson(batch.storage_path)
+      // Chuyến lưu TRƯỚC khi tách file theo kho chỉ có storage_path (1 file gộp cả 2 kho, đọc nguyên như
+      // cũ) — không có storage_path_lgt để tách lại hồi tố, không cần thiết vì dữ liệu vẫn đọc đúng.
+      if (!batch.storage_path_lgt) return files.readJson(batch.storage_path)
+      const [payloadC, payloadLgt] = await Promise.all([
+        files.readJson(batch.storage_path),
+        files.readJson(batch.storage_path_lgt),
+      ])
+      return { ...payloadC, khoLgt: payloadLgt.khoLgt || [] }
     },
 
     async remove(batch) {
       fail((await lineTable().delete().eq('batch_id', batch.id)).error)
       fail((await batchTable().delete().eq('id', batch.id)).error)
       await files.remove(batch.storage_path)
+      if (batch.storage_path_lgt) await files.remove(batch.storage_path_lgt).catch(() => undefined)
       for (const bb of batch.bien_ban_files || []) {
         if (bb.storagePath) await files.remove(bb.storagePath).catch(() => undefined)
       }
