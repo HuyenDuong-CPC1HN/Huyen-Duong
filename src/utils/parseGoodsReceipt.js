@@ -125,7 +125,11 @@ export function readWarehouseExportRows(arrayBuffer) {
       const raw = line[colIndex]
       if (field === 'hanDung') row[field] = toIsoDate(raw)
       else if (field === 'soLo') row[field] = normalizeLot(raw)
-      else if (['kienNguyen', 'kienLe', 'slHoaDon'].includes(field)) row[field] = toOptionalNumber(raw)
+      // "Số hộp cần" là số HỘP lẻ (đơn vị nhỏ, có thể 1, 18, 72...), không phải số KIỆN — dù bao nhiêu hộp
+      // lẻ của 1 mặt hàng cũng chỉ đóng gói thành đúng 1 kiện lẻ, nên ép về 0/1 ngay khi đọc, tránh cộng
+      // nhầm số hộp vào tổng kiện khi đối chiếu với biên bản giao nhận (Tổng cả đơn ... Kiện).
+      else if (field === 'kienLe') row[field] = toOptionalNumber(raw) > 0 ? 1 : 0
+      else if (['kienNguyen', 'slHoaDon'].includes(field)) row[field] = toOptionalNumber(raw)
       else row[field] = raw === null || raw === undefined ? '' : String(raw).trim()
     })
     if (!row.maHang || !PRODUCT_CODE.test(row.maHang)) continue
