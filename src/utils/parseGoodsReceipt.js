@@ -459,8 +459,12 @@ export async function extractPdfText(arrayBuffer) {
       chunks.push(content.items.map(item => item.str).join(' '))
     }
     return chunks.join('\n')
-  } catch {
-    throw new Error('Không đọc được file PDF biên bản giao nhận.')
+  } catch (err) {
+    // Dùng chung cho mọi loại PDF (phiếu xuất kho lẫn biên bản giao nhận) — thông báo lỗi không được
+    // hardcode riêng "biên bản giao nhận"; kèm luôn lý do gốc (err.message) thay vì nuốt mất, để còn biết
+    // đường sửa khi 1 loạt file cùng lỗi (vd worker PDF.js không tải được, không phải do từng file hỏng).
+    const reason = err?.message || String(err)
+    throw new Error(`Không đọc được nội dung file PDF (${reason}).`, { cause: err })
   }
 }
 
