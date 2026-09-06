@@ -52,6 +52,16 @@ describe('parseGoodsReceipt', () => {
     })
   })
 
+  it('"Số hộp cần" là số hộp lẻ, không phải số kiện — dù bao nhiêu hộp cũng chỉ tính thành 1 kiện lẻ', () => {
+    const buffer = makeWorkbook([
+      { Mã: 'G00898', Tên: 'Guacanyl', 'Số lô đề nghị': 'LOT1', 'Lượng cần': 3200, 'Số kiện cần': 2, 'Số hộp cần': 18, ĐVT: 'HOP' },
+      { Mã: 'P01818', Tên: 'Pilo Drop', 'Số lô đề nghị': 'LOT2', 'Lượng cần': 200, 'Số kiện cần': 0, 'Số hộp cần': 200, ĐVT: 'HOP' },
+    ])
+    const rows = readWarehouseExportRows(buffer)
+    expect(rows[0]).toMatchObject({ kienNguyen: 2, kienLe: 1 })
+    expect(rows[1]).toMatchObject({ kienNguyen: 0, kienLe: 1 })
+  })
+
   it('parses pdf delivery note rows by stt + product code', () => {
     const pdfText = '3 F00507 Falgankid - Hộp 4 vỉ x 5 ống 10ml 010526 0 20 26400 44 A01259 Aricamun - 2 vỉ x 15 viên 010426 0 1 7920'
     const rows = parsePdfDeliveryNote(pdfText)
