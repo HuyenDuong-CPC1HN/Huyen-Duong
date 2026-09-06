@@ -9,6 +9,7 @@ import {
   parsePdfDeliveryNote,
   parsePdfItems,
   readWarehouseExportRows,
+  recheckKienTotal,
 } from '../parseGoodsReceipt'
 
 function makeWorkbook(rows) {
@@ -261,5 +262,29 @@ describe('parseGoodsReceipt', () => {
       pdfTexts: [pdfText],
     })
     expect(warnings.some(w => w.includes('D02124') && w.includes('300') && w.includes('768'))).toBe(true)
+  })
+
+  it('recheckKienTotal: đối chiếu lại tổng kiện sau khi dò tay sửa số kiện, không đụng cảnh báo khác', () => {
+    const pdfText = '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 1 272 Tổng cả đơn 5 Kiện'
+
+    const chuaKhop = recheckKienTotal({
+      khoC: [{ kienNguyen: 1, kienLe: 0 }],
+      khoLgt: [],
+      pdfTexts: [pdfText],
+    })
+    expect(chuaKhop).toMatchObject({ checked: true, matched: false, declaredTotal: 5, actualTotal: 1 })
+
+    // Người dùng dò tay sửa lại đúng số kiện -> bấm đối chiếu lại -> khớp.
+    const daKhop = recheckKienTotal({
+      khoC: [{ kienNguyen: 5, kienLe: 0 }],
+      khoLgt: [],
+      pdfTexts: [pdfText],
+    })
+    expect(daKhop).toMatchObject({ checked: true, matched: true, declaredTotal: 5, actualTotal: 5 })
+  })
+
+  it('recheckKienTotal: báo rõ khi biên bản không có dòng "Tổng cả đơn ... Kiện" để đối chiếu', () => {
+    const result = recheckKienTotal({ khoC: [{ kienNguyen: 1, kienLe: 0 }], khoLgt: [], pdfTexts: ['không có dòng tổng nào cả'] })
+    expect(result.checked).toBe(false)
   })
 })

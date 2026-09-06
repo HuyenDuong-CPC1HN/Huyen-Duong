@@ -48,5 +48,12 @@ export function createStorageFilesRepository(client) {
       fail(error, 'Không tạo được liên kết xem tệp')
       return data.signedUrl
     },
+    // Tải nguyên bytes của file gốc (PDF/ảnh...) — dùng khi cần đọc lại nội dung (vd trích xuất text PDF
+    // để đối chiếu lại), khác readJson (chỉ dùng cho blob JSON) và getSignedUrl (chỉ để xem trực tiếp).
+    async downloadFile(path) {
+      const { data, error } = await files.download(path)
+      if (error || !data) throw new Error(`Không tải được tệp từ kho tệp: ${error?.message || 'không tìm thấy tệp'}`)
+      return data.arrayBuffer()
+    },
   }
 }

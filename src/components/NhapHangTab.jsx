@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import {
   Upload, FileUp, FileSpreadsheet, X, Download, Search, PackagePlus,
-  Pencil, Save, History, FileText, Plus, Trash2,
+  Pencil, Save, History, FileText, Plus, Trash2, RefreshCw,
 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import {
@@ -11,6 +11,7 @@ import {
   extractPdfText,
   parsePdfMetadata,
   readWarehouseExportRows,
+  recheckKienTotal,
 } from '../utils/parseGoodsReceipt'
 import { exportReceiptFromTemplate } from '../utils/exportGoodsReceipt'
 
@@ -294,6 +295,8 @@ export default function NhapHangTab() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [batches, setBatches] = useState(() => readBatches())
   const [uploadingBienBan, setUploadingBienBan] = useState(false)
+  const [checkingKien, setCheckingKien] = useState(false)
+  const [kienCheckResult, setKienCheckResult] = useState(null)
   const [activeId, setActiveId] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_KEY)
     const all = readBatches()
@@ -544,6 +547,54 @@ export default function NhapHangTab() {
     }
   }
 
+  // Đối chiếu lại RIÊNG tổng kiện — dùng sau khi người dùng dò tay và tự sửa Kiện nguyên/Kiện lẻ trong chế
+  // độ Chỉnh sửa, để kiểm tra đã khớp với (các) biên bản giao nhận (Loại 2) đã lưu chưa, không cần xử lý
+  // lại cả chuyến từ đầu. Tải lại đúng file PDF gốc từ Storage (chỉ lưu file, chưa lưu text đã trích) rồi
+  // đọc lại text mỗi lần bấm — hơi tốn nhưng đơn giản, và chuyến hàng nào cũng chỉ vài file biên bản.
+  const recheckKienReconciliation = async () => {
+    if (!active) return
+    const bienBan = active.bienBanFiles || []
+    if (bienBan.length === 0) {
+      setKienCheckResult({ matched: false, message: 'Chưa có biên bản giao nhận nào để đối chiếu lại.' })
+      return
+    }
+    setCheckingKien(true)
+    setKienCheckResult(null)
+    setError('')
+    try {
+      const { createStorageFilesRepository } = await import('../data/storageFiles')
+      const { supabase } = await import('../supabase')
+      const repo = createStorageFilesRepository(supabase)
+      const pdfTexts = []
+      const readErrors = []
+      for (const bb of bienBan) {
+        try {
+          const buf = await repo.downloadFile(bb.storagePath)
+          pdfTexts.push(await extractPdfText(buf))
+        } catch (err) {
+          readErrors.push(`${bb.fileName}: ${err.message || err}`)
+        }
+      }
+      const result = recheckKienTotal({ khoC: active.khoC, khoLgt: active.khoLgt, pdfTexts })
+      setKienCheckResult(readErrors.length > 0
+        ? { matched: false, message: `${result.message} (Không đọc được: ${readErrors.join('; ')})` }
+        : { matched: result.matched, message: result.message })
+
+      // Cập nhật luôn vào Cảnh báo đối chiếu đã lưu — khớp thì bỏ dòng cảnh báo tổng kiện cũ (nếu có),
+      // lệch thì thay bằng số mới nhất, các cảnh báo khác (lệch SL từng dòng...) giữ nguyên.
+      const otherWarnings = (active.warnings || []).filter(w => !w.includes('kiện nhưng bảng'))
+      const nextWarnings = result.checked && !result.matched
+        ? [...otherWarnings, `Cảnh báo: ${result.message}`]
+        : otherWarnings
+      updateBatch(active.id, { warnings: nextWarnings })
+      setBatches(readBatches())
+    } catch (err) {
+      setKienCheckResult({ matched: false, message: err.message || 'Không đối chiếu lại được.' })
+    } finally {
+      setCheckingKien(false)
+    }
+  }
+
   const searchHistory = async () => {
     const q = historyQuery.trim()
     if (!q) { setHistoryRows([]); return }
@@ -737,11 +788,26 @@ export default function NhapHangTab() {
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
           <FileText size={16} className="text-gray-500" />
           <h3 className="font-semibold text-sm">Biên bản giao nhận</h3>
           <span className="text-xs text-gray-400">dùng để đối chiếu SL thực tế + tổng kiện — đã tải lên lúc xử lý</span>
+          <button
+            type="button"
+            disabled={checkingKien}
+            onClick={() => void recheckKienReconciliation()}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs hover:border-blue-400 text-gray-600 disabled:opacity-50"
+            title="Kiểm tra lại xem tổng số kiện (sau khi dò tay/sửa) đã khớp biên bản giao nhận chưa"
+          >
+            <RefreshCw size={12} className={checkingKien ? 'animate-spin' : ''} />
+            {checkingKien ? 'Đang đối chiếu...' : 'Đối chiếu lại số kiện'}
+          </button>
         </div>
+        {kienCheckResult && (
+          <p className={`text-xs rounded-lg px-3 py-2 mb-2 ${kienCheckResult.matched ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+            {kienCheckResult.matched ? '✅ ' : '⚠️ '}{kienCheckResult.message}
+          </p>
+        )}
         {(active.bienBanFiles || []).length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {active.bienBanFiles.map((bb) => (

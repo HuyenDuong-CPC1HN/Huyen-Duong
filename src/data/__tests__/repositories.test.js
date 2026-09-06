@@ -106,6 +106,17 @@ describe('Supabase repositories', () => {
       .rejects.toThrow('Không tải được dữ liệu tuần từ kho tệp')
   })
 
+  it('downloads raw file bytes for re-reading a saved PDF (đối chiếu lại số kiện)', async () => {
+    const bytes = new Uint8Array([1, 2, 3])
+    const blob = new Blob([bytes])
+    const storage = { download: vi.fn().mockResolvedValue({ data: blob, error: null }) }
+    const client = { storage: { from: vi.fn(() => storage) } }
+
+    const buf = await createStorageFilesRepository(client).downloadFile('goods-receipt/2026/09/b1/bb.pdf')
+    expect(new Uint8Array(buf)).toEqual(bytes)
+    expect(storage.download).toHaveBeenCalledWith('goods-receipt/2026/09/b1/bb.pdf')
+  })
+
   it('publishes and unpublishes a KPI package through the server-side completion gate', async () => {
     const client = {
       rpc: vi.fn()

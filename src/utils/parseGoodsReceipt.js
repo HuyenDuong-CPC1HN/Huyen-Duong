@@ -425,6 +425,30 @@ export function buildReceiptFromFiles({
   return { khoC, khoLgt, pdfRows, warnings }
 }
 
+// Đối chiếu lại RIÊNG tổng kiện (Kiện nguyên + Kiện lẻ) giữa bảng hiện tại — có thể đã được dò tay/sửa số
+// kiện trong chế độ Chỉnh sửa — với "Tổng cả đơn ... Kiện" trong (các) biên bản giao nhận đã lưu. Dùng khi
+// người dùng muốn kiểm tra lại sau khi tự sửa tay, không phải lúc xử lý file lần đầu (đó là
+// buildReceiptFromFiles ở trên) nên không đụng đến các cảnh báo đối chiếu khác (lệch SL từng dòng...).
+export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [] }) {
+  const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
+  if (declaredTotals.length === 0) {
+    return { checked: false, message: 'Không đọc được "Tổng cả đơn ... Kiện" từ (các) biên bản giao nhận đã lưu.' }
+  }
+  const declaredTotal = declaredTotals.reduce((a, b) => a + b, 0)
+  const actualTotal = sumKien(khoC) + sumKien(khoLgt)
+  const matched = declaredTotal === actualTotal
+  return {
+    checked: true,
+    matched,
+    declaredTotal,
+    actualTotal,
+    message: matched
+      ? `Đã khớp — biên bản giao nhận khai ${declaredTotal} kiện, bảng hiện có ${actualTotal} kiện.`
+      : `Biên bản giao nhận khai tổng ${declaredTotal} kiện nhưng bảng hiện có ${actualTotal} kiện `
+        + `(lệch ${declaredTotal - actualTotal}).`,
+  }
+}
+
 function extractDriverInfo(compact) {
   const lower = compact.toLowerCase()
   const nameLabel = 'họ và tên:'
