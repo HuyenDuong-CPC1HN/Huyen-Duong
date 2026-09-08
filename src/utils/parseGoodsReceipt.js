@@ -455,6 +455,163 @@ export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [] }) {
   }
 }
 
+const ACTUAL_SCAN_HEADER_CANDIDATES = new Set(['Mã SP', 'Mã sp'])
+const ACTUAL_SCAN_ALIASES = {
+  maHang: ['Mã SP', 'Mã sp'],
+  tenHang: ['Sản phẩm'],
+  soLo: ['Số lô'],
+  soLuong: ['Số lượng'],
+}
+
+function resolveActualScanField(header) {
+  const key = normalizeHeader(header)
+  for (const [field, aliases] of Object.entries(ACTUAL_SCAN_ALIASES)) {
+    if (aliases.some(alias => alias.toLowerCase() === key.toLowerCase())) return field
+  }
+  return null
+}
+
+// Số lô thuần số đôi khi bị xuất thành nhiều cụm cách nhau khoảng trắng do lỗi hiển thị (vd "1 14" thay vì
+// "114") — đã thấy ở cả PDF biên bản giao nhận (xem parsePdfSegment) lẫn file quét thực tế xuất từ website,
+// cùng 1 kiểu lỗi nguồn dữ liệu. Nối lại trước khi đối chiếu; số lô có chữ (vd "04526F01") không bị đụng tới
+// vì tách theo khoảng trắng ra sẽ có token không thuần số, không thoả điều kiện "mọi token đều là số".
+function joinSplitNumericLot(raw) {
+  const lot = String(raw ?? '').trim()
+  const tokens = lot.split(/\s+/)
+  if (tokens.length > 1 && tokens.every(t => /^\d+$/.test(t))) return tokens.join('')
+  return lot
+}
+
+// File Excel "Danh sách nhập kho" xuất từ website sau khi quét hàng thực tế — cột Mã SP/Số lô/Số lượng.
+// Không có cột nào phân biệt được Kho C/Kho LGT/Kho SO (đã kiểm tra: cột "Kho" và "Trạng thái" đồng nhất
+// trên toàn bộ file mẫu thật) — vùng kho được xác định bởi việc người dùng thả file vào khung nào (xem
+// DoiSoatThucTeTab.jsx), không đọc từ nội dung file.
+export function readActualScanRows(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
+  const headerRowIndex = grid.findIndex(row => row.some(cell => ACTUAL_SCAN_HEADER_CANDIDATES.has(normalizeHeader(cell))))
+  if (headerRowIndex === -1) {
+    throw new Error('Không tìm thấy cột "Mã SP" trong file Excel quét thực tế.')
+  }
+
+  const fieldByCol = grid[headerRowIndex].map(cell => resolveActualScanField(cell))
+  const rows = []
+  for (let i = headerRowIndex + 1; i < grid.length; i += 1) {
+    const line = grid[i]
+    if (!line || line.every(cell => cell === null || cell === '')) continue
+    const row = {}
+    fieldByCol.forEach((field, colIndex) => {
+      if (!field) return
+      const raw = line[colIndex]
+      if (field === 'soLo') row[field] = joinSplitNumericLot(raw)
+      else if (field === 'soLuong') row[field] = toOptionalNumber(raw)
+      else row[field] = raw === null || raw === undefined ? '' : String(raw).trim()
+    })
+    if (!row.maHang || !PRODUCT_CODE.test(row.maHang)) continue
+    if (!(row.soLuong > 0)) continue
+    rows.push(row)
+  }
+  return rows
+}
+
+// Website xuất mỗi lần quét/xác nhận thành 1 dòng riêng — cùng 1 lô có thể xuất hiện hàng chục dòng nếu
+// quét nhiều đợt (đã thấy 1 lô lặp tới 24 dòng trong file mẫu thật). Cộng dồn Số lượng theo Mã hàng + Số
+// lô trước khi đối chiếu, giống cách mergeWarehouseRows gộp nhiều phiếu xuất kho.
+export function mergeActualScanRows(rows) {
+  const merged = new Map()
+  for (const row of rows) {
+    const key = rowKey(row)
+    const existing = merged.get(key)
+    if (!existing) {
+      merged.set(key, { maHang: row.maHang, tenHang: row.tenHang || '', soLo: row.soLo || '', soLuong: row.soLuong ?? 0 })
+      continue
+    }
+    existing.soLuong += row.soLuong ?? 0
+    if (!existing.tenHang && row.tenHang) existing.tenHang = row.tenHang
+  }
+  return [...merged.values()]
+}
+
+const SO_TAG = /\(SO\)/i
+
+// Kho SO là TẬP CON của Kho C, không phải 1 kho song song — hàng có nhãn "(SO)" trong Tên hàng bản chất
+// vẫn là hàng về Kho C, chỉ được tách riêng ra để xuất cho SO. Lọc trực tiếp từ bảng Kho C ĐÃ TÁCH của 1
+// chuyến đã lưu (batch.khoC) — không đụng tới Kho LGT, và không cần thêm file hoá đơn riêng cho Kho SO.
+export function splitSoRows(khoCRows) {
+  const soRows = []
+  const nonSoRows = []
+  for (const row of khoCRows || []) {
+    if (SO_TAG.test(row.tenHang || '')) soRows.push(row)
+    else nonSoRows.push(row)
+  }
+  return { soRows, nonSoRows }
+}
+
+function reconcileKey(maHang, soLo) {
+  return `${maHang}::${joinSplitNumericLot(soLo)}`
+}
+
+// Đối soát Thực tế ↔ Hoá đơn — KHÁC với recheckKienTotal (đối chiếu lại số kiện) ở trên: cái này so từng
+// dòng Mã hàng + Số lô (không phải 1 tổng số kiện), và nguồn Thực tế là file quét thực tế mới upload mỗi
+// chuyến (không phải PDF biên bản giao nhận đã lưu sẵn). Hàm thuần, không đọc/ghi gì — gọi lại bao nhiêu
+// lần cũng ra đúng kết quả mới nhất theo invoiceRows/actualRows truyền vào, để bên gọi (DoiSoatThucTeTab)
+// có thể chạy lại tự do sau khi người dùng quét khắc phục rồi thả file mới vào.
+//
+// invoiceRows: [{ maHang, tenHang, soLo, slHoaDon }] — lấy từ bảng batch.khoC/batch.khoLgt đã lưu (hoặc
+// phần đã lọc theo splitSoRows cho Kho SO/Kho C).
+// actualRows: kết quả mergeActualScanRows(...) — [{ maHang, tenHang, soLo, soLuong }].
+//
+// trangThai trả về: 'khop' | 'thieu' | 'thua' | 'chuaQuet' (có hoá đơn, chưa thấy quét) | 'quetLa' (quét
+// được nhưng không khớp hoá đơn nào).
+export function reconcileActualVsInvoice(invoiceRows, actualRows) {
+  const invoiceMap = new Map()
+  for (const row of invoiceRows || []) {
+    const key = reconcileKey(row.maHang, row.soLo)
+    const existing = invoiceMap.get(key)
+    if (existing) existing.slHoaDon += row.slHoaDon ?? 0
+    else invoiceMap.set(key, { maHang: row.maHang, tenHang: row.tenHang || '', soLo: row.soLo || '', slHoaDon: row.slHoaDon ?? 0 })
+  }
+
+  const actualMap = new Map()
+  for (const row of actualRows || []) {
+    const key = reconcileKey(row.maHang, row.soLo)
+    const existing = actualMap.get(key)
+    if (existing) existing.soLuong += row.soLuong ?? 0
+    else actualMap.set(key, { maHang: row.maHang, tenHang: row.tenHang || '', soLo: row.soLo || '', soLuong: row.soLuong ?? 0 })
+  }
+
+  const keys = new Set([...invoiceMap.keys(), ...actualMap.keys()])
+  const results = [...keys].map(key => {
+    const inv = invoiceMap.get(key)
+    const act = actualMap.get(key)
+    const slHoaDon = inv ? inv.slHoaDon : null
+    const slThucTe = act ? act.soLuong : null
+    let trangThai
+    let chenhLech = null
+    if (inv && act) {
+      chenhLech = slThucTe - slHoaDon
+      trangThai = chenhLech === 0 ? 'khop' : (chenhLech > 0 ? 'thua' : 'thieu')
+    } else if (inv) {
+      trangThai = 'chuaQuet'
+      chenhLech = -slHoaDon
+    } else {
+      trangThai = 'quetLa'
+    }
+    return {
+      maHang: inv?.maHang || act?.maHang,
+      tenHang: inv?.tenHang || act?.tenHang || '',
+      soLo: inv?.soLo || act?.soLo || '',
+      slHoaDon,
+      slThucTe,
+      chenhLech,
+      trangThai,
+    }
+  })
+  results.sort((a, b) => a.maHang.localeCompare(b.maHang) || String(a.soLo).localeCompare(String(b.soLo)))
+  return results
+}
+
 function extractDriverInfo(compact) {
   const lower = compact.toLowerCase()
   const nameLabel = 'họ và tên:'

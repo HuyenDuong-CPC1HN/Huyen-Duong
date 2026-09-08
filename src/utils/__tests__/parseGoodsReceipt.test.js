@@ -5,11 +5,15 @@ import {
   calcChenhLech,
   detectPhieuXuatKhoWarehouse,
   enrichRowsFromPdfCatalog,
+  mergeActualScanRows,
   mergeWarehouseRows,
   parsePdfDeliveryNote,
   parsePdfItems,
+  reconcileActualVsInvoice,
+  readActualScanRows,
   readWarehouseExportRows,
   recheckKienTotal,
+  splitSoRows,
 } from '../parseGoodsReceipt'
 
 function makeWorkbook(rows) {
@@ -304,5 +308,71 @@ describe('parseGoodsReceipt', () => {
   it('recheckKienTotal: báo rõ khi biên bản không có dòng "Tổng cả đơn ... Kiện" để đối chiếu', () => {
     const result = recheckKienTotal({ khoC: [{ kienNguyen: 1, kienLe: 0 }], khoLgt: [], pdfTexts: ['không có dòng tổng nào cả'] })
     expect(result.checked).toBe(false)
+  })
+
+  it('readActualScanRows: đọc file quét thực tế (Mã SP/Sản phẩm/Số lô/Số lượng), nối số lô bị tách rời', () => {
+    const buffer = makeWorkbook([
+      { 'Mã SP': 'A01252', 'Sản phẩm': 'Arimenus - Hộp 10 ống 1ml', 'Số lô': '011225', 'Số lượng': 660, Kho: '020101' },
+      { 'Mã SP': 'L01021', 'Sản phẩm': 'Liproin - Hộp 1 tuýp 5g', 'Số lô': '1 14', 'Số lượng': 167, Kho: '020101' },
+      { 'Mã SP': 'X00000', 'Sản phẩm': 'Không phải mã hàng hợp lệ', 'Số lô': '1', 'Số lượng': 0, Kho: '020101' },
+    ])
+    const rows = readActualScanRows(buffer)
+    expect(rows).toHaveLength(2)
+    expect(rows.find(r => r.maHang === 'A01252')).toMatchObject({ soLo: '011225', soLuong: 660 })
+    // "1 14" là 1 số lô bị tách thành 2 cụm số cách nhau khoảng trắng do lỗi hiển thị -> nối lại thành "114".
+    expect(rows.find(r => r.maHang === 'L01021')).toMatchObject({ soLo: '114', soLuong: 167 })
+  })
+
+  it('readActualScanRows: báo lỗi rõ ràng khi không tìm thấy cột "Mã SP"', () => {
+    const buffer = makeWorkbook([{ Cột1: 'a', Cột2: 'b' }])
+    expect(() => readActualScanRows(buffer)).toThrow(/Mã SP/)
+  })
+
+  it('mergeActualScanRows: cộng dồn nhiều dòng quét cùng Mã hàng + Số lô', () => {
+    const merged = mergeActualScanRows([
+      { maHang: 'N00845', soLo: '18726H01', soLuong: 1200 },
+      { maHang: 'N00845', soLo: '18726H01', soLuong: 1200 },
+      { maHang: 'N00845', soLo: '020326', soLuong: 500 },
+    ])
+    expect(merged).toHaveLength(2)
+    expect(merged.find(r => r.soLo === '18726H01')).toMatchObject({ soLuong: 2400 })
+    expect(merged.find(r => r.soLo === '020326')).toMatchObject({ soLuong: 500 })
+  })
+
+  it('splitSoRows: tách hàng có nhãn "(SO)" trong Tên hàng ra khỏi bảng Kho C (Kho SO là tập con của Kho C)', () => {
+    const { soRows, nonSoRows } = splitSoRows([
+      { maHang: 'A01500', tenHang: 'Actiso Viet - Hộp 4 vỉ x 5 ống 10ml (SO)', soLo: '03226G04', slHoaDon: 3960 },
+      { maHang: 'G01006', tenHang: 'Golistin Soda - Hộp 1 lọ 45ml', soLo: '04526F01', slHoaDon: 1920 },
+    ])
+    expect(soRows).toHaveLength(1)
+    expect(soRows[0].maHang).toBe('A01500')
+    expect(nonSoRows).toHaveLength(1)
+    expect(nonSoRows[0].maHang).toBe('G01006')
+  })
+
+  it('reconcileActualVsInvoice: khớp/thiếu/thừa/chưa quét/quét lạ theo Mã hàng + Số lô', () => {
+    const invoiceRows = [
+      { maHang: 'G01006', tenHang: 'Golistin Soda', soLo: '04526F01', slHoaDon: 1920 },
+      { maHang: 'A01338', tenHang: 'Afenemi', soLo: '28826G01', slHoaDon: 51000 },
+      { maHang: 'D02124', tenHang: 'Hàng chưa quét', soLo: '30926H01', slHoaDon: 780 },
+    ]
+    const actualRows = [
+      { maHang: 'G01006', tenHang: 'Golistin Soda', soLo: '04526F01', soLuong: 1920 },
+      { maHang: 'A01338', tenHang: 'Afenemi', soLo: '28826G01', soLuong: 50400 },
+      { maHang: 'X09999', tenHang: 'Quét lạ mã', soLo: '99926X01', soLuong: 45 },
+    ]
+    const results = reconcileActualVsInvoice(invoiceRows, actualRows)
+    expect(results.find(r => r.maHang === 'G01006')).toMatchObject({ trangThai: 'khop', chenhLech: 0 })
+    expect(results.find(r => r.maHang === 'A01338')).toMatchObject({ trangThai: 'thieu', chenhLech: -600 })
+    expect(results.find(r => r.maHang === 'D02124')).toMatchObject({ trangThai: 'chuaQuet', slThucTe: null, chenhLech: -780 })
+    expect(results.find(r => r.maHang === 'X09999')).toMatchObject({ trangThai: 'quetLa', slHoaDon: null })
+  })
+
+  it('reconcileActualVsInvoice: nối số lô bị tách rời ở 1 bên vẫn khớp đúng với bên kia', () => {
+    const invoiceRows = [{ maHang: 'L01021', tenHang: 'Liproin', soLo: '114', slHoaDon: 167 }]
+    const actualRows = [{ maHang: 'L01021', tenHang: 'Liproin', soLo: '1 14', soLuong: 167 }]
+    const results = reconcileActualVsInvoice(invoiceRows, actualRows)
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ trangThai: 'khop', chenhLech: 0 })
   })
 })
