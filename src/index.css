@@ -59,7 +59,16 @@
 }
 
 /* ===== BASE ===== */
-* { box-sizing: border-box; margin: 0; padding: 0; }
+/* Trong @layer base (không để "trần"/unlayered) — theo đúng luật CSS Cascade Layers, 1 rule "trần" nằm
+   ngoài mọi @layer sẽ LUÔN thắng bất kỳ rule nào trong @layer, bất kể độ đặc hiệu (specificity). Trước đây
+   để "trần", rule này vô tình đè mất toàn bộ class padding, margin, space-x, space-y của Tailwind trong
+   CẢ APP (những class đó nằm trong @layer utilities do Tailwind sinh ra) — mọi nơi tính padding và margin
+   ra 0px dù class đúng, gây hiện tượng nội dung dính sát, tràn viền. Đưa vào @layer base để lớp utilities
+   (ưu tiên cao hơn base) tự động thắng như đúng thiết kế của Tailwind — vẫn giữ nguyên hiệu ứng xoá sạch
+   padding và margin mặc định của trình duyệt cho mọi phần tử chưa có class Tailwind chỉnh riêng. */
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+}
 body {
   background: var(--bg-page);
   font-family: var(--font-family);
@@ -1300,6 +1309,13 @@ body {
   gap: 12px;
   min-height: 0;
   flex: 1;
+}
+
+/* Riêng cho ReturnTrackingTab (Theo dõi nhập trả lại) — khung Năm/Tháng bên trái hẹp lại 30%, bảng đơn
+   trả hàng bên phải rộng ra 70%, không đụng tới SheetTab (Giao hàng Đơn C/DTP) vẫn đang dùng tỉ lệ 45/55
+   mặc định ở trên vì 2 tab dùng chung class .sheet-tab-split. */
+.sheet-tab-split--30-70 {
+  grid-template-columns: minmax(0, 30fr) minmax(0, 70fr);
 }
 
 .sheet-tab-col--right {
