@@ -100,4 +100,30 @@ describe('ExpiryStockTab', () => {
     expect(expired['Tên lô']).toBe('LOT1')
     expect(expired['Tuổi thuốc (Tháng)']).toBeLessThan(0)
   })
+
+  it('kéo mép cột để đổi độ rộng, lưu lại, và có thể đặt lại về mặc định', async () => {
+    const { container } = render(<ExpiryStockTab />)
+    const file = buildSampleFile()
+    const input = document.querySelector('input[type="file"]')
+    fireEvent.change(input, { target: { files: [file] } })
+    await waitFor(() => expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument())
+
+    const firstTh = container.querySelectorAll('th')[0] // "Mã vật tư"
+    const handle = firstTh.querySelector('.cursor-col-resize')
+    expect(handle).toBeTruthy()
+
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(document, { clientX: 160 }) // kéo sang phải 60px
+    fireEvent.mouseUp(document)
+
+    await waitFor(() => {
+      const saved = JSON.parse(store.opsStore.getItem('expiry_stock_colwidths') || '{}')
+      expect(saved['Mã vật tư']).toBeGreaterThanOrEqual(60)
+    })
+    expect(firstTh.style.width).not.toBe('110px') // đã đổi khỏi mặc định
+
+    fireEvent.click(screen.getByText('Đặt lại độ rộng cột'))
+    expect(store.opsStore.getItem('expiry_stock_colwidths')).toBeNull()
+    expect(container.querySelectorAll('th')[0].style.width).toBe('110px') // về lại mặc định
+  })
 })

@@ -1,8 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
-import { Upload, FileUp, FileSpreadsheet, X, AlertTriangle, Clock, CircleAlert, Search, PackageSearch, Download } from 'lucide-react'
+import { Upload, FileUp, FileSpreadsheet, X, AlertTriangle, Clock, CircleAlert, Search, PackageSearch, Download, FileWarning } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { opsStore as localStorage } from '../data/workspace'
+import { ResizeHandle } from './DataTable'
 import { parseExpiryStockWorkbook, classifyExpiry, daysUntil } from '../utils/parseExpiryStock'
+import { exportExpiryDisposal } from '../utils/exportExpiryDisposal'
+
+// Ngưỡng "hàng còn hạn dùng dưới 1 tháng" dùng riêng cho Biên bản Xử lý/Xác minh — hẹp hơn bucket
+// "near3" (dưới 3 tháng) đã có, và không gồm hàng đã hết hạn (daysLeft âm, thuộc bucket "expired" riêng,
+// khác quy trình với "hàng cận date" mà 2 mẫu biên bản này dùng).
+const DISPOSAL_DAYS_THRESHOLD = 30
 
 // ---- Lưu trữ dữ liệu upload theo TỪNG THÁNG, cố định/không bị ghi đè khi upload file mới ----
 // expiry_stock_months = [{ id, fileName, uploadedAt, rows }, ...] (mới nhất ở đầu)
@@ -42,6 +49,34 @@ const BUCKETS = [
   { key: 'near3', label: 'Cận dưới 3 tháng', icon: AlertTriangle, cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', bgActive: 'bg-orange-100 border-orange-400' },
   { key: 'near6', label: 'Cận dưới 6 tháng', icon: Clock, cls: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', bgActive: 'bg-amber-100 border-amber-400' },
 ]
+
+const TABLE_COLUMNS = ['Mã vật tư', 'Tên vật tư', 'Mã kho', 'Mã lô', 'Hạn dùng', 'Còn lại', 'Tồn cuối', 'Đvt']
+const DEFAULT_COL_WIDTH = {
+  'Mã vật tư': 110, 'Tên vật tư': 260, 'Mã kho': 90, 'Mã lô': 120,
+  'Hạn dùng': 100, 'Còn lại': 140, 'Tồn cuối': 100, 'Đvt': 80,
+}
+const COLWIDTHS_KEY = 'expiry_stock_colwidths'
+
+// Độ rộng cột do người dùng tự kéo chỉnh (kéo mép phải mỗi cột) — lưu lại để lần sau mở vẫn giữ nguyên.
+function useColWidths() {
+  const init = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(COLWIDTHS_KEY) || '{}')
+      return { ...DEFAULT_COL_WIDTH, ...saved }
+    } catch { return { ...DEFAULT_COL_WIDTH } }
+  }
+  const [widths, setWidths] = useState(init)
+  const setWidth = (key, w) => setWidths(prev => {
+    const next = { ...prev, [key]: Math.max(60, w) }
+    localStorage.setItem(COLWIDTHS_KEY, JSON.stringify(next))
+    return next
+  })
+  const resetWidths = () => {
+    localStorage.removeItem(COLWIDTHS_KEY)
+    setWidths({ ...DEFAULT_COL_WIDTH })
+  }
+  return [widths, setWidth, resetWidths]
+}
 
 function formatDateVi(iso) {
   if (!iso) return '—'
@@ -101,6 +136,8 @@ export default function ExpiryStockTab() {
   const [tab, setTab] = useState('canDate') // canDate | expired | near3 | near6 | all
   const [search, setSearch] = useState('')
   const [khoFilter, setKhoFilter] = useState('all')
+  const [exportingDisposal, setExportingDisposal] = useState(false)
+  const [colWidths, setColWidth, resetColWidths] = useColWidths()
 
   const active = months.find(m => m.id === activeId) || null
 
@@ -171,6 +208,35 @@ export default function ExpiryStockTab() {
       return a.hanDung.localeCompare(b.hanDung)
     })
   }, [inStock, tab, khoFilter, search])
+
+  // Hàng còn hạn dùng dưới 1 tháng (chưa hết hạn) — nguồn cho Biên bản Xử lý + Xác minh, tính từ toàn bộ
+  // inStock (không phụ thuộc tab/tìm kiếm/lọc kho đang chọn trên bảng), vì biên bản hủy cần đủ toàn bộ
+  // hàng cận date trong tháng, không phải chỉ phần đang xem trên màn hình.
+  const disposalRows = useMemo(
+    () => inStock.filter(r => r.daysLeft !== null && r.daysLeft >= 0 && r.daysLeft < DISPOSAL_DAYS_THRESHOLD),
+    [inStock],
+  )
+
+  const handleExportDisposal = async () => {
+    if (disposalRows.length === 0) return
+    setExportingDisposal(true)
+    setError('')
+    try {
+      await exportExpiryDisposal(disposalRows.map(r => ({
+        maHang: r.maVatTu,
+        tenHang: r.tenVatTu,
+        soLo: r.maLo,
+        hanDung: r.hanDung,
+        dvt: r.dvt,
+        soLuong: r.tonCuoi,
+        maKho: r.maKho,
+      })))
+    } catch (err) {
+      setError(err.message || 'Không xuất được biên bản hàng cận date.')
+    } finally {
+      setExportingDisposal(false)
+    }
+  }
 
   if (!active) {
     return (
@@ -293,33 +359,51 @@ export default function ExpiryStockTab() {
         </div>
         <span className="text-xs text-gray-400 whitespace-nowrap">{filteredRows.length} dòng</span>
         <button
+          onClick={resetColWidths}
+          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors ml-auto"
+          title="Đặt lại độ rộng cột về mặc định"
+        >
+          Đặt lại độ rộng cột
+        </button>
+        <button
           onClick={() => exportRowsToExcel(filteredRows, active, tab)}
           disabled={filteredRows.length === 0}
-          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-green-400 hover:text-green-600 text-gray-600 transition-colors ml-auto disabled:opacity-40 disabled:pointer-events-none"
+          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-green-400 hover:text-green-600 text-gray-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
         >
           <Download size={14} />
           Xuất Excel
         </button>
+        <button
+          onClick={() => void handleExportDisposal()}
+          disabled={disposalRows.length === 0 || exportingDisposal}
+          title="Xuất Biên bản Xử lý (Excel) + Biên bản Xác minh (Word) cho hàng còn hạn dùng dưới 1 tháng"
+          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-red-400 hover:text-red-600 text-gray-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <FileWarning size={14} />
+          {exportingDisposal ? 'Đang tạo biên bản...' : `Xuất biên bản hàng cận date (${disposalRows.length})`}
+        </button>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-sm border-collapse">
+        <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: TABLE_COLUMNS.reduce((sum, c) => sum + colWidths[c], 0), minWidth: '100%' }}>
           <thead>
             <tr className="bg-[#1e3a5f] text-white text-xs">
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Mã vật tư</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Tên vật tư</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Mã kho</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Mã lô</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Hạn dùng</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Còn lại</th>
-              <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Tồn cuối</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Đvt</th>
+              {TABLE_COLUMNS.map(c => (
+                <th
+                  key={c}
+                  className={`px-3 py-2.5 font-semibold whitespace-nowrap relative ${c === 'Tồn cuối' || c === 'Đvt' ? 'text-center' : 'text-left'}`}
+                  style={{ width: colWidths[c] }}
+                >
+                  {c}
+                  <ResizeHandle colKey={c} setWidth={setColWidth} />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-10 text-gray-400">
+                <td colSpan={TABLE_COLUMNS.length} className="text-center py-10 text-gray-400">
                   <div className="flex flex-col items-center gap-2">
                     <PackageSearch size={24} className="text-gray-300" />
                     Không có dữ liệu phù hợp
@@ -328,12 +412,12 @@ export default function ExpiryStockTab() {
               </tr>
             ) : filteredRows.map((r, i) => (
               <tr key={`${r.maVatTu}_${r.maLo}_${i}`} className="border-b border-gray-100 text-[12px] hover:bg-blue-50/40">
-                <td className="px-3 py-2 whitespace-nowrap font-mono">{r.maVatTu}</td>
-                <td className="px-3 py-2">{r.tenVatTu || '—'}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.maKho || '—'}</td>
-                <td className="px-3 py-2 whitespace-nowrap font-mono">{r.maLo || '—'}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{formatDateVi(r.hanDung)}</td>
-                <td className="px-3 py-2 whitespace-nowrap">
+                <td className="px-3 py-2 font-mono" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.maVatTu}</td>
+                <td className="px-3 py-2" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.tenVatTu || '—'}</td>
+                <td className="px-3 py-2" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.maKho || '—'}</td>
+                <td className="px-3 py-2 font-mono" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.maLo || '—'}</td>
+                <td className="px-3 py-2" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatDateVi(r.hanDung)}</td>
+                <td className="px-3 py-2" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {r.daysLeft === null ? (
                     <span className="text-gray-400">Không rõ</span>
                   ) : r.daysLeft < 0 ? (
@@ -344,8 +428,8 @@ export default function ExpiryStockTab() {
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right font-medium whitespace-nowrap">{r.tonCuoi.toLocaleString('vi-VN')}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.dvt || '—'}</td>
+                <td className="px-3 py-2 text-center font-medium" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.tonCuoi.toLocaleString('vi-VN')}</td>
+                <td className="px-3 py-2 text-center" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.dvt || '—'}</td>
               </tr>
             ))}
           </tbody>

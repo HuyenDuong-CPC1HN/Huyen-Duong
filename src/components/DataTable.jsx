@@ -170,9 +170,10 @@ export function ResizeHandle({ colKey, setWidth }) {
   return (
     <span
       onMouseDown={onMouseDown}
-      className="absolute right-0 top-0 h-full w-2 cursor-col-resize select-none z-10 flex items-center justify-center group"
+      title="Kéo để đổi độ rộng cột"
+      className="absolute -right-1.5 top-0 h-full w-4 cursor-col-resize select-none z-10 flex items-center justify-center group"
     >
-      <span className="w-px h-4 bg-gray-300 group-hover:bg-blue-400 transition-colors" />
+      <span className="w-0.5 h-4 bg-gray-300 group-hover:bg-blue-400 group-hover:h-full transition-colors" />
     </span>
   )
 }
