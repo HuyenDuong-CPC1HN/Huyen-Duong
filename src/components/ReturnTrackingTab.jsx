@@ -135,7 +135,7 @@ export default function ReturnTrackingTab({ type }) {
           </div>
         </header>
 
-        <div className="sheet-tab-split">
+        <div className="sheet-tab-split sheet-tab-split--30-70">
           {/* Left: Năm > Tháng */}
           <div className="sheet-tab-col sheet-tab-col--left">
             <div className="report-section">
