@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
 import { ChevronDown, ChevronRight, Plus, Trash2, FileDown, Pencil, FolderOpen, Eye } from 'lucide-react'
 import DamagedGoodsRecordForm from './DamagedGoodsRecordForm'
+import DamagedGoodsKhoAForm from './DamagedGoodsKhoAForm'
 import DamagedGoodsRecordView from './DamagedGoodsRecordView'
-import { exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh } from '../utils/exportDamagedGoods'
+import { exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh, exportDamagedGoodsKhoAXuLy, exportDamagedGoodsKhoAXacMinh } from '../utils/exportDamagedGoods'
 
 const STORAGE_KEY = 'damaged_goods_records'
 
@@ -17,7 +18,7 @@ function readAllRecords() {
 }
 function writeAllRecords(records) { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)) }
 
-const TYPE_LABEL = type => (type === 'khoC' ? 'Kho C' : 'Kho DTP')
+const TYPE_LABEL = type => ({ khoC: 'Kho C', khoDTP: 'Kho DTP', khoA: 'Kho A' })[type] || type
 const MONTH_LABELS = ['', 'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12']
 
 function formatDateVi(iso) {
@@ -89,8 +90,8 @@ export default function DamagedGoodsTrackingTab({ type }) {
   const handleExport = async (record, kind) => {
     setExportingId(`${record.id}_${kind}`)
     try {
-      if (kind === 'xuLy') await exportDamagedGoodsXuLy(record)
-      else await exportDamagedGoodsXacMinh(record)
+      if (kind === 'xuLy') await (record.entity === 'khoA' ? exportDamagedGoodsKhoAXuLy(record) : exportDamagedGoodsXuLy(record))
+      else await (record.entity === 'khoA' ? exportDamagedGoodsKhoAXacMinh(record) : exportDamagedGoodsXacMinh(record))
       if (record.status !== 'exported') {
         persist(allRecords.map(r => (r.id === record.id ? { ...r, status: 'exported' } : r)))
       }
@@ -104,16 +105,27 @@ export default function DamagedGoodsTrackingTab({ type }) {
   const viewingRecord = viewingId ? allRecords.find(r => r.id === viewingId) : null
 
   if (formState) {
+    const record = formState === 'new' ? null : formState
     return (
       <div className="sheet-tab">
-        <DamagedGoodsRecordForm
-          type={type}
-          year={selected.year}
-          month={selected.month}
-          record={formState === 'new' ? null : formState}
-          onSave={handleSave}
-          onCancel={() => setFormState(null)}
-        />
+        {type === 'khoA' ? (
+          <DamagedGoodsKhoAForm
+            year={selected.year}
+            month={selected.month}
+            record={record}
+            onSave={handleSave}
+            onCancel={() => setFormState(null)}
+          />
+        ) : (
+          <DamagedGoodsRecordForm
+            type={type}
+            year={selected.year}
+            month={selected.month}
+            record={record}
+            onSave={handleSave}
+            onCancel={() => setFormState(null)}
+          />
+        )}
       </div>
     )
   }

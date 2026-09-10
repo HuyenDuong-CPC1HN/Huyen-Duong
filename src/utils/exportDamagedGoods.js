@@ -1,5 +1,6 @@
 import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
+import { fillBienBanXuLy as fillBienBanXuLyCanDate } from './exportExpiryDisposal.js'
 
 // Xuất "Biên bản Xử lý sản phẩm" (Excel) + "Biên bản Xác minh tình trạng hàng hoá" (Word) cho hàng lỗi,
 // bể vỡ khi vận chuyển — MỖI KHO CÓ MẪU RIÊNG (Kho C = CPC1HN, Kho LGT = UPHARMA, 2 pháp nhân khác nhau,
@@ -266,6 +267,63 @@ export async function exportDamagedGoodsXuLy(record) {
   const bytes = await fillBienBanXuLy(templateBuffer, items, { location: record.location || '' })
   const label = new Date(record.processedAt || Date.now()).toLocaleDateString('vi-VN').replaceAll('/', '-')
   triggerDownloadBytes(bytes, `BBXL_HangLoi_${labelOf(record.entity)}_${label}.xlsx`)
+}
+
+// ---------- Kho A (hàng huỷ tạo từ phiếu xuất kho PDF) ----------
+
+// Kho A dùng CHUNG mẫu + hàm điền với "hàng cận date" (exportExpiryDisposal.js): file mẫu thật do người
+// dùng gửi cho Kho A có đúng bố cục 10 cột (không có cột "Kho" riêng như 2 kho trên), cùng định dạng ngày
+// "TP.Hồ Chí Minh ngày..." và cùng dòng "Xuất xử lý" mặc định - nên không cần thêm file mẫu .xlsx mới.
+// "Kho mặc định 020110" điền vào ô "3. Địa điểm xử lý:" của mẫu (diaDiem), không phải cột trong bảng.
+const KHO_A_BBXL_TEMPLATE_URL = '/templates/BIEN_BAN_XU_LY_CAN_DATE.xlsx'
+let khoABbxlTemplateBuffer = null
+async function loadKhoABbxlTemplateBuffer() {
+  if (khoABbxlTemplateBuffer) return khoABbxlTemplateBuffer
+  const res = await fetch(KHO_A_BBXL_TEMPLATE_URL)
+  if (!res.ok) throw new Error('Không tải được file mẫu Biên bản Xử lý.')
+  khoABbxlTemplateBuffer = await res.arrayBuffer()
+  return khoABbxlTemplateBuffer
+}
+
+// record: { entity: 'khoA', processedAt (ISO), items: [{maHang, tenHang, soLo, hanDung, dvt, soLuong, quyCach}] }
+export async function exportDamagedGoodsKhoAXuLy(record) {
+  const items = record.items || []
+  if (items.length === 0) throw new Error('Chưa có mặt hàng nào trong biên bản.')
+  const templateBuffer = await loadKhoABbxlTemplateBuffer()
+  const bytes = await fillBienBanXuLyCanDate(templateBuffer, items, { diaDiem: 'Kho 020110' })
+  const label = new Date(record.processedAt || Date.now()).toLocaleDateString('vi-VN').replaceAll('/', '-')
+  triggerDownloadBytes(bytes, `BBXL_HangHuy_KhoA_${label}.xlsx`)
+}
+
+// Kho A dùng CHUNG mẫu Xác minh với "hàng cận date" luôn (BIEN_BAN_XAC_MINH_CAN_DATE.docx) — xác nhận qua
+// 1 file ví dụ thật (CPC1HN_XÁC MINH_XK2621.00652.docx) khớp byte-for-byte về cấu trúc: "3. Địa điểm: Tại
+// CN.Hồ Chí Minh" là chữ CỐ ĐỊNH có sẵn trong mẫu (không phải đặt theo "Kho 020110" như ô "Địa điểm xử lý"
+// bên Excel), và bảng có cột "Kho" riêng luôn = "020110" cho mọi dòng (không phải Kho 020110 - không có
+// tiền tố "Kho" như bên Excel).
+const KHO_A_XACMINH_TEMPLATE_URL = '/templates/BIEN_BAN_XAC_MINH_CAN_DATE.docx'
+
+export async function exportDamagedGoodsKhoAXacMinh(record) {
+  const items = record.items || []
+  if (items.length === 0) throw new Error('Chưa có mặt hàng nào trong biên bản.')
+  const { ngay, thang, nam } = todayParts(record.processedAt ? new Date(record.processedAt) : new Date())
+  const data = {
+    ngay, thang, nam, gio: '08h30’',
+    items: items.map((it, i) => ({
+      stt: i + 1,
+      maSanPham: it.maHang || '',
+      tenHang: it.tenHang || '',
+      soLo: it.soLo || '',
+      hanDung: formatDateVi(it.hanDung),
+      kho: '020110',
+      dvt: it.dvt || '',
+      soLuong: it.soLuong ?? '',
+      quyCach: it.quyCach || '',
+      tinhTrang: 'Hàng cận date',
+    })),
+  }
+  const blob = await fillXacMinhTemplate(KHO_A_XACMINH_TEMPLATE_URL, data)
+  const label = new Date(record.processedAt || Date.now()).toLocaleDateString('vi-VN').replaceAll('/', '-')
+  triggerDownloadBlob(blob, `XacMinh_HangHuy_KhoA_${label}.docx`)
 }
 
 export async function exportDamagedGoodsXacMinh(record) {

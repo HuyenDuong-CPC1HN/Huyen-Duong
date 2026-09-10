@@ -3,13 +3,15 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import PizZip from 'pizzip'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fillBienBanXuLy, todayParts, exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh } from '../exportDamagedGoods'
+import { fillBienBanXuLy, todayParts, exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh, exportDamagedGoodsKhoAXuLy, exportDamagedGoodsKhoAXacMinh } from '../exportDamagedGoods'
 
 const TPL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../public/templates')
 const XULY_C_PATH = `${TPL_DIR}/BIEN_BAN_XU_LY_HANG_LOI_KHO_C.xlsx`
 const XULY_DTP_PATH = `${TPL_DIR}/BIEN_BAN_XU_LY_HANG_LOI_KHO_LGT.xlsx`
 const XACMINH_C_PATH = `${TPL_DIR}/BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx`
 const XACMINH_DTP_PATH = `${TPL_DIR}/BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx`
+const XULY_CAN_DATE_PATH = `${TPL_DIR}/BIEN_BAN_XU_LY_CAN_DATE.xlsx`
+const XACMINH_CAN_DATE_PATH = `${TPL_DIR}/BIEN_BAN_XAC_MINH_CAN_DATE.docx`
 
 function loadBuffer(path) {
   const buf = readFileSync(path)
@@ -139,5 +141,113 @@ describe('exportDamagedGoods — Biên bản Xác minh (Word)', () => {
   it('exportDamagedGoodsXuLy + Xác minh cùng báo lỗi rõ ràng khi chưa có mặt hàng nào', async () => {
     await expect(exportDamagedGoodsXuLy({ entity: 'khoC', items: [] })).rejects.toThrow(/chưa có mặt hàng/i)
     await expect(exportDamagedGoodsXacMinh({ entity: 'khoC', items: [] })).rejects.toThrow(/chưa có mặt hàng/i)
+  })
+})
+
+describe('exportDamagedGoodsKhoAXuLy — dùng chung mẫu + hàm điền với hàng cận date (10 cột, không có cột Kho)', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  function stubFetchCanDateTemplate() {
+    globalThis.fetch = vi.fn(async () => {
+      const buf = readFileSync(XULY_CAN_DATE_PATH)
+      return { ok: true, arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) }
+    })
+  }
+
+  it('điền đúng dữ liệu từ phiếu xuất kho vào bảng, "Địa điểm xử lý" cố định "Kho 020110", Ghi chú cố định "Hàng cận date"', async () => {
+    stubFetchCanDateTemplate()
+    const originalCreateObjectURL = URL.createObjectURL
+    URL.createObjectURL = vi.fn(() => 'blob:1')
+    URL.revokeObjectURL = vi.fn()
+
+    let capturedBytes
+    const originalClick = HTMLAnchorElement.prototype.click
+    HTMLAnchorElement.prototype.click = vi.fn()
+    try {
+      const record = {
+        entity: 'khoA',
+        processedAt: '2026-08-29T00:00:00.000Z',
+        items: [
+          { maHang: 'C02161', tenHang: 'Combo Aricamun', soLo: '010', hanDung: '2026-08-26', dvt: 'BO', soLuong: 14, quyCach: '' },
+        ],
+      }
+      await exportDamagedGoodsKhoAXuLy(record)
+      const blobArg = URL.createObjectURL.mock.calls[0][0]
+      capturedBytes = new Uint8Array(await blobArg.arrayBuffer())
+    } finally {
+      HTMLAnchorElement.prototype.click = originalClick
+      URL.createObjectURL = originalCreateObjectURL
+    }
+
+    const cell = readCells(capturedBytes)
+    expect(cell(18, 'B')).toBe('C02161')
+    expect(cell(18, 'C')).toBe('Combo Aricamun')
+    expect(cell(18, 'D')).toBe('010')
+    expect(cell(18, 'E')).toBe('26/08/2026')
+    expect(cell(18, 'F')).toBe('BO') // không có cột Kho ở mẫu này - F là ĐVT, khác exportDamagedGoodsXuLy (khoC/DTP)
+    expect(cell(18, 'G')).toBe('14')
+    expect(cell(18, 'H')).toBe('14')
+    expect(cell(18, 'J')).toBe('Hàng cận date') // "Tình trạng cố định" — không lấy từ record, luôn cố định
+
+    const sheetXml = sheetXmlOf(capturedBytes)
+    const sstXml = sharedStringsOf(capturedBytes)
+    expect(sstXml).toContain('Kho 020110')
+    expect(sheetXml).toBeTruthy()
+  })
+
+  it('báo lỗi rõ ràng khi chưa có mặt hàng nào', async () => {
+    await expect(exportDamagedGoodsKhoAXuLy({ entity: 'khoA', items: [] })).rejects.toThrow(/chưa có mặt hàng/i)
+  })
+})
+
+describe('exportDamagedGoodsKhoAXacMinh — dùng chung mẫu Xác minh với hàng cận date (xác nhận qua 1 file ví dụ thật)', () => {
+  const originalCreateObjectURL = URL.createObjectURL
+  const originalRevokeObjectURL = URL.revokeObjectURL
+  let savedBlobs
+
+  beforeEach(() => { savedBlobs = [] })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    URL.createObjectURL = originalCreateObjectURL
+    URL.revokeObjectURL = originalRevokeObjectURL
+  })
+
+  function stubDownloads() {
+    URL.createObjectURL = vi.fn((blob) => { savedBlobs.push(blob); return `blob:${savedBlobs.length}` })
+    URL.revokeObjectURL = vi.fn()
+  }
+  function stubFetchXacMinhCanDate() {
+    globalThis.fetch = vi.fn(async () => {
+      const buf = readFileSync(XACMINH_CAN_DATE_PATH)
+      return { ok: true, arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) }
+    })
+  }
+  function docPlainText(blobBytes) {
+    const xml = new PizZip(blobBytes).file('word/document.xml').asText()
+    return xml.replace(/<w:tab\/>/g, '\t').replace(/<\/w:p>/g, '\n').replace(/<\/w:tr>/g, '\n').replace(/<\/w:tc>/g, ' | ').replace(/<[^>]+>/g, '')
+  }
+
+  it('điền đúng dữ liệu, cột "Kho" luôn "020110" (không có tiền tố "Kho"), "Tình trạng" cố định "Hàng cận date", "3. Địa điểm" giữ nguyên chữ có sẵn của mẫu ("Tại CN.Hồ Chí Minh")', async () => {
+    stubDownloads()
+    stubFetchXacMinhCanDate()
+    const record = {
+      entity: 'khoA',
+      processedAt: '2026-08-29T00:00:00.000Z',
+      items: [
+        { maHang: 'C02161', tenHang: 'Combo Aricamun', soLo: '010', hanDung: '2026-08-26', dvt: 'BO', soLuong: 14, quyCach: '' },
+      ],
+    }
+    await exportDamagedGoodsKhoAXacMinh(record)
+    const text = docPlainText(new Uint8Array(await savedBlobs[0].arrayBuffer()))
+    expect(text).toContain('3. Địa điểm: Tại CN.Hồ Chí Minh') // chữ cố định của mẫu, không đổi theo "Kho 020110"
+    expect(text).toContain('C02161')
+    expect(text).toContain('Combo Aricamun')
+    expect(text).toContain('26/08/2026')
+    expect(text).toMatch(/010\s*\|\s*26\/08\/2026\s*\|\s*020110/) // cột Kho ngay sau Hạn dùng, đúng giá trị "020110"
+    expect(text).toContain('Hàng cận date') // Tình trạng cố định
+  })
+
+  it('báo lỗi rõ ràng khi chưa có mặt hàng nào', async () => {
+    await expect(exportDamagedGoodsKhoAXacMinh({ entity: 'khoA', items: [] })).rejects.toThrow(/chưa có mặt hàng/i)
   })
 })

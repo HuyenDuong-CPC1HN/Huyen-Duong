@@ -55,6 +55,7 @@ const NAV = [
     children: [
       { id: 'hangHuyC', label: 'Kho C', icon: Truck },
       { id: 'hangHuyDTP', label: 'Kho DTP', icon: Package },
+      { id: 'hangHuyA', label: 'Kho A', icon: PackageX },
     ],
   },
   { id: 'guilen8n', label: 'Gửi lên n8n', icon: Send },
@@ -73,6 +74,7 @@ const BREADCRUMB = {
   traHangDTP: ['Trang chủ', 'Theo dõi nhập trả lại', 'Đơn DTP'],
   hangHuyC:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho C'],
   hangHuyDTP: ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho DTP'],
+  hangHuyA:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho A'],
   guilen8n: ['Trang chủ', 'Gửi lên n8n'],
 }
 
@@ -432,6 +434,7 @@ function AppContent({ user }) {
           {active === 'traHangDTP' && <ReturnTrackingTab type="donDTP" />}
           {active === 'hangHuyC'   && <DamagedGoodsTrackingTab type="khoC" />}
           {active === 'hangHuyDTP' && <DamagedGoodsTrackingTab type="khoDTP" />}
+          {active === 'hangHuyA'   && <DamagedGoodsTrackingTab type="khoA" />}
           {active === 'guilen8n' && <N8nWebhookForm />}
         </main>
       </div>

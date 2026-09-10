@@ -42,16 +42,25 @@ export default function DamagedGoodsRecordView({ record, onClose, onEdit, onExpo
           <div className="report-section">
             <div className="report-section-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 16 }}>
               <InfoField label="Ngày lập biên bản" value={formatDateVi(record.processedAt)} />
-              <InfoField label="Địa điểm lập biên bản" value={record.location} />
-              <InfoField label="Lý do" value={record.reason} />
-              <InfoField label="Đại diện kho" value={record.repWarehouse} />
-              <InfoField label="Đại diện kế toán" value={record.repAccounting} />
+              {record.entity === 'khoA' ? (
+                <>
+                  <InfoField label="File phiếu xuất kho" value={record.sourceFileName} />
+                  <InfoField label="Địa điểm xử lý" value="Kho 020110" />
+                </>
+              ) : (
+                <>
+                  <InfoField label="Địa điểm lập biên bản" value={record.location} />
+                  <InfoField label="Lý do" value={record.reason} />
+                  <InfoField label="Đại diện kho" value={record.repWarehouse} />
+                  <InfoField label="Đại diện kế toán" value={record.repAccounting} />
+                </>
+              )}
             </div>
           </div>
 
           <div className="report-section">
             <div className="report-section-trigger" style={{ cursor: 'default' }}>
-              <span className="report-section-title">Hàng hoá lỗi, bể vỡ</span>
+              <span className="report-section-title">{record.entity === 'khoA' ? 'Hàng huỷ' : 'Hàng hoá lỗi, bể vỡ'}</span>
               <span className="report-section-count">{(record.items || []).length} mặt hàng</span>
             </div>
             <div className="report-section-content" style={{ overflowX: 'auto' }}>
@@ -61,7 +70,10 @@ export default function DamagedGoodsRecordView({ record, onClose, onEdit, onExpo
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      {['Mã hàng', 'Tên hàng', 'Số lô', 'Hạn dùng', 'Kho', 'ĐVT', 'Số lượng', 'Quy cách', 'Nguyên nhân / Ghi chú'].map(h => (
+                      {(record.entity === 'khoA'
+                        ? ['Mã hàng', 'Tên hàng', 'Số lô', 'Hạn dùng', 'ĐVT', 'Số lượng', 'Quy cách']
+                        : ['Mã hàng', 'Tên hàng', 'Số lô', 'Hạn dùng', 'Kho', 'ĐVT', 'Số lượng', 'Quy cách', 'Nguyên nhân / Ghi chú']
+                      ).map(h => (
                         <th key={h} className="px-2 py-2 text-left text-gray-500 font-semibold whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -73,11 +85,11 @@ export default function DamagedGoodsRecordView({ record, onClose, onEdit, onExpo
                         <td className="px-2 py-1.5">{it.tenHang || '—'}</td>
                         <td className="px-2 py-1.5">{it.soLo || '—'}</td>
                         <td className="px-2 py-1.5">{it.hanDung || '—'}</td>
-                        <td className="px-2 py-1.5">{it.kho || '—'}</td>
+                        {record.entity !== 'khoA' && <td className="px-2 py-1.5">{it.kho || '—'}</td>}
                         <td className="px-2 py-1.5">{it.dvt || '—'}</td>
                         <td className="px-2 py-1.5">{it.soLuong || '—'}</td>
                         <td className="px-2 py-1.5">{it.quyCach || '—'}</td>
-                        <td className="px-2 py-1.5">{it.ghiChu || '—'}</td>
+                        {record.entity !== 'khoA' && <td className="px-2 py-1.5">{it.ghiChu || '—'}</td>}
                       </tr>
                     ))}
                   </tbody>
