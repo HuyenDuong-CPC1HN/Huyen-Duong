@@ -328,6 +328,24 @@ describe('parseGoodsReceipt', () => {
     expect(() => readActualScanRows(buffer)).toThrow(/Mã SP/)
   })
 
+  it('readActualScanRows: cũng đọc được khi cột mã hàng viết đầy đủ "Mã sản phẩm" thay vì viết tắt "Mã SP" (đợt xuất khác từ website)', () => {
+    const buffer = makeWorkbook([
+      { 'Mã sản phẩm': 'A01252', 'Sản phẩm': 'Arimenus - Hộp 10 ống 1ml', 'Số lô': '011225', 'Số lượng': 660, Kho: '020101' },
+    ])
+    const rows = readActualScanRows(buffer)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ maHang: 'A01252', soLo: '011225', soLuong: 660 })
+  })
+
+  it('readActualScanRows: cũng đọc được cột tên hàng khi đặt tên "Tên sản phẩm" thay vì "Sản phẩm" (vd file Kho LGT — trước đây bị bỏ trống)', () => {
+    const buffer = makeWorkbook([
+      { 'Mã SP': 'N01041', 'Tên sản phẩm': 'Neo Tiêu Độc - Hộp 4 vỉ x 5 ống 10ml', 'Số lô': '010126', 'Số lượng': 60, Kho: '020101' },
+    ])
+    const rows = readActualScanRows(buffer)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ maHang: 'N01041', tenHang: 'Neo Tiêu Độc - Hộp 4 vỉ x 5 ống 10ml', soLo: '010126', soLuong: 60 })
+  })
+
   it('mergeActualScanRows: cộng dồn nhiều dòng quét cùng Mã hàng + Số lô', () => {
     const merged = mergeActualScanRows([
       { maHang: 'N00845', soLo: '18726H01', soLuong: 1200 },

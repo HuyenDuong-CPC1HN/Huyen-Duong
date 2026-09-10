@@ -455,10 +455,14 @@ export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [] }) {
   }
 }
 
-const ACTUAL_SCAN_HEADER_CANDIDATES = new Set(['Mã SP', 'Mã sp'])
+// Cột mã hàng trong file quét thực tế đã thấy 2 tên khác nhau tuỳ đợt xuất từ website: "Mã SP" (viết tắt)
+// và "Mã sản phẩm" (viết đầy đủ) — chấp nhận cả 2, không chỉ 1 tên cố định.
+const ACTUAL_SCAN_HEADER_CANDIDATES = new Set(['Mã SP', 'Mã sp', 'Mã sản phẩm', 'Mã Sản phẩm', 'Mã Sản Phẩm'])
 const ACTUAL_SCAN_ALIASES = {
-  maHang: ['Mã SP', 'Mã sp'],
-  tenHang: ['Sản phẩm'],
+  maHang: ['Mã SP', 'Mã sp', 'Mã sản phẩm', 'Mã Sản phẩm', 'Mã Sản Phẩm'],
+  // Cột tên hàng cũng đã thấy 2 tên khác nhau tuỳ đợt xuất/tuỳ kho: "Sản phẩm" và "Tên sản phẩm" (vd Kho
+  // LGT) — chấp nhận cả 2, không chỉ 1 tên cố định.
+  tenHang: ['Sản phẩm', 'Tên sản phẩm', 'Tên Sản phẩm', 'Tên Sản Phẩm'],
   soLo: ['Số lô'],
   soLuong: ['Số lượng'],
 }
@@ -492,7 +496,7 @@ export function readActualScanRows(arrayBuffer) {
   const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
   const headerRowIndex = grid.findIndex(row => row.some(cell => ACTUAL_SCAN_HEADER_CANDIDATES.has(normalizeHeader(cell))))
   if (headerRowIndex === -1) {
-    throw new Error('Không tìm thấy cột "Mã SP" trong file Excel quét thực tế.')
+    throw new Error('Không tìm thấy cột "Mã SP" hoặc "Mã sản phẩm" trong file Excel quét thực tế.')
   }
 
   const fieldByCol = grid[headerRowIndex].map(cell => resolveActualScanField(cell))
