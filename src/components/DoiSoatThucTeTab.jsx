@@ -157,10 +157,22 @@ function matchesFilters(row, filters) {
   })
 }
 
-function ResultTable({ title, rows }) {
+// "lech" là 1 ô gộp chung 2 trạng thái thật ("thiếu" + "thừa") trên thẻ tổng hợp, nên khi lọc theo ô này
+// phải khớp CẢ HAI, không phải so trực tiếp bằng "lech" (không có trangThai nào tên vậy).
+function matchesStatusFilter(row, statusFilter) {
+  if (!statusFilter) return true
+  if (statusFilter === 'lech') return row.trangThai === 'thieu' || row.trangThai === 'thua'
+  return row.trangThai === statusFilter
+}
+
+function ResultTable({ title, rows, statusFilter }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const hasFilter = Object.values(filters).some(v => v.trim())
-  const filteredRows = useMemo(() => rows.filter(row => matchesFilters(row, filters)), [rows, filters])
+  const hasAnyFilter = hasFilter || !!statusFilter
+  const filteredRows = useMemo(
+    () => rows.filter(row => matchesFilters(row, filters) && matchesStatusFilter(row, statusFilter)),
+    [rows, filters, statusFilter],
+  )
   const setFilter = (key, value) => setFilters(current => ({ ...current, [key]: value }))
 
   return (
@@ -171,7 +183,7 @@ function ResultTable({ title, rows }) {
           {title}
         </span>
         <span className="text-xs text-gray-400">
-          {hasFilter ? `${filteredRows.length}/${rows.length} dòng` : `${rows.length} dòng`}
+          {hasAnyFilter ? `${filteredRows.length}/${rows.length} dòng` : `${rows.length} dòng`}
         </span>
         {hasFilter && (
           <button type="button" onClick={() => setFilters(EMPTY_FILTERS)} className="text-xs text-teal-600 hover:text-teal-800 hover:underline">
@@ -226,7 +238,7 @@ function ResultTable({ title, rows }) {
                 </tr>
               ))}
               {filteredRows.length === 0 && (
-                <tr><td colSpan={7} style={padCell} className="text-center text-gray-400">{hasFilter ? 'Không tìm thấy dòng nào khớp' : 'Không có dữ liệu'}</td></tr>
+                <tr><td colSpan={7} style={padCell} className="text-center text-gray-400">{hasAnyFilter ? 'Không tìm thấy dòng nào khớp' : 'Không có dữ liệu'}</td></tr>
               )}
             </tbody>
           </table>
@@ -236,12 +248,20 @@ function ResultTable({ title, rows }) {
   )
 }
 
-function Tile({ label, count, className }) {
+// Bấm vào 1 thẻ để lọc các bảng bên dưới chỉ còn dòng đúng trạng thái đó; bấm lại đúng thẻ đang chọn để
+// bỏ lọc. Viền màu (ring) nhấn thẻ đang được chọn, phân biệt với 3 thẻ còn lại.
+function Tile({ label, count, className, active, onClick }) {
   return (
-    <div style={padCard} className="flex flex-col gap-1 bg-white rounded-2xl border border-gray-200 shadow-sm">
+    <button
+      type="button"
+      onClick={onClick}
+      style={padCard}
+      className={`flex flex-col gap-1 bg-white rounded-2xl border shadow-sm text-left transition-all hover:border-gray-300
+        ${active ? 'border-teal-400 ring-2 ring-teal-200' : 'border-gray-200'}`}
+    >
       <div className={`text-3xl font-bold tabular-nums ${className}`}>{count}</div>
       <div className="text-[11px] uppercase tracking-wide text-gray-400">{label}</div>
-    </div>
+    </button>
   )
 }
 
@@ -252,6 +272,7 @@ export default function DoiSoatThucTeTab() {
   const [results, setResults] = useState(null)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
+  const [statusFilter, setStatusFilter] = useState(null)
 
   const batch = batches.find(b => b.id === selectedBatchId) || null
 
@@ -311,6 +332,7 @@ export default function DoiSoatThucTeTab() {
         khoLgt: reconcileActualVsInvoice(invoiceKhoLgt, mergeActualScanRows(rawLgt)),
         khoSo: reconcileActualVsInvoice(invoiceKhoSo, mergeActualScanRows(rawSo)),
       })
+      setStatusFilter(null)
       if (fileErrors.length > 0) setError(`Không đọc được: ${fileErrors.join('; ')}`)
     } catch (err) {
       setError(err.message || 'Không chạy được đối soát.')
@@ -357,7 +379,7 @@ export default function DoiSoatThucTeTab() {
           <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Chuyến hàng đã lưu</label>
           <select
             value={selectedBatchId || ''}
-            onChange={(e) => { setSelectedBatchId(e.target.value); setResults(null) }}
+            onChange={(e) => { setSelectedBatchId(e.target.value); setResults(null); setStatusFilter(null) }}
             style={padSelect}
             className="w-full rounded-xl text-sm border border-gray-200 bg-white text-gray-700 hover:border-teal-300 focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
           >
@@ -396,15 +418,33 @@ export default function DoiSoatThucTeTab() {
 
       {results && (
         <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {tiles.map(tile => (
-              <Tile key={tile.key} label={tile.label} count={tile.count} className={tile.className} />
-            ))}
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {tiles.map(tile => (
+                <Tile
+                  key={tile.key}
+                  label={tile.label}
+                  count={tile.count}
+                  className={tile.className}
+                  active={statusFilter === tile.key}
+                  onClick={() => setStatusFilter(current => (current === tile.key ? null : tile.key))}
+                />
+              ))}
+            </div>
+            {statusFilter && (
+              <p className="text-xs text-gray-400">
+                Đang lọc theo trạng thái: <span className="font-semibold text-gray-600">{tiles.find(t => t.key === statusFilter)?.label}</span>
+                {' — '}
+                <button type="button" onClick={() => setStatusFilter(null)} className="text-teal-600 hover:text-teal-800 hover:underline">
+                  Bỏ lọc
+                </button>
+              </p>
+            )}
           </div>
 
-          <ResultTable title="Kho C" rows={results.khoC} />
-          <ResultTable title="Kho LGT" rows={results.khoLgt} />
-          <ResultTable title="Kho SO" rows={results.khoSo} />
+          <ResultTable title="Kho C" rows={results.khoC} statusFilter={statusFilter} />
+          <ResultTable title="Kho LGT" rows={results.khoLgt} statusFilter={statusFilter} />
+          <ResultTable title="Kho SO" rows={results.khoSo} statusFilter={statusFilter} />
         </div>
       )}
     </div>
