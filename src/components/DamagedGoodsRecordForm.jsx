@@ -3,6 +3,8 @@ import { Plus, Trash2, X } from 'lucide-react'
 
 const DEFAULT_REASON = 'Hàng lỗi, bể vỡ trong quá trình vận chuyển.'
 const DEFAULT_LOCATION = 'Kho CN Hồ Chí Minh'
+const DEFAULT_REP_WAREHOUSE = 'Dương Thị Ngọc Huyền'
+const DEFAULT_REP_ACCOUNTING = 'Lưu Thị Thuỳ'
 
 const EMPTY_ITEM = { maHang: '', tenHang: '', soLo: '', hanDung: '', kho: '', dvt: '', soLuong: '', quyCach: '', ghiChu: '' }
 
@@ -83,8 +85,8 @@ export default function DamagedGoodsRecordForm({ type, year, month, record, onSa
   const [processedAt, setProcessedAt] = useState(record?.processedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10))
   const [location, setLocation] = useState(record?.location ?? DEFAULT_LOCATION)
   const [reason, setReason] = useState(record?.reason ?? DEFAULT_REASON)
-  const [repWarehouse, setRepWarehouse] = useState(record?.repWarehouse || '')
-  const [repAccounting, setRepAccounting] = useState(record?.repAccounting || '')
+  const [repWarehouse, setRepWarehouse] = useState(record?.repWarehouse || DEFAULT_REP_WAREHOUSE)
+  const [repAccounting, setRepAccounting] = useState(record?.repAccounting || DEFAULT_REP_ACCOUNTING)
   const [items, setItems] = useState(record?.items?.length ? record.items : [{ ...EMPTY_ITEM }])
 
   const handleSubmit = (e) => {
