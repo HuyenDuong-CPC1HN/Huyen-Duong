@@ -113,6 +113,14 @@ function setCellNumberForce(doc, row, col, value) {
   ensureChild(doc, cell, 'v').textContent = String(value)
 }
 
+function shiftRowTo(row, newRowNum) {
+  row.setAttribute('r', String(newRowNum))
+  row.querySelectorAll('c').forEach(c => {
+    const col = c.getAttribute('r').match(/^[A-Z]+/)[0]
+    c.setAttribute('r', `${col}${newRowNum}`)
+  })
+}
+
 // Nhân bản dòng dữ liệu mẫu (đã có sẵn style/border) để thêm dòng khi số hàng > 1, dời phần chân xuống
 // theo. Trả về số dòng lệch (0 nếu không cần thêm dòng nào).
 function ensureDataRows(doc, rowCount) {
@@ -133,6 +141,19 @@ function ensureDataRows(doc, rowCount) {
   }
   const firstFooterRow = footerRows[0]
 
+  // Mẫu có SẴN các dòng trống phía sau phần chân (vd r=24..89, chỉ để canh đủ 1 trang in) — lấy sẵn NODE
+  // của chúng luôn ở đây (cùng lý do với footerRows ở trên: phải lấy TRƯỚC khi có node nào bị đổi số "r",
+  // tránh querySelector tra nhầm). Nếu bỏ qua không dời các dòng trống này theo, khi cần thêm > 5 dòng dữ
+  // liệu (extra > 5), số "r" mới của dòng dữ liệu/dòng chân sẽ ĐỤNG TRÙNG với số "r" gốc của các dòng trống
+  // này (cùng nằm trong khoảng 24-89) — 2 <row> khác nhau cùng "r" khiến Excel chỉ hiển thị 1 trong 2 (tuỳ
+  // dòng), làm mất/trống nội dung phần chân hoặc vài dòng dữ liệu cuối — đây chính là lỗi thật đã gặp khi
+  // xuất biên bản có > 6 mặt hàng (vd Kho A, phiếu xuất kho 21 dòng) khiến mục "7. Các thành phần tham gia
+  // hủy" mất chữ.
+  const trailingRows = []
+  for (let node = footerRows[footerRows.length - 1].nextElementSibling; node; node = node.nextElementSibling) {
+    trailingRows.push(node)
+  }
+
   for (let i = 0; i < extra; i += 1) {
     const newRowNum = DATA_ROW_TEMPLATE + 1 + i
     const clone = templateRow.cloneNode(true)
@@ -145,14 +166,9 @@ function ensureDataRows(doc, rowCount) {
   }
 
   // Dời các dòng chân — dùng đúng node đã lấy sẵn ở trên, không tra lại theo r="..." nữa.
-  footerRows.forEach((row, i) => {
-    const newRowNum = FOOTER_FIRST_ROW_TEMPLATE + i + extra
-    row.setAttribute('r', String(newRowNum))
-    row.querySelectorAll('c').forEach(c => {
-      const col = c.getAttribute('r').match(/^[A-Z]+/)[0]
-      c.setAttribute('r', `${col}${newRowNum}`)
-    })
-  })
+  footerRows.forEach((row, i) => shiftRowTo(row, FOOTER_FIRST_ROW_TEMPLATE + i + extra))
+  // Dời tiếp các dòng trống phía sau, theo đúng số lệch "extra" - giữ nguyên thứ tự tương đối với nhau.
+  trailingRows.forEach((row) => shiftRowTo(row, Number(row.getAttribute('r')) + extra))
 
   const newSignatureRow = SIGNATURE_MERGE_ROW_TEMPLATE + extra
   doc.querySelectorAll('mergeCell').forEach(mc => {

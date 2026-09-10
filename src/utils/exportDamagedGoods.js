@@ -112,6 +112,14 @@ function setCellNumberForce(doc, row, col, value) {
   ensureChild(doc, cell, 'v').textContent = String(value)
 }
 
+function shiftRowTo(row, newRowNum) {
+  row.setAttribute('r', String(newRowNum))
+  row.querySelectorAll('c').forEach(c => {
+    const col = c.getAttribute('r').match(/^[A-Z]+/)[0]
+    c.setAttribute('r', `${col}${newRowNum}`)
+  })
+}
+
 // Nhân bản dòng dữ liệu mẫu để thêm dòng khi số hàng > 1, dời phần chân xuống theo. Lấy sẵn ĐÚNG NODE của
 // các dòng chân TRƯỚC khi nhân bản dòng nào — tránh đúng lỗi "dòng nhân bản tạm trùng số dòng với dòng
 // chân gốc, khiến bước dời chân tra lại theo r=... bắt nhầm" đã gặp và sửa ở exportExpiryDisposal.js.
@@ -127,6 +135,15 @@ function ensureDataRows(doc, rowCount) {
   }
   const firstFooterRow = footerRows[0]
 
+  // Mẫu có sẵn các dòng trống phía sau phần chân (r=24..89, chỉ để canh đủ 1 trang in) — lấy sẵn NODE của
+  // chúng ở đây (trước khi mutate gì) và dời xuống theo cùng "extra", nếu không sẽ ĐỤNG TRÙNG số "r" với
+  // dòng dữ liệu/dòng chân vừa thêm khi có > 5 dòng dữ liệu (batch thật hàng huỷ Kho A 21 dòng đã gặp lỗi
+  // này — mất chữ mục "7. Các thành phần tham gia hủy" vì 2 <row> cùng "r", Excel chỉ hiển thị 1 dòng).
+  const trailingRows = []
+  for (let node = footerRows[footerRows.length - 1].nextElementSibling; node; node = node.nextElementSibling) {
+    trailingRows.push(node)
+  }
+
   for (let i = 0; i < extra; i += 1) {
     const newRowNum = DATA_ROW_TEMPLATE + 1 + i
     const clone = templateRow.cloneNode(true)
@@ -138,14 +155,8 @@ function ensureDataRows(doc, rowCount) {
     sheetData.insertBefore(clone, firstFooterRow)
   }
 
-  footerRows.forEach((row, i) => {
-    const newRowNum = FOOTER_FIRST_ROW_TEMPLATE + i + extra
-    row.setAttribute('r', String(newRowNum))
-    row.querySelectorAll('c').forEach(c => {
-      const col = c.getAttribute('r').match(/^[A-Z]+/)[0]
-      c.setAttribute('r', `${col}${newRowNum}`)
-    })
-  })
+  footerRows.forEach((row, i) => shiftRowTo(row, FOOTER_FIRST_ROW_TEMPLATE + i + extra))
+  trailingRows.forEach((row) => shiftRowTo(row, Number(row.getAttribute('r')) + extra))
 
   const newSignatureRow = SIGNATURE_MERGE_ROW_TEMPLATE + extra
   doc.querySelectorAll('mergeCell').forEach(mc => {

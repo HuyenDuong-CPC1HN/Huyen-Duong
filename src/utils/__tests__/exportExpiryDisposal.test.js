@@ -168,4 +168,37 @@ describe('exportExpiryDisposal — Biên bản Xử lý (Excel)', () => {
     expect(doc.querySelector('mergeCell[ref="A23:I23"]')).toBeTruthy()
     expect(doc.querySelector('dimension').getAttribute('ref')).toBe('A1:J89')
   })
+
+  it('nhiều hơn 6 dòng (extra > 5) -> không được đụng số "r" với các dòng trống có sẵn phía sau mẫu (r=24..89), nếu không Excel sẽ mất/trống mục "7. Các thành phần tham gia hủy"', async () => {
+    // Bug thật gặp phải: mẫu có sẵn ~70 dòng trống (r=24..89, chỉ để canh đủ 1 trang in) mà ensureDataRows
+    // không hề dời theo phần chân — hễ thêm > 5 dòng sản phẩm, dòng chân dời xuống ĐỤNG TRÙNG "r" với đúng
+    // các dòng trống này (2 <row> cùng "r"), Excel chỉ hiển thị 1 trong 2 -> mục "7." mất chữ. 21 dòng là
+    // đúng số dòng thật của phiếu xuất kho Kho A gây ra lỗi này (không phát hiện được ở test 2-3 dòng).
+    const templateBuffer = loadTemplateBuffer()
+    const rows = Array.from({ length: 21 }, (_, i) => makeRow({ maHang: `X${String(i).padStart(5, '0')}`, soLo: `LOT${i}` }))
+    const bytes = await fillBienBanXuLy(templateBuffer, rows)
+
+    const sheetXml = sheetXmlOf(bytes)
+    const rowNums = [...sheetXml.matchAll(/<row r="(\d+)"/g)].map(m => Number(m[1]))
+    const seen = new Set()
+    const duplicates = rowNums.filter(n => (seen.has(n) ? true : (seen.add(n), false)))
+    expect(duplicates).toEqual([])
+
+    const doc = new DOMParser().parseFromString(sheetXml, 'application/xml')
+    const sstDoc = new DOMParser().parseFromString(sharedStringsOf(bytes), 'application/xml')
+    const sharedText = i => sstDoc.documentElement.getElementsByTagName('si')[i]?.textContent || ''
+    const cell = readCells(bytes)
+
+    // 21 sản phẩm -> extra = 20 -> dòng chân gốc 19-23 dời xuống đúng 39-43.
+    expect(cell(18, 'A')).toBe('1')
+    expect(cell(38, 'A')).toBe('21')
+    expect(cell(39, 'A')).toContain('Phương pháp xử lý')
+    expect(cell(42, 'A')).toBe('7. Các thành phần tham gia hủy (Ký và ghi rõ họ tên)')
+    const namesCell = doc.querySelector('c[r="A43"]')
+    const namesText = sharedText(Number(namesCell.querySelector('v').textContent))
+    expect(namesText).toContain('Thủ Kho')
+    expect(namesText).toContain('Kế Toán Đơn Hàng')
+    expect(namesText).toContain('Giám đốc chi nhánh')
+    expect(doc.querySelector('dimension').getAttribute('ref')).toBe('A1:J109')
+  })
 })

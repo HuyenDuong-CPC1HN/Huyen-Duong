@@ -92,6 +92,24 @@ describe('exportDamagedGoods — Biên bản Xử lý (Excel), riêng mẫu Kho 
     expect(cell(20, 'B')).toBeNull()
     expect(cell(21, 'B')).toBe('Xuất gửi nhà máy xử lý')
   })
+
+  it('nhiều hơn 6 dòng (extra > 5) -> không đụng "r" với các dòng trống có sẵn phía sau mẫu (r=24..89) — cùng lỗi thật đã sửa ở exportExpiryDisposal.js, mẫu này dùng chung cấu trúc', async () => {
+    const items = Array.from({ length: 21 }, (_, i) => makeItem({ maHang: `X${String(i).padStart(5, '0')}`, tenHang: `San pham ${i}` }))
+    const bytes = await fillBienBanXuLy(loadBuffer(XULY_C_PATH), items)
+
+    const sheetXml = sheetXmlOf(bytes)
+    const rowNums = [...sheetXml.matchAll(/<row r="(\d+)"/g)].map(m => Number(m[1]))
+    const seen = new Set()
+    const duplicates = rowNums.filter(n => (seen.has(n) ? true : (seen.add(n), false)))
+    expect(duplicates).toEqual([])
+
+    const cell = readCells(bytes)
+    expect(cell(18, 'A')).toBe('1')
+    expect(cell(38, 'A')).toBe('21')
+    expect(cell(39, 'A')).toContain('Phương pháp xử lý')
+    expect(cell(40, 'B')).toBe('Xuất gửi nhà máy xử lý')
+    expect(cell(42, 'A')).toBe('7. Các thành phần tham gia hủy (Ký và ghi rõ họ tên)')
+  })
 })
 
 describe('exportDamagedGoods — Biên bản Xác minh (Word)', () => {
