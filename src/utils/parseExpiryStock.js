@@ -40,6 +40,46 @@ function toIsoDate(v) {
   return null
 }
 
+// Vài dòng đầu file có dòng dạng "Từ ngày 01/06/2026 đến ngày 10/09/2026..." khai khoảng thời gian báo cáo
+// bao phủ — dùng để tính "hàng chậm luân chuyển" (Sl nhập/Sl xuất = 0 trong SUỐT khoảng này, xem
+// isSlowMoving bên dưới): khoảng báo cáo càng dài, kết luận "không phát sinh > N ngày" càng đáng tin.
+const DATE_RANGE_RE = /Từ ngày\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+đến ngày\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i
+
+// Dựng thẳng bằng Date.UTC (không qua giờ địa phương) — nếu dùng "new Date(y, m-1, d)" (giờ địa phương)
+// rồi .toISOString(), múi giờ dương (vd Việt Nam +7, đúng múi giờ trình duyệt người dùng sẽ chạy) sẽ lùi
+// lại đúng 1 ngày khi cắt về "yyyy-mm-dd" (nửa đêm giờ địa phương = chiều hôm trước theo UTC).
+function toIsoFromParts(d, m, y) {
+  return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).toISOString().slice(0, 10)
+}
+
+// Trả về { tuNgay, denNgay (ISO yyyy-mm-dd), soNgay } đọc từ dòng "Từ ngày ... đến ngày ..." ở đầu file,
+// hoặc null nếu không tìm thấy (file có thể xuất từ nguồn/đợt khác không có dòng này).
+export function parseReportDateRange(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
+  for (const row of grid) {
+    for (const cell of row) {
+      if (typeof cell !== 'string') continue
+      const m = DATE_RANGE_RE.exec(cell)
+      if (!m) continue
+      const [, d1, mo1, y1, d2, mo2, y2] = m
+      const tuNgay = toIsoFromParts(d1, mo1, y1)
+      const denNgay = toIsoFromParts(d2, mo2, y2)
+      const soNgay = Math.round((new Date(denNgay) - new Date(tuNgay)) / 86400000)
+      return { tuNgay, denNgay, soNgay }
+    }
+  }
+  return null
+}
+
+// "Hàng chậm luân chuyển" = còn tồn kho nhưng không phát sinh Sl nhập lẫn Sl xuất trong SUỐT khoảng thời
+// gian file báo cáo (parseReportDateRange) — không tính hàng đã hết tồn (tonCuoi = 0, không còn gì để
+// luân chuyển sang chi nhánh khác).
+export function isSlowMoving(row) {
+  return row.tonCuoi > 0 && row.slNhap === 0 && row.slXuat === 0
+}
+
 // Đọc toàn bộ workbook, trả về danh sách vật tư (kể cả tồn = 0) đã chuẩn hoá kiểu dữ liệu.
 export function parseExpiryStockWorkbook(arrayBuffer) {
   const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })

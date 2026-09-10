@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX } from 'lucide-react'
+import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -7,6 +7,7 @@ import SheetTab from './components/SheetTab'
 import TmdtTab from './components/TmdtTab'
 import TongDonTab from './components/TongDonTab'
 import ExpiryStockTab from './components/ExpiryStockTab'
+import SlowMovingStockTab from './components/SlowMovingStockTab'
 import NhapHangTab from './components/NhapHangTab'
 import DoiSoatThucTeTab from './components/DoiSoatThucTeTab'
 import ReturnTrackingTab from './components/ReturnTrackingTab'
@@ -30,6 +31,7 @@ const NAV = [
     ],
   },
   { id: 'tonkhocandate', label: 'Tồn kho cận date', icon: CalendarClock },
+  { id: 'hangchamluanchuyen', label: 'Hàng chậm luân chuyển', icon: Hourglass },
   {
     id: 'nhaphang',
     label: 'Nhập hàng',
@@ -68,6 +70,7 @@ const BREADCRUMB = {
   donDTP:   ['Trang chủ', 'Báo cáo giao hàng', 'Giao hàng Đơn DTP'],
   tmdt:     ['Trang chủ', 'Báo cáo giao hàng', 'Đơn hàng Sàn TMĐT'],
   tonkhocandate: ['Trang chủ', 'Tồn kho cận date'],
+  hangchamluanchuyen: ['Trang chủ', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
   traHangC:   ['Trang chủ', 'Theo dõi nhập trả lại', 'Đơn C'],
@@ -428,6 +431,7 @@ function AppContent({ user }) {
           {active === 'donDTP'  && <SheetTab type="donDTP" />}
           {active === 'tmdt'    && <TmdtTab />}
           {active === 'tonkhocandate' && <ExpiryStockTab />}
+          {active === 'hangchamluanchuyen' && <SlowMovingStockTab />}
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
           {active === 'traHangC'   && <ReturnTrackingTab type="donC" />}
