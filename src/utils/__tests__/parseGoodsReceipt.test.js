@@ -6,6 +6,7 @@ import {
   detectPhieuXuatKhoWarehouse,
   enrichRowsFromPdfCatalog,
   mergeActualScanRows,
+  mergeSupplementRows,
   mergeWarehouseRows,
   parsePdfDeliveryNote,
   parsePdfItems,
@@ -32,6 +33,29 @@ describe('parseGoodsReceipt', () => {
     expect(merged).toHaveLength(2)
     expect(merged.find(r => r.soLo === 'L1')).toMatchObject({ slHoaDon: 15, kienNguyen: 3, kienLe: 1 })
     expect(merged.find(r => r.soLo === 'L2')).toMatchObject({ slHoaDon: 3 })
+  })
+
+  it('mergeSupplementRows: cộng dồn dòng trùng Mã hàng+Số lô, giữ nguyên Ghi chú/SL TT đã sửa tay, thêm dòng mới hoàn toàn vào cuối', () => {
+    const existing = [
+      { rowId: 'r1', maHang: 'A001', soLo: 'L1', tenHang: 'Thuốc A', dvt: 'ONG', slHoaDon: 10, kienNguyen: 2, kienLe: 0, slThucTe: 10, ghiChu: 'Đã kiểm đủ', needsManual: false },
+      { rowId: 'r2', maHang: 'B002', soLo: 'L2', tenHang: 'Thuốc B', dvt: 'VIEN', slHoaDon: 5, kienNguyen: 1, kienLe: 0, slThucTe: null, ghiChu: '', needsManual: false },
+    ]
+    const supplement = [
+      { maHang: 'A001', soLo: 'L1', tenHang: 'Thuốc A', dvt: 'ONG', slHoaDon: 4, kienNguyen: 1, kienLe: 0 },
+      { maHang: 'C003', soLo: 'L3', tenHang: 'Thuốc C', dvt: 'LO', slHoaDon: 6, kienNguyen: 1, kienLe: 1 },
+    ]
+    const merged = mergeSupplementRows(existing, supplement)
+    expect(merged).toHaveLength(3)
+    // Dòng trùng key A001/L1: cộng dồn số lượng/kiện, KHÔNG đụng vào rowId/Ghi chú/SL TT đã có.
+    expect(merged.find(r => r.maHang === 'A001')).toMatchObject({
+      rowId: 'r1', slHoaDon: 14, kienNguyen: 3, ghiChu: 'Đã kiểm đủ', slThucTe: 10,
+    })
+    // Dòng không trùng (B002) giữ nguyên y hệt.
+    expect(merged.find(r => r.maHang === 'B002')).toMatchObject(existing[1])
+    // Dòng hoàn toàn mới (C003) được thêm vào cuối.
+    expect(merged.find(r => r.maHang === 'C003')).toMatchObject({ slHoaDon: 6, kienNguyen: 1, kienLe: 1 })
+    // existingRows gốc không bị mutate.
+    expect(existing[0].slHoaDon).toBe(10)
   })
 
   it('reads warehouse export columns (Mã, Lượng cần, Số kiện cần)', () => {
