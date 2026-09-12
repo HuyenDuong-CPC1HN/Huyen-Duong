@@ -282,7 +282,16 @@ export function enrichRowsFromPdfCatalog(rows, pdfRows, sharedKeys = new Set()) 
 function parsePhieuXuatKhoPdf(pdfText) {
   if (!pdfText) return []
   const compact = String(pdfText).replace(/\s+/g, ' ').trim()
-  let afterHeader = compact.split(/Vị trí/i).pop() || ''
+  // "Vị trí" là cột cuối trong tiêu đề bảng của ĐÚNG mẫu Phiếu xuất kho (02-VT) — bắt buộc phải có, không
+  // chỉ dùng để cắt bớt phần đầu. Trước đây thiếu "Vị trí" thì split() không khớp, .pop() trả nguyên văn
+  // bản gốc, khiến regex bên dưới vẫn chạy trên TOÀN VĂN BẢN — 1 file "biên bản giao nhận - DTP" (bảng
+  // cũng liệt kê mã hàng/tên hàng/đơn vị/số lượng/lô/hạn dùng, cấu trúc gần giống) từng bị match nhầm
+  // thành phiếu xuất kho theo cách này: text vỡ vụn thành tên hàng lộn xộn, và mất luôn Kiện nguyên/Kiện
+  // lẻ (Loại 1 không có 2 cột đó, phải điền lại từ biên bản giao nhận Loại 2 — enrichRowsFromPdfCatalog).
+  // Không có "Vị trí" thì dừng ngay, để parsePdfItems rơi xuống thử mẫu biên bản giao nhận đúng hơn.
+  const parts = compact.split(/Vị trí/i)
+  if (parts.length < 2) return []
+  let afterHeader = parts.pop() || ''
   // Bỏ dòng mã cột ẩn cố định của mẫu form ("A B C D 2 3 5 1 4") ngay sau "Vị trí", trước Stt=1 thật —
   // nếu không bỏ, dòng đầu tiên sẽ bị nhặt nhầm 1 trong các số lẻ này làm Stt, cuốn theo rác vào tên hàng.
   afterHeader = afterHeader.replace(/^\s*A\s+B\s*C\s+D\s+2\s+3\s+5\s*1\s+4\s*/i, '')

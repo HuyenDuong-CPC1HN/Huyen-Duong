@@ -136,6 +136,18 @@ describe('parseGoodsReceipt', () => {
     expect(rows[1]).toMatchObject({ maHang: 'H05005', soLuong: 1440, hanDung: '2029-07-31' })
   })
 
+  it('KHÔNG match nhầm 1 PDF khác (vd biên bản giao nhận) thành "Phiếu xuất kho" chỉ vì bảng có hình dạng tương tự — thiếu "Vị trí" (cột bắt buộc của đúng mẫu 02-VT) thì không match', () => {
+    // Y hệt fixture "Phiếu xuất kho" hợp lệ ở trên nhưng CỐ TÌNH bỏ "Vị trí" khỏi dòng tiêu đề — trước đây
+    // bug thật: thiếu "Vị trí" thì compact.split(/Vị trí/i).pop() trả nguyên văn bản, regex vẫn chạy trên
+    // toàn văn bản và match nhầm, khiến 1 file "biên bản giao nhận - DTP" bị coi là phiếu xuất kho (mất
+    // Kiện nguyên/Kiện lẻ, tên hàng vỡ vụn do regex không đúng mẫu thật của file đó).
+    const pdfText = 'Địa điểm: DH030926/03507_Dự trù SO Kho C - Chi nhánh HCM - 0903114623 '
+      + 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX '
+      + '1   Arica Folicus Cream - Hộp 1 tuýp 30g A01840   TUBE   272,000 DTP-VNM   612   21/06/2029'
+    const rows = parsePdfItems(pdfText)
+    expect(rows.every(r => r.source !== 'phieuXuatKho')).toBe(true)
+  })
+
   it('detects target warehouse from Phiếu xuất kho "Địa điểm" line', () => {
     expect(detectPhieuXuatKhoWarehouse('...Địa điểm: DH030926/03507_Dự trù SO Kho C - Chi nhánh HCM...')).toBe('C')
     expect(detectPhieuXuatKhoWarehouse('...Địa điểm: DH030926/03506_Chi nhánh HCM - Kho DTP LGT...')).toBe('LGT')
