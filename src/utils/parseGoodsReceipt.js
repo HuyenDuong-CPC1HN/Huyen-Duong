@@ -183,6 +183,37 @@ export function mergeWarehouseRows(rows) {
   })
 }
 
+// Gộp dòng từ (các) file Excel BỔ SUNG vào bảng đã xử lý trước đó — dùng khi người dùng phát hiện quên
+// upload thiếu file sau khi đã "Tách kho & tạo biên bản" xong 1 chuyến. Dòng trùng Mã hàng + Số lô với
+// dòng có sẵn thì CỘNG DỒN Kiện nguyên/Kiện lẻ/SL HĐ vào dòng đó (giữ nguyên mọi thứ khác của dòng có sẵn
+// — Ghi chú, SL TT, needsManual... — không ghi đè, kể cả khi đã sửa tay); dòng hoàn toàn mới (Mã hàng +
+// Số lô chưa từng có) thì thêm vào cuối bảng. existingRows không bị mutate (trả về mảng mới), phù hợp để
+// gán thẳng vào state.
+export function mergeSupplementRows(existingRows, newRows) {
+  const merged = existingRows.map(row => ({ ...row }))
+  const indexByKey = new Map(merged.map((row, i) => [rowKey(row), i]))
+  for (const row of newRows) {
+    const key = rowKey(row)
+    const idx = indexByKey.get(key)
+    if (idx === undefined) {
+      merged.push({ ...row })
+      indexByKey.set(key, merged.length - 1)
+      continue
+    }
+    const existing = merged[idx]
+    merged[idx] = {
+      ...existing,
+      kienNguyen: (existing.kienNguyen ?? 0) + (row.kienNguyen ?? 0),
+      kienLe: (existing.kienLe ?? 0) + (row.kienLe ?? 0),
+      slHoaDon: (existing.slHoaDon ?? 0) + (row.slHoaDon ?? 0),
+      tenHang: existing.tenHang || row.tenHang || '',
+      dvt: existing.dvt || row.dvt || '',
+      hanDung: existing.hanDung || row.hanDung || null,
+    }
+  }
+  return merged
+}
+
 export function calcChenhLech(row) {
   if (row.slThucTe === null || row.slThucTe === undefined || row.slThucTe === '') return null
   return Number(row.slThucTe) - Number(row.slHoaDon ?? 0)
