@@ -89,13 +89,27 @@ function batchLabelOf(processedAt) {
   })
 }
 
-function EditableCell({ value, onChange, type = 'text', className = '' }) {
+// multiline: dùng <textarea> thay <input> — Tên hàng thường dài (vd tên sản phẩm ghi kèm quy cách đóng
+// gói), gói gọn trong 1 hàng ngang rất khó đọc/sửa hết chữ. resize-y cho tự kéo giãn thêm nếu 2 dòng vẫn
+// chưa đủ.
+function EditableCell({ value, onChange, type = 'text', className = '', multiline = false }) {
   const handleChange = (e) => {
     if (type === 'number') {
       onChange(e.target.value === '' ? null : Number(e.target.value))
     } else {
       onChange(e.target.value)
     }
+  }
+
+  if (multiline) {
+    return (
+      <textarea
+        value={value ?? ''}
+        onChange={handleChange}
+        rows={2}
+        className={`w-full min-w-40 px-1.5 py-1 text-xs border border-transparent rounded hover:border-gray-300 focus:border-blue-400 focus:outline-none bg-transparent resize-y leading-snug ${className}`}
+      />
+    )
   }
 
   return (
@@ -222,7 +236,7 @@ function ReceiptTableRow({ row, index, rank, editing, onRowChange, onRemoveRow }
         {editing ? <EditableCell value={row.maHang} onChange={(v) => onRowChange(index, 'maHang', v)} /> : row.maHang}
       </td>
       <td className="px-2 py-1.5">
-        {editing ? <EditableCell value={row.tenHang} onChange={(v) => onRowChange(index, 'tenHang', v)} /> : row.tenHang}
+        {editing ? <EditableCell value={row.tenHang} onChange={(v) => onRowChange(index, 'tenHang', v)} multiline /> : row.tenHang}
       </td>
       <td className="px-2 py-1.5">
         {editing ? <EditableCell value={row.dvt} onChange={(v) => onRowChange(index, 'dvt', v)} /> : row.dvt}
