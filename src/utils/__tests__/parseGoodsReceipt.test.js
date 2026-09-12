@@ -5,6 +5,7 @@ import {
   calcChenhLech,
   detectPhieuXuatKhoWarehouse,
   enrichRowsFromPdfCatalog,
+  joinPdfTextItems,
   mergeActualScanRows,
   mergeSupplementRows,
   mergeWarehouseRows,
@@ -56,6 +57,38 @@ describe('parseGoodsReceipt', () => {
     expect(merged.find(r => r.maHang === 'C003')).toMatchObject({ slHoaDon: 6, kienNguyen: 1, kienLe: 1 })
     // existingRows gốc không bị mutate.
     expect(existing[0].slHoaDon).toBe(10)
+  })
+
+  // Dữ liệu item mô phỏng lấy TRỰC TIẾP từ getTextContent() thật của 1 file "Giao nhận - DTP.pdf" người
+  // dùng gửi — tên hàng "Sữa tắm gội..." bị vỡ chữ do dấu tiếng Việt (mỗi ký tự 1 item sát nhau) và Số lô
+  // "202602/DTP-HTC" bị ngắt dòng giữa chừng vì cột quá hẹp, trước đây .join(' ') làm sai cả 2.
+  function fakeItem(str, x, width, hasEOL = false) {
+    return { str, transform: [1, 0, 0, 1, x, 0], width, hasEOL }
+  }
+
+  it('joinPdfTextItems: KHÔNG chèn khoảng trắng giữa các item chữ dính sát nhau (dấu tiếng Việt bị pdf.js tách vụn)', () => {
+    // "Sữa tắm" rồi xuống dòng "gội" (Tên hàng bị wrap trong ô hẹp) — mỗi ký tự có dấu là 1 item riêng,
+    // x liền kề TUYỆT ĐỐI (không có khoảng trống thật) nên không được chèn cách; ranh giới dòng (hasEOL)
+    // vẫn cần 1 khoảng trắng để "tắm" và "gội" không dính liền thành 1 từ.
+    const items = [
+      fakeItem('S', 133.50, 6.67), fakeItem('ữ', 140.17, 6.74), fakeItem('a t', 146.91, 11.66),
+      fakeItem('ắ', 158.57, 5.33), fakeItem('m', 163.90, 9.33, true),
+      fakeItem('g', 133.50, 6.00), fakeItem('ộ', 139.50, 6.00), fakeItem('i', 145.50, 3.33, true),
+    ]
+    expect(joinPdfTextItems(items)).toBe('Sữa tắm gội')
+  })
+
+  it('joinPdfTextItems: giá trị bị ngắt dòng giữa chừng (kết thúc bằng "-" áp sát chữ) nối liền KHÔNG cách, dấu "-" ngăn cách (có cách trước đó) vẫn giữ cách', () => {
+    const soLoWrap = [fakeItem('202602/DTP-', 204.73, 66.00, true), fakeItem('HTC', 225.73, 24.00)]
+    expect(joinPdfTextItems(soLoWrap)).toBe('202602/DTP-HTC')
+
+    const tenHangWithDash = [fakeItem('Zentokid -', 133.50, 50.32, true), fakeItem('Lọ 500ml', 133.50, 47.00)]
+    expect(joinPdfTextItems(tenHangWithDash)).toBe('Zentokid - Lọ 500ml')
+  })
+
+  it('joinPdfTextItems: vẫn chèn khoảng trắng bình thường khi 2 item cách nhau thật (vd giữa STT và Mã hàng)', () => {
+    const items = [fakeItem('16', 46.50, 12.00), fakeItem('S10693', 82.16, 36.67)]
+    expect(joinPdfTextItems(items)).toBe('16 S10693')
   })
 
   it('reads warehouse export columns (Mã, Lượng cần, Số kiện cần)', () => {

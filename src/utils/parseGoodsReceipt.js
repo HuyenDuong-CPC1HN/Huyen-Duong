@@ -690,6 +690,37 @@ export function parsePdfMetadata(pdfText) {
   }
 }
 
+// Nối các "item" chữ pdf.js trả về (getTextContent().items) thành 1 chuỗi văn bản của 1 trang. pdf.js
+// đôi khi tách 1 chữ có dấu (vd "Sữa") thành NHIỀU item liền kề sát nhau — không có khoảng trắng thật
+// giữa chúng, chỉ do cách font dựng dấu tiếng Việt — nối bằng dấu cách cố định như trước sẽ ra
+// "S ữ a t ắ m" (sai hoàn toàn). Chỉ chèn khoảng trắng khi khoảng cách ngang thật giữa 2 item liên tiếp
+// đủ lớn, hoặc khi item trước đó kết thúc 1 dòng (hasEOL — ranh giới dòng luôn cần 1 khoảng trắng để
+// không dính chữ dòng dưới vào dòng trên, TRỪ trường hợp dòng trước kết thúc bằng 1 dấu "-" áp sát chữ
+// không có khoảng trắng phía trước (vd "202602/DTP-" rồi xuống dòng "HTC" — 1 giá trị bị ngắt dòng giữa
+// chừng do quá dài so với bề rộng cột, đúng ra là "202602/DTP-HTC" liền không cách) — khác với dấu "-"
+// dùng làm dấu ngăn cách có khoảng trắng 2 bên (vd "Zentokid -" rồi "Lọ 500ml", vẫn giữ cách vì trước "-"
+// đã có dấu cách sẵn, không áp sát chữ).
+export function joinPdfTextItems(items) {
+  let out = ''
+  let prevEndX = null
+  let prevEOL = true
+  let prevStr = ''
+  for (const item of items) {
+    const str = item.str
+    if (str === '') { prevEOL = prevEOL || item.hasEOL; continue }
+    const x = item.transform?.[4]
+    const lineBreak = prevEOL
+    const gapSpace = typeof x === 'number' && prevEndX !== null && x - prevEndX > 1
+    const isHyphenLineWrap = lineBreak && /\S-$/.test(prevStr)
+    const needsSpace = prevEndX !== null && !isHyphenLineWrap && (lineBreak || gapSpace)
+    out += (needsSpace ? ' ' : '') + str
+    prevEndX = (typeof x === 'number' ? x : prevEndX) + (item.width || 0)
+    prevEOL = item.hasEOL
+    prevStr = str
+  }
+  return out
+}
+
 export async function extractPdfText(arrayBuffer) {
   try {
     const pdfjs = await import('pdfjs-dist/build/pdf.mjs')
@@ -703,7 +734,7 @@ export async function extractPdfText(arrayBuffer) {
     for (let pageNum = 1; pageNum <= doc.numPages; pageNum += 1) {
       const page = await doc.getPage(pageNum)
       const content = await page.getTextContent()
-      chunks.push(content.items.map(item => item.str).join(' '))
+      chunks.push(joinPdfTextItems(content.items))
     }
     return chunks.join('\n')
   } catch (err) {
