@@ -156,19 +156,21 @@ export function useCarrierRowsPendingClear(carrierKey) {
   return { pendingClear, scheduleClear, cancelClear }
 }
 
-// ---- Loại trừ theo "Tên hàng" — áp dụng chung cho carrier (không riêng theo tuần), vì đây là quy tắc
-// phân loại sản phẩm (vd voucher, quà tặng...) chứ không phải số liệu upload ----
-export function readExcludedTenHang(carrierKey) {
-  try { return JSON.parse(localStorage.getItem(`carrier_exclude_tenhang_${carrierKey}`) || '[]') } catch { return [] }
+// ---- Loại trừ theo TỪNG ĐƠN (Mã vận đơn) — áp dụng chung cho carrier (không riêng theo tuần), vì mã vận
+// đơn là duy nhất nên không cần tách theo tuần. Trước đây loại theo "Tên hàng" (loại LUÔN mọi đơn cùng tên
+// hàng, vd mọi đơn "VOUCHER") — đổi lại theo yêu cầu: bấm đúng đơn nào thì chỉ loại đơn đó, không ảnh
+// hưởng các đơn khác dù cùng tên hàng.
+export function readExcludedOrders(carrierKey) {
+  try { return JSON.parse(localStorage.getItem(`carrier_exclude_orders_${carrierKey}`) || '[]') } catch { return [] }
 }
-export function writeExcludedTenHang(carrierKey, list) {
-  localStorage.setItem(`carrier_exclude_tenhang_${carrierKey}`, JSON.stringify(list))
+export function writeExcludedOrders(carrierKey, list) {
+  localStorage.setItem(`carrier_exclude_orders_${carrierKey}`, JSON.stringify(list))
 }
-function filterExcludedRows(rows, carrierKey) {
-  const excluded = readExcludedTenHang(carrierKey)
+function filterExcludedRows(rows, carrierKey, carrierType) {
+  const excluded = readExcludedOrders(carrierKey)
   if (excluded.length === 0) return rows
   const excludedSet = new Set(excluded)
-  return rows.filter(r => !excludedSet.has((r['Tên hàng'] || '').trim()))
+  return rows.filter(r => !excludedSet.has(getTrackingCode(r, carrierType)))
 }
 
 // ---- File đối chiếu "Chờ giao Logistics" — dùng để xác nhận đơn "Đang lấy hàng" có thật đang xử lý không.
@@ -287,7 +289,7 @@ function buildStatsForWeek(entry, carrierKey, carrierType, internalData, frozenL
   const lookupMap = frozenLookup ? new Map(Object.entries(frozenLookup)) : buildInternalOrderLookup(internalData)
   const holdLookupSet = getHoldLookupSet(carrierKey)
   const holdNotes = readHoldNotesMap(carrierKey)
-  const effectiveRows = filterExcludedRows(entry.rows, carrierKey)
+  const effectiveRows = filterExcludedRows(entry.rows, carrierKey, carrierType)
   const stats = computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes)
 
   return {
@@ -1019,22 +1021,23 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     setWeeks(readCarrierWeeks(carrierKey))
   }
 
-  // Loại trừ theo "Tên hàng" (vd voucher, quà tặng...) khỏi thống kê — áp dụng chung cho carrier này
-  const [excludedNames, setExcludedNames] = useState(() => readExcludedTenHang(carrierKey))
+  // Loại trừ theo TỪNG ĐƠN (bấm vào ô "Tên hàng" của đúng đơn đó) khỏi thống kê — chỉ loại đúng đơn bấm,
+  // không ảnh hưởng các đơn khác dù cùng tên hàng. Nhận theo Mã vận đơn (duy nhất cho mỗi đơn).
+  const [excludedCodes, setExcludedCodes] = useState(() => readExcludedOrders(carrierKey))
   const hasTenHang = TABLE_COLUMNS.includes('Tên hàng')
 
-  const toggleExclude = (name) => {
-    const next = excludedNames.includes(name) ? excludedNames.filter(n => n !== name) : [...excludedNames, name]
-    setExcludedNames(next)
-    writeExcludedTenHang(carrierKey, next)
+  const toggleExclude = (code) => {
+    const next = excludedCodes.includes(code) ? excludedCodes.filter(c => c !== code) : [...excludedCodes, code]
+    setExcludedCodes(next)
+    writeExcludedOrders(carrierKey, next)
   }
 
   const effectiveRows = useMemo(() => {
     if (!state) return []
-    if (!hasTenHang || excludedNames.length === 0) return state.rows
-    const excludedSet = new Set(excludedNames)
-    return state.rows.filter(r => !excludedSet.has((r['Tên hàng'] || '').trim()))
-  }, [state, excludedNames, hasTenHang])
+    if (!hasTenHang || excludedCodes.length === 0) return state.rows
+    const excludedSet = new Set(excludedCodes)
+    return state.rows.filter(r => !excludedSet.has(getTrackingCode(r, carrierType)))
+  }, [state, excludedCodes, hasTenHang, carrierType])
 
   const stats = useMemo(() => state ? computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes) : null, [state, effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes])
 
@@ -1284,8 +1287,8 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
                   <tr><td colSpan={TABLE_COLUMNS.length + (showNoteCol ? 1 : 0)} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
                 ) : (pageSize === 'all' ? filteredRows : filteredRows.slice(0, pageSize)).map((row, i) => {
                   const tenHang = (row['Tên hàng'] || '').trim()
-                  const isExcludedRow = hasTenHang && excludedNames.includes(tenHang)
-                  const code = showNoteCol ? getTrackingCode(row, carrierType) : null
+                  const code = getTrackingCode(row, carrierType)
+                  const isExcludedRow = hasTenHang && excludedCodes.includes(code)
                   const isUnmatchedHold = showNoteCol && isHoldStatusRow(row, carrierType) && !holdLookupSet?.has(code)
                   return (
                     <tr
@@ -1302,10 +1305,10 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
                         return (
                           <td
                             key={c}
-                            onClick={isTenHangCol && tenHang ? () => toggleExclude(tenHang) : undefined}
+                            onClick={isTenHangCol && tenHang ? () => toggleExclude(code) : undefined}
                             className={`px-3 py-2 border border-gray-200 ${isTenHangCol && tenHang ? 'cursor-pointer hover:bg-red-50' : ''}`}
                             style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                            title={isTenHangCol && tenHang ? 'Bấm để loại trừ/khôi phục các đơn cùng "Tên hàng" khỏi thống kê' : undefined}
+                            title={isTenHangCol && tenHang ? 'Bấm để loại trừ/khôi phục ĐÚNG đơn này khỏi thống kê' : undefined}
                           >
                             {row[c] || '—'}
                           </td>
