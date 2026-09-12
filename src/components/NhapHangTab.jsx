@@ -501,17 +501,21 @@ export default function NhapHangTab() {
       // ngày xử lý) để duyệt trong Storage theo Năm > Tháng > các chuyến trong tháng.
       const bienBanFiles = []
       if (bienBanFilesRaw.length > 0) {
-        try {
-          const { createStorageFilesRepository, monthFolder } = await import('../data/storageFiles')
-          const { supabase } = await import('../supabase')
-          const repo = createStorageFilesRepository(supabase)
-          for (const file of bienBanFilesRaw) {
-            const path = `goods-receipt/${monthFolder(processedAt)}/${batchId}/${file.name}`
+        const { createStorageFilesRepository, monthFolder } = await import('../data/storageFiles')
+        const { supabase } = await import('../supabase')
+        const repo = createStorageFilesRepository(supabase)
+        for (const file of bienBanFilesRaw) {
+          try {
+            // Dùng UUID làm TÊN FILE lưu trên Storage, không dùng file.name gốc — tên gốc có thể chứa
+            // dấu tiếng Việt/khoảng trắng khiến Supabase Storage báo "Invalid key" và không lưu được (tên
+            // gốc vẫn hiển thị đúng cho người dùng qua fileName riêng, không mất). Đồng thời try/catch
+            // TỪNG file — 1 file lỗi không được chặn các file còn lại lưu thành công.
+            const path = `goods-receipt/${monthFolder(processedAt)}/${batchId}/${crypto.randomUUID()}.pdf`
             await repo.writeFile(path, file)
             bienBanFiles.push({ fileName: file.name, storagePath: path })
+          } catch (err) {
+            fileErrors.push(`Lưu biên bản giao nhận "${file.name}" lên kho tệp: ${err.message || err}`)
           }
-        } catch (err) {
-          fileErrors.push(`Lưu biên bản giao nhận lên kho tệp: ${err.message || err}`)
         }
       }
 
