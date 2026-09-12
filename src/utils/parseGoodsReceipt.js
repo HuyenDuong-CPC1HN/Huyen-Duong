@@ -303,16 +303,71 @@ function parsePhieuXuatKhoPdf(pdfText) {
     const [, , tenHangRaw, maHang, dvt, qtyRaw, soLo, dd, mo, yyyy] = m
     const soLuong = Number(qtyRaw.split(',')[0].replaceAll('.', ''))
     if (!Number.isFinite(soLuong)) continue
-    rows.push({
+    const baseRow = {
       maHang,
       tenHang: tenHangRaw.trim(),
       dvt,
       soLuong,
       soLo,
       hanDung: `${yyyy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}`,
-    })
+    }
+
+    // Mặt hàng KHÔNG có Hạn dùng (vd quà tặng/khuyến mãi kèm theo, không phải thuốc) không tự kết thúc
+    // được ở regex trên — phần "Tên hàng" ([\s\S]+? không tham lam) bị cuốn theo luôn, đọc lấn sang tới
+    // tận dòng có Hạn dùng hợp lệ TIẾP THEO, dính chết tên 2 mặt hàng khác nhau làm 1 (vd "Quạt cầm tay
+    // mini... Q00008" không có Hạn dùng, bị cuốn vào tên "Sữa tắm gội... S10693" ngay sau nó). Nhận biết
+    // qua dấu hiệu: Tên hàng vừa đọc được chứa NGUYÊN 1 Mã vật tư khác ở giữa — tách dòng bị cuốn đó ra
+    // riêng (Đvt/Số lượng đọc được ngay sau mã của nó, còn đáng tin; Số lô/Hạn dùng không có nguồn đáng
+    // tin cậy để tách nên để trống, cần kiểm tra tay), rồi tìm lại đúng Tên hàng thật của dòng đang xét.
+    const embedded = /[A-Z]\d{4,5}/.exec(tenHangRaw)
+    if (embedded) {
+      const swallowedCode = embedded[0]
+      const beforeEmbedded = tenHangRaw.slice(0, embedded.index)
+      const afterEmbedded = tenHangRaw.slice(embedded.index + swallowedCode.length)
+      const swallowedTenHang = stripLeadingStt(beforeEmbedded)
+      const tailMatch = /^\s*(\S+)\s+([\d.,]+)/.exec(afterEmbedded)
+      if (swallowedTenHang && tailMatch) {
+        const [, sDvt, sQtyRaw] = tailMatch
+        const sQty = Number(sQtyRaw.split(',')[0].replaceAll('.', ''))
+        if (Number.isFinite(sQty)) {
+          rows.push({ maHang: swallowedCode, tenHang: swallowedTenHang, dvt: sDvt, soLuong: sQty, soLo: '', hanDung: null })
+        }
+        // Tên hàng thật của dòng đang xét chỉ còn lại phần SAU đuôi (Đvt+SL) vừa tách của dòng bị cuốn —
+        // tìm mốc "Stt + chữ" GẦN NHẤT bên phải trong đúng đoạn dư nhỏ này (không phải trên toàn bộ Tên
+        // hàng ban đầu, tránh lẫn với số đứng trước đơn vị tính bên trong tên sản phẩm, vd "Hộp 1 lọ...").
+        const remainder = afterEmbedded.slice(tailMatch[0].length)
+        const sttSplitRe = /\d{1,3}\s+\p{L}/gu
+        let boundary = -1
+        let sm
+        while ((sm = sttSplitRe.exec(remainder))) boundary = sm.index
+        baseRow.tenHang = stripLeadingStt(boundary >= 0 ? remainder.slice(boundary) : remainder)
+      }
+    }
+    rows.push(baseRow)
+  }
+
+  // Mặt hàng không có Hạn dùng mà cũng không bị "cứu" bởi dòng nào phía sau (vd nó là dòng CUỐI CÙNG của
+  // cả phiếu) thì không khớp regex trên lẫn không nằm lẫn trong Tên hàng dòng nào khác — dò nốt các Mã vật
+  // tư còn sót lại theo đúng thứ tự xuất hiện, lấy được Đvt/Số lượng, còn lại để trống cần kiểm tra tay.
+  const consumed = new Set(rows.map(r => r.maHang))
+  const codeRe = /[A-Z]\d{4,5}/g
+  let cm
+  while ((cm = codeRe.exec(afterHeader))) {
+    const code = cm[0]
+    if (consumed.has(code)) continue
+    const tailMatch = /^\s*(\S+)\s+([\d.,]+)/.exec(afterHeader.slice(cm.index + code.length))
+    if (!tailMatch) continue
+    const [, dvt, qtyRaw] = tailMatch
+    const soLuong = Number(qtyRaw.split(',')[0].replaceAll('.', ''))
+    if (!Number.isFinite(soLuong)) continue
+    rows.push({ maHang: code, tenHang: '(chưa rõ tên hàng — kiểm tra lại bằng chế độ Chỉnh sửa)', dvt, soLuong, soLo: '', hanDung: null })
   }
   return rows
+}
+
+function stripLeadingStt(text) {
+  const m = /^(\d{1,3})\s+(.+)$/s.exec(text.trim())
+  return (m ? m[2] : text).trim()
 }
 
 // Đọc PDF theo cả 2 định dạng đã biết — thử mẫu "Phiếu xuất kho" (thường gặp nhất hiện nay) trước,
@@ -693,9 +748,13 @@ export function parsePdfMetadata(pdfText) {
 // Nối các "item" chữ pdf.js trả về (getTextContent().items) thành 1 chuỗi văn bản của 1 trang. pdf.js
 // đôi khi tách 1 chữ có dấu (vd "Sữa") thành NHIỀU item liền kề sát nhau — không có khoảng trắng thật
 // giữa chúng, chỉ do cách font dựng dấu tiếng Việt — nối bằng dấu cách cố định như trước sẽ ra
-// "S ữ a t ắ m" (sai hoàn toàn). Chỉ chèn khoảng trắng khi khoảng cách ngang thật giữa 2 item liên tiếp
-// đủ lớn, hoặc khi item trước đó kết thúc 1 dòng (hasEOL — ranh giới dòng luôn cần 1 khoảng trắng để
-// không dính chữ dòng dưới vào dòng trên, TRỪ trường hợp dòng trước kết thúc bằng 1 dấu "-" áp sát chữ
+// "S ữ a t ắ m" (sai hoàn toàn). Chỉ BỎ khoảng trắng khi khoảng cách ngang thật giữa 2 item liên tiếp gần
+// như bằng 0 (thật sự liền kề); mọi trường hợp khác đều chèn khoảng trắng — kể cả khi item kế tiếp nhảy
+// NGƯỢC về bên trái (x nhỏ hơn điểm kết thúc item trước) vì đang chuyển sang 1 vùng/cột hoàn toàn khác
+// của bảng (mẫu "Phiếu xuất kho" vẽ cột "Số lượng" và "Nước SX" không theo đúng thứ tự trái→phải trong
+// luồng dữ liệu PDF — coi khoảng cách âm là "liền kề" từng làm dính "80,000" với "DTP-VNM" thành
+// "80,000DTP-VNM", khiến cả dòng đó không đọc được nữa). Ranh giới dòng (hasEOL) luôn cần 1 khoảng trắng
+// để không dính chữ dòng dưới vào dòng trên, TRỪ trường hợp dòng trước kết thúc bằng 1 dấu "-" áp sát chữ
 // không có khoảng trắng phía trước (vd "202602/DTP-" rồi xuống dòng "HTC" — 1 giá trị bị ngắt dòng giữa
 // chừng do quá dài so với bề rộng cột, đúng ra là "202602/DTP-HTC" liền không cách) — khác với dấu "-"
 // dùng làm dấu ngăn cách có khoảng trắng 2 bên (vd "Zentokid -" rồi "Lọ 500ml", vẫn giữ cách vì trước "-"
@@ -710,9 +769,9 @@ export function joinPdfTextItems(items) {
     if (str === '') { prevEOL = prevEOL || item.hasEOL; continue }
     const x = item.transform?.[4]
     const lineBreak = prevEOL
-    const gapSpace = typeof x === 'number' && prevEndX !== null && x - prevEndX > 1
+    const contiguous = typeof x === 'number' && prevEndX !== null && Math.abs(x - prevEndX) <= 1
     const isHyphenLineWrap = lineBreak && /\S-$/.test(prevStr)
-    const needsSpace = prevEndX !== null && !isHyphenLineWrap && (lineBreak || gapSpace)
+    const needsSpace = prevEndX !== null && !isHyphenLineWrap && (lineBreak || !contiguous)
     out += (needsSpace ? ' ' : '') + str
     prevEndX = (typeof x === 'number' ? x : prevEndX) + (item.width || 0)
     prevEOL = item.hasEOL

@@ -181,6 +181,25 @@ describe('parseGoodsReceipt', () => {
     expect(rows.every(r => r.source !== 'phieuXuatKho')).toBe(true)
   })
 
+  it('mặt hàng KHÔNG có Hạn dùng (vd quà tặng/khuyến mãi kèm theo, không phải thuốc) trong "Phiếu xuất kho" không bị cuốn dính vào Tên hàng của dòng liền sau', () => {
+    // Dữ liệu thật từ 1 file "Phiếu xuất kho" người dùng gửi — dòng 2 "Quạt cầm tay mini..." (mã Q00008)
+    // là hàng khuyến mãi không có Hạn dùng, trước đây bị cuốn dính vào Tên hàng của dòng 3 (mã S10693,
+    // Sữa tắm gội) vì regex chính chỉ coi 1 dòng là "xong" khi tìm được ngày Hạn dùng hợp lệ ở cuối.
+    const pdfText = 'Địa điểm: Chi nhánh HCM - Kho DTP LGT '
+      + 'Stt   Mã vật tư   Tên vật tư   Đvt   Số lượng   Hạn dùng Lô Nước SX   Vị trí  A   B C   D   2   3   5 1   4 '
+      + '1   pH Balance Protect Intimate Gel - Hộp 1 lọ 200ml (MP) P01879   LO   40,000 DTP-VNM   020526   17/05/2029 '
+      + '2   Quạt cầm tay mini gấp gọn - Laforin Q00008   CAI   59,000   Lô 202602.DT P-HTC ngày nhập 08/09/2026 08/09/2026 '
+      + '3   Sưa tăm gội Zentokid - Lọ 500ml S10693   LO   21,000 DTP-VNM   010826   16/08/2029'
+    const rows = parsePdfItems(pdfText)
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toMatchObject({ maHang: 'P01879', soLuong: 40, hanDung: '2029-05-17' })
+    // Dòng bị thiếu Hạn dùng vẫn tách được thành 1 dòng riêng — Đvt/Số lượng đọc đúng, Số lô/Hạn dùng để
+    // trống (không có nguồn đáng tin cậy để tách phần "Lô 202602.DT P-HTC ngày nhập..." rất phi chuẩn).
+    expect(rows[1]).toMatchObject({ maHang: 'Q00008', tenHang: 'Quạt cầm tay mini gấp gọn - Laforin', dvt: 'CAI', soLuong: 59, hanDung: null })
+    // Quan trọng nhất: Tên hàng dòng liền sau PHẢI sạch, không dính chữ của dòng Quạt phía trước.
+    expect(rows[2]).toMatchObject({ maHang: 'S10693', tenHang: 'Sưa tăm gội Zentokid - Lọ 500ml', soLuong: 21, hanDung: '2029-08-16' })
+  })
+
   it('detects target warehouse from Phiếu xuất kho "Địa điểm" line', () => {
     expect(detectPhieuXuatKhoWarehouse('...Địa điểm: DH030926/03507_Dự trù SO Kho C - Chi nhánh HCM...')).toBe('C')
     expect(detectPhieuXuatKhoWarehouse('...Địa điểm: DH030926/03506_Chi nhánh HCM - Kho DTP LGT...')).toBe('LGT')
