@@ -28,16 +28,24 @@ export function KpiTile({ icon: Icon, value, label, sub, pctOfTotal, cls }) {
   )
 }
 
-export function StatCard({ icon: Icon, value, label, cls, pctOfTotal }) {
+// onClick (tuỳ chọn): làm thẻ bấm được để lọc danh sách chi tiết theo đúng trạng thái của thẻ này — xem
+// NgoaiSanPanel/FrozenNgoaiSanPanel (CarrierStats.jsx). Không truyền onClick thì render như cũ (div tĩnh),
+// không ảnh hưởng các chỗ khác đang dùng StatCard.
+export function StatCard({ icon: Icon, value, label, cls, pctOfTotal, onClick, active }) {
+  const Tag = onClick ? 'button' : 'div'
   return (
-    <div className="report-stat">
+    <Tag
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={`report-stat ${onClick ? 'report-stat--clickable' : ''} ${active ? 'report-stat--active' : ''}`}
+    >
       <Icon size={16} className={cls} aria-hidden="true" />
       <div className={`report-stat-value ${cls}`}>
         {value.toLocaleString('vi-VN')}
         {pctOfTotal !== undefined && <span>({pctOfTotal}%)</span>}
       </div>
       <div className="report-stat-label">{label}</div>
-    </div>
+    </Tag>
   )
 }
 

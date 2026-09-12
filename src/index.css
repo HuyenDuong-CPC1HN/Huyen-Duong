@@ -1774,6 +1774,21 @@ body {
   line-height: 1.35;
 }
 
+.report-stat--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+
+.report-stat--clickable:hover {
+  border-color: var(--text-tertiary);
+}
+
+.report-stat--active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
 .report-action:focus-visible,
 .report-section-trigger:focus-visible {
   outline: 3px solid var(--focus-ring);

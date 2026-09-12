@@ -442,6 +442,25 @@ const NGOAI_SAN_GIAO_CARDS = [
   { key: 'treHanGiao',       label: 'Giao trễ hạn (>48h)',    icon: Clock,         cls: 'text-orange-600' },
   { key: 'chuaGiaoQuaHan',   label: 'Chưa giao — quá 48h',    icon: AlertTriangle, cls: 'text-red-600' },
 ]
+const NGOAI_SAN_ALL_CARDS = [...NGOAI_SAN_DONG_KIEN_CARDS, ...NGOAI_SAN_LAY_HANG_CARDS, ...NGOAI_SAN_GIAO_CARDS]
+
+// Bấm vào 1 thẻ tổng hợp (A/B/C) sẽ lọc bảng "Chi tiết đối soát" chỉ còn đúng đơn ở trạng thái đó — khớp
+// đúng theo cùng điều kiện app đã dùng để đếm ra số trên thẻ (xem reconcileNgoaiSan.js), kể cả phần loại
+// trừ "đã đánh dấu không cần tính" (excludedFromReport) ở layChuaLay/chuaGiaoQuaHan.
+const NGOAI_SAN_MATCHERS = {
+  dungHanDongKien: r => r.tinhTrangDongKien === 'Đạt (≤24h)',
+  treDongKien: r => r.tinhTrangDongKien === 'TRỄ ĐÓNG KIỆN (>24h)',
+  quaHanChuaDongKien: r => r.tinhTrangDongKien === 'CHƯA ĐÓNG KIỆN — QUÁ 24H',
+  layTrong24h: r => r.nhomLay === '≤24h',
+  layTrong48h: r => r.nhomLay === '≤48h',
+  layTrong72h: r => r.nhomLay === '≤72h',
+  layQua72h: r => r.nhomLay === '>72h',
+  layChuaLay: r => r.nhomLay === 'Chưa lấy hàng' && !r.excludedFromReport,
+  khongCoDuLieuDongKien: r => r.nhomLay === 'Không có dữ liệu đóng kiện',
+  dungHanGiao: r => r.tinhTrangGiao === 'Đúng hạn (≤48h)',
+  treHanGiao: r => r.tinhTrangGiao === 'TRỄ HẠN (>48h)',
+  chuaGiaoQuaHan: r => r.tinhTrangGiao === 'CHƯA GIAO — QUÁ 48H' && !r.excludedFromReport,
+}
 
 // Đối soát "đơn ngoại sàn" (SPX COD) theo 4 mốc thời gian — xem reconcileNgoaiSan.js.
 // Chỉ hiển thị trong tab SPX (carrierType === 'spx').
@@ -453,7 +472,16 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
   const [packingWeeks, setPackingWeeks] = useState(() => readPackingWeeks(carrierKey))
   const [expanded, setExpanded] = useState(false)
   const [onlyProblem, setOnlyProblem] = useState(false)
+  const [statusFilter, setStatusFilter] = useState(null)
   const [excluded, setExcludedEntry] = useNgoaiSanExcluded(carrierKey)
+
+  // Bấm thẻ để lọc theo đúng trạng thái đó, mở luôn "Chi tiết đối soát"; bấm lại đúng thẻ đang chọn để bỏ
+  // lọc. Không kết hợp với "Chỉ hiện đơn trễ/quá hạn" — chọn cái này thì tắt cái kia, tránh 2 bộ lọc chồng nhau.
+  const selectStatus = (key) => {
+    setStatusFilter(current => (current === key ? null : key))
+    setOnlyProblem(false)
+    setExpanded(true)
+  }
 
   const salesLookup = useMemo(() => buildSalesOrderLookup(salesWeeks), [salesWeeks])
   const packingLookup = useMemo(() => buildPackingLookup(packingWeeks), [packingWeeks])
@@ -522,7 +550,7 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
     problemStatuses.has(r.tinhTrangDongKien) || problemStatuses.has(r.tinhTrangGiao) ||
     r.nhomLay === '>72h' || r.nhomLay === 'Chưa lấy hàng'
   )
-  const visibleRows = onlyProblem ? rows.filter(isProblemRow) : rows
+  const visibleRows = statusFilter ? rows.filter(NGOAI_SAN_MATCHERS[statusFilter]) : onlyProblem ? rows.filter(isProblemRow) : rows
   const problemCount = rows.filter(isProblemRow).length
   const khongKhopRows = rows.filter(r => r.tinhTrangDongKien === 'Không khớp Mã đơn')
 
@@ -598,21 +626,24 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
           <p className="text-xs font-semibold text-gray-500 mb-2">A) Đóng kiện (kho) — Mốc 1 → Mốc 2</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
             {NGOAI_SAN_DONG_KIEN_CARDS.map(c => (
-              <StatCard key={c.key} icon={c.icon} value={stats[c.key]} label={c.label} cls={c.cls} />
+              <StatCard key={c.key} icon={c.icon} value={stats[c.key]} label={c.label} cls={c.cls}
+                onClick={() => selectStatus(c.key)} active={statusFilter === c.key} />
             ))}
           </div>
 
           <p className="text-xs font-semibold text-gray-500 mb-2">B) SPX lấy hàng — Mốc 2 → Mốc 3</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
             {NGOAI_SAN_LAY_HANG_CARDS.map(c => (
-              <StatCard key={c.key} icon={c.icon} value={stats[c.key]} label={c.label} cls={c.cls} />
+              <StatCard key={c.key} icon={c.icon} value={stats[c.key]} label={c.label} cls={c.cls}
+                onClick={() => selectStatus(c.key)} active={statusFilter === c.key} />
             ))}
           </div>
 
           <p className="text-xs font-semibold text-gray-500 mb-2">C) Giao hàng thành công — Mốc 1 → Mốc 4</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
             {NGOAI_SAN_GIAO_CARDS.map(c => (
-              <StatCard key={c.key} icon={c.icon} value={stats[c.key]} label={c.label} cls={c.cls} />
+              <StatCard key={c.key} icon={c.icon} value={stats[c.key]} label={c.label} cls={c.cls}
+                onClick={() => selectStatus(c.key)} active={statusFilter === c.key} />
             ))}
           </div>
 
@@ -638,7 +669,7 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {problemCount > 0 ? (
                   <button
-                    onClick={() => setOnlyProblem(v => !v)}
+                    onClick={() => { setOnlyProblem(v => !v); setStatusFilter(null) }}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${
                       onlyProblem ? 'bg-red-100 border-red-300 text-red-700' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
                     }`}
@@ -655,6 +686,12 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
                 {khongKhopRows.length > 0 && (
                   <span className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
                     {khongKhopRows.length} đơn SPX chưa tìm thấy Mã đơn tương ứng
+                  </span>
+                )}
+                {statusFilter && (
+                  <span className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                    Đang lọc: {NGOAI_SAN_ALL_CARDS.find(c => c.key === statusFilter)?.label}
+                    <button onClick={() => setStatusFilter(null)} className="text-blue-500 hover:text-blue-800 hover:underline ml-1">Bỏ lọc</button>
                   </span>
                 )}
               </div>
@@ -723,9 +760,15 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
 // đổi theo dữ liệu upload thêm sau này. Chỉ đọc (không có nút upload/xoá tuần, checkbox chỉ để xem).
 export function FrozenNgoaiSanPanel({ frozen }) {
   const [expanded, setExpanded] = useState(false)
+  const [statusFilter, setStatusFilter] = useState(null)
   if (!frozen) return null
   const { rows, stats } = frozen
   const problemStatuses = new Set(['TRỄ ĐÓNG KIỆN (>24h)', 'CHƯA ĐÓNG KIỆN — QUÁ 24H', 'TRỄ HẠN (>48h)', 'CHƯA GIAO — QUÁ 48H'])
+  const selectStatus = (key) => {
+    setStatusFilter(current => (current === key ? null : key))
+    setExpanded(true)
+  }
+  const visibleRows = statusFilter ? rows.filter(NGOAI_SAN_MATCHERS[statusFilter]) : rows
 
   return (
     <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4">
@@ -737,19 +780,22 @@ export function FrozenNgoaiSanPanel({ frozen }) {
       <p className="text-xs font-semibold text-gray-500 mb-2">A) Đóng kiện (kho) — Mốc 1 → Mốc 2</p>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
         {NGOAI_SAN_DONG_KIEN_CARDS.map(c => (
-          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls} />
+          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls}
+            onClick={() => selectStatus(c.key)} active={statusFilter === c.key} />
         ))}
       </div>
       <p className="text-xs font-semibold text-gray-500 mb-2">B) SPX lấy hàng — Mốc 2 → Mốc 3</p>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
         {NGOAI_SAN_LAY_HANG_CARDS.map(c => (
-          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls} />
+          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls}
+            onClick={() => selectStatus(c.key)} active={statusFilter === c.key} />
         ))}
       </div>
       <p className="text-xs font-semibold text-gray-500 mb-2">C) Giao hàng thành công — Mốc 1 → Mốc 4</p>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
         {NGOAI_SAN_GIAO_CARDS.map(c => (
-          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls} />
+          <StatCard key={c.key} icon={c.icon} value={stats[c.key] || 0} label={c.label} cls={c.cls}
+            onClick={() => selectStatus(c.key)} active={statusFilter === c.key} />
         ))}
       </div>
 
@@ -771,47 +817,57 @@ export function FrozenNgoaiSanPanel({ frozen }) {
       </button>
 
       {expanded && (
-        <div className="mt-3 overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="bg-[#1e3a5f] text-white">
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mã đơn</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trạng thái SPX</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc1 - Tạo lúc</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc2 - Đóng kiện</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ đóng kiện</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng đóng kiện</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc3 - SPX lấy hàng</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ lấy sau đóng kiện</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Nhóm lấy hàng</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc4 - Giao hàng</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ giao tổng</th>
-                <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng giao (≤48h)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={12} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
-              ) : rows.map((r, i) => (
-                <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
-                  <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
-                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
-                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc1 || '—'}</td>
-                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc2 || '—'}</td>
-                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioDongKien === '' || r.gioDongKien === undefined ? '—' : r.gioDongKien}</td>
-                  <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangDongKien) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangDongKien || '—'}</td>
-                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc3 || '—'}</td>
-                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioLaySauDongKien === '' || r.gioLaySauDongKien === undefined ? '—' : r.gioLaySauDongKien}</td>
-                  <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${!r.excludedFromReport && (r.nhomLay === '>72h' || r.nhomLay === 'Chưa lấy hàng') ? 'text-red-600 font-medium' : ''}`}>
-                    {r.excludedFromReport ? 'Chưa lấy hàng (đã bỏ qua)' : (r.nhomLay || '—')}
-                  </td>
-                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc4 || '—'}</td>
-                  <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioGiaoTong === '' || r.gioGiaoTong === undefined ? '—' : r.gioGiaoTong}</td>
-                  <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangGiao) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangGiao || '—'}</td>
+        <div className="mt-3">
+          {statusFilter && (
+            <div className="flex items-center gap-1.5 mb-3">
+              <span className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                Đang lọc: {NGOAI_SAN_ALL_CARDS.find(c => c.key === statusFilter)?.label}
+                <button onClick={() => setStatusFilter(null)} className="text-blue-500 hover:text-blue-800 hover:underline ml-1">Bỏ lọc</button>
+              </span>
+            </div>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-gray-200">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#1e3a5f] text-white">
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mã đơn</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trạng thái SPX</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc1 - Tạo lúc</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc2 - Đóng kiện</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ đóng kiện</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng đóng kiện</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc3 - SPX lấy hàng</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ lấy sau đóng kiện</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Nhóm lấy hàng</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc4 - Giao hàng</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Giờ giao tổng</th>
+                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tình trạng giao (≤48h)</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visibleRows.length === 0 ? (
+                  <tr><td colSpan={12} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
+                ) : visibleRows.map((r, i) => (
+                  <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
+                    <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc1 || '—'}</td>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc2 || '—'}</td>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioDongKien === '' || r.gioDongKien === undefined ? '—' : r.gioDongKien}</td>
+                    <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangDongKien) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangDongKien || '—'}</td>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc3 || '—'}</td>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioLaySauDongKien === '' || r.gioLaySauDongKien === undefined ? '—' : r.gioLaySauDongKien}</td>
+                    <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${!r.excludedFromReport && (r.nhomLay === '>72h' || r.nhomLay === 'Chưa lấy hàng') ? 'text-red-600 font-medium' : ''}`}>
+                      {r.excludedFromReport ? 'Chưa lấy hàng (đã bỏ qua)' : (r.nhomLay || '—')}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc4 || '—'}</td>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.gioGiaoTong === '' || r.gioGiaoTong === undefined ? '—' : r.gioGiaoTong}</td>
+                    <td className={`px-3 py-2 border border-gray-200 whitespace-nowrap ${problemStatuses.has(r.tinhTrangGiao) ? 'text-red-600 font-medium' : ''}`}>{r.tinhTrangGiao || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
