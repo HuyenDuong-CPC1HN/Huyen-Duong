@@ -193,7 +193,6 @@ function fillHeaderFields(doc, sstDoc, metadata, processedAt) {
 function ensureDataRows(doc, rowCount) {
   if (rowCount <= DATA_TEMPLATE_ROWS) return FOOTER_ROW_TEMPLATE
 
-  const sheetData = doc.querySelector('sheetData')
   const templateRow = doc.querySelector(`row[r="${CLONE_STYLE_ROW}"]`)
   const footerRow = doc.querySelector(`row[r="${FOOTER_ROW_TEMPLATE}"]`)
   const extra = rowCount - DATA_TEMPLATE_ROWS
@@ -212,7 +211,7 @@ function ensureDataRows(doc, rowCount) {
       const f = c.querySelector('f')
       if (f) f.remove()
     })
-    sheetData.insertBefore(clone, footerRow)
+    footerRow.before(clone)
     setCellNumber(doc, newRowNum, 'A', DATA_TEMPLATE_ROWS + i + 1)
   }
 
@@ -244,7 +243,8 @@ function fillDataRows(doc, sstDoc, rows, styleIds) {
   rows.forEach((r, index) => {
     const row = DATA_FIRST_ROW + index
     const hanDung = formatDateVi(r.hanDung)
-    const tenHang = `${r.maHang ? `${r.maHang} - ` : ''}${r.tenHang || ''}`
+    const productPrefix = r.maHang ? `${r.maHang} - ` : ''
+    const tenHang = productPrefix + (r.tenHang || '')
     setCellNumber(doc, row, 'A', index + 1)
     setCellString(doc, sstDoc, row, 'B', tenHang)
     setCellString(doc, sstDoc, row, 'C', r.dvt)
@@ -265,8 +265,7 @@ function fillDataRows(doc, sstDoc, rows, styleIds) {
 
 function updatePrintArea(workbookDoc, footerRowNum) {
   const defs = workbookDoc.getElementsByTagName('definedName')
-  for (let i = 0; i < defs.length; i += 1) {
-    const def = defs[i]
+  for (const def of defs) {
     if (def.getAttribute('name') === '_xlnm.Print_Area') {
       def.textContent = def.textContent.replace(/\$M\$\d+$/, `$M$${footerRowNum + 1}`)
     }
@@ -306,12 +305,11 @@ export async function fillReceiptTemplate(templateBuffer, rows, { metadata = {},
 function triggerDownload(bytes, filename) {
   const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
+  if (!url.startsWith('blob:')) return
   const a = document.createElement('a')
   a.href = url
   a.download = filename
-  document.body.appendChild(a)
   a.click()
-  a.remove()
   URL.revokeObjectURL(url)
 }
 
