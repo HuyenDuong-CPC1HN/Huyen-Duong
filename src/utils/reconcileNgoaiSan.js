@@ -4,7 +4,11 @@ const clean = s => String(s || '').replace(/^'+|'+$/g, '').trim()
 
 // "Tạo lúc" trong file "Danh sách thống kê" (đội kinh doanh lên đơn) đôi khi bị Excel tách thành 2 cột:
 // giờ ("17:44") ở cột "Tạo lúc", ngày kiểu M/D/YY ("9/4/26") ở cột liền kề không có tên — ghép lại thành
-// 1 mốc thời gian đầy đủ. Fallback: 1 cột duy nhất dạng chuỗi "17:44 04/09/2026" (giờ:phút ngày/tháng/năm).
+// 1 mốc thời gian đầy đủ. Fallback 1: 1 cột duy nhất dạng chuỗi "17:44 04/09/2026" (giờ:phút ngày/tháng/năm).
+// Fallback 2: dán trực tiếp text từ trang thống kê web vào Excel — Excel tự nhận diện thành ngày giờ và
+// hiển thị lại theo định dạng Mỹ mặc định "M/D/YY H:mm" (vd "9/11/26 17:24" = ngày 11/09/2026, KHÔNG phải
+// ngày 9 tháng 11 — đã xác nhận qua dữ liệu thật, tháng luôn cố định "9" xuyên suốt file 1 tuần, ngày mới
+// đổi từ 5-11) — ngày đứng trước giờ, ngược thứ tự với fallback 1.
 function parseTaoLuc(row) {
   const timePart = clean(row['Tạo lúc'])
   // Cột ngày không có tiêu đề: SheetJS đặt tên "__EMPTY" (đọc qua sheet_to_json mặc định) — ""
@@ -19,9 +23,15 @@ function parseTaoLuc(row) {
     return new Date(yy, Number(MM) - 1, Number(dd), Number(hh), Number(mm))
   }
   const m = timePart.match(/^(\d{1,2}):(\d{2})\s+(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (!m) return null
-  const [, hh, mm, dd, MM, yyyy] = m
-  return new Date(Number(yyyy), Number(MM) - 1, Number(dd), Number(hh), Number(mm))
+  if (m) {
+    const [, hh, mm, dd, MM, yyyy] = m
+    return new Date(Number(yyyy), Number(MM) - 1, Number(dd), Number(hh), Number(mm))
+  }
+  const mUs = timePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})$/)
+  if (!mUs) return null
+  const [, MM, dd, yy, hh, mm] = mUs
+  const yyyy = yy.length === 2 ? 2000 + Number(yy) : Number(yy)
+  return new Date(yyyy, Number(MM) - 1, Number(dd), Number(hh), Number(mm))
 }
 
 // SPX xuất "Thời gian lấy hàng/gửi hàng"/"Thời gian giao hàng" theo yyyy-mm-dd HH:mm
