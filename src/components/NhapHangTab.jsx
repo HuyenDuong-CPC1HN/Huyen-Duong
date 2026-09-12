@@ -11,7 +11,6 @@ import {
   detectPhieuXuatKhoWarehouse,
   extractPdfText,
   mergeSupplementRows,
-  mergeWarehouseRows,
   parsePdfMetadata,
   readWarehouseExportRows,
   recheckKienTotal,
@@ -668,14 +667,18 @@ export default function NhapHangTab() {
     }
   }
 
-  // Thêm file Excel phiếu xuất kho BỔ SUNG vào 1 kho của chuyến đã xử lý xong — dùng khi phát hiện lúc
+  // Thêm file BỔ SUNG (Excel hoặc PDF phiếu xuất kho) vào chuyến đã xử lý xong — dùng khi phát hiện lúc
   // đầu quên upload thiếu file. KHÔNG xử lý lại từ đầu (sẽ mất mọi chỉnh sửa tay đã làm): đọc riêng (các)
-  // file mới, gộp chúng với nhau như lúc xử lý ban đầu (mergeWarehouseRows), rồi cộng dồn vào bảng hiện có
-  // theo Mã hàng+Số lô (mergeSupplementRows) — dòng đã sửa tay (Ghi chú, SL TT...) được giữ nguyên.
+  // file mới rồi chạy qua ĐÚNG buildReceiptFromFiles như lúc xử lý ban đầu để có dòng đã merge/enrich, sau
+  // đó cộng dồn vào bảng hiện có theo Mã hàng+Số lô (mergeSupplementRows) — dòng đã sửa tay (Ghi chú, SL
+  // TT...) được giữ nguyên. File Excel thuộc ĐÚNG vùng bấm nút (Kho C hay Kho LGT do người dùng chọn khi
+  // thả file, không tự suy ra được); file PDF phiếu xuất kho tự route theo "Lý do xuất kho" ghi trong
+  // chính nó — có thể route sang kho KHÁC với nút vừa bấm, giống hệt lúc xử lý lần đầu.
   const addMoreWarehouseFiles = async (warehouse, incoming) => {
     if (!active) return
     const excelFiles = incoming.filter(isExcelFile)
-    if (excelFiles.length === 0) return
+    const pdfFiles = incoming.filter(isPdfFile)
+    if (excelFiles.length === 0 && pdfFiles.length === 0) return
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
     const fileNamesKey = warehouse === 'C' ? 'khoCFileNames' : 'khoLgtFileNames'
     setUploadingSupplement(current => ({ ...current, [key]: true }))
@@ -683,14 +686,26 @@ export default function NhapHangTab() {
     try {
       const fileErrors = []
       const newRawRows = await readWarehouseRowsFromFiles(excelFiles, fileErrors)
+      const pdfItems = await readPdfTextsFromFiles(pdfFiles, fileErrors)
       if (fileErrors.length > 0) throw new Error(fileErrors.join('; '))
-      const newRows = mergeWarehouseRows(newRawRows)
-      const nextRows = mergeSupplementRows(active[key] || [], newRows)
-      const nextFileNames = [...(active[fileNamesKey] || []), ...excelFiles.map(f => f.name)]
-      updateBatch(active.id, { [key]: nextRows, [fileNamesKey]: nextFileNames })
+      const pdfTexts = pdfItems.map(item => item.text)
+      const warehouseWarnings = warehouse === 'C'
+        ? collectWarehouseWarnings(pdfItems, [])
+        : collectWarehouseWarnings([], pdfItems)
+      const { khoC: newKhoC, khoLgt: newKhoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({
+        khoCRows: warehouse === 'C' ? newRawRows : [],
+        khoLgtRows: warehouse === 'LGT' ? newRawRows : [],
+        pdfTexts,
+      })
+      const nextKhoC = mergeSupplementRows(active.khoC || [], newKhoC)
+      const nextKhoLgt = mergeSupplementRows(active.khoLgt || [], newKhoLgt)
+      const nextFileNames = [...(active[fileNamesKey] || []), ...incoming.map(f => f.name)]
+      const newWarnings = [...warehouseWarnings, ...(reconciliationWarnings || [])].map(m => `Cảnh báo (bổ sung): ${m}`)
+      const nextWarnings = [...(active.warnings || []), ...newWarnings]
+      updateBatch(active.id, { khoC: nextKhoC, khoLgt: nextKhoLgt, [fileNamesKey]: nextFileNames, warnings: nextWarnings })
       setBatches(readBatches())
     } catch (err) {
-      setError(err.message || 'Không đọc được file Excel bổ sung.')
+      setError(err.message || 'Không đọc được file bổ sung.')
     } finally {
       setUploadingSupplement(current => ({ ...current, [key]: false }))
     }
@@ -897,18 +912,19 @@ export default function NhapHangTab() {
             <X size={14} />
           </button>
         </div>
-        {/* Bổ sung file Excel còn thiếu cho chuyến ĐÃ xử lý xong — không xử lý lại từ đầu (sẽ mất chỉnh
-            sửa tay), chỉ đọc riêng file mới rồi cộng dồn vào bảng theo Mã hàng+Số lô. */}
+        {/* Bổ sung file (Excel hoặc PDF phiếu xuất kho) còn thiếu cho chuyến ĐÃ xử lý xong — không xử lý
+            lại từ đầu (sẽ mất chỉnh sửa tay), chỉ đọc riêng file mới rồi cộng dồn vào bảng theo Mã hàng+Số
+            lô. File PDF phiếu xuất kho tự route đúng kho theo nội dung, không phụ thuộc nút nào bấm. */}
         <label
           className={`flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm cursor-pointer
             ${uploadingSupplement.khoC ? 'opacity-60 pointer-events-none' : 'hover:border-blue-400 text-gray-600'}`}
-          title="Thêm file Excel phiếu xuất kho còn thiếu vào Kho C — cộng dồn vào bảng đã có, không xử lý lại từ đầu"
+          title="Thêm file Excel hoặc PDF phiếu xuất kho còn thiếu vào Kho C — cộng dồn vào bảng đã có, không xử lý lại từ đầu"
         >
           <Plus size={14} /> {uploadingSupplement.khoC ? 'Đang thêm...' : 'Thêm file Kho C'}
           <input
             type="file"
             multiple
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.pdf"
             className="hidden"
             disabled={uploadingSupplement.khoC}
             onChange={(e) => { void addMoreWarehouseFiles('C', [...e.target.files]); e.target.value = '' }}
@@ -917,13 +933,13 @@ export default function NhapHangTab() {
         <label
           className={`flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm cursor-pointer
             ${uploadingSupplement.khoLgt ? 'opacity-60 pointer-events-none' : 'hover:border-blue-400 text-gray-600'}`}
-          title="Thêm file Excel phiếu xuất kho còn thiếu vào Kho LGT — cộng dồn vào bảng đã có, không xử lý lại từ đầu"
+          title="Thêm file Excel hoặc PDF phiếu xuất kho còn thiếu vào Kho LGT — cộng dồn vào bảng đã có, không xử lý lại từ đầu"
         >
           <Plus size={14} /> {uploadingSupplement.khoLgt ? 'Đang thêm...' : 'Thêm file Kho LGT'}
           <input
             type="file"
             multiple
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.pdf"
             className="hidden"
             disabled={uploadingSupplement.khoLgt}
             onChange={(e) => { void addMoreWarehouseFiles('LGT', [...e.target.files]); e.target.value = '' }}
