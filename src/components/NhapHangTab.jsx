@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Upload, FileUp, FileSpreadsheet, X, Download, Search, PackagePlus,
   Pencil, Save, History, FileText, Plus, Trash2, RefreshCw,
@@ -18,10 +18,16 @@ import { exportReceiptFromTemplate } from '../utils/exportGoodsReceipt'
 const STORAGE_KEY = 'goods_receipt_batches'
 const ACTIVE_KEY = 'goods_receipt_active'
 
+function withRowIds(rows) {
+  return rows.map(row => (row.rowId ? row : { ...row, rowId: crypto.randomUUID() }))
+}
+
 function readBatches() {
   try {
     const batches = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    return Array.isArray(batches) ? batches : []
+    return Array.isArray(batches)
+      ? batches.map(batch => ({ ...batch, khoC: withRowIds(batch.khoC || []), khoLgt: withRowIds(batch.khoLgt || []) }))
+      : []
   } catch { return [] }
 }
 
@@ -29,7 +35,12 @@ function writeBatches(batches) { localStorage.setItem(STORAGE_KEY, JSON.stringif
 
 function addBatch(entry) {
   const batches = readBatches()
-  const withId = { id: entry.id || String(Date.now()), ...entry }
+  const withId = {
+    ...entry,
+    id: entry.id || String(Date.now()),
+    khoC: withRowIds(entry.khoC || []),
+    khoLgt: withRowIds(entry.khoLgt || []),
+  }
   writeBatches([withId, ...batches])
   localStorage.setItem(ACTIVE_KEY, withId.id)
   return withId
@@ -109,17 +120,15 @@ function isSupportedFile(file) { return isExcelFile(file) || isPdfFile(file) }
 // Vùng upload đa file cho 1 kho vật lý — chuyến hàng thường có nhiều phiếu xuất kho (nhiều Excel) +
 // có thể kèm PDF phiếu xuất kho riêng, nên nhận bao nhiêu file cũng được thay vì đúng 1 file cố định.
 function FileZone({ label, hint, files, onAddFiles, onRemoveFile, accept = '.xlsx,.xls,.pdf' }) {
-  const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
 
   return (
     <div className="border border-gray-200 rounded-xl p-3 bg-white">
-      <div
+      <label
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
         onDrop={(e) => { e.preventDefault(); setDragging(false); onAddFiles([...e.dataTransfer.files]) }}
-        onClick={() => inputRef.current?.click()}
-        className={`flex flex-col items-center justify-center gap-2 w-full min-h-28 rounded-xl border-2 border-dashed cursor-pointer transition-all select-none p-4
+        className={`flex flex-col items-center justify-center gap-2 w-full min-h-28 rounded-xl border-2 border-dashed cursor-pointer transition-all select-none p-4 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200
           ${dragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'}`}
       >
         <FileUp size={20} className={dragging ? 'text-blue-500' : 'text-gray-400'} />
@@ -127,15 +136,14 @@ function FileZone({ label, hint, files, onAddFiles, onRemoveFile, accept = '.xls
           <p className="text-sm font-semibold text-gray-700">{label}</p>
           <p className="text-xs text-gray-400 mt-0.5">{hint}</p>
         </div>
-      </div>
       <input
-        ref={inputRef}
         type="file"
         multiple
         accept={accept}
-        className="hidden"
+        className="sr-only"
         onChange={(e) => { onAddFiles([...e.target.files]); e.target.value = '' }}
       />
+      </label>
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2">
           {files.map((file, i) => (
@@ -283,12 +291,7 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow }) {
           <tbody>
             {rows.map((row, index) => (
               <ReceiptTableRow
-                // Dùng index làm key, KHÔNG ghép Mã hàng/Số lô vào key — 2 ô đó chính là ô người dùng
-                // gõ tay khi Chỉnh sửa, nên key đổi theo từng ký tự khiến React coi dòng là component
-                // mới, unmount rồi mount lại <input> ngay sau mỗi ký tự -> mất focus, phải bấm lại liên
-                // tục. ReceiptTableRow không giữ state nội bộ (mọi giá trị đến từ prop row) nên key theo
-                // index là an toàn.
-                key={index}
+                key={row.rowId}
                 row={row}
                 index={index}
                 editing={editing}
@@ -301,6 +304,34 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow }) {
       </div>
     </div>
   )
+}
+
+function collectWarehouseWarnings(khoCItems, khoLgtItems) {
+  const warnings = []
+  for (const [items, warehouse] of [[khoCItems, 'C'], [khoLgtItems, 'LGT']]) {
+    for (const item of items) {
+      const detected = detectPhieuXuatKhoWarehouse(item.text)
+      if (detected && detected !== warehouse) warnings.push(`${item.name}: nội dung PDF ghi Kho ${detected} nhưng đang ở vùng Kho ${warehouse}`)
+    }
+  }
+  return warnings
+}
+
+function groupBatchesByMonth(batches) {
+  const map = new Map()
+  for (const batch of batches) {
+    const key = monthKeyOf(batch.processedAt)
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(batch)
+  }
+  for (const list of map.values()) list.sort((a, b) => new Date(b.processedAt) - new Date(a.processedAt))
+  return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))
+}
+
+function resolveEffectiveMonthKey(selectedMonthKey, active, monthGroups) {
+  if (selectedMonthKey && monthGroups.some(([key]) => key === selectedMonthKey)) return selectedMonthKey
+  if (active) return monthKeyOf(active.processedAt)
+  return monthGroups[0]?.[0] || null
 }
 
 export default function NhapHangTab() {
@@ -328,22 +359,11 @@ export default function NhapHangTab() {
 
   const active = batches.find(batch => batch.id === activeId) || null
 
-  const monthGroups = useMemo(() => {
-    const map = new Map()
-    for (const batch of batches) {
-      const key = monthKeyOf(batch.processedAt)
-      if (!map.has(key)) map.set(key, [])
-      map.get(key).push(batch)
-    }
-    for (const list of map.values()) list.sort((a, b) => new Date(b.processedAt) - new Date(a.processedAt))
-    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))
-  }, [batches])
+  const monthGroups = useMemo(() => groupBatchesByMonth(batches), [batches])
 
   // Mặc định bám theo tháng của chuyến đang xem; chỉ dùng lựa chọn tay khi tháng đó vẫn còn tồn tại
   // (vd sau khi xoá hết chuyến trong tháng đang xem tay thì quay lại bám theo active).
-  const effectiveMonthKey = (selectedMonthKey && monthGroups.some(([key]) => key === selectedMonthKey))
-    ? selectedMonthKey
-    : (active ? monthKeyOf(active.processedAt) : monthGroups[0]?.[0] || null)
+  const effectiveMonthKey = resolveEffectiveMonthKey(selectedMonthKey, active, monthGroups)
   const batchesInMonth = monthGroups.find(([key]) => key === effectiveMonthKey)?.[1] || []
 
   const canProcess = pendingFiles.khoC.some(isExcelFile)
@@ -406,16 +426,7 @@ export default function NhapHangTab() {
       // giao nhận" chỉ dùng để đối chiếu, không quan tâm vùng nào.
       const pdfTexts = [...khoCPdfItems, ...khoLgtPdfItems, ...bienBanPdfItems].map(item => item.text)
 
-      // Cảnh báo (không chặn) nếu lỡ thả nhầm vùng thói quen — không ảnh hưởng kết quả phân kho.
-      const warehouseWarnings = []
-      for (const item of khoCPdfItems) {
-        const detected = detectPhieuXuatKhoWarehouse(item.text)
-        if (detected && detected !== 'C') warehouseWarnings.push(`${item.name}: nội dung PDF ghi Kho ${detected} nhưng đang ở vùng Kho C`)
-      }
-      for (const item of khoLgtPdfItems) {
-        const detected = detectPhieuXuatKhoWarehouse(item.text)
-        if (detected && detected !== 'LGT') warehouseWarnings.push(`${item.name}: nội dung PDF ghi Kho ${detected} nhưng đang ở vùng Kho LGT`)
-      }
+      const warehouseWarnings = collectWarehouseWarnings(khoCPdfItems, khoLgtPdfItems)
 
       const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
       const { khoC, khoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
@@ -495,7 +506,7 @@ export default function NhapHangTab() {
   const addRow = (warehouse) => {
     if (!active) return
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
-    const newRow = { maHang: '', tenHang: '', dvt: '', soLo: '', hanDung: null, kienNguyen: 0, kienLe: 0, slHoaDon: 0, slThucTe: null, ghiChu: '', needsManual: true }
+    const newRow = { rowId: crypto.randomUUID(), maHang: '', tenHang: '', dvt: '', soLo: '', hanDung: null, kienNguyen: 0, kienLe: 0, slHoaDon: 0, slThucTe: null, ghiChu: '', needsManual: true }
     const next = { ...active, [key]: [newRow, ...(active[key] || [])] }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
   }
@@ -540,8 +551,15 @@ export default function NhapHangTab() {
     try {
       const { createStorageFilesRepository } = await import('../data/storageFiles')
       const { supabase } = await import('../supabase')
-      const url = await createStorageFilesRepository(supabase).getSignedUrl(storagePath)
-      window.open(url, '_blank', 'noopener')
+      const signedUrl = new URL(await createStorageFilesRepository(supabase).getSignedUrl(storagePath))
+      if (signedUrl.origin !== new URL(import.meta.env.VITE_SUPABASE_URL).origin) {
+        throw new Error('Liên kết xem biên bản không hợp lệ.')
+      }
+      const a = document.createElement('a')
+      a.href = signedUrl.href
+      a.target = '_blank'
+      a.rel = 'noopener'
+      a.click()
     } catch (err) {
       setError(err.message || 'Không mở được biên bản giao nhận.')
     }
@@ -567,14 +585,16 @@ export default function NhapHangTab() {
     setUploadingBienBan(true)
     setError('')
     try {
-      const { createStorageFilesRepository, monthFolder } = await import('../data/storageFiles')
+      const { createStorageFilesRepository } = await import('../data/storageFiles')
       const { supabase } = await import('../supabase')
       const repo = createStorageFilesRepository(supabase)
       const added = []
       for (const file of pdfs) {
-        const path = `goods-receipt/${monthFolder(active.processedAt)}/${active.id}/${file.name}`
+        const fileName = file.name.replaceAll('..', '').replace(/[\\/]/g, '')
+        if (!fileName) throw new Error('Tên tệp không hợp lệ.')
+        const path = `goods-receipt/${crypto.randomUUID()}.pdf`
         await repo.writeFile(path, file)
-        added.push({ fileName: file.name, storagePath: path })
+        added.push({ fileName, storagePath: path })
       }
       updateBatch(active.id, { bienBanFiles: [...(active.bienBanFiles || []), ...added] })
       setBatches(readBatches())
@@ -830,7 +850,7 @@ export default function NhapHangTab() {
             <h3 className="font-semibold text-sm text-amber-800">Cảnh báo đối chiếu ({active.warnings.length})</h3>
           </div>
           <ul className="space-y-1 text-xs text-amber-800 list-disc list-inside">
-            {active.warnings.map((w, i) => <li key={i}>{w}</li>)}
+            {active.warnings.map(w => <li key={w}>{w}</li>)}
           </ul>
           <p className="text-xs text-amber-700 mt-2">Kiểm tra và sửa trực tiếp bằng nút "Chỉnh sửa" ở trên nếu cần.</p>
         </div>

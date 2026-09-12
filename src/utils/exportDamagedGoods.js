@@ -126,7 +126,6 @@ function shiftRowTo(row, newRowNum) {
 function ensureDataRows(doc, rowCount) {
   if (rowCount <= 1) return 0
   const extra = rowCount - 1
-  const sheetData = doc.querySelector('sheetData')
   const templateRow = doc.querySelector(`row[r="${DATA_ROW_TEMPLATE}"]`)
 
   const footerRows = []
@@ -140,7 +139,7 @@ function ensureDataRows(doc, rowCount) {
   // dòng dữ liệu/dòng chân vừa thêm khi có > 5 dòng dữ liệu (batch thật hàng huỷ Kho A 21 dòng đã gặp lỗi
   // này — mất chữ mục "7. Các thành phần tham gia hủy" vì 2 <row> cùng "r", Excel chỉ hiển thị 1 dòng).
   const trailingRows = []
-  for (let node = footerRows[footerRows.length - 1].nextElementSibling; node; node = node.nextElementSibling) {
+  for (let node = footerRows.at(-1).nextElementSibling; node; node = node.nextElementSibling) {
     trailingRows.push(node)
   }
 
@@ -152,7 +151,7 @@ function ensureDataRows(doc, rowCount) {
       const col = c.getAttribute('r').match(/^[A-Z]+/)[0]
       c.setAttribute('r', `${col}${newRowNum}`)
     })
-    sheetData.insertBefore(clone, firstFooterRow)
+    firstFooterRow.before(clone)
   }
 
   footerRows.forEach((row, i) => shiftRowTo(row, FOOTER_FIRST_ROW_TEMPLATE + i + extra))
@@ -169,7 +168,9 @@ function ensureDataRows(doc, rowCount) {
   const dim = doc.querySelector('dimension')
   if (dim) {
     const ref = dim.getAttribute('ref')
-    dim.setAttribute('ref', ref.replace(/(\d+)$/, num => String(Number(num) + extra)))
+    const endCell = ref.slice(ref.lastIndexOf(':') + 1)
+    const endRow = Number.parseInt(endCell.replaceAll(/[A-Z$]/g, ''), 10)
+    dim.setAttribute('ref', `${ref.slice(0, -String(endRow).length)}${endRow + extra}`)
   }
   doc.querySelector('rowBreaks')?.remove()
 
@@ -179,8 +180,7 @@ function ensureDataRows(doc, rowCount) {
 function updatePrintArea(workbookDoc, extra) {
   if (!extra) return
   const defs = workbookDoc.getElementsByTagName('definedName')
-  for (let i = 0; i < defs.length; i += 1) {
-    const def = defs[i]
+  for (const def of defs) {
     if (def.getAttribute('name') === '_xlnm.Print_Area') {
       def.textContent = def.textContent.replace(/\$(\d+)$/, (m, num) => `$${Number(num) + extra}`)
     }
@@ -243,12 +243,11 @@ async function fillXacMinhTemplate(templatePath, data, fetchImpl = fetch) {
 
 function triggerDownloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
+  if (!url.startsWith('blob:')) return
   const a = document.createElement('a')
   a.href = url
   a.download = filename
-  document.body.appendChild(a)
   a.click()
-  a.remove()
   URL.revokeObjectURL(url)
 }
 function triggerDownloadBytes(bytes, filename) {
