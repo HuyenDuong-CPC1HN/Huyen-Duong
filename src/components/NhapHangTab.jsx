@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Upload, FileUp, FileSpreadsheet, X, Download, Search, PackagePlus,
   Pencil, Save, History, FileText, Plus, Trash2, RefreshCw,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import {
@@ -207,13 +208,15 @@ function DateCell({ value, onChange, className = '' }) {
   )
 }
 
-function ReceiptTableRow({ row, index, editing, onRowChange, onRemoveRow }) {
+function ReceiptTableRow({ row, index, rank, editing, onRowChange, onRemoveRow }) {
   const chenh = calcChenhLech(row)
   const highlight = row.needsManual || !row.hanDung
 
   return (
     <tr className={highlight ? 'bg-amber-50/70' : 'border-t border-gray-50'}>
-      <td className="px-2 py-1.5 text-gray-500">{index + 1}</td>
+      {/* STT hiển thị theo thứ tự đang XEM (rank) — khác với index (vị trí thật trong mảng dữ liệu,
+          dùng để gọi onRowChange/onRemoveRow đúng dòng) vì bảng có thể đang sắp xếp alphabet. */}
+      <td className="px-2 py-1.5 text-gray-500">{(rank ?? index) + 1}</td>
       <td className="px-2 py-1.5 font-medium">
         {editing ? <EditableCell value={row.maHang} onChange={(v) => onRowChange(index, 'maHang', v)} /> : row.maHang}
       </td>
@@ -271,7 +274,51 @@ function ReceiptTableRow({ row, index, editing, onRowChange, onRemoveRow }) {
   )
 }
 
+// Cột bấm được để sắp xếp alphabet — map tên cột hiển thị -> field dữ liệu tương ứng.
+const SORTABLE_COLUMNS = { 'Mã hàng': 'maHang', 'Tên hàng': 'tenHang' }
+
+function SortableHeader({ label, sortKey, activeKey, dir, disabled, onToggle }) {
+  const active = activeKey === sortKey
+  return (
+    <th className="px-2 py-2 text-left font-medium whitespace-nowrap">
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        disabled={disabled}
+        title={disabled ? 'Tắt "Chỉnh sửa" để sắp xếp theo cột này' : `Bấm để sắp xếp theo ${label} (A→Z / Z→A)`}
+        className={`flex items-center gap-1 ${disabled ? 'cursor-not-allowed text-gray-400' : 'hover:text-gray-900'}`}
+      >
+        {label}
+        {active
+          ? (dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)
+          : <ArrowUpDown size={12} className="text-gray-300" />}
+      </button>
+    </th>
+  )
+}
+
 function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow }) {
+  const [sortKey, setSortKey] = useState(null)
+  const [sortDir, setSortDir] = useState('asc')
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  // Sắp xếp CHỈ áp dụng khi KHÔNG Chỉnh sửa — nếu sắp cả lúc đang gõ Mã hàng/Tên hàng, mỗi ký tự gõ vào
+  // sẽ đổi thứ tự ngay, dòng đang gõ nhảy vị trí liên tục ngay dưới con trỏ, trải nghiệm rất khó chịu dù
+  // key={row.rowId} vẫn giữ đúng danh tính từng dòng. originalIndex giữ nguyên vị trí thật trong mảng dữ
+  // liệu để onRowChange/onRemoveRow sửa đúng dòng dù bảng đang hiển thị theo thứ tự đã sắp xếp.
+  const ordered = useMemo(() => {
+    const indexed = rows.map((row, originalIndex) => ({ row, originalIndex }))
+    if (editing || !sortKey) return indexed
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...indexed].sort((a, b) =>
+      dir * String(a.row[sortKey] || '').localeCompare(String(b.row[sortKey] || ''), 'vi', { sensitivity: 'base', numeric: true })
+    )
+  }, [rows, editing, sortKey, sortDir])
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -283,17 +330,30 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow }) {
           <thead className="bg-gray-50 text-gray-600">
             <tr>
               {['STT', 'Mã hàng', 'Tên hàng', 'ĐVT', 'Số lô', 'Hạn dùng', 'Kiện nguyên', 'Kiện lẻ', 'SL HĐ', 'SL TT', 'Chênh lệch', 'Ghi chú'].map(h => (
-                <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">{h}</th>
+                SORTABLE_COLUMNS[h] ? (
+                  <SortableHeader
+                    key={h}
+                    label={h}
+                    sortKey={SORTABLE_COLUMNS[h]}
+                    activeKey={sortKey}
+                    dir={sortDir}
+                    disabled={editing}
+                    onToggle={toggleSort}
+                  />
+                ) : (
+                  <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">{h}</th>
+                )
               ))}
               {editing && <th className="px-2 py-2 w-8" />}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
+            {ordered.map(({ row, originalIndex }, rank) => (
               <ReceiptTableRow
                 key={row.rowId}
                 row={row}
-                index={index}
+                index={originalIndex}
+                rank={rank}
                 editing={editing}
                 onRowChange={onRowChange}
                 onRemoveRow={onRemoveRow}
