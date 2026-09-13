@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Wave Home Hero trên HomeBrief | Advisory</title>
+  <style>
+    :root {
+      --surface: oklch(0.985 0.002 260);
+      --surface-raised: oklch(1 0 0);
+      --surface-muted: oklch(0.965 0.004 260);
+      --ink: oklch(0.19 0.012 260);
+      --ink-soft: oklch(0.4 0.014 260);
+      --ink-faint: oklch(0.56 0.012 260);
+      --line: oklch(0.88 0.008 260);
+      --line-strong: oklch(0.76 0.012 260);
+      --blue: oklch(0.51 0.16 255);
+      --blue-dark: oklch(0.4 0.15 255);
+      --blue-soft: oklch(0.95 0.03 255);
+      --radius: 12px;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --space-7: 48px;
+      --space-8: 64px;
+      --space-9: 96px;
+      --measure: 72ch;
+      --ease: cubic-bezier(0.25, 1, 0.5, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--surface);
+      color: var(--ink);
+      font-family: Geist, "Segoe UI Variable", "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+    }
+    a { color: inherit; text-underline-offset: 3px; }
+    a:hover { color: var(--blue-dark); }
+    a:focus-visible {
+      outline: 3px solid var(--blue);
+      outline-offset: 3px;
+      border-radius: var(--space-1);
+    }
+    ::selection { background: var(--blue-soft); color: var(--ink); }
+
+    .skip-link {
+      position: fixed;
+      z-index: 10;
+      top: var(--space-2);
+      left: var(--space-2);
+      padding: var(--space-3) var(--space-4);
+      background: var(--ink);
+      color: var(--surface-raised);
+      border-radius: var(--radius);
+      transform: translateY(-160%);
+      transition: transform 160ms var(--ease);
+    }
+    .skip-link:focus { transform: translateY(0); }
+    .shell { width: min(100% - 32px, 1200px); margin-inline: auto; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      min-height: 72px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink-soft);
+      font-size: 0.875rem;
+    }
+    .crumb { display: flex; gap: var(--space-2); align-items: center; min-width: 0; }
+    .crumb strong { color: var(--ink); font-weight: 600; }
+    .topbar time { white-space: nowrap; }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-6);
+      padding-block: var(--space-8) var(--space-7);
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      margin: 0 0 var(--space-3);
+      color: var(--blue-dark);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { text-wrap: balance; }
+    h1 {
+      max-width: 17ch;
+      margin: 0;
+      font-size: clamp(2.75rem, 6vw + 1rem, 5.5rem);
+      line-height: 1.04;
+      letter-spacing: -0.035em;
+      font-weight: 650;
+    }
+    .lede {
+      max-width: 58ch;
+      margin: var(--space-5) 0 0;
+      color: var(--ink-soft);
+      font-size: clamp(1.0625rem, 1.4vw, 1.25rem);
+      text-wrap: pretty;
+    }
+    .verdict {
+      display: grid;
+      gap: var(--space-3);
+      align-self: end;
+      padding: var(--space-5);
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .verdict h2, .verdict p { margin: 0; }
+    .verdict h2 { font-size: 1rem; font-weight: 650; }
+    .verdict p { color: var(--ink-soft); text-wrap: pretty; }
+    .mark {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--blue-dark);
+      font-size: 0.875rem;
+      font-weight: 650;
+    }
+    .mark::before {
+      width: 8px;
+      height: 8px;
+      content: "";
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    main { padding-block: var(--space-8) var(--space-9); }
+    .chapter { padding-block: var(--space-7); border-bottom: 1px solid var(--line); }
+    .chapter:first-child { padding-top: 0; }
+    .chapter:last-child { border-bottom: 0; padding-bottom: 0; }
+    .section-heading { max-width: 32ch; margin: 0 0 var(--space-5); font-size: clamp(1.75rem, 3.2vw, 2.75rem); line-height: 1.13; letter-spacing: -0.025em; }
+    .section-intro { max-width: var(--measure); margin: calc(var(--space-5) * -1) 0 var(--space-6); color: var(--ink-soft); text-wrap: pretty; }
+
+    .facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .fact { padding: var(--space-5); background: var(--surface-raised); }
+    .fact dt { margin-bottom: var(--space-2); color: var(--blue-dark); font-size: 0.8125rem; font-weight: 700; }
+    .fact dd { margin: 0; color: var(--ink-soft); text-wrap: pretty; }
+
+    .flow-figure { margin: 0; padding: var(--space-5); background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius); }
+    .flow-figure svg { display: block; width: 100%; height: auto; }
+    .flow-figure figcaption { margin-top: var(--space-4); color: var(--ink-soft); font-size: 0.9375rem; }
+    .flow-line { stroke: var(--line-strong); stroke-width: 1.5; }
+    .flow-node { fill: var(--surface-muted); stroke: var(--line-strong); stroke-width: 1.5; }
+    .flow-node-accent { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 1.5; }
+    .flow-label { fill: var(--ink); font-family: Geist, "Segoe UI Variable", "Segoe UI", sans-serif; font-size: 14px; font-weight: 650; }
+    .flow-note { fill: var(--ink-soft); font-family: Geist, "Segoe UI Variable", "Segoe UI", sans-serif; font-size: 12px; }
+
+    .split { display: grid; gap: var(--space-6); }
+    .split > section { min-width: 0; }
+    .list { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+    .list li { position: relative; padding-left: var(--space-5); color: var(--ink-soft); text-wrap: pretty; }
+    .list li::before { position: absolute; top: 0.65em; left: 0; width: 8px; height: 8px; content: ""; border: 1.5px solid var(--blue); border-radius: 50%; }
+    .dont li::before { border-color: var(--ink-faint); }
+
+    .comparison { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-raised); }
+    table { width: 100%; min-width: 640px; border-collapse: collapse; text-align: left; }
+    th, td { padding: var(--space-4); vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { background: var(--surface-muted); color: var(--ink); font-size: 0.875rem; font-weight: 650; }
+    td { color: var(--ink-soft); text-wrap: pretty; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .recommended { color: var(--blue-dark); font-weight: 650; }
+    .rejected { color: var(--ink-faint); }
+
+    .tradeoffs { display: grid; gap: var(--space-4); }
+    .tradeoff { display: grid; gap: var(--space-2); padding-bottom: var(--space-4); border-bottom: 1px solid var(--line); }
+    .tradeoff:last-child { padding-bottom: 0; border-bottom: 0; }
+    .tradeoff h3, .tradeoff p { margin: 0; }
+    .tradeoff h3 { font-size: 1rem; font-weight: 650; }
+    .tradeoff p { color: var(--ink-soft); text-wrap: pretty; }
+
+    .workflow { counter-reset: flow; display: grid; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
+    .workflow li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+    .workflow li::before { counter-increment: flow; content: counter(flow); display: grid; width: 40px; height: 40px; place-items: center; color: var(--blue-dark); border: 1px solid var(--line-strong); border-radius: 50%; font-size: 0.875rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .workflow strong { display: block; margin-bottom: var(--space-1); }
+    .workflow span { color: var(--ink-soft); text-wrap: pretty; }
+
+    .check-grid { display: grid; gap: var(--space-6); }
+    .checklist { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+    .checklist li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: var(--space-3); color: var(--ink-soft); text-wrap: pretty; }
+    .checklist li::before { width: 16px; height: 16px; margin-top: 0.4em; content: ""; border: 1.5px solid var(--line-strong); border-radius: var(--space-1); }
+
+    .source {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-5);
+      padding: var(--space-5);
+      background: var(--blue-soft);
+      border: 1px solid oklch(0.86 0.055 255);
+      border-radius: var(--radius);
+    }
+    .source h2, .source p { margin: 0; }
+    .source h2 { font-size: 1rem; }
+    .source p { margin-top: var(--space-1); color: var(--ink-soft); font-size: 0.9375rem; }
+    .source a {
+      display: inline-flex;
+      flex: 0 0 auto;
+      min-height: 44px;
+      align-items: center;
+      padding: 0 var(--space-4);
+      border: 1px solid var(--blue);
+      border-radius: 999px;
+      color: var(--blue-dark);
+      font-weight: 650;
+      text-decoration: none;
+      transition: transform 160ms var(--ease), background-color 160ms var(--ease), color 160ms var(--ease);
+    }
+    .source a:hover { background: var(--blue); color: var(--surface-raised); transform: translateY(-2px); }
+    .source a:active { transform: translateY(1px); }
+
+    footer { padding-block: var(--space-5); border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 0.875rem; }
+    footer p { margin: 0; }
+
+    @media (min-width: 768px) {
+      .hero { grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr); align-items: end; padding-block: var(--space-9) var(--space-8); }
+      .split { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-8); }
+      .check-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); align-items: start; }
+    }
+    @media (max-width: 599px) {
+      .topbar { align-items: flex-start; flex-direction: column; justify-content: center; padding-block: var(--space-3); }
+      .facts { grid-template-columns: 1fr; }
+      .source { align-items: flex-start; flex-direction: column; }
+      .source a { width: 100%; justify-content: center; }
+      .flow-figure { padding: var(--space-4); }
+      .flow-label { font-size: 12px; }
+      .flow-note { font-size: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#report">Đến nội dung báo cáo</a>
+  <header class="shell topbar" aria-label="Thông tin báo cáo">
+    <div class="crumb"><span>HomeBrief</span><span aria-hidden="true">/</span><strong>Advisory</strong></div>
+    <time datetime="2026-09-13">13.09.2026</time>
+  </header>
+
+  <div class="shell">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Phạm vi đã xác nhận</p>
+        <h1 id="page-title">Wave Home Hero trên HomeBrief</h1>
+        <p class="lede">Một hero state-first thay intro hiện tại, dùng hành động đã có để làm rõ kênh cần xử lý mà không phát minh dashboard, KPI hay luồng dữ liệu mới.</p>
+      </div>
+      <aside class="verdict" aria-labelledby="verdict-title">
+        <span class="mark">Khuyến nghị</span>
+        <h2 id="verdict-title">Verdict</h2>
+        <p>Làm hero là hợp lý khi nó thay intro và chỉ làm rõ hành động mà HomeBrief đã chọn sẵn. Giữ phạm vi nhỏ, state-first.</p>
+      </aside>
+    </section>
+  </div>
+
+  <main id="report" class="shell" tabindex="-1">
+    <section class="chapter" aria-labelledby="facts-title">
+      <h2 id="facts-title" class="section-heading">Sự thật đã xác minh</h2>
+      <dl class="facts">
+        <div class="fact"><dt>Nguồn kênh</dt><dd>HomeBrief derive trực tiếp bốn kênh từ <code>opsStore</code>: Tongdon, Đơn C, Đơn DTP và TMĐT.</dd></div>
+        <div class="fact"><dt>Trạng thái hợp lệ</dt><dd><code>ready</code>, <code>needsSave</code> và <code>missing</code> là các trạng thái hiện có.</dd></div>
+        <div class="fact"><dt>Hành động kế tiếp</dt><dd><code>nextAction</code> ưu tiên kênh chưa sẵn sàng đầu tiên ngoài Tongdon. CTA hiện tại gọi <code>onNavigate</code>.</dd></div>
+        <div class="fact"><dt>Metric</dt><dd><code>formatOrders</code> chỉ format số hữu hạn. <code>0</code> hợp lệ, còn metric thiếu hoặc không hợp lệ không được thay bằng <code>0</code>.</dd></div>
+        <div class="fact"><dt>n8n</dt><dd>CTA n8n gate theo trạng thái Tongdon, không phải cả bốn kênh. Nó không chứng minh báo cáo hoàn chỉnh.</dd></div>
+        <div class="fact"><dt>Prototype và CSS</dt><dd><code>#home</code> chỉ là authority cho hierarchy. <code>.home-*</code> là CSS chuyên biệt, còn <code>.sheet-tab-*</code> và <code>.report-*</code> đang được dùng chung.</dd></div>
+      </dl>
+    </section>
+
+    <section class="chapter" aria-labelledby="contract-title">
+      <h2 id="contract-title" class="section-heading">Hợp đồng outcome đã xác nhận</h2>
+      <p class="section-intro">Khi mở Home, người dùng cần biết kênh nào trong dữ liệu hiện có cần xử lý và cần đến đâu. Hero thay intro với hierarchy Admin v2, không thêm dashboard hay action model.</p>
+      <figure class="flow-figure" aria-labelledby="flow-caption">
+        <svg viewBox="0 0 900 270" role="img" aria-labelledby="flow-title flow-description">
+          <title id="flow-title">Luồng quyết định cho hero HomeBrief</title>
+          <desc id="flow-description">Nếu có kênh chưa sẵn sàng, hero dùng nextAction và CTA điều hướng bằng onNavigate. Nếu tất cả kênh sẵn sàng, hero nói rõ không có data exception hiện tại và chỉ hiển thị một metric tồn tại, hợp lệ nếu metric đó hữu ích.</desc>
+          <path class="flow-line" d="M450 64V96M450 96H235V126M450 96H665V126" fill="none" />
+          <rect class="flow-node" x="337" y="16" width="226" height="48" rx="12" />
+          <text class="flow-label" x="450" y="46" text-anchor="middle">Trạng thái bốn kênh hiện có</text>
+          <rect class="flow-node-accent" x="76" y="126" width="318" height="104" rx="12" />
+          <text class="flow-label" x="235" y="158" text-anchor="middle">Có kênh chưa sẵn sàng</text>
+          <text class="flow-note" x="235" y="184" text-anchor="middle">H1, subcopy và CTA từ nextAction</text>
+          <text class="flow-note" x="235" y="204" text-anchor="middle">CTA dùng onNavigate tới cùng target</text>
+          <rect class="flow-node" x="506" y="126" width="318" height="104" rx="12" />
+          <text class="flow-label" x="665" y="158" text-anchor="middle">Tất cả kênh sẵn sàng</text>
+          <text class="flow-note" x="665" y="184" text-anchor="middle">Nêu rõ không có data exception hiện tại</text>
+          <text class="flow-note" x="665" y="204" text-anchor="middle">Chỉ thêm một metric có sẵn, hợp lệ nếu hữu ích</text>
+          <path class="flow-line" d="M235 230V250M665 230V250" fill="none" />
+          <text class="flow-note" x="235" y="267" text-anchor="middle">Không có thuật toán ưu tiên thứ hai</text>
+          <text class="flow-note" x="665" y="267" text-anchor="middle">Metric thiếu hoặc không hợp lệ vẫn vắng mặt</text>
+        </svg>
+        <figcaption id="flow-caption">Hero chỉ map presentation từ trạng thái hiện hữu. Không API, storage, Supabase, state model, calculation hay fallback metric mới.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter split" aria-label="Phạm vi thực hiện">
+      <section aria-labelledby="do-title">
+        <h2 id="do-title" class="section-heading">Nên làm</h2>
+        <ul class="list">
+          <li>Dùng <code>deriveChannels</code>, <code>exceptions</code> và <code>nextAction</code> làm single source of hero state, chỉ thêm presentation mapping nhỏ nhất cho copy.</li>
+          <li>Thay, không prepend, intro hiện tại. Giữ channel cards, Exceptions và Next Action phía dưới.</li>
+          <li>Ở trạng thái incomplete, nêu data hoặc report action cần thiết, kênh được chọn và CTA tới cùng kênh đó.</li>
+          <li>Ở trạng thái all-ready, nói rõ completion. Chỉ hiển thị tối đa một metric có sẵn, hợp lệ nếu nó thêm context cụ thể.</li>
+          <li>Map hierarchy, spacing, typography, container 1200px và một CTA pill 44px từ prototype trong HomeBrief namespace.</li>
+        </ul>
+      </section>
+      <section aria-labelledby="dont-title">
+        <h2 id="dont-title" class="section-heading">Không làm</h2>
+        <ul class="list dont">
+          <li>Không expose mock từ <code>#home</code>, tính cross-channel total hay suy ra service quality từ source data thiếu.</li>
+          <li>Không đặt CTA n8n thứ hai trong hero. Tongdon-only gate hiện có không chứng minh readiness của toàn bộ HomeBrief.</li>
+          <li>Không tạo thuật toán action-prioritization thứ hai, di chuyển Exceptions hoặc Next Action, hay đổi n8n behavior hiện hữu.</li>
+          <li>Không mở rộng selector vào <code>.sheet-tab-*</code> hoặc <code>.report-*</code>, và không redesign DTP, Return hoặc Damaged.</li>
+        </ul>
+      </section>
+    </section>
+
+    <section class="chapter" aria-labelledby="alternatives-title">
+      <h2 id="alternatives-title" class="section-heading">Các phương án đã cân nhắc</h2>
+      <div class="comparison" role="region" aria-label="Bảng so sánh các phương án" tabindex="0">
+        <table>
+          <thead><tr><th scope="col">Phương án</th><th scope="col">Kết quả</th><th scope="col">Quyết định</th></tr></thead>
+          <tbody>
+            <tr><td>State-first hero do <code>nextAction</code> hiện hữu dẫn dắt</td><td>Next step rõ ràng mà không tạo data contract mới</td><td class="recommended">Khuyến nghị</td></tr>
+            <tr><td>Metric-first management summary</td><td>Cần KPI cross-channel đáng tin cậy mà hiện không có semantics</td><td class="rejected">Loại</td></tr>
+            <tr><td>Chỉ restyle composition của intro hiện tại</td><td>Rủi ro thấp nhất nhưng không đáp ứng action-priority outcome</td><td class="rejected">Loại</td></tr>
+            <tr><td>Hero cộng original intro và actions</td><td>Lặp quyết định và đẩy channel scan xuống dưới fold</td><td class="rejected">Loại</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="chapter split" aria-label="Lợi ích và trade-offs">
+      <section aria-labelledby="benefits-title">
+        <h2 id="benefits-title" class="section-heading">Lợi ích chính</h2>
+        <ul class="list">
+          <li>Hierarchy tốt hơn vì người dùng thấy next step ngay tại Home.</li>
+          <li>Không phát minh KPI hoặc thay đổi luồng dữ liệu hiện hữu.</li>
+          <li>CTA duy trì đúng target và navigation behavior từ <code>nextAction</code> cùng <code>onNavigate</code>.</li>
+          <li>Giữ channel cards, Exceptions, Next Action và n8n contract để giảm regression risk.</li>
+        </ul>
+      </section>
+      <section aria-labelledby="tradeoffs-title">
+        <h2 id="tradeoffs-title" class="section-heading">Trade-offs</h2>
+        <div class="tradeoffs">
+          <article class="tradeoff"><h3>Hero có thể thưa</h3><p>Đó là đúng. Absence of a valid aggregate phải giữ nguyên, không biến thành metric trông có vẻ hợp lý.</p></article>
+          <article class="tradeoff"><h3>Chính sách ưu tiên được kế thừa</h3><p>Dùng lại <code>nextAction</code> giữ behavior, đồng thời kế thừa policy: incomplete ngoài Tongdon trước, rồi Tongdon.</p></article>
+          <article class="tradeoff"><h3>Có một ít lặp ngữ nghĩa</h3><p>Exceptions và Next Action bên dưới được giữ lại để tránh UX hoặc behavior cutover chưa được chấp thuận.</p></article>
+          <article class="tradeoff"><h3>Giới hạn đúng lúc</h3><p>Nếu sản phẩm cần SLA, return, carrier hoặc history aggregate đã xác minh, phải định nghĩa report schema và data-refresh contract trước.</p></article>
+        </div>
+      </section>
+    </section>
+
+    <section class="chapter" aria-labelledby="workflow-title">
+      <h2 id="workflow-title" class="section-heading">Workflow bắt buộc trước khi triển khai</h2>
+      <ol class="workflow">
+        <li><div><strong>Lập plan</strong><span><code>/skill:ak:plan</code> là phù hợp và đủ trước EXECUTE. Scoped presentation plan cần một implementation contract cuối cùng.</span></div></li>
+        <li><div><strong>Chỉ khám phá visual khi cần</strong><span><code>/skill:ak:frontend-design</code> không bắt buộc trước plan. Chỉ dùng khi hero 1440px cần visual exploration vượt ngoài <code>#home</code>.</span></div></li>
+        <li><div><strong>Triển khai có kiểm soát</strong><span>Sau đó dùng <code>/skill:ak:cook</code>, đồng thời theo repository impact-analysis requirement trước khi sửa symbol.</span></div></li>
+        <li><div><strong>Review rồi dừng</strong><span>Sau triển khai, chạy requested review và security chain dưới Cursor control. Không ship, commit, merge, deploy hoặc đổi model roles trong advisory scope.</span></div></li>
+      </ol>
+    </section>
+
+    <section class="chapter check-grid" aria-labelledby="checklist-title">
+      <div>
+        <h2 id="checklist-title" class="section-heading">Checklist thực hiện</h2>
+        <ul class="checklist">
+          <li>Khóa hero như thay thế intro HomeBrief hiện tại, không phải dashboard section mới.</li>
+          <li>Xác định branch <code>nextAction</code>/<code>onNavigate</code> cung cấp incomplete-state H1, subcopy và CTA.</li>
+          <li>Chỉ rõ all-ready copy, một optional valid existing metric và trường hợp omission khi metric không hợp lệ.</li>
+          <li>Map prototype hierarchy, spacing, typography và một pill CTA vào HomeBrief-scoped CSS.</li>
+          <li>Bảo toàn channel cards, Exceptions, Next Action và n8n behavior verbatim.</li>
+          <li>Browser-check Home ở 1440px cho một incomplete state và all-ready state khi có.</li>
+          <li>Chạy behavior tests phù hợp, test UI, build, code review, security review và final verification dưới Cursor control.</li>
+        </ul>
+      </div>
+      <aside aria-labelledby="success-title">
+        <h2 id="success-title" class="section-heading">Success metrics</h2>
+        <ul class="checklist">
+          <li>Hero có đúng một primary action, đi qua target <code>onNavigate</code> do <code>nextAction</code> chọn.</li>
+          <li>Không có mock hoặc invented aggregate, SLA, return, carrier hay history metric.</li>
+          <li>Metric invalid hoặc missing vắng mặt. Numeric <code>0</code> hợp lệ vẫn được phân biệt là <code>0</code>.</li>
+          <li>HomeBrief UI characterization tests giữ empty, malformed, ready, needs-save, analytics, n8n và navigation contracts.</li>
+          <li>Manual 1440px inspection xác nhận hierarchy và không regression ở channel cards, exceptions hoặc next action.</li>
+          <li><code>npm test</code>, <code>npm run test:ui</code> và <code>npm run build</code> hoàn tất thành công khi đến pha triển khai.</li>
+        </ul>
+      </aside>
+    </section>
+
+    <section class="source" aria-labelledby="source-title">
+      <div><h2 id="source-title">Nguồn báo cáo chuẩn</h2><p>Toàn bộ kết luận và ràng buộc trên được trình bày từ canonical advisory report.</p></div>
+      <a href="2026-09-13-advise-wave-home-hero.md">Mở Markdown nguồn</a>
+    </section>
+  </main>
+
+  <footer class="shell"><p>Advisory only. Status: confirmed scope.</p></footer>
+</body>
+</html>
