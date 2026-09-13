@@ -3,7 +3,7 @@
  * before and after the no-scroll redesign (R1–R28).
  *
  * These tests validate:
- *  - DonC and DonDTP render with the new .sheet-tab class
+ *  - DonC and DonDTP retain exclusive v2 presentation root classes
  *  - KPI strip shows correct total / delivered / pending counts
  *  - Detail accordion defaults to closed
  *  - Saved-mode class applied when weekId is in savedIds
@@ -124,11 +124,13 @@ describe('SheetTab Đơn C — layout and KPI invariants', () => {
     store.clear()
   })
 
-  it('renders with .sheet-tab class when data is loaded', () => {
+  it('renders with the DonC-only v2 class when data is loaded', () => {
     const week = makeDonCWeek()
     mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(week))
     render(<SheetTab type="donC" />)
-    expect(document.querySelector('.sheet-tab')).toBeInTheDocument()
+    const sheetTab = document.querySelector('.sheet-tab')
+    expect(sheetTab).toHaveClass('donc-v2')
+    expect(sheetTab).not.toHaveClass('dtp-v2')
   })
 
   it('detail accordion defaults to closed (aria-expanded=false)', () => {
@@ -196,11 +198,13 @@ describe('SheetTab Đơn DTP — layout and DTP-specific invariants', () => {
     store.clear()
   })
 
-  it('renders with .sheet-tab class for DonDTP', () => {
+  it('renders with the DonDTP-only v2 class when data is loaded', () => {
     const week = makeDonDTPWeek()
     mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(week))
     render(<SheetTab type="donDTP" />)
-    expect(document.querySelector('.sheet-tab')).toBeInTheDocument()
+    const sheetTab = document.querySelector('.sheet-tab')
+    expect(sheetTab).toHaveClass('dtp-v2')
+    expect(sheetTab).not.toHaveClass('donc-v2')
   })
 
   it('detail accordion defaults to closed for DonDTP', () => {
@@ -312,11 +316,19 @@ describe('SheetTab empty state', () => {
     store.clear()
   })
 
-  it('shows upload zone when no weeks exist (R6)', () => {
+  it('gives DonC its v2 empty-state root', () => {
     mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(null))
     render(<SheetTab type="donC" />)
-    // .sheet-tab only present when data loaded — empty shows upload zone
-    expect(document.querySelector('.sheet-tab')).not.toBeInTheDocument()
+    const emptyState = document.querySelector('.donc-v2--empty')
+    expect(emptyState).toHaveClass('donc-v2')
+    expect(screen.getByText(/kéo.*thả.*file.*excel/i)).toBeInTheDocument()
+  })
+
+  it('gives DonDTP its v2 empty-state root', () => {
+    mockUseWeeklyDataRef.mockReturnValue(makeWeeklyDataMock(null))
+    render(<SheetTab type="donDTP" />)
+    const emptyState = document.querySelector('.dtp-v2--empty')
+    expect(emptyState).toHaveClass('dtp-v2')
     expect(screen.getByText(/kéo.*thả.*file.*excel/i)).toBeInTheDocument()
   })
 })
