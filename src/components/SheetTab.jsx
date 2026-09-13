@@ -105,18 +105,20 @@ export default function SheetTab({ type }) {
   const isSaved = savedIds.includes(activeId)
   const hasData = displayWeeks.length > 0
   const isDonC = type === 'donC'
+  const isDonDTP = type === 'donDTP'
+  const presentationClass = isDonC ? 'donc-v2' : isDonDTP ? 'dtp-v2' : ''
 
   // ─── Empty state ────────────────────────────────────────────────────────────
   if (!hasData) {
     return (
-      <div className={isDonC ? 'donc-v2 donc-v2--empty' : undefined}>
+      <div className={presentationClass ? `${presentationClass} ${presentationClass}--empty` : undefined}>
         <ExcelUpload onData={addWeek} fileName="" onClear={() => {}} />
       </div>
     )
   }
 
   return (
-    <div className={`sheet-tab ${hasData ? 'is-active-report' : ''} ${isSaved ? 'is-saved-report' : ''} ${isDonC ? 'donc-v2' : ''}`}>
+    <div className={`sheet-tab ${hasData ? 'is-active-report' : ''} ${isSaved ? 'is-saved-report' : ''} ${presentationClass}`}>
       <div className="sheet-tab-shell">
 
         {/* ── Context bar ──────────────────────────────────────────────────── */}

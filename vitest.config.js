@@ -7,5 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/vitest.setup.js'],
     include: ['src/**/*.test.{js,jsx}'],
+    maxWorkers: 1,
+    fileParallelism: false,
   },
 })
