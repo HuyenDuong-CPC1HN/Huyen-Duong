@@ -69,17 +69,22 @@ describe('authenticated application shell', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual([
+      'Bổ sung dữ liệu Đơn C',
       'Tình trạng tuần hiện tại',
       'Ngoại lệ cần xử lý',
       'Hành động tiếp theo',
     ])
+
+    const hero = screen.getByRole('region', { name: 'Bổ sung dữ liệu Đơn C' })
+    expect(within(hero).getByText('Dữ liệu tuần cần bổ sung')).toBeInTheDocument()
+    expect(within(hero).getByRole('button', { name: 'Bổ sung dữ liệu Đơn C' })).toBeInTheDocument()
 
     for (const channel of ['Tổng đơn', 'Đơn C', 'Đơn DTP', 'TMĐT']) {
       expect(screen.getByRole('button', { name: `Mở ${channel}: Chưa có dữ liệu tuần` })).toBeInTheDocument()
     }
     expect(screen.queryByText(/^0 đơn$/)).not.toBeInTheDocument()
     expect(screen.getAllByText('Chưa có dữ liệu tuần')).toHaveLength(4)
-    expect(screen.getByRole('button', { name: 'Bổ sung dữ liệu Đơn C' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Bổ sung dữ liệu Đơn C' })).toHaveLength(2)
   })
 
   it('shows only saved values and flags an active week that has not been saved', async () => {
@@ -117,7 +122,12 @@ describe('authenticated application shell', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'Đơn DTP' })).toBeInTheDocument()
     const exceptions = screen.getByRole('region', { name: 'Ngoại lệ cần xử lý' })
     expect(within(exceptions).getAllByRole('listitem')).toHaveLength(1)
+    const hero = screen.getByRole('region', { name: 'Lưu số liệu Đơn DTP' })
+    expect(within(hero).getByText('Báo cáo tuần cần lưu')).toBeInTheDocument()
+    expect(within(hero).getByRole('button', { name: 'Lưu số liệu Đơn DTP' })).toBeInTheDocument()
+
   })
+
 
   it('shows a clear week and offers n8n only when every channel has saved data', async () => {
     workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 316 }]))
@@ -137,6 +147,31 @@ describe('authenticated application shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo lên n8n' }))
     expect(screen.getByRole('heading', { level: 1, name: 'Gửi lên n8n' })).toBeInTheDocument()
+  })
+
+  it('uses the existing next-action destination from the hero CTA', async () => {
+    render(<App />)
+
+    const hero = await screen.findByRole('region', { name: 'Bổ sung dữ liệu Đơn C' })
+    fireEvent.click(within(hero).getByRole('button', { name: 'Bổ sung dữ liệu Đơn C' }))
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Giao hàng Đơn C' })).toBeInTheDocument()
+  })
+
+  it('keeps a valid zero metric and omits invalid metrics from the ready hero', async () => {
+    workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 0 }]))
+    workspaceMocks.opsStore.setItem('sheet_reports_donDTP', JSON.stringify([{ id: 'd-1', b24: 'invalid' }]))
+    workspaceMocks.opsStore.setItem('tmdt_reports', JSON.stringify([{ id: 't-1', total: 'invalid' }]))
+    workspaceMocks.opsStore.setItem(
+      'tongdon_reports',
+      JSON.stringify([{ id: 'all-1', current: { grandTotal: 'invalid' } }]),
+    )
+    render(<App />)
+
+    const hero = await screen.findByRole('region', { name: 'Dữ liệu tuần đã sẵn sàng' })
+    expect(
+      within(hero).getByText('Giao ≤24h đã lưu: 0 đơn. Không có ngoại lệ từ trạng thái dữ liệu hiện có.'),
+    ).toBeInTheDocument()
   })
 
   it('shows analytics readiness only for an explicitly published current cycle', async () => {

@@ -134,23 +134,53 @@ function getActionCopy(channel) {
   return `Bổ sung dữ liệu ${channel.label}`
 }
 
+function getHeroContent(channels, nextAction) {
+  if (nextAction) {
+    return {
+      eyebrow: nextAction.state === 'needsSave' ? 'Báo cáo tuần cần lưu' : 'Dữ liệu tuần cần bổ sung',
+      title: getActionCopy(nextAction),
+      description: nextAction.cardCopy,
+      actionLabel: getActionCopy(nextAction),
+      target: nextAction.id,
+      icon: ClipboardList,
+    }
+  }
+
+  const metricChannel = channels.find((channel) => channel.headline)
+  return {
+    eyebrow: 'Trạng thái tuần hiện tại',
+    title: 'Dữ liệu tuần đã sẵn sàng',
+    description: metricChannel
+      ? `${metricChannel.headlineLabel}: ${metricChannel.headline}. Không có ngoại lệ từ trạng thái dữ liệu hiện có.`
+      : 'Không có ngoại lệ từ trạng thái dữ liệu hiện có.',
+    actionLabel: 'Xem báo cáo Tổng đơn',
+    target: 'tongdon',
+    icon: LayoutGrid,
+  }
+}
 export default function HomeBrief({ onNavigate }) {
   const channels = deriveChannels()
   const exceptions = channels.filter((channel) => channel.state !== 'ready')
   const nextAction = exceptions.find((channel) => channel.id !== 'tongdon') || exceptions[0]
   const totalReady = channels[0].state === 'ready'
+  const hero = getHeroContent(channels, nextAction)
+  const HeroIcon = hero.icon
 
   return (
     <div className="home-brief">
-      <div className="home-brief-intro">
-        <p className="home-brief-eyebrow">Tóm tắt vận hành</p>
-        <p>
-          Theo dõi nhanh dữ liệu đang hoạt động hoặc báo cáo gần nhất đã lưu của từng kênh.
-        </p>
+      <section className="home-brief-intro" aria-labelledby="home-hero-title">
+        <p className="home-brief-eyebrow">{hero.eyebrow}</p>
+        <h2 id="home-hero-title">{hero.title}</h2>
+        <p className="home-hero-copy">{hero.description}</p>
         <p className="home-brief-analytics-status">
           {channels[0].analyticsReady ? 'Chu kỳ hiện tại: sẵn sàng phân tích' : 'Chu kỳ hiện tại: chưa công bố cho phân tích'}
         </p>
-      </div>
+        <button type="button" className="home-action-primary home-hero-action" onClick={() => onNavigate(hero.target)}>
+          <HeroIcon size={18} aria-hidden="true" />
+          {hero.actionLabel}
+          <ArrowRight size={17} aria-hidden="true" />
+        </button>
+      </section>
 
       <section className="home-brief-section" aria-labelledby="home-status-title">
         <div className="home-brief-section-heading">
