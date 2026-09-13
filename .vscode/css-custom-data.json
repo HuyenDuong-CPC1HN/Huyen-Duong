@@ -1,0 +1,37 @@
+{
+  "version": 1.1,
+  "atDirectives": [
+    {
+      "name": "@theme",
+      "description": "Tailwind CSS v4 theme tokens (colors, fonts, spacing)."
+    },
+    {
+      "name": "@custom-variant",
+      "description": "Tailwind CSS v4 custom variant, e.g. dark mode."
+    },
+    {
+      "name": "@apply",
+      "description": "Inline Tailwind utilities inside a CSS rule."
+    },
+    {
+      "name": "@utility",
+      "description": "Tailwind CSS v4 custom utility."
+    },
+    {
+      "name": "@variant",
+      "description": "Tailwind CSS v4 variant definition."
+    },
+    {
+      "name": "@source",
+      "description": "Tailwind CSS v4 content source path."
+    },
+    {
+      "name": "@plugin",
+      "description": "Load a Tailwind CSS v4 plugin."
+    },
+    {
+      "name": "@reference",
+      "description": "Import Tailwind theme/utilities without emitting CSS."
+    }
+  ]
+}
