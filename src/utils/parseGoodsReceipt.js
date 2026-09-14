@@ -145,6 +145,16 @@ export function readWarehouseExportRows(arrayBuffer) {
   return rows
 }
 
+// Sắp xếp cố định theo Tên hàng A-Z (rồi Mã hàng để ổn định khi trùng tên) — áp dụng ngay khi gộp dữ liệu
+// để cả bảng trên màn hình lẫn file "BB NHẬP HÀNG" xuất ra LUÔN cùng 1 thứ tự, không phụ thuộc thứ tự dòng
+// trong file Excel gốc (trước đây giữ nguyên thứ tự đọc được từ Excel, nên nếu file gốc không được sắp
+// theo tên thì bảng/file xuất cũng không theo tên).
+export function sortByTenHang(rows) {
+  return [...rows].sort((a, b) => (
+    (a.tenHang || '').localeCompare(b.tenHang || '', 'vi') || (a.maHang || '').localeCompare(b.maHang || '')
+  ))
+}
+
 export function mergeWarehouseRows(rows) {
   const merged = new Map()
   for (const row of rows) {
@@ -483,8 +493,8 @@ export function buildReceiptFromFiles({
   const khoCMissing = buildMissingRowsFromPdf(khoCPdfRows, khoCKeys)
   const khoLgtMissing = buildMissingRowsFromPdf(khoLgtPdfRows, khoLgtKeys)
 
-  const khoC = enrichRowsFromPdfCatalog([...khoCMerged, ...khoCMissing], pdfRows, sharedKeys)
-  const khoLgt = enrichRowsFromPdfCatalog([...khoLgtMerged, ...khoLgtMissing], pdfRows, sharedKeys)
+  const khoC = sortByTenHang(enrichRowsFromPdfCatalog([...khoCMerged, ...khoCMissing], pdfRows, sharedKeys))
+  const khoLgt = sortByTenHang(enrichRowsFromPdfCatalog([...khoLgtMerged, ...khoLgtMissing], pdfRows, sharedKeys))
 
   // Đối chiếu riêng cho các mã dùng chung: tổng Kho C + Kho DTP (theo Excel) phải khớp với dòng gộp
   // trên PDF — khớp thì im lặng (không cần ghi chú), chỉ báo khi thực sự lệch.
