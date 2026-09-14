@@ -427,6 +427,7 @@ body {
 .dashboard-main {
   flex: 1;
   overflow-y: auto;
+  scroll-behavior: smooth;
   background: #fafafa;
   padding: 24px;
   outline: none;
@@ -2109,6 +2110,10 @@ body {
   .login-submit {
     transition: none;
   }
+  .dashboard-main {
+    scroll-behavior: auto;
+  }
+
 }
 
 @theme inline {

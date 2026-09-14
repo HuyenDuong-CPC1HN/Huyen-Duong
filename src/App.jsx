@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
-import SheetTab from './components/SheetTab'
 import TmdtTab from './components/TmdtTab'
-import TongDonTab from './components/TongDonTab'
 import ExpiryStockTab from './components/ExpiryStockTab'
 import SlowMovingStockTab from './components/SlowMovingStockTab'
 import NhapHangTab from './components/NhapHangTab'
@@ -16,6 +14,9 @@ import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
 import cpcLogo from './assets/cpc1hn_logo.png'
+
+const SheetTab = lazy(() => import('./components/SheetTab'))
+const TongDonTab = lazy(() => import('./components/TongDonTab'))
 
 const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
@@ -277,6 +278,14 @@ function AppContent({ user }) {
 
   const crumbs = BREADCRUMB[active] || []
   const pageTitle = crumbs.at(-1) || 'CPC1HN'
+  const tabLoadingState = (
+    <div className="app-loading-state" role="status" aria-live="polite">
+      <img src={cpcLogo} alt="CPC1HN" width="78" height="81" />
+      <RefreshCw size={22} className="animate-spin" aria-hidden="true" />
+      <span>Đang tải báo cáo...</span>
+    </div>
+  )
+
 
   const handleNav = (id, hasChildren) => {
     if (hasChildren) {
@@ -426,9 +435,9 @@ function AppContent({ user }) {
               }}
             />
           )}
-          {active === 'tongdon'  && <TongDonTab onNavigate={setActive} />}
-          {active === 'donC'    && <SheetTab type="donC" />}
-          {active === 'donDTP'  && <SheetTab type="donDTP" />}
+          {active === 'tongdon' && <Suspense fallback={tabLoadingState}><TongDonTab onNavigate={setActive} /></Suspense>}
+          {active === 'donC' && <Suspense fallback={tabLoadingState}><SheetTab type="donC" /></Suspense>}
+          {active === 'donDTP' && <Suspense fallback={tabLoadingState}><SheetTab type="donDTP" /></Suspense>}
           {active === 'tmdt'    && <TmdtTab />}
           {active === 'tonkhocandate' && <ExpiryStockTab />}
           {active === 'hangchamluanchuyen' && <SlowMovingStockTab />}

@@ -104,9 +104,12 @@ export default function SheetTab({ type }) {
 
   const isSaved = savedIds.includes(activeId)
   const hasData = displayWeeks.length > 0
-  const isDonC = type === 'donC'
-  const isDonDTP = type === 'donDTP'
-  const presentationClass = isDonC ? 'donc-v2' : isDonDTP ? 'dtp-v2' : ''
+  let presentationClass = ''
+  if (type === 'donC') {
+    presentationClass = 'donc-v2'
+  } else if (type === 'donDTP') {
+    presentationClass = 'dtp-v2'
+  }
 
   // ─── Empty state ────────────────────────────────────────────────────────────
   if (!hasData) {
