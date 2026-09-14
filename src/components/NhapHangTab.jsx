@@ -801,7 +801,7 @@ export default function NhapHangTab() {
       const { createGoodsReceiptBatchesRepository } = await import('../data/goodsReceiptBatches')
       const { supabase } = await import('../supabase')
       const repo = createGoodsReceiptBatchesRepository(supabase)
-      const rows = await repo.searchByMaHang(q)
+      const rows = await repo.searchByMaHangOrTenHang(q)
       setHistoryRows(rows)
     } catch (err) {
       setError(err.message || 'Không tra cứu được lịch sử.')
@@ -815,9 +815,12 @@ export default function NhapHangTab() {
     const q = historyQuery.trim().toLowerCase()
     if (!q) return []
     const hits = []
+    const matches = (row) => (
+      String(row.maHang ?? '').toLowerCase().includes(q) || String(row.tenHang ?? '').toLowerCase().includes(q)
+    )
     for (const batch of batches) {
       for (const row of (batch.khoC || [])) {
-        if (String(row.maHang).toLowerCase().includes(q)) {
+        if (matches(row)) {
           hits.push({
             ma_hang: row.maHang,
             ten_hang: row.tenHang,
@@ -830,7 +833,7 @@ export default function NhapHangTab() {
         }
       }
       for (const row of (batch.khoLgt || [])) {
-        if (String(row.maHang).toLowerCase().includes(q)) {
+        if (matches(row)) {
           hits.push({
             ma_hang: row.maHang,
             ten_hang: row.tenHang,
@@ -1105,7 +1108,7 @@ export default function NhapHangTab() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-3">
           <History size={16} className="text-gray-500" />
-          <h3 className="font-semibold text-sm">Tra cứu lịch sử theo Mã hàng</h3>
+          <h3 className="font-semibold text-sm">Tra cứu lịch sử theo Mã hàng / Tên hàng</h3>
         </div>
         <div className="flex gap-2 mb-3">
           <div className="relative flex-1 max-w-sm">
@@ -1114,7 +1117,7 @@ export default function NhapHangTab() {
               value={historyQuery}
               onChange={(e) => setHistoryQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void searchHistory()}
-              placeholder="Nhập mã hàng..."
+              placeholder="Nhập mã hàng hoặc tên hàng..."
               className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg"
             />
           </div>
