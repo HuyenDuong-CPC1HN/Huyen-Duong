@@ -690,6 +690,39 @@ export function reconcileActualVsInvoice(invoiceRows, actualRows) {
     else actualMap.set(key, { maHang: row.maHang, tenHang: row.tenHang || '', soLo: row.soLo || '', soLuong: row.soLuong ?? 0 })
   }
 
+  // Số lô bị bỏ trống ở 1 bên (hoá đơn hoặc quét thực tế) trong khi bên kia ghi đầy đủ — vẫn là CÙNG 1 lô
+  // hàng thật, chỉ thiếu sót khi nhập liệu (thấy ở file hoá đơn), không phải 2 dòng khác nhau; nếu để
+  // nguyên sẽ báo sai thành 1 dòng "Chưa quét" + 1 dòng "Quét lạ" cho cùng 1 mã hàng dù số lượng khớp.
+  // Chỉ tự ghép khi, SAU KHI đã khớp đúng Mã hàng+Số lô, 1 mã hàng còn lại ĐÚNG 1 dòng hoá đơn chưa khớp
+  // và ĐÚNG 1 dòng quét chưa khớp — nhiều hơn 1 dòng mỗi bên thì không đủ chắc chắn để đoán ghép dòng nào
+  // với dòng nào (có thể là nhiều lô thật khác nhau), cứ để nguyên "Chưa quét"/"Quét lạ" cho người dùng tự
+  // đối chiếu. Nếu CẢ 2 dòng đều có số lô riêng (khác nhau) thì không ghép — đó là lệch lô thật, cần báo.
+  const unmatchedByMaHang = (map, otherMap) => {
+    const grouped = new Map()
+    for (const [key, row] of map) {
+      if (otherMap.has(key)) continue
+      const list = grouped.get(row.maHang) || []
+      list.push(key)
+      grouped.set(row.maHang, list)
+    }
+    return grouped
+  }
+  const unmatchedInvoice = unmatchedByMaHang(invoiceMap, actualMap)
+  const unmatchedActual = unmatchedByMaHang(actualMap, invoiceMap)
+  for (const [maHang, invKeys] of unmatchedInvoice) {
+    const actKeys = unmatchedActual.get(maHang)
+    if (!actKeys || invKeys.length !== 1 || actKeys.length !== 1) continue
+    const invRow = invoiceMap.get(invKeys[0])
+    const actRow = actualMap.get(actKeys[0])
+    if (invRow.soLo && actRow.soLo) continue
+    const mergedSoLo = invRow.soLo || actRow.soLo
+    const mergedKey = reconcileKey(maHang, mergedSoLo)
+    invoiceMap.delete(invKeys[0])
+    actualMap.delete(actKeys[0])
+    invoiceMap.set(mergedKey, { ...invRow, soLo: mergedSoLo })
+    actualMap.set(mergedKey, { ...actRow, soLo: mergedSoLo })
+  }
+
   const keys = new Set([...invoiceMap.keys(), ...actualMap.keys()])
   const results = [...keys].map(key => {
     const inv = invoiceMap.get(key)

@@ -481,4 +481,33 @@ describe('parseGoodsReceipt', () => {
     expect(results).toHaveLength(1)
     expect(results[0]).toMatchObject({ trangThai: 'khop', chenhLech: 0 })
   })
+
+  it('reconcileActualVsInvoice: hoá đơn bỏ trống Số lô nhưng quét thực tế có ghi — vẫn ghép thành 1 dòng khớp, không tách thành chưa quét + quét lạ', () => {
+    const invoiceRows = [{ maHang: 'Q00008', tenHang: 'Quạt cầm tay mini gấp gọn - Laforin', soLo: '', slHoaDon: 59 }]
+    const actualRows = [{ maHang: 'Q00008', tenHang: 'Quạt cầm tay mini gấp gọn - Laforin', soLo: '202602/DTP-HTC', soLuong: 59 }]
+    const results = reconcileActualVsInvoice(invoiceRows, actualRows)
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ trangThai: 'khop', chenhLech: 0, soLo: '202602/DTP-HTC' })
+  })
+
+  it('reconcileActualVsInvoice: có nhiều hơn 1 dòng chưa khớp cùng Mã hàng thì KHÔNG tự đoán ghép', () => {
+    const invoiceRows = [
+      { maHang: 'Q00008', tenHang: 'Quạt', soLo: '', slHoaDon: 20 },
+      { maHang: 'Q00008', tenHang: 'Quạt', soLo: 'LO-A', slHoaDon: 30 },
+    ]
+    const actualRows = [{ maHang: 'Q00008', tenHang: 'Quạt', soLo: 'LO-B', soLuong: 20 }]
+    const results = reconcileActualVsInvoice(invoiceRows, actualRows)
+    // Còn 2 dòng hoá đơn + 1 dòng quét chưa khớp cùng mã — không đủ chắc chắn để đoán ghép dòng nào với
+    // dòng nào, giữ nguyên cả 3 dòng riêng biệt thay vì tự gộp nhầm.
+    expect(results.filter(r => r.trangThai === 'chuaQuet')).toHaveLength(2)
+    expect(results.filter(r => r.trangThai === 'quetLa')).toHaveLength(1)
+  })
+
+  it('reconcileActualVsInvoice: cả 2 bên đều có Số lô riêng khác nhau thật thì KHÔNG tự ghép (lệch lô thật)', () => {
+    const invoiceRows = [{ maHang: 'Q00008', tenHang: 'Quạt', soLo: 'LO-A', slHoaDon: 59 }]
+    const actualRows = [{ maHang: 'Q00008', tenHang: 'Quạt', soLo: 'LO-B', soLuong: 59 }]
+    const results = reconcileActualVsInvoice(invoiceRows, actualRows)
+    expect(results.find(r => r.soLo === 'LO-A')).toMatchObject({ trangThai: 'chuaQuet' })
+    expect(results.find(r => r.soLo === 'LO-B')).toMatchObject({ trangThai: 'quetLa' })
+  })
 })
