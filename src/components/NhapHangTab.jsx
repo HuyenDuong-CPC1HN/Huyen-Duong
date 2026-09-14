@@ -292,6 +292,18 @@ function ReceiptTableRow({ row, index, rank, editing, onRowChange, onRemoveRow }
 // Cột bấm được để sắp xếp alphabet — map tên cột hiển thị -> field dữ liệu tương ứng.
 const SORTABLE_COLUMNS = { 'Mã hàng': 'maHang', 'Tên hàng': 'tenHang' }
 
+// Dùng chung cho cả bảng hiển thị (ReceiptTable) LẪN lúc xuất file — trước đây bảng sắp xếp được nhưng
+// "Tải Excel" luôn xuất theo đúng thứ tự gốc trong dữ liệu (không theo thứ tự đang xem trên màn hình),
+// khiến file xuất ra khác thứ tự bảng đang hiển thị. Giữ đúng cùng 1 công thức so sánh (locale 'vi', số
+// so theo giá trị chứ không so ký tự) để 2 nơi luôn khớp nhau.
+function sortRowsBy(rows, sortKey, sortDir) {
+  if (!sortKey) return rows
+  const dir = sortDir === 'asc' ? 1 : -1
+  return [...rows].sort((a, b) => (
+    dir * String(a[sortKey] || '').localeCompare(String(b[sortKey] || ''), 'vi', { sensitivity: 'base', numeric: true })
+  ))
+}
+
 function SortableHeader({ label, sortKey, activeKey, dir, disabled, onToggle }) {
   const active = activeKey === sortKey
   return (
@@ -312,19 +324,13 @@ function SortableHeader({ label, sortKey, activeKey, dir, disabled, onToggle }) 
   )
 }
 
-function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow }) {
-  const [sortKey, setSortKey] = useState(null)
-  const [sortDir, setSortDir] = useState('asc')
-
-  const toggleSort = (key) => {
-    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    else { setSortKey(key); setSortDir('asc') }
-  }
-
+function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, sortKey, sortDir, onToggleSort }) {
   // Sắp xếp CHỈ áp dụng khi KHÔNG Chỉnh sửa — nếu sắp cả lúc đang gõ Mã hàng/Tên hàng, mỗi ký tự gõ vào
   // sẽ đổi thứ tự ngay, dòng đang gõ nhảy vị trí liên tục ngay dưới con trỏ, trải nghiệm rất khó chịu dù
   // key={row.rowId} vẫn giữ đúng danh tính từng dòng. originalIndex giữ nguyên vị trí thật trong mảng dữ
   // liệu để onRowChange/onRemoveRow sửa đúng dòng dù bảng đang hiển thị theo thứ tự đã sắp xếp.
+  // sortKey/sortDir được nhấc lên component cha (NhapHangTab) để "Tải Excel" xuất đúng theo thứ tự đang
+  // xem trên bảng — xem sortRowsBy.
   const ordered = useMemo(() => {
     const indexed = rows.map((row, originalIndex) => ({ row, originalIndex }))
     if (editing || !sortKey) return indexed
@@ -353,7 +359,7 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow }) {
                     activeKey={sortKey}
                     dir={sortDir}
                     disabled={editing}
-                    onToggle={toggleSort}
+                    onToggle={onToggleSort}
                   />
                 ) : (
                   <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">{h}</th>
@@ -432,6 +438,14 @@ export default function NhapHangTab() {
   const [selectedMonthKey, setSelectedMonthKey] = useState(null)
 
   const [pendingFiles, setPendingFiles] = useState({ khoC: [], khoLgt: [], bienBan: [] })
+
+  // Sắp xếp alphabet của mỗi bảng (Kho C/Kho LGT click cột "Mã hàng"/"Tên hàng") — nhấc lên đây (thay vì
+  // để state riêng trong ReceiptTable) để "Tải Excel" xuất đúng theo thứ tự đang xem, không phải thứ tự
+  // gốc trong dữ liệu.
+  const [khoCSort, setKhoCSort] = useState({ key: null, dir: 'asc' })
+  const [khoLgtSort, setKhoLgtSort] = useState({ key: null, dir: 'asc' })
+  const toggleKhoCSort = (key) => setKhoCSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
+  const toggleKhoLgtSort = (key) => setKhoLgtSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
 
   const active = batches.find(batch => batch.id === activeId) || null
 
@@ -611,9 +625,11 @@ export default function NhapHangTab() {
     setExporting(true)
     setError('')
     try {
+      // Đang Chỉnh sửa thì bảng bỏ qua sắp xếp để không nhảy dòng khi gõ (xem ReceiptTable) — xuất file
+      // cũng theo đúng quy tắc đó cho khớp với những gì đang hiển thị.
       await exportReceiptFromTemplate({
-        khoC: active.khoC,
-        khoLgt: active.khoLgt,
+        khoC: sortRowsBy(active.khoC || [], editing ? null : khoCSort.key, khoCSort.dir),
+        khoLgt: sortRowsBy(active.khoLgt || [], editing ? null : khoLgtSort.key, khoLgtSort.dir),
         metadata: active.pdfMetadata || {},
         processedAt: new Date(active.processedAt),
       })
@@ -1071,6 +1087,9 @@ export default function NhapHangTab() {
         editing={editing}
         onRowChange={(i, f, v) => patchRows('C', i, f, v)}
         onRemoveRow={(i) => removeRow('C', i)}
+        sortKey={khoCSort.key}
+        sortDir={khoCSort.dir}
+        onToggleSort={toggleKhoCSort}
       />
       <ReceiptTable
         title="Kho LGT"
@@ -1078,6 +1097,9 @@ export default function NhapHangTab() {
         editing={editing}
         onRowChange={(i, f, v) => patchRows('LGT', i, f, v)}
         onRemoveRow={(i) => removeRow('LGT', i)}
+        sortKey={khoLgtSort.key}
+        sortDir={khoLgtSort.dir}
+        onToggleSort={toggleKhoLgtSort}
       />
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
