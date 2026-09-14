@@ -64,10 +64,10 @@ npm run dev</code>
         var fallback = document.getElementById('boot-fallback')
         var root = document.getElementById('root')
         function showFallback() {
-          if (fallback) fallback.setAttribute('data-visible', 'true')
+          if (fallback) fallback.dataset.visible = 'true'
         }
         function hideFallback() {
-          if (fallback) fallback.removeAttribute('data-visible')
+          if (fallback) delete fallback.dataset.visible
         }
         window.__hideBootFallback = hideFallback
         if (location.protocol === 'file:') {
