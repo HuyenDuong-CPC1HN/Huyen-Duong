@@ -248,6 +248,24 @@ function ResultTable({ title, rows, statusFilter }) {
   )
 }
 
+// Kho không thả file quét thực tế nào — không chạy đối soát cho kho này (xem runReconciliation), tránh
+// báo nhầm toàn bộ hoá đơn kho đó thành "Chưa quét".
+function NoActualDataNotice({ title }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span style={padChip} className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 border border-gray-200 text-gray-500 text-[11px] font-bold uppercase tracking-wide">
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+          {title}
+        </span>
+      </div>
+      <div style={padCell} className="bg-white rounded-2xl border border-gray-200 shadow-sm text-center text-sm text-gray-400">
+        Không có dữ liệu thực tế để đối soát
+      </div>
+    </div>
+  )
+}
+
 // Bấm vào 1 thẻ để lọc các bảng bên dưới chỉ còn dòng đúng trạng thái đó; bấm lại đúng thẻ đang chọn để
 // bỏ lọc. Viền màu (ring) nhấn thẻ đang được chọn, phân biệt với 3 thẻ còn lại.
 function Tile({ label, count, className, active, onClick }) {
@@ -327,10 +345,13 @@ export default function DoiSoatThucTeTab() {
       const { soRows: invoiceKhoSo, nonSoRows: invoiceKhoC } = splitSoRows(batch.khoC)
       const invoiceKhoLgt = batch.khoLgt || []
 
+      // Kho nào không thả file (khoX.length === 0) thì để null (không chạy đối soát) — chạy với mảng
+      // rỗng sẽ coi TOÀN BỘ hoá đơn kho đó là "Chưa quét" dù thực ra người dùng chỉ chưa upload file cho
+      // kho này, không phải hàng thật sự chưa quét. ResultTable/summary hiển thị riêng cho trường hợp này.
       setResults({
-        khoC: reconcileActualVsInvoice(invoiceKhoC, mergeActualScanRows(rawC)),
-        khoLgt: reconcileActualVsInvoice(invoiceKhoLgt, mergeActualScanRows(rawLgt)),
-        khoSo: reconcileActualVsInvoice(invoiceKhoSo, mergeActualScanRows(rawSo)),
+        khoC: pendingFiles.khoC.length > 0 ? reconcileActualVsInvoice(invoiceKhoC, mergeActualScanRows(rawC)) : null,
+        khoLgt: pendingFiles.khoLgt.length > 0 ? reconcileActualVsInvoice(invoiceKhoLgt, mergeActualScanRows(rawLgt)) : null,
+        khoSo: pendingFiles.khoSo.length > 0 ? reconcileActualVsInvoice(invoiceKhoSo, mergeActualScanRows(rawSo)) : null,
       })
       setStatusFilter(null)
       if (fileErrors.length > 0) setError(`Không đọc được: ${fileErrors.join('; ')}`)
@@ -341,7 +362,7 @@ export default function DoiSoatThucTeTab() {
     }
   }
 
-  const allResults = results ? [...results.khoC, ...results.khoLgt, ...results.khoSo] : []
+  const allResults = results ? [...(results.khoC || []), ...(results.khoLgt || []), ...(results.khoSo || [])] : []
   const tiles = [
     { key: 'khop', label: 'Khớp', className: 'text-green-600', count: allResults.filter(r => r.trangThai === 'khop').length },
     { key: 'lech', label: 'Thiếu / Thừa', className: 'text-amber-600', count: allResults.filter(r => r.trangThai === 'thieu' || r.trangThai === 'thua').length },
@@ -442,9 +463,9 @@ export default function DoiSoatThucTeTab() {
             )}
           </div>
 
-          <ResultTable title="Kho C" rows={results.khoC} statusFilter={statusFilter} />
-          <ResultTable title="Kho LGT" rows={results.khoLgt} statusFilter={statusFilter} />
-          <ResultTable title="Kho SO" rows={results.khoSo} statusFilter={statusFilter} />
+          {results.khoC ? <ResultTable title="Kho C" rows={results.khoC} statusFilter={statusFilter} /> : <NoActualDataNotice title="Kho C" />}
+          {results.khoLgt ? <ResultTable title="Kho LGT" rows={results.khoLgt} statusFilter={statusFilter} /> : <NoActualDataNotice title="Kho LGT" />}
+          {results.khoSo ? <ResultTable title="Kho SO" rows={results.khoSo} statusFilter={statusFilter} /> : <NoActualDataNotice title="Kho SO" />}
         </div>
       )}
     </div>
