@@ -194,7 +194,11 @@ function fillDataRows(doc, sstDoc, items) {
     setCellStringForce(doc, sstDoc, row, COL.maHang, it.maHang)
     setCellStringForce(doc, sstDoc, row, COL.tenHang, it.tenHang)
     setCellStringForce(doc, sstDoc, row, COL.soLo, it.soLo)
-    setCellStringForce(doc, sstDoc, row, COL.hanDung, formatDateVi(it.hanDung))
+    // Kho C/DTP: "Hạn dùng" là ô nhập tay tự do trong DamagedGoodsRecordForm.jsx (đã sẵn dạng dd/mm/yyyy
+    // do người dùng gõ), KHÔNG phải ngày ISO như hàng cận date/Kho A — dùng formatDateVi() ở đây từng làm
+    // ô này luôn trống trên file xuất (formatDateVi tách theo dấu "-", chuỗi dd/mm/yyyy không có "-" nên
+    // parse ra rỗng). Ghi thẳng giá trị người dùng đã gõ, không reformat.
+    setCellStringForce(doc, sstDoc, row, COL.hanDung, it.hanDung || '')
     setCellStringForce(doc, sstDoc, row, COL.kho, it.kho || '')
     setCellStringForce(doc, sstDoc, row, COL.dvt, it.dvt)
     setCellNumberForce(doc, row, COL.theoChungTu, it.soLuong ?? 0)
@@ -349,7 +353,8 @@ export async function exportDamagedGoodsXacMinh(record) {
       maSanPham: it.maHang || '',
       tenHang: it.tenHang || '',
       soLo: it.soLo || '',
-      hanDung: formatDateVi(it.hanDung),
+      // Kho C/DTP: ô nhập tay tự do (dd/mm/yyyy sẵn), không phải ISO — xem ghi chú ở fillDataRows.
+      hanDung: it.hanDung || '',
       kho: it.kho || '',
       dvt: it.dvt || '',
       soLuong: it.soLuong ?? '',
