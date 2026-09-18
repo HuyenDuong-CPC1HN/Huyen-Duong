@@ -49,7 +49,7 @@ export function StatCard({ icon: Icon, value, label, cls, pctOfTotal, onClick, a
   )
 }
 
-export function OrderBadge({ value }) {
+function OrderBadge({ value }) {
   return (
     <span className="report-section-count">
       {value.toLocaleString('vi-VN')} đơn

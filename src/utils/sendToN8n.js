@@ -3,8 +3,8 @@ const WEBHOOK_URL = '/n8n-webhook/webhook/Claude%20Web%20App'
 
 /**
  * Gửi dữ liệu JSON lên n8n qua Webhook.
- * @param {object} payload - Dữ liệu cần gửi (name, email, message, ...)
- * @returns {{ success: boolean, data?: any, error?: string }}
+ * @param {object} payload
+ * @returns {Promise<Object>}
  */
 export async function sendToN8n(payload) {
   try {

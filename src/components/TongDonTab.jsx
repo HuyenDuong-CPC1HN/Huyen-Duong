@@ -12,7 +12,7 @@ import { deliveryBucket } from '../utils/deliveryDays'
 import { readSheetReports } from '../utils/sheetReports'
 import {
   getCarrierFileStats, pickCarrierWeekIdByDate, carrierWeekHasRows, computeFrozenNgoaiSan, getCarrierWeekRows,
-} from './CarrierStats'
+} from './carrierUtils'
 import { pct, buildDonSanNarrative, buildDonTruyenThongNarrative } from './tongDonNarrative'
 import TongDonReportDonSan from './TongDonReportDonSan'
 import TongDonReportDonTruyenThong from './TongDonReportDonTruyenThong'
@@ -332,6 +332,86 @@ function DataSourcePicker({ open, onToggle, donCPick, donDTPPick, tmdtPick }) {
   )
 }
 
+function LoadingState() {
+  return (
+    <div className="text-center py-24 text-gray-400">
+      <RefreshCw size={28} className="animate-spin mx-auto mb-3" />
+      <p>Đang tải dữ liệu...</p>
+    </div>
+  )
+}
+
+function pngExportFilename(suffix, date = new Date()) {
+  return `${suffix}_${date.toLocaleDateString('vi-VN').replaceAll('/', '_')}.png`
+}
+
+function missingCompletionLabel(item) {
+  if (item === 'sheet_report_donC') return 'thiếu báo cáo Đơn C đã lưu'
+  if (item === 'sheet_report_donDTP') return 'thiếu báo cáo Đơn DTP đã lưu'
+  return 'thiếu khóa tuần của Tổng đơn'
+}
+
+function publishButtonText(isPublished, publishing) {
+  if (isPublished) return 'Đã công bố cho phân tích'
+  if (publishing) return 'Đang công bố...'
+  return 'Công bố cho phân tích'
+}
+
+function publishButtonTitle(isPublished, completion) {
+  if (isPublished) return 'Chu kỳ này đã được công bố cho phân tích.'
+  if (!completion.ok) {
+    return `Chưa thể công bố: ${completion.missing.map(missingCompletionLabel).join(', ')}.`
+  }
+  return 'Công bố KPI đã đóng băng cho phân tích.'
+}
+
+function TongDonToolbar({
+  isReadOnly, completion, publishing, isPublished, publishTitle, publishBtnText,
+  onPublish, onDelete, onNavigate, onSave, savingReport, onExport, exporting,
+}) {
+  return (
+    <div className="tdr-toolbar">
+      {isReadOnly ? (
+        <>
+          <button
+            onClick={onPublish}
+            type="button"
+            disabled={!completion.ok || publishing || isPublished}
+            title={publishTitle}
+            className="tdr-btn is-publish"
+          >
+            <ClipboardList size={13} /> {publishBtnText}
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="tdr-btn is-reselect"
+            title="Xoá báo cáo đã lưu để chọn lại tuần so sánh và làm lại (dùng khi lỡ chọn nhầm tuần)"
+          >
+            <RotateCcw size={13} /> Chọn lại &amp; làm lại
+          </button>
+          {onNavigate && (
+            <button type="button" onClick={() => onNavigate('donC')} className="tdr-btn is-primary">
+              <Upload size={13} /> Upload tuần mới
+            </button>
+          )}
+        </>
+      ) : (
+        <button type="button" onClick={onSave} disabled={savingReport} className="tdr-btn is-primary">
+          <ClipboardList size={13} /> {savingReport ? 'Đang lưu...' : 'Lưu báo cáo tuần này'}
+        </button>
+      )}
+      <button type="button" onClick={onExport} disabled={exporting} className="tdr-btn">
+        <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh PNG'}
+      </button>
+      <button type="button" onClick={() => window.print()} className="tdr-btn">
+        <Printer size={13} /> In / Xuất PDF
+      </button>
+    </div>
+  )
+}
+
+
 export default function TongDonTab({ onNavigate }) {
   const donC = useTypeData('donC')
   const donDTP = useTypeData('donDTP')
@@ -481,7 +561,7 @@ export default function TongDonTab({ onNavigate }) {
       const a = document.createElement('a')
       const suffix = activeTab === 'donsan' ? 'DonSan' : 'DonTruyenThong'
       a.href = dataUrl
-      a.download = `${suffix}_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '_')}.png`
+      a.download = pngExportFilename(suffix)
       a.click()
     } catch {
       window.alert('Không xuất được ảnh, vui lòng thử lại.')
@@ -552,35 +632,14 @@ export default function TongDonTab({ onNavigate }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="text-center py-24 text-gray-400">
-        <RefreshCw size={28} className="animate-spin mx-auto mb-3" />
-        <p>Đang tải dữ liệu...</p>
-      </div>
-    )
-  }
+  if (loading) return <LoadingState />
 
   const fmtDate = (at) => (at && !Number.isNaN(new Date(at).getTime()) ? new Date(at).toLocaleDateString('vi-VN') : null)
   const currentPeriodLabel = !isReadOnly ? fmtDate(donCCurrentEntry?.at) : null
   const previousPeriodLabel = !isReadOnly ? fmtDate(donCPreviousEntry?.at) : null
   const savedAtLabel = isReadOnly ? new Date(snapshot.createdAt).toLocaleString('vi-VN') : null
-
-  let publishBtnText = 'Công bố cho phân tích'
-  if (isPublished) publishBtnText = 'Đã công bố cho phân tích'
-  else if (publishing) publishBtnText = 'Đang công bố...'
-
-  let publishTitle = 'Công bố KPI đã đóng băng cho phân tích.'
-  if (isPublished) {
-    publishTitle = 'Chu kỳ này đã được công bố cho phân tích.'
-  } else if (!completion.ok) {
-    const missingLabels = completion.missing.map((item) => {
-      if (item === 'sheet_report_donC') return 'thiếu báo cáo Đơn C đã lưu'
-      if (item === 'sheet_report_donDTP') return 'thiếu báo cáo Đơn DTP đã lưu'
-      return 'thiếu khóa tuần của Tổng đơn'
-    })
-    publishTitle = `Chưa thể công bố: ${missingLabels.join(', ')}.`
-  }
+  const publishBtnText = publishButtonText(isPublished, publishing)
+  const publishTitle = publishButtonTitle(isPublished, completion)
 
   return (
     <div className="tdr-tab">
@@ -598,44 +657,21 @@ export default function TongDonTab({ onNavigate }) {
             tmdtPick={tmdtPick}
           />
         )}
-        <div className="tdr-toolbar">
-          {isReadOnly ? (
-            <>
-              <button
-                onClick={publishForAnalytics}
-                type="button"
-                disabled={!completion.ok || publishing || isPublished}
-                title={publishTitle}
-                className="tdr-btn is-publish"
-              >
-                <ClipboardList size={13} /> {publishBtnText}
-              </button>
-              <button
-                type="button"
-                onClick={deleteReport}
-                className="tdr-btn is-reselect"
-                title="Xoá báo cáo đã lưu để chọn lại tuần so sánh và làm lại (dùng khi lỡ chọn nhầm tuần)"
-              >
-                <RotateCcw size={13} /> Chọn lại &amp; làm lại
-              </button>
-              {onNavigate && (
-                <button type="button" onClick={() => onNavigate('donC')} className="tdr-btn is-primary">
-                  <Upload size={13} /> Upload tuần mới
-                </button>
-              )}
-            </>
-          ) : (
-            <button type="button" onClick={() => { void saveReport() }} disabled={savingReport} className="tdr-btn is-primary">
-              <ClipboardList size={13} /> {savingReport ? 'Đang lưu...' : 'Lưu báo cáo tuần này'}
-            </button>
-          )}
-          <button type="button" onClick={handleExportImage} disabled={exporting} className="tdr-btn">
-            <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh PNG'}
-          </button>
-          <button type="button" onClick={() => window.print()} className="tdr-btn">
-            <Printer size={13} /> In / Xuất PDF
-          </button>
-        </div>
+        <TongDonToolbar
+          isReadOnly={isReadOnly}
+          completion={completion}
+          publishing={publishing}
+          isPublished={isPublished}
+          publishTitle={publishTitle}
+          publishBtnText={publishBtnText}
+          onPublish={publishForAnalytics}
+          onDelete={deleteReport}
+          onNavigate={onNavigate}
+          onSave={() => { void saveReport() }}
+          savingReport={savingReport}
+          onExport={handleExportImage}
+          exporting={exporting}
+        />
       </div>
       {publishError && <p role="alert" className="tdr-error">{publishError}</p>}
 

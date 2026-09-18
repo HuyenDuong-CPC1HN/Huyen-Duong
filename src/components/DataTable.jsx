@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback, useReducer } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Search, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react'
 import { COLUMNS } from '../config'
 import StatusBadge from './StatusBadge'
@@ -26,14 +26,18 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
 
   useEffect(() => {
     if (!open) return
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false)
+        setQuery('')
+      }
+    }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
-    else setQuery('')
   }, [open])
 
   const toggle = (opt) => {
@@ -63,9 +67,12 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
   const hasFilter = selected.length > 0
 
   return (
-    <div ref={ref} className="relative inline-block ml-1" onClick={e => e.stopPropagation()}>
+    <div ref={ref} className="relative inline-block ml-1">
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          setOpen(o => !o)
+          if (open) setQuery('')
+        }}
         className={`p-0.5 rounded transition-colors ${hasFilter ? 'text-blue-500' : 'text-gray-300 hover:text-gray-500'}`}
         title={hasFilter ? `Đang lọc: ${selected.join(', ')}` : 'Lọc'}
       >
@@ -108,7 +115,7 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
                   type="checkbox"
                   checked={selected.includes('')}
                   onChange={() => toggle('')}
-                  className="accent-blue-500 flex-shrink-0"
+                  className="accent-blue-500 shrink-0"
                 />
                 <span>(Trống)</span>
               </label>
@@ -126,7 +133,7 @@ export function ColumnFilter({ colKey, data, selected, onChange }) {
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggle(opt)}
-                    className="accent-blue-500 flex-shrink-0"
+                    className="accent-blue-500 shrink-0"
                   />
                   <span className="truncate max-w-48">{opt}</span>
                 </label>
@@ -168,13 +175,15 @@ export function ResizeHandle({ colKey, setWidth }) {
   }
 
   return (
-    <span
+    <button
+      type="button"
+      tabIndex={-1}
       onMouseDown={onMouseDown}
       title="Kéo để đổi độ rộng cột"
-      className="absolute -right-1.5 top-0 h-full w-4 cursor-col-resize select-none z-10 flex items-center justify-center group"
+      className="absolute -right-1.5 top-0 h-full w-4 cursor-col-resize select-none z-10 flex items-center justify-center group p-0 border-0 bg-transparent"
     >
       <span className="w-0.5 h-4 bg-gray-300 group-hover:bg-blue-400 group-hover:h-full transition-colors" />
-    </span>
+    </button>
   )
 }
 
@@ -196,7 +205,10 @@ function EditableVCCell({ value, rowIndex, onSave }) {
       value={val}
       onChange={e => setVal(e.target.value)}
       onBlur={commit}
-      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') commit()
+        if (e.key === 'Escape') cancel()
+      }}
       className="w-full px-1 py-0.5 text-[12px] border border-blue-400 rounded outline-none bg-blue-50"
       style={{ minWidth: 80 }}
     />
@@ -213,13 +225,30 @@ function EditableVCCell({ value, rowIndex, onSave }) {
   )
 }
 
+function renderCell(col, row, rowIndex, onEditVC) {
+  if (col.key === 'Trạng thái') return <StatusBadge status={row[col.key]} />
+  if (col.key === VC_KEY) {
+    return (
+      <EditableVCCell
+        value={row[VC_KEY]}
+        rowIndex={rowIndex}
+        onSave={(_, v) => onEditVC?.(row['Mã hóa đơn'] || String(rowIndex), v)}
+      />
+    )
+  }
+  if (col.key === 'Thu hộ' || col.key === 'TT Thu hộ' || col.key === 'Phí Ship/kiện') {
+    return <span className="font-semibold text-gray-800">{row[col.key] || '—'}</span>
+  }
+  return row[col.key] || <span className="text-gray-300">—</span>
+}
+
 export default function DataTable({ data: rawData, loading, error, refresh, lastRefresh, onEditVC }) {
   // Bỏ các dòng không có Mã kiện hàng (dòng tổng/dòng trống trong file Excel)
   const data = useMemo(() => rawData.filter(row => String(row['Mã kiện hàng'] ?? '').trim() !== ''), [rawData])
   const [search, setSearch] = useState('')
   const [colFilters, setColFilters] = useState({})
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(50)
+  const [pageSize, setPageSize] = useState('50')
   const [colWidths, setColWidth] = useColWidths()
   const topScrollRef = useRef()
   const tableScrollRef = useRef()
@@ -286,8 +315,10 @@ export default function DataTable({ data: rawData, loading, error, refresh, last
     })
   }, [data, search, activeFilters])
 
-  const totalPages = pageSize === 'all' ? 1 : Math.ceil(filtered.length / pageSize)
-  const pageData = pageSize === 'all' ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize)
+  const showAll = pageSize === 'all'
+  const pageLimit = showAll ? filtered.length : Number(pageSize)
+  const totalPages = showAll ? 1 : Math.ceil(filtered.length / pageLimit)
+  const pageData = showAll ? filtered : filtered.slice((page - 1) * pageLimit, page * pageLimit)
 
   if (error) return (
     <div className="text-center py-20 text-red-500">
@@ -300,7 +331,7 @@ export default function DataTable({ data: rawData, loading, error, refresh, last
     <div>
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2 mb-3 items-center">
-        <div className="relative w-56 flex-shrink-0">
+        <div className="relative w-56 shrink-0">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
@@ -316,7 +347,7 @@ export default function DataTable({ data: rawData, loading, error, refresh, last
           <span>Hiển thị</span>
           <select
             value={pageSize}
-            onChange={e => { setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value)); setPage(1) }}
+            onChange={e => { setPageSize(e.target.value); setPage(1) }}
             className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
           >
             {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n === 'all' ? 'Tất cả' : `${n} dòng`}</option>)}
@@ -407,18 +438,11 @@ export default function DataTable({ data: rawData, loading, error, refresh, last
                     </td>
                   </tr>
                 ) : pageData.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-100 hover:bg-blue-50/40 transition-colors bg-white">
-                    <td className="px-4 py-3.5 text-gray-400 text-[12px] font-medium border border-gray-200 align-middle" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pageSize === 'all' ? i + 1 : (page - 1) * pageSize + i + 1}</td>
+                  <tr key={row['Mã kiện hàng']} className="border-b border-gray-100 hover:bg-blue-50/40 transition-colors bg-white">
+                    <td className="px-4 py-3.5 text-gray-400 text-[12px] font-medium border border-gray-200 align-middle" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{showAll ? i + 1 : (page - 1) * pageLimit + i + 1}</td>
                     {COLUMNS.map(col => (
                       <td key={col.key} className="px-4 py-3.5 text-gray-700 text-[12px] border border-gray-200 align-middle" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {col.key === 'Trạng thái'
-                          ? <StatusBadge status={row[col.key]} />
-                          : col.key === VC_KEY
-                            ? <EditableVCCell value={row[VC_KEY]} rowIndex={i} onSave={(_, v) => onEditVC?.(row['Mã hóa đơn'] || String(i), v)} />
-                          : col.key === 'Thu hộ' || col.key === 'TT Thu hộ' || col.key === 'Phí Ship/kiện'
-                            ? <span className="font-semibold text-gray-800">{row[col.key] || '—'}</span>
-                            : row[col.key] || <span className="text-gray-300">—</span>
-                        }
+                        {renderCell(col, row, i, onEditVC)}
                       </td>
                     ))}
                   </tr>

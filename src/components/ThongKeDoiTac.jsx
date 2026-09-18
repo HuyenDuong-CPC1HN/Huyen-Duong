@@ -4,7 +4,7 @@ import { Package, CheckCircle, TrendingUp, Truck, AlertTriangle } from 'lucide-r
 import StatusBadge from './StatusBadge'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
-import { getCarrierFileTotal, getCarrierFileStats, readHoldWeeks } from './CarrierStats'
+import { getCarrierFileTotal, getCarrierFileStats, readHoldWeeks } from './carrierUtils'
 import { KpiTile, SectionCard } from './ReportCards'
 
 // Số "chưa giao"/"chưa gửi chành" nhập tay ở cột Thống kê giao hàng — đây là các đơn THỰC TẾ tồn tại

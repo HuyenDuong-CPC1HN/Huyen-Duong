@@ -86,8 +86,19 @@ function formatDateVi(iso) {
 
 // "Tuổi thuốc (Tháng)" = số tháng CÒN LẠI tới hạn dùng (âm nếu đã hết hạn), quy đổi từ số ngày còn lại.
 function monthsLeft(daysLeft) {
-  if (daysLeft === null) return ''
-  return Math.round((daysLeft / 30.44) * 10) / 10
+  return Math.round(((daysLeft ?? 0) / 30.44) * 10) / 10
+}
+
+function remainingClass(bucket) {
+  if (bucket === 'near3') return 'text-orange-600 font-medium'
+  if (bucket === 'near6') return 'text-amber-600 font-medium'
+  return 'text-gray-600'
+}
+
+function remainingDaysLabel(daysLeft, bucket) {
+  if (daysLeft === null) return <span className="text-gray-400">Không rõ</span>
+  if (daysLeft < 0) return <span className="text-red-600 font-medium">Quá hạn {Math.abs(daysLeft)} ngày</span>
+  return <span className={remainingClass(bucket)}>Còn {daysLeft} ngày</span>
 }
 
 const TAB_FILE_LABEL = { canDate: 'CanDate', expired: 'HetHan', near3: 'Duoi3Thang', near6: 'Duoi6Thang', all: 'TatCa' }
@@ -130,7 +141,7 @@ export default function ExpiryStockTab() {
   const [activeId, setActiveId] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_KEY)
     const all = readMonths()
-    if (all.find(m => m.id === saved)) return saved
+    if (all.some(m => m.id === saved)) return saved
     return all[0]?.id || null
   })
   const [tab, setTab] = useState('canDate') // canDate | expired | near3 | near6 | all
@@ -141,27 +152,23 @@ export default function ExpiryStockTab() {
 
   const active = months.find(m => m.id === activeId) || null
 
-  const parseFile = (file) => {
+  const parseFile = async (file) => {
     setError('')
     if (!file) return
     const ext = file.name.split('.').pop().toLowerCase()
     if (!['xlsx', 'xls'].includes(ext)) { setError('Chỉ hỗ trợ file .xlsx hoặc .xls'); return }
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const rows = parseExpiryStockWorkbook(e.target.result)
-        if (rows.length === 0) { setError('Không tìm thấy dữ liệu vật tư trong file.'); return }
-        const entry = addMonth({ fileName: file.name, uploadedAt: new Date().toISOString(), rows })
-        setMonths(readMonths())
-        setActiveId(entry.id)
-      } catch (err) {
-        setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
-      }
+    try {
+      const rows = parseExpiryStockWorkbook(await file.arrayBuffer())
+      if (rows.length === 0) { setError('Không tìm thấy dữ liệu vật tư trong file.'); return }
+      const entry = addMonth({ fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+      setMonths(readMonths())
+      setActiveId(entry.id)
+    } catch (err) {
+      setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
     }
-    reader.readAsArrayBuffer(file)
   }
 
-  const handleDrop = (e) => { e.preventDefault(); setDragging(false); parseFile(e.dataTransfer.files[0]) }
+  const handleDrop = (e) => { e.preventDefault(); setDragging(false); void parseFile(e.dataTransfer.files[0]) }
 
   const removeActive = () => {
     if (!active) return
@@ -190,7 +197,7 @@ export default function ExpiryStockTab() {
     near6: inStock.filter(r => r.bucket === 'near6').length,
   }), [inStock])
 
-  const khoOptions = useMemo(() => [...new Set(inStock.map(r => r.maKho).filter(Boolean))].sort(), [inStock])
+  const khoOptions = useMemo(() => [...new Set(inStock.map(r => r.maKho).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [inStock])
 
   const filteredRows = useMemo(() => {
     let rows = inStock
@@ -241,11 +248,10 @@ export default function ExpiryStockTab() {
   if (!active) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div
+        <label
           onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
           onDrop={handleDrop}
-          onClick={() => inputRef.current.click()}
           className={`flex flex-col items-center justify-center gap-3 w-full h-56 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none
             ${dragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'}`}
         >
@@ -256,9 +262,9 @@ export default function ExpiryStockTab() {
             <p className="text-gray-700 font-semibold text-sm">Kéo & thả file "Báo cáo tổng hợp nhập xuất tồn theo kho" vào đây</p>
             <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx</span> — mỗi lần upload là 1 tháng dữ liệu</p>
           </div>
-        </div>
+          <input ref={inputRef} type="file" accept=".xlsx,.xls" className="sr-only" onChange={e => void parseFile(e.target.files[0])} />
+        </label>
         {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
       </div>
     )
   }
@@ -284,7 +290,7 @@ export default function ExpiryStockTab() {
 
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
-          <FileSpreadsheet size={15} className="text-green-600 flex-shrink-0" />
+          <FileSpreadsheet size={15} className="text-green-600 shrink-0" />
           <span className="text-green-700 font-medium truncate max-w-72">{active.fileName}</span>
           <span className="text-green-500 text-xs">({inStock.length} mặt hàng còn tồn)</span>
           <button onClick={removeActive} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xoá hẳn dữ liệu tháng này (các tháng khác không bị ảnh hưởng)">
@@ -298,7 +304,7 @@ export default function ExpiryStockTab() {
           <Upload size={14} />
           Upload tháng mới
         </button>
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
+        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => void parseFile(e.target.files[0])} />
         <span className="text-xs text-gray-400">Cập nhật: {new Date(active.uploadedAt).toLocaleString('vi-VN')}</span>
       </div>
       {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
@@ -313,7 +319,7 @@ export default function ExpiryStockTab() {
               onClick={() => setTab(isActive ? 'canDate' : b.key)}
               className={`flex items-center gap-3 rounded-xl border p-3.5 text-left transition-colors ${isActive ? b.bgActive : b.bg} hover:brightness-95`}
             >
-              <Icon size={20} className={`${b.cls} flex-shrink-0`} />
+              <Icon size={20} className={`${b.cls} shrink-0`} />
               <div>
                 <div className={`text-xl font-bold ${b.cls}`}>{counts[b.key].toLocaleString('vi-VN')}</div>
                 <div className="text-xs text-gray-600">{b.label}</div>
@@ -418,15 +424,7 @@ export default function ExpiryStockTab() {
                 <td className="px-3 py-2 font-mono" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.maLo || '—'}</td>
                 <td className="px-3 py-2" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatDateVi(r.hanDung)}</td>
                 <td className="px-3 py-2" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.daysLeft === null ? (
-                    <span className="text-gray-400">Không rõ</span>
-                  ) : r.daysLeft < 0 ? (
-                    <span className="text-red-600 font-medium">Quá hạn {Math.abs(r.daysLeft)} ngày</span>
-                  ) : (
-                    <span className={r.bucket === 'near3' ? 'text-orange-600 font-medium' : r.bucket === 'near6' ? 'text-amber-600 font-medium' : 'text-gray-600'}>
-                      Còn {r.daysLeft} ngày
-                    </span>
-                  )}
+                  {remainingDaysLabel(r.daysLeft, r.bucket)}
                 </td>
                 <td className="px-3 py-2 text-center font-medium" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.tonCuoi.toLocaleString('vi-VN')}</td>
                 <td className="px-3 py-2 text-center" style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.dvt || '—'}</td>

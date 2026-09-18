@@ -108,7 +108,7 @@ export default function SlowMovingStockTab() {
   const [activeId, setActiveId] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_KEY)
     const all = readMonths()
-    if (all.find(m => m.id === saved)) return saved
+    if (all.some(m => m.id === saved)) return saved
     return all[0]?.id || null
   })
   const [search, setSearch] = useState('')
@@ -117,28 +117,25 @@ export default function SlowMovingStockTab() {
 
   const active = months.find(m => m.id === activeId) || null
 
-  const parseFile = (file) => {
+  const parseFile = async (file) => {
     setError('')
     if (!file) return
     const ext = file.name.split('.').pop().toLowerCase()
     if (!['xlsx', 'xls'].includes(ext)) { setError('Chỉ hỗ trợ file .xlsx hoặc .xls'); return }
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const rows = parseExpiryStockWorkbook(e.target.result)
-        if (rows.length === 0) { setError('Không tìm thấy dữ liệu vật tư trong file.'); return }
-        const dateRange = parseReportDateRange(e.target.result)
-        const entry = addMonth({ fileName: file.name, uploadedAt: new Date().toISOString(), rows, dateRange })
-        setMonths(readMonths())
-        setActiveId(entry.id)
-      } catch (err) {
-        setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
-      }
+    try {
+      const buffer = await file.arrayBuffer()
+      const rows = parseExpiryStockWorkbook(buffer)
+      if (rows.length === 0) { setError('Không tìm thấy dữ liệu vật tư trong file.'); return }
+      const dateRange = parseReportDateRange(buffer)
+      const entry = addMonth({ fileName: file.name, uploadedAt: new Date().toISOString(), rows, dateRange })
+      setMonths(readMonths())
+      setActiveId(entry.id)
+    } catch (err) {
+      setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
     }
-    reader.readAsArrayBuffer(file)
   }
 
-  const handleDrop = (e) => { e.preventDefault(); setDragging(false); parseFile(e.dataTransfer.files[0]) }
+  const handleDrop = (e) => { e.preventDefault(); setDragging(false); void parseFile(e.dataTransfer.files[0]) }
 
   const removeActive = () => {
     if (!active) return
@@ -158,7 +155,7 @@ export default function SlowMovingStockTab() {
     return (active.rows || []).filter(isSlowMoving)
   }, [active])
 
-  const khoOptions = useMemo(() => [...new Set(slowRows.map(r => r.maKho).filter(Boolean))].sort(), [slowRows])
+  const khoOptions = useMemo(() => [...new Set(slowRows.map(r => r.maKho).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [slowRows])
 
   const filteredRows = useMemo(() => {
     let rows = slowRows
@@ -176,11 +173,10 @@ export default function SlowMovingStockTab() {
   if (!active) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div
+        <label
           onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
           onDrop={handleDrop}
-          onClick={() => inputRef.current.click()}
           className={`flex flex-col items-center justify-center gap-3 w-full h-56 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none
             ${dragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'}`}
         >
@@ -191,9 +187,9 @@ export default function SlowMovingStockTab() {
             <p className="text-gray-700 font-semibold text-sm">Kéo & thả file "Báo cáo tổng hợp nhập xuất tồn theo kho" vào đây</p>
             <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx</span> — nên xuất báo cáo với khoảng thời gian từ {MIN_DAYS} ngày trở lên để kết quả chính xác</p>
           </div>
-        </div>
+          <input ref={inputRef} type="file" accept=".xlsx,.xls" className="sr-only" onChange={e => void parseFile(e.target.files[0])} />
+        </label>
         {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
       </div>
     )
   }
@@ -219,7 +215,7 @@ export default function SlowMovingStockTab() {
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
-          <FileSpreadsheet size={15} className="text-green-600 flex-shrink-0" />
+          <FileSpreadsheet size={15} className="text-green-600 shrink-0" />
           <span className="text-green-700 font-medium truncate max-w-72">{active.fileName}</span>
           <span className="text-green-500 text-xs">({slowRows.length} mặt hàng chậm luân chuyển)</span>
           <button onClick={removeActive} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xoá hẳn dữ liệu tháng này (các tháng khác không bị ảnh hưởng)">
@@ -233,13 +229,13 @@ export default function SlowMovingStockTab() {
           <Upload size={14} />
           Upload tháng mới
         </button>
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
+        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => void parseFile(e.target.files[0])} />
         <span className="text-xs text-gray-400">Cập nhật: {new Date(active.uploadedAt).toLocaleString('vi-VN')}</span>
       </div>
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
 
       <div className={`flex items-start gap-2.5 mb-5 px-3.5 py-3 rounded-xl border text-sm ${rangeTooShort ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-indigo-50 border-indigo-200 text-indigo-800'}`}>
-        {rangeTooShort ? <TriangleAlert size={17} className="flex-shrink-0 mt-0.5" /> : <Hourglass size={17} className="flex-shrink-0 mt-0.5" />}
+        {rangeTooShort ? <TriangleAlert size={17} className="shrink-0 mt-0.5" /> : <Hourglass size={17} className="shrink-0 mt-0.5" />}
         {dateRange ? (
           <p>
             File báo cáo khoảng <span className="font-semibold">{formatDateVi(dateRange.tuNgay)} → {formatDateVi(dateRange.denNgay)}</span> ({dateRange.soNgay} ngày)

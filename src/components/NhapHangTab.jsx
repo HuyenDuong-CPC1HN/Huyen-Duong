@@ -20,6 +20,44 @@ import { exportReceiptFromTemplate } from '../utils/exportGoodsReceipt'
 const STORAGE_KEY = 'goods_receipt_batches'
 const ACTIVE_KEY = 'goods_receipt_active'
 
+
+const MAX_HISTORY_QUERY_LENGTH = 100
+
+function normalizeHistoryQuery(value) {
+  return String(value).trim().toLocaleLowerCase().slice(0, MAX_HISTORY_QUERY_LENGTH)
+}
+
+function matchesHistoryRow(row, query) {
+  return String(row.maHang ?? '').toLocaleLowerCase().includes(query) ||
+    String(row.tenHang ?? '').toLocaleLowerCase().includes(query)
+}
+
+function toHistoryHit(row, batch, warehouse) {
+  return {
+    ma_hang: row.maHang,
+    ten_hang: row.tenHang,
+    so_lo: row.soLo,
+    sl_hoa_don: row.slHoaDon,
+    han_dung: row.hanDung,
+    warehouse,
+    goods_receipt_batches: { processed_at: batch.processedAt },
+  }
+}
+
+function collectLocalHistoryMatches(batches, query) {
+  const q = normalizeHistoryQuery(query)
+  if (!q) return []
+  const hits = []
+  for (const batch of batches) {
+    for (const row of (batch.khoC || [])) {
+      if (matchesHistoryRow(row, q)) hits.push(toHistoryHit(row, batch, 'C'))
+    }
+    for (const row of (batch.khoLgt || [])) {
+      if (matchesHistoryRow(row, q)) hits.push(toHistoryHit(row, batch, 'LGT'))
+    }
+  }
+  return hits
+}
 function withRowIds(rows) {
   return rows.map(row => (row.rowId ? row : { ...row, rowId: crypto.randomUUID() }))
 }
@@ -31,6 +69,13 @@ function readBatches() {
       ? batches.map(batch => ({ ...batch, khoC: withRowIds(batch.khoC || []), khoLgt: withRowIds(batch.khoLgt || []) }))
       : []
   } catch { return [] }
+}
+
+function readStoredActiveId() {
+  const saved = localStorage.getItem(ACTIVE_KEY)
+  const all = readBatches()
+  if (all.some(batch => batch.id === saved)) return saved
+  return all[0]?.id || null
 }
 
 function writeBatches(batches) { localStorage.setItem(STORAGE_KEY, JSON.stringify(batches)) }
@@ -304,6 +349,11 @@ function sortRowsBy(rows, sortKey, sortDir) {
   ))
 }
 
+function nextSortState(current, key) {
+  if (current.key !== key) return { key, dir: 'asc' }
+  return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+}
+
 function SortableHeader({ label, sortKey, activeKey, dir, disabled, onToggle }) {
   const active = activeKey === sortKey
   return (
@@ -316,9 +366,9 @@ function SortableHeader({ label, sortKey, activeKey, dir, disabled, onToggle }) 
         className={`flex items-center gap-1 ${disabled ? 'cursor-not-allowed text-gray-400' : 'hover:text-gray-900'}`}
       >
         {label}
-        {active
-          ? (dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)
-          : <ArrowUpDown size={12} className="text-gray-300" />}
+        {active && dir === 'asc' && <ArrowUp size={12} />}
+        {active && dir !== 'asc' && <ArrowDown size={12} />}
+        {!active && <ArrowUpDown size={12} className="text-gray-300" />}
       </button>
     </th>
   )
@@ -449,6 +499,70 @@ function resolveEffectiveMonthKey(selectedMonthKey, active, monthGroups) {
   return monthGroups[0]?.[0] || null
 }
 
+function EmptyNhapHangState({ pendingFiles, onAddFiles, onRemoveFile, canProcess, processing, onProcess, error }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <PackagePlus size={18} className="text-gray-500" />
+        <p className="text-sm text-gray-600">
+          Mỗi kho vật lý có thể nhận nhiều file (Excel + PDF phiếu xuất kho) — thả vào vùng nào cũng
+          được, PDF phiếu xuất kho tự ghi rõ đích đến (Kho C hay Kho DTP LGT) nên hệ thống tự tách đúng
+          kho theo nội dung, không phụ thuộc vùng bạn thả.
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <FileZone
+          label="Kho C *"
+          hint="Kéo/thả hoặc click — nhận nhiều file .xlsx, .xls, .pdf"
+          files={pendingFiles.khoC}
+          onAddFiles={(files) => onAddFiles('khoC', files)}
+          onRemoveFile={(i) => onRemoveFile('khoC', i)}
+        />
+        <FileZone
+          label="Kho LGT (DTP) — tuỳ chọn"
+          hint="Nếu chưa có file riêng, app sẽ dùng chung dữ liệu Kho C"
+          files={pendingFiles.khoLgt}
+          onAddFiles={(files) => onAddFiles('khoLgt', files)}
+          onRemoveFile={(i) => onRemoveFile('khoLgt', i)}
+        />
+      </div>
+
+      <FileZone
+        label="Biên bản giao nhận — tuỳ chọn"
+        hint="Chỉ nhận .pdf — dùng để đối chiếu SL thực tế + tổng kiện, không phải nguồn tách kho"
+        accept=".pdf"
+        files={pendingFiles.bienBan}
+        onAddFiles={(files) => onAddFiles('bienBan', files)}
+        onRemoveFile={(i) => onRemoveFile('bienBan', i)}
+      />
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={!canProcess || processing}
+          onClick={() => void onProcess()}
+          className="px-4 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm disabled:opacity-50"
+        >
+          {processing ? 'Đang xử lý...' : 'Tách kho & tạo biên bản'}
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-500 whitespace-pre-line">{error}</p>}
+    </div>
+  )
+}
+
+function KienCheckResultBanner({ result }) {
+  if (!result) return null
+  const ok = result.matched
+  return (
+    <p className={`text-xs rounded-lg px-3 py-2 mb-2 ${ok ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+      {ok ? '✅ ' : '⚠️ '}{result.message}
+    </p>
+  )
+}
+
 export default function NhapHangTab() {
   const [error, setError] = useState('')
   const [processing, setProcessing] = useState(false)
@@ -464,12 +578,7 @@ export default function NhapHangTab() {
   const [kienCheckResult, setKienCheckResult] = useState(null)
   const [showFactoryDetail, setShowFactoryDetail] = useState(false)
   const [showFactoryOther, setShowFactoryOther] = useState(false)
-  const [activeId, setActiveId] = useState(() => {
-    const saved = localStorage.getItem(ACTIVE_KEY)
-    const all = readBatches()
-    if (all.some(batch => batch.id === saved)) return saved
-    return all[0]?.id || null
-  })
+  const [activeId, setActiveId] = useState(readStoredActiveId)
   // null = chưa tự chọn tháng nào — mặc định bám theo tháng của chuyến đang xem (active).
   const [selectedMonthKey, setSelectedMonthKey] = useState(null)
 
@@ -480,8 +589,8 @@ export default function NhapHangTab() {
   // gốc trong dữ liệu.
   const [khoCSort, setKhoCSort] = useState({ key: null, dir: 'asc' })
   const [khoLgtSort, setKhoLgtSort] = useState({ key: null, dir: 'asc' })
-  const toggleKhoCSort = (key) => setKhoCSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
-  const toggleKhoLgtSort = (key) => setKhoLgtSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
+  const toggleKhoCSort = key => setKhoCSort(current => nextSortState(current, key))
+  const toggleKhoLgtSort = key => setKhoLgtSort(current => nextSortState(current, key))
 
   const active = batches.find(batch => batch.id === activeId) || null
 
@@ -758,7 +867,7 @@ export default function NhapHangTab() {
       const fileErrors = []
       const newRawRows = await readWarehouseRowsFromFiles(excelFiles, fileErrors)
       const pdfItems = await readPdfTextsFromFiles(pdfFiles, fileErrors)
-      if (fileErrors.length > 0) throw new Error(fileErrors.join('; '))
+      if (fileErrors.length > 0) throw new Error(fileErrors.filter(Boolean).join('; ') || 'Có tệp không thể đọc.')
       const pdfTexts = pdfItems.map(item => item.text)
       const warehouseWarnings = warehouse === 'C'
         ? collectWarehouseWarnings(pdfItems, [])
@@ -831,7 +940,7 @@ export default function NhapHangTab() {
   }
 
   const searchHistory = async () => {
-    const q = historyQuery.trim()
+    const q = normalizeHistoryQuery(historyQuery)
     if (!q) { setHistoryRows([]); return }
     setHistoryLoading(true)
     try {
@@ -848,97 +957,24 @@ export default function NhapHangTab() {
     }
   }
 
-  const localHistoryMatches = useMemo(() => {
-    const q = historyQuery.trim().toLowerCase()
-    if (!q) return []
-    const hits = []
-    const matches = (row) => (
-      String(row.maHang ?? '').toLowerCase().includes(q) || String(row.tenHang ?? '').toLowerCase().includes(q)
-    )
-    for (const batch of batches) {
-      for (const row of (batch.khoC || [])) {
-        if (matches(row)) {
-          hits.push({
-            ma_hang: row.maHang,
-            ten_hang: row.tenHang,
-            so_lo: row.soLo,
-            sl_hoa_don: row.slHoaDon,
-            han_dung: row.hanDung,
-            warehouse: 'C',
-            goods_receipt_batches: { processed_at: batch.processedAt },
-          })
-        }
-      }
-      for (const row of (batch.khoLgt || [])) {
-        if (matches(row)) {
-          hits.push({
-            ma_hang: row.maHang,
-            ten_hang: row.tenHang,
-            so_lo: row.soLo,
-            sl_hoa_don: row.slHoaDon,
-            han_dung: row.hanDung,
-            warehouse: 'LGT',
-            goods_receipt_batches: { processed_at: batch.processedAt },
-          })
-        }
-      }
-    }
-    return hits
-  }, [batches, historyQuery])
+  const localHistoryMatches = useMemo(
+    () => collectLocalHistoryMatches(batches, historyQuery),
+    [batches, historyQuery],
+  )
 
   const displayHistory = historyRows.length > 0 ? historyRows : localHistoryMatches
 
   if (!active) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <PackagePlus size={18} className="text-gray-500" />
-          <p className="text-sm text-gray-600">
-            Mỗi kho vật lý có thể nhận nhiều file (Excel + PDF phiếu xuất kho) — thả vào vùng nào cũng
-            được, PDF phiếu xuất kho tự ghi rõ đích đến (Kho C hay Kho DTP LGT) nên hệ thống tự tách đúng
-            kho theo nội dung, không phụ thuộc vùng bạn thả.
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-3">
-          <FileZone
-            label="Kho C *"
-            hint="Kéo/thả hoặc click — nhận nhiều file .xlsx, .xls, .pdf"
-            files={pendingFiles.khoC}
-            onAddFiles={(files) => addFiles('khoC', files)}
-            onRemoveFile={(i) => removeFile('khoC', i)}
-          />
-          <FileZone
-            label="Kho LGT (DTP) — tuỳ chọn"
-            hint="Nếu chưa có file riêng, app sẽ dùng chung dữ liệu Kho C"
-            files={pendingFiles.khoLgt}
-            onAddFiles={(files) => addFiles('khoLgt', files)}
-            onRemoveFile={(i) => removeFile('khoLgt', i)}
-          />
-        </div>
-
-        <FileZone
-          label="Biên bản giao nhận — tuỳ chọn"
-          hint="Chỉ nhận .pdf — dùng để đối chiếu SL thực tế + tổng kiện, không phải nguồn tách kho"
-          accept=".pdf"
-          files={pendingFiles.bienBan}
-          onAddFiles={(files) => addFiles('bienBan', files)}
-          onRemoveFile={(i) => removeFile('bienBan', i)}
-        />
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={!canProcess || processing}
-            onClick={() => void processFiles()}
-            className="px-4 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm disabled:opacity-50"
-          >
-            {processing ? 'Đang xử lý...' : 'Tách kho & tạo biên bản'}
-          </button>
-        </div>
-
-        {error && <p className="text-sm text-red-500 whitespace-pre-line">{error}</p>}
-      </div>
+      <EmptyNhapHangState
+        pendingFiles={pendingFiles}
+        onAddFiles={addFiles}
+        onRemoveFile={removeFile}
+        canProcess={canProcess}
+        processing={processing}
+        onProcess={processFiles}
+        error={error}
+      />
     )
   }
 
@@ -1114,11 +1150,7 @@ export default function NhapHangTab() {
             {checkingKien ? 'Đang đối chiếu...' : 'Đối chiếu lại số kiện'}
           </button>
         </div>
-        {kienCheckResult && (
-          <p className={`text-xs rounded-lg px-3 py-2 mb-2 ${kienCheckResult.matched ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-            {kienCheckResult.matched ? '✅ ' : '⚠️ '}{kienCheckResult.message}
-          </p>
-        )}
+        <KienCheckResultBanner result={kienCheckResult} />
         {(active.bienBanFiles || []).length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {active.bienBanFiles.map((bb) => (
@@ -1181,6 +1213,7 @@ export default function NhapHangTab() {
             <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               value={historyQuery}
+              maxLength={MAX_HISTORY_QUERY_LENGTH}
               onChange={(e) => setHistoryQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void searchHistory()}
               placeholder="Nhập mã hàng hoặc tên hàng..."
