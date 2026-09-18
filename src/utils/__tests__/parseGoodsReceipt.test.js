@@ -481,4 +481,52 @@ describe('parseGoodsReceipt', () => {
     expect(results).toHaveLength(1)
     expect(results[0]).toMatchObject({ trangThai: 'khop', chenhLech: 0 })
   })
+
+  it('factoryReconciliation: gộp theo Mã hàng (cả 2 kho) để chỉ đúng mã nào còn thiếu ở nhà máy so với biên bản', () => {
+    // G01006: bảng đặt 60 kiện (40 Kho C + 20 Kho LGT) nhưng biên bản chỉ xác nhận 26 -> còn 34 kiện ở NM.
+    const pdfText = '19 G01006 Golistin Soda - Hộp 1 lọ 45ml 04526F02 0 26 1664 Tổng cả đơn 26 Kiện'
+    const { factoryReconciliation } = buildReceiptFromFiles({
+      khoCRows: [{ maHang: 'G01006', tenHang: 'Golistin Soda', dvt: 'HOP', soLo: '04526F02', hanDung: '2026-07-06', kienNguyen: 40, kienLe: 0, slHoaDon: 1000 }],
+      khoLgtRows: [{ maHang: 'G01006', tenHang: 'Golistin Soda', dvt: 'HOP', soLo: '04526F02', hanDung: '2026-07-06', kienNguyen: 20, kienLe: 0, slHoaDon: 500 }],
+      pdfTexts: [pdfText],
+    })
+    expect(factoryReconciliation.conONhaMay).toHaveLength(1)
+    expect(factoryReconciliation.conONhaMay[0]).toMatchObject({ maHang: 'G01006', dat: 60, bienBan: 26, lech: 34 })
+    expect(factoryReconciliation.tongConONhaMay).toBe(34)
+    expect(factoryReconciliation.khac).toHaveLength(0)
+  })
+
+  it('factoryReconciliation: chiều ngược lại (biên bản khai nhiều hơn bảng) xếp riêng vào "khac", không tính vào "conONhaMay"', () => {
+    // E00557: biên bản ghi 36 kiện (hàng lạnh gộp ghi đại diện) nhưng bảng chỉ có 5 -> không phải "còn ở
+    // nhà máy" (chiều ngược lại tổng kiện thật lại nhiều hơn khai), phải xếp riêng.
+    const pdfText = '45 E00557 Ergome-BFS - Hộp 10 ống 1ml 010426 0 36 3000 thùng xốp Tổng cả đơn 36 Kiện'
+    const { factoryReconciliation } = buildReceiptFromFiles({
+      khoCRows: [{ maHang: 'E00557', tenHang: 'Ergome-BFS', dvt: 'HOP', soLo: '010426', hanDung: '2026-04-01', kienNguyen: 4, kienLe: 1, slHoaDon: 3000 }],
+      khoLgtRows: [],
+      pdfTexts: [pdfText],
+    })
+    expect(factoryReconciliation.conONhaMay).toHaveLength(0)
+    expect(factoryReconciliation.khac).toHaveLength(1)
+    expect(factoryReconciliation.khac[0]).toMatchObject({ maHang: 'E00557', dat: 5, bienBan: 36, lech: -31 })
+    expect(factoryReconciliation.tongKhac).toBe(31)
+  })
+
+  it('factoryReconciliation: null khi chuyến không có biên bản giao nhận nào (chỉ có phiếu xuất kho) — tránh báo lệch giả', () => {
+    const { factoryReconciliation } = buildReceiptFromFiles({
+      khoCRows: [{ maHang: 'A01259', tenHang: 'Arica', dvt: 'TUYP', soLo: '612', hanDung: '2026-01-01', kienNguyen: 5, kienLe: 0, slHoaDon: 1000 }],
+      khoLgtRows: [],
+      pdfTexts: [],
+    })
+    expect(factoryReconciliation).toBeNull()
+  })
+
+  it('recheckKienTotal cũng trả về factoryReconciliation mới nhất (dùng khi bấm "Đối chiếu lại số kiện" sau khi dò tay sửa)', () => {
+    const pdfText = '19 G01006 Golistin Soda - Hộp 1 lọ 45ml 04526F02 0 26 1664 Tổng cả đơn 26 Kiện'
+    const result = recheckKienTotal({
+      khoC: [{ maHang: 'G01006', tenHang: 'Golistin Soda', kienNguyen: 40, kienLe: 0 }],
+      khoLgt: [],
+      pdfTexts: [pdfText],
+    })
+    expect(result.factoryReconciliation.conONhaMay[0]).toMatchObject({ maHang: 'G01006', dat: 40, bienBan: 26, lech: 14 })
+  })
 })

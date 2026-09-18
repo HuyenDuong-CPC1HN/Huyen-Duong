@@ -438,6 +438,66 @@ function sumKien(rows) {
   return rows.reduce((sum, row) => sum + (row.kienNguyen ?? 0) + (row.kienLe ?? 0), 0)
 }
 
+// Đối chiếu "còn ở nhà máy": khi biên bản giao nhận khai tổng kiện ÍT hơn bảng đã tách (thường do nhà
+// máy gặp sự cố, giao thiếu), liệt kê RÕ từng mã hàng bị thiếu để người dùng gọi nhà máy đúng mã — thay
+// vì chỉ báo 1 số lệch tổng chung không biết mã nào.
+//
+// Gộp theo MÃ HÀNG (bỏ Số lô), cộng cả Kho C + Kho LGT — vì Số lô đôi khi bị nhà máy ghi khác nhau giữa
+// lúc lên đơn (Excel) và lúc giao hàng thật (biên bản), so ở mức Số lô dễ tạo lệch giả; và vì biên bản
+// chỉ ghi 1 dòng gộp cho mã dùng chung cả 2 kho (xem sharedKeys ở buildReceiptFromFiles) nên phải cộng cả
+// 2 kho mới so đúng. Chỉ so SỐ KIỆN (không so SL/đơn vị) vì đó là con số biên bản thực sự ghi nhận lúc
+// kiểm hàng.
+//
+// "conONhaMay": mã hàng bảng có nhiều kiện hơn biên bản xác nhận — nhiều khả năng nhà máy chưa giao đủ.
+// "khac": chiều ngược lại (biên bản khai nhiều hơn bảng) — KHÔNG suy ra "còn ở nhà máy", vì thường do lý
+// do khác hẳn (vd nhiều mã hàng lạnh được nhà máy gộp ghi đại diện vào 1 dòng "thùng xốp", hoặc mã hàng
+// có trên biên bản nhưng chưa từng lên đơn Excexcel) — để riêng, mặc định ẩn, không gộp chung với
+// "conONhaMay" kẻo hiểu nhầm.
+//
+// Trả về null khi chuyến này không có biên bản giao nhận nào (không có gì để đối chiếu) — tránh báo lệch
+// giả cho những chuyến chỉ dùng phiếu xuất kho, không upload biên bản.
+function buildFactoryReconciliation(khoC, khoLgt, pdfTexts) {
+  const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
+  if (declaredTotals.length === 0) return null
+
+  const declaredByMa = new Map()
+  for (const text of pdfTexts) {
+    for (const item of parsePdfDeliveryNote(text)) {
+      const kien = (item.kienNguyen ?? 0) + (item.kienLe ?? 0)
+      declaredByMa.set(item.maHang, (declaredByMa.get(item.maHang) ?? 0) + kien)
+    }
+  }
+
+  const actualByMa = new Map()
+  const tenByMa = new Map()
+  for (const row of [...khoC, ...khoLgt]) {
+    const kien = (row.kienNguyen ?? 0) + (row.kienLe ?? 0)
+    actualByMa.set(row.maHang, (actualByMa.get(row.maHang) ?? 0) + kien)
+    if (row.tenHang && !tenByMa.has(row.maHang)) tenByMa.set(row.maHang, row.tenHang)
+  }
+
+  const conONhaMay = []
+  const khac = []
+  for (const maHang of new Set([...actualByMa.keys(), ...declaredByMa.keys()])) {
+    const dat = actualByMa.get(maHang) ?? 0
+    const bienBan = declaredByMa.get(maHang) ?? 0
+    const lech = dat - bienBan
+    if (lech === 0) continue
+    const entry = { maHang, tenHang: tenByMa.get(maHang) || '', dat, bienBan, lech }
+    if (lech > 0) conONhaMay.push(entry)
+    else khac.push(entry)
+  }
+  conONhaMay.sort((a, b) => b.lech - a.lech)
+  khac.sort((a, b) => a.lech - b.lech)
+
+  return {
+    conONhaMay,
+    khac,
+    tongConONhaMay: conONhaMay.reduce((sum, r) => sum + r.lech, 0),
+    tongKhac: khac.reduce((sum, r) => sum - r.lech, 0),
+  }
+}
+
 export function buildReceiptFromFiles({
   khoCRows = [],
   khoLgtRows = [],
@@ -521,7 +581,9 @@ export function buildReceiptFromFiles({
     }
   }
 
-  return { khoC, khoLgt, pdfRows, warnings }
+  const factoryReconciliation = buildFactoryReconciliation(khoC, khoLgt, pdfTexts)
+
+  return { khoC, khoLgt, pdfRows, warnings, factoryReconciliation }
 }
 
 // Đối chiếu lại RIÊNG tổng kiện (Kiện nguyên + Kiện lẻ) giữa bảng hiện tại — có thể đã được dò tay/sửa số
@@ -547,6 +609,7 @@ export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [] }) {
       ? `Đã khớp — biên bản giao nhận khai ${declaredTotal} kiện, bảng hiện có ${actualTotal} kiện.`
       : `Biên bản giao nhận khai tổng ${declaredTotal} kiện nhưng bảng hiện có ${actualTotal} kiện `
         + `(lệch ${declaredTotal - actualTotal}).`,
+    factoryReconciliation: buildFactoryReconciliation(khoC, khoLgt, pdfTexts),
   }
 }
 
