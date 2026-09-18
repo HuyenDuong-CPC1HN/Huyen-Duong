@@ -13,16 +13,16 @@ import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
 import {
   pickCarrierWeekIdByDate, snapshotCarrierLookup,
-  getCarrierFileStats, useCarrierRowsPendingClear,
-  getCarrierWeekRows, computeFrozenNgoaiSan,
-} from './CarrierStats'
+  getCarrierFileStats, getCarrierWeekRows, computeFrozenNgoaiSan,
+  useCarrierRowsPendingClear,
+} from './carrierUtils'
 import {
   readSheetReports, saveSheetReport, removeSheetReport,
   relinkSheetReportCarrier,
 } from '../utils/sheetReports'
 
 /** Compute bucket counts from raw data rows — used by handleSave. */
-export function computeBuckets(data) {
+function computeBuckets(data) {
   const validData = data.filter(r => String(r['Mã kiện hàng'] ?? '').trim())
   let b24 = 0, b48 = 0, b72 = 0, chanhXeCount = 0
   for (const row of validData) {

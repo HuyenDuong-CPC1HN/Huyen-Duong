@@ -14,23 +14,23 @@ export default function N8nWebhookForm() {
     setForm(f => ({ ...f, [name]: value }))
   }
 
-  const handleSubmit = async e => {
+  const handleSubmit = e => {
     e.preventDefault()
     setStatus('loading')
     setErrorMsg('')
 
-    const result = await sendToN8n({
+    sendToN8n({
       ...form,
       sentAt: new Date().toISOString(),
+    }).then(result => {
+      if (result.success) {
+        setStatus('success')
+        setForm(INIT)
+      } else {
+        setStatus('error')
+        setErrorMsg(result.error)
+      }
     })
-
-    if (result.success) {
-      setStatus('success')
-      setForm(INIT)
-    } else {
-      setStatus('error')
-      setErrorMsg(result.error)
-    }
   }
 
   const handleReset = () => {
@@ -49,7 +49,7 @@ export default function N8nWebhookForm() {
         {/* Thành công */}
         {status === 'success' && (
           <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg p-4 mb-5">
-            <CheckCircle2 size={20} className="text-green-500 flex-shrink-0 mt-0.5" />
+            <CheckCircle2 size={20} className="text-green-500 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-green-800">Gửi thành công!</p>
               <p className="text-xs text-green-600 mt-0.5">n8n đã nhận được dữ liệu của bạn.</p>
@@ -61,7 +61,7 @@ export default function N8nWebhookForm() {
         {/* Lỗi */}
         {status === 'error' && (
           <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-4 mb-5">
-            <XCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+            <XCircle size={20} className="text-red-500 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-red-800">Gửi thất bại</p>
               <p className="text-xs text-red-600 mt-0.5">{errorMsg}</p>
@@ -73,8 +73,9 @@ export default function N8nWebhookForm() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Họ tên</label>
+            <label htmlFor="n8n-name" className="block text-sm font-medium text-gray-700 mb-1">Họ tên</label>
             <input
+              id="n8n-name"
               type="text"
               name="name"
               value={form.name}
@@ -86,8 +87,9 @@ export default function N8nWebhookForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label htmlFor="n8n-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
+              id="n8n-email"
               type="email"
               name="email"
               value={form.email}
@@ -99,8 +101,9 @@ export default function N8nWebhookForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nội dung</label>
+            <label htmlFor="n8n-message" className="block text-sm font-medium text-gray-700 mb-1">Nội dung</label>
             <textarea
+              id="n8n-message"
               name="message"
               value={form.message}
               onChange={handleChange}

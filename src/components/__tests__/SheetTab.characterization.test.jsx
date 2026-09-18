@@ -78,7 +78,6 @@ vi.mock('../useSheetReportActions', () => ({
     pendingBannerProps: null,
     reports: [],
   })),
-  computeBuckets: vi.fn(() => ({ b24: 0, b48: 0, b72: 0, chanhXeCount: 0 })),
 }))
 
 // ─── Factory helpers (call inside each it block) ─────────────────────────────

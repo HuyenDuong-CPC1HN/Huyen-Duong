@@ -6,6 +6,12 @@ import { reconcileNgoaiSan, buildSalesOrderLookup, buildPackingLookup } from '..
 import * as XLSX from 'xlsx'
 import { ColumnFilter, ResizeHandle } from './DataTable'
 import { StatCard } from './ReportCards'
+import {
+  readCarrierWeeks,
+  writeCarrierWeeks,
+  readHoldWeeks,
+} from './carrierUtils'
+
 
 const STAT_CARDS = [
   { key: '24h',          label: '≤ 24 giờ',        icon: CheckCircle, cls: 'text-green-600' },
@@ -17,24 +23,18 @@ const STAT_CARDS = [
   { key: 'hoanHang',     label: 'Hoàn hàng',       icon: XCircle,     cls: 'text-red-600' },
 ]
 
-// ---- Lưu trữ dữ liệu upload theo TỪNG TUẦN, cố định/không bị ghi đè khi upload file mới ----
-// carrier_weeks_${carrierKey} = [{ id, fileName, uploadedAt, rows }, ...] (mới nhất ở đầu)
+async function readWorkbook(file) {
+  return XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
+}
 
-function readCarrierWeeks(carrierKey) {
-  try {
-    const weeks = JSON.parse(localStorage.getItem(`carrier_weeks_${carrierKey}`) || 'null')
-    if (Array.isArray(weeks)) return weeks
-    // Di chuyển dữ liệu cũ (định dạng 1 file duy nhất) sang định dạng nhiều tuần, giữ nguyên số liệu cũ
-    const legacy = JSON.parse(localStorage.getItem(`carrier_data_${carrierKey}`) || 'null')
-    if (legacy) {
-      const migrated = [{ id: legacy.uploadedAt || String(Date.now()), fileName: legacy.fileName, uploadedAt: legacy.uploadedAt, rows: legacy.rows }]
-      localStorage.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify(migrated))
-      return migrated
+function filterCarrierRows(rows, activeFilters, search, excludeKey = null) {
+  const query = search.toLowerCase()
+  return rows.filter(row => {
+    for (const [key, values] of activeFilters) {
+      if (key !== excludeKey && !values.includes(row[key])) return false
     }
-    return []
-  } catch {
-    return []
-  }
+    return !query || Object.values(row).some(value => String(value).toLowerCase().includes(query))
+  })
 }
 
 const MAX_CARRIER_WEEKS = 8 // tối đa số tuần giữ lại — mỗi tuần lưu toàn bộ dòng dữ liệu, cần chặn để tránh đầy localStorage
@@ -55,27 +55,9 @@ function freeUpLocalStorageSpace() {
   }
 }
 
-// Ghi danh sách tuần — nếu vượt quota (bộ nhớ trình duyệt đầy): thử giải phóng chỗ từ nơi khác trước,
-// nếu vẫn không đủ thì tự động bớt dần các tuần CŨ NHẤT của chính carrier này rồi ghi lại
-function writeCarrierWeeks(carrierKey, weeks) {
-  let list = weeks
-  let triedFreeing = false
-  while (list.length > 0) {
-    try {
-      localStorage.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify(list))
-      return list
-    } catch (err) {
-      if (!triedFreeing) { triedFreeing = true; freeUpLocalStorageSpace(); continue }
-      if (list.length <= 1) throw err
-      list = list.slice(0, -1) // bỏ tuần cũ nhất (mảng đang sắp mới nhất ở đầu)
-    }
-  }
-  throw new Error('Không thể lưu — dữ liệu quá lớn ngay cả với 1 tuần.')
-}
-
 // Thêm 1 tuần upload mới — KHÔNG ghi đè các tuần cũ. Giới hạn tối đa MAX_CARRIER_WEEKS tuần,
 // và tự động bớt tuần cũ nhất nếu localStorage đầy (báo cho người dùng biết nếu có tuần bị bớt).
-export function addCarrierWeek(carrierKey, entry) {
+function addCarrierWeek(carrierKey, entry) {
   const weeks = readCarrierWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
   const next = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
@@ -85,7 +67,7 @@ export function addCarrierWeek(carrierKey, entry) {
 }
 
 // Xoá 1 tuần cụ thể (không ảnh hưởng các tuần khác)
-export function removeCarrierWeek(carrierKey, weekId) {
+function removeCarrierWeek(carrierKey, weekId) {
   const weeks = readCarrierWeeks(carrierKey).filter(w => w.id !== weekId)
   writeCarrierWeeks(carrierKey, weeks)
   const activeId = localStorage.getItem(`carrier_active_${carrierKey}`)
@@ -95,95 +77,21 @@ export function removeCarrierWeek(carrierKey, weekId) {
   }
 }
 
-// Chỉ giữ lại các tuần có id trong keepIds — dùng khi báo cáo Tổng đơn đã lưu, không cần giữ file các tuần cũ hơn để đỡ tốn bộ nhớ
-export function pruneCarrierWeeksToIds(carrierKey, keepIds) {
-  const weeks = readCarrierWeeks(carrierKey)
-  const kept = weeks.filter(w => keepIds.includes(w.id))
-  if (kept.length === weeks.length) return
-  writeCarrierWeeks(carrierKey, kept)
-}
-
-// Xoá phần dòng dữ liệu (rows) của 1 tuần VTP/SPX sau khi đã đóng băng đủ 7 số liệu vào báo cáo Đơn C/DTP —
-// KHÔNG xoá hẳn tuần khỏi danh sách, chỉ rỗng rows để đỡ tốn bộ nhớ. Lưu ý: file này có thể đang được tab
-// Tổng đơn dùng để tính "Tuần này/Tuần trước" — xoá rows có thể khiến Tổng đơn hiện 0 cho đến khi có tuần mới.
-export function clearCarrierWeekRows(carrierKey, weekId) {
-  const weeks = readCarrierWeeks(carrierKey)
-  const updated = weeks.map(w => w.id === weekId ? { ...w, rows: [] } : w)
-  writeCarrierWeeks(carrierKey, updated)
-}
-
-export function carrierWeekHasRows(carrierKey, weekId) {
-  const w = readCarrierWeeks(carrierKey).find(w => w.id === weekId)
-  return !!(w && w.rows && w.rows.length > 0)
-}
-
-function pendingClearCarrierKey(carrierKey) { return `pending_clear_carrier_${carrierKey}` }
-function loadCarrierPendingClear(carrierKey) {
-  try { return JSON.parse(localStorage.getItem(pendingClearCarrierKey(carrierKey)) || 'null') } catch { return null }
-}
-
-// Thời gian ân hạn trước khi thực sự xoá rows của 1 tuần VTP/SPX (giống cơ chế Excel Đơn C/DTP) —
-// cho phép "Hoàn tác" trong vài phút. carrierKey có thể là null (vd donDTP không có SPX) — khi đó hook chỉ đứng yên.
-export function useCarrierRowsPendingClear(carrierKey) {
-  const [pendingClear, setPendingClear] = useState(() => carrierKey ? loadCarrierPendingClear(carrierKey) : null)
-
-  const scheduleClear = (weekId, delayMs = 3 * 60 * 1000) => {
-    if (!carrierKey) return
-    const info = { weekId, clearAt: Date.now() + delayMs }
-    localStorage.setItem(pendingClearCarrierKey(carrierKey), JSON.stringify(info))
-    setPendingClear(info)
-  }
-
-  const cancelClear = () => {
-    if (!carrierKey) return
-    localStorage.removeItem(pendingClearCarrierKey(carrierKey))
-    setPendingClear(null)
-  }
-
-  useEffect(() => {
-    if (!carrierKey || !pendingClear) return
-    const remaining = pendingClear.clearAt - Date.now()
-    const finalize = () => {
-      clearCarrierWeekRows(carrierKey, pendingClear.weekId)
-      localStorage.removeItem(pendingClearCarrierKey(carrierKey))
-      setPendingClear(null)
-    }
-    if (remaining <= 0) { finalize(); return }
-    const timer = setTimeout(finalize, remaining)
-    return () => clearTimeout(timer)
-  }, [carrierKey, pendingClear])
-
-  return { pendingClear, scheduleClear, cancelClear }
-}
 
 // ---- Loại trừ theo TỪNG ĐƠN (Mã vận đơn) — áp dụng chung cho carrier (không riêng theo tuần), vì mã vận
 // đơn là duy nhất nên không cần tách theo tuần. Trước đây loại theo "Tên hàng" (loại LUÔN mọi đơn cùng tên
 // hàng, vd mọi đơn "VOUCHER") — đổi lại theo yêu cầu: bấm đúng đơn nào thì chỉ loại đơn đó, không ảnh
 // hưởng các đơn khác dù cùng tên hàng.
-export function readExcludedOrders(carrierKey) {
+function readExcludedOrders(carrierKey) {
   try { return JSON.parse(localStorage.getItem(`carrier_exclude_orders_${carrierKey}`) || '[]') } catch { return [] }
 }
-export function writeExcludedOrders(carrierKey, list) {
+function writeExcludedOrders(carrierKey, list) {
   localStorage.setItem(`carrier_exclude_orders_${carrierKey}`, JSON.stringify(list))
-}
-function filterExcludedRows(rows, carrierKey, carrierType) {
-  const excluded = readExcludedOrders(carrierKey)
-  if (excluded.length === 0) return rows
-  const excludedSet = new Set(excluded)
-  return rows.filter(r => !excludedSet.has(getTrackingCode(r, carrierType)))
 }
 
 // ---- File đối chiếu "Chờ giao Logistics" — dùng để xác nhận đơn "Đang lấy hàng" có thật đang xử lý không.
 // Mỗi lần upload là 1 tuần độc lập, KHÔNG ghi đè tuần cũ (giống dữ liệu carrier chính) ----
-export function readHoldWeeks(carrierKey) {
-  try {
-    const weeks = JSON.parse(localStorage.getItem(`carrier_holdweeks_${carrierKey}`) || '[]')
-    return Array.isArray(weeks) ? weeks : []
-  } catch {
-    return []
-  }
-}
-export function addHoldWeek(carrierKey, entry) {
+function addHoldWeek(carrierKey, entry) {
   const weeks = readHoldWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
   let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
@@ -200,14 +108,14 @@ export function addHoldWeek(carrierKey, entry) {
   }
   throw new Error('Không thể lưu — dữ liệu quá lớn ngay cả với 1 tuần.')
 }
-export function removeHoldWeek(carrierKey, weekId) {
+function removeHoldWeek(carrierKey, weekId) {
   const next = readHoldWeeks(carrierKey).filter(w => w.id !== weekId)
   localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(next))
 }
 
 // File "Danh sách thống kê" (đội kinh doanh lên đơn, cột Mã đơn/Tạo lúc) — dùng để đối soát "đơn ngoại sàn"
 // SPX COD (xem NgoaiSanPanel). Tích luỹ nhiều tuần giống hệt cơ chế Chờ giao Logistics ở trên.
-export function readSalesOrderWeeks(carrierKey) {
+function readSalesOrderWeeks(carrierKey) {
   try {
     const weeks = JSON.parse(localStorage.getItem(`carrier_salesorderweeks_${carrierKey}`) || '[]')
     return Array.isArray(weeks) ? weeks : []
@@ -215,7 +123,7 @@ export function readSalesOrderWeeks(carrierKey) {
     return []
   }
 }
-export function addSalesOrderWeek(carrierKey, entry) {
+function addSalesOrderWeek(carrierKey, entry) {
   const weeks = readSalesOrderWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
   let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
@@ -232,14 +140,14 @@ export function addSalesOrderWeek(carrierKey, entry) {
   }
   throw new Error('Không thể lưu — dữ liệu quá lớn ngay cả với 1 tuần.')
 }
-export function removeSalesOrderWeek(carrierKey, weekId) {
+function removeSalesOrderWeek(carrierKey, weekId) {
   const next = readSalesOrderWeeks(carrierKey).filter(w => w.id !== weekId)
   localStorage.setItem(`carrier_salesorderweeks_${carrierKey}`, JSON.stringify(next))
 }
 
 // File "bốc đóng" (kho đóng kiện, cột Mã vận đơn/TG Đóng kiện) — dùng để đối soát "đơn ngoại sàn" SPX COD
 // (mốc 2, xem NgoaiSanPanel). Tích luỹ nhiều tuần giống hệt cơ chế Chờ giao Logistics/Danh sách thống kê.
-export function readPackingWeeks(carrierKey) {
+function readPackingWeeks(carrierKey) {
   try {
     const weeks = JSON.parse(localStorage.getItem(`carrier_packingweeks_${carrierKey}`) || '[]')
     return Array.isArray(weeks) ? weeks : []
@@ -247,7 +155,7 @@ export function readPackingWeeks(carrierKey) {
     return []
   }
 }
-export function addPackingWeek(carrierKey, entry) {
+function addPackingWeek(carrierKey, entry) {
   const weeks = readPackingWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
   let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
@@ -264,54 +172,12 @@ export function addPackingWeek(carrierKey, entry) {
   }
   throw new Error('Không thể lưu — dữ liệu quá lớn ngay cả với 1 tuần.')
 }
-export function removePackingWeek(carrierKey, weekId) {
+function removePackingWeek(carrierKey, weekId) {
   const next = readPackingWeeks(carrierKey).filter(w => w.id !== weekId)
   localStorage.setItem(`carrier_packingweeks_${carrierKey}`, JSON.stringify(next))
 }
-// Gộp mã tracking từ TOÀN BỘ các tuần đã upload (tích luỹ dần) để đối chiếu
-function getHoldLookupSet(carrierKey) {
-  const weeks = readHoldWeeks(carrierKey)
-  if (weeks.length === 0) return null
-  const set = new Set()
-  for (const w of weeks) for (const code of buildTrackingSet(w.rows, 'Mã vận đơn VT')) set.add(code)
-  return set
-}
 
-// Ghi chú tay theo từng mã vận đơn (xem useHoldNotes) — đọc trực tiếp từ localStorage cho bản build tĩnh
-function readHoldNotesMap(carrierKey) {
-  try { return JSON.parse(localStorage.getItem(`carrier_hold_notes_${carrierKey}`) || '{}') } catch { return {} }
-}
 
-// frozenLookup (object {mã: số lượng}, xem snapshotCarrierLookup): dùng thay cho internalData khi Excel gốc
-// đã bị xoá (báo cáo Đơn C/DTP đã lưu) — vẫn đếm đúng đơn CB gộp/SPX lấy hàng-không-thành-công.
-function buildStatsForWeek(entry, carrierKey, carrierType, internalData, frozenLookup = null) {
-  if (!entry) return null
-  const lookupMap = frozenLookup ? new Map(Object.entries(frozenLookup)) : buildInternalOrderLookup(internalData)
-  const holdLookupSet = getHoldLookupSet(carrierKey)
-  const holdNotes = readHoldNotesMap(carrierKey)
-  const effectiveRows = filterExcludedRows(entry.rows, carrierKey, carrierType)
-  const stats = computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes)
-
-  return {
-    weekId: entry.id,
-    fileName: entry.fileName,
-    uploadedAt: entry.uploadedAt,
-    stats,
-    total: stats['24h'] + stats['48h'] + stats['72h'] + stats.dangVanChuyen + stats.giaoLai + stats.hoanHang + stats.choLay,
-  }
-}
-
-// Đọc nhanh toàn bộ thống kê (24h/48h/72h/đang vận chuyển/giao lại/hoàn hàng) theo tuần đang chọn (mặc định: tuần mới nhất)
-export function getCarrierFileStats(carrierKey, carrierType, internalData, weekId, frozenLookup = null) {
-  try {
-    const weeks = readCarrierWeeks(carrierKey)
-    if (weeks.length === 0) return null
-    const entry = weekId ? weeks.find(w => w.id === weekId) : weeks[0]
-    return buildStatsForWeek(entry, carrierKey, carrierType, internalData, frozenLookup)
-  } catch {
-    return null
-  }
-}
 
 // Chọn tuần có ngày upload GẦN NHẤT với referenceDate — đáng tin cậy hơn so với đếm vị trí trong danh sách,
 // vì danh sách Excel Đơn C/DTP và danh sách VTP/SPX là 2 danh sách upload độc lập, không tăng đồng bộ với nhau
@@ -329,45 +195,8 @@ function closestByDate(weeks, referenceDate) {
   return best
 }
 
-// Đóng băng bảng đối chiếu "Mã vận đơn" nội bộ (object nhỏ gọn, không phải toàn bộ dòng Excel) — gọi lúc
-// còn dữ liệu Excel sống (trước khi "Lưu số liệu tuần này" xoá Excel gốc) để giữ đúng cách đếm đơn CB gộp/
-// SPX lấy hàng-không-thành-công về sau, không bị lệch khi Excel đã xoá (internalData sẽ thành rỗng).
-export function snapshotCarrierLookup(internalData) {
-  return Object.fromEntries(buildInternalOrderLookup(internalData))
-}
-
-// Lấy tổng đơn theo file VTP/SPX có ngày upload gần nhất với referenceDate (ngày upload Excel Đơn C/DTP
-// đang xem) — không truyền referenceDate thì mặc định lấy file mới nhất.
-export function getCarrierFileTotal(carrierKey, carrierType, internalData, referenceDate = null) {
-  const weeks = readCarrierWeeks(carrierKey)
-  const entry = closestByDate(weeks, referenceDate)
-  return entry ? buildStatsForWeek(entry, carrierKey, carrierType, internalData) : null
-}
-
-// Trả về id của file VTP/SPX khớp gần nhất với referenceDate — dùng để "đóng băng" đúng file tương ứng
-// vào 1 báo cáo đã lưu (Lưu số liệu tuần này), tránh lệch nếu sau này upload thêm file mới.
-export function pickCarrierWeekIdByDate(carrierKey, referenceDate) {
-  return closestByDate(readCarrierWeeks(carrierKey), referenceDate)?.id || null
-}
-
-// Danh sách rút gọn các tuần đã upload (không kèm rows) — dùng cho UI chọn tuần thủ công ở nơi khác (vd Tổng đơn)
-export function getCarrierWeeksList(carrierKey) {
-  return readCarrierWeeks(carrierKey).map(w => ({ id: w.id, fileName: w.fileName, uploadedAt: w.uploadedAt }))
-}
-
-// So sánh tuần mới nhất vs tuần trước đó cho 1 carrier
-export function getCarrierHistoryCompare(carrierKey, carrierType, internalData) {
-  try {
-    const weeks = readCarrierWeeks(carrierKey)
-    return {
-      current: buildStatsForWeek(weeks[0], carrierKey, carrierType, internalData),
-      previous: buildStatsForWeek(weeks[1], carrierKey, carrierType, internalData),
-    }
-  } catch {
-    return { current: null, previous: null }
-  }
-}
-
+// ReconcilePanel is not currently used but kept as reference for future Viettel reconciliation feature
+// eslint-disable-next-line no-unused-vars
 function ReconcilePanel({ vtpRows, internalData }) {
   const [open, setOpen] = useState(false)
   const result = useMemo(() => reconcileViettelOrders(vtpRows, internalData), [vtpRows, internalData])
@@ -379,8 +208,8 @@ function ReconcilePanel({ vtpRows, internalData }) {
     <div className={`rounded-xl border p-3 mb-4 ${isMatched ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 text-left">
         {isMatched
-          ? <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
-          : <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />}
+          ? <CheckCircle size={16} className="text-green-600 shrink-0" />
+          : <AlertTriangle size={16} className="text-amber-600 shrink-0" />}
         <span className={`text-sm font-medium ${isMatched ? 'text-green-800' : 'text-amber-800'}`}>
           {isMatched
             ? `Khớp hoàn toàn: ${result.internalTotal} đơn nội bộ ↔ ${result.vtpUniqueCodes} mã trong file VTP`
@@ -491,49 +320,41 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
     [spxRows, salesLookup, packingLookup, excludedSet]
   )
 
-  const parseSalesFile = (file) => {
+  const parseSalesFile = async (file) => {
     setError('')
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const fileRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
-        if (fileRows.length === 0 || !('Mã đơn' in fileRows[0])) {
-          setError('Không tìm thấy cột "Mã đơn" trong file. Vui lòng kiểm tra lại.')
-          return
-        }
-        addSalesOrderWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })
-        setSalesWeeks(readSalesOrderWeeks(carrierKey))
-      } catch {
-        setError('Không đọc được file Danh sách thống kê. Vui lòng kiểm tra lại.')
+    try {
+      const wb = await readWorkbook(file)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const fileRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+      if (fileRows.length === 0 || !('Mã đơn' in fileRows[0])) {
+        setError('Không tìm thấy cột "Mã đơn" trong file. Vui lòng kiểm tra lại.')
+        return
       }
+      addSalesOrderWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })
+      setSalesWeeks(readSalesOrderWeeks(carrierKey))
+    } catch {
+      setError('Không đọc được file Danh sách thống kê. Vui lòng kiểm tra lại.')
     }
-    reader.readAsArrayBuffer(file)
   }
 
-  const parsePackingFile = (file) => {
+  const parsePackingFile = async (file) => {
     setError('')
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true })
-        const ws = wb.Sheets[wb.SheetNames.includes('Theo dõi kiện hàng') ? 'Theo dõi kiện hàng' : wb.SheetNames[0]]
-        const fileRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
-        const hasPackingTimeCol = 'TG Đóng kiện' in fileRows[0] || 'TG Đóng hàng' in fileRows[0]
-        if (fileRows.length === 0 || !('Mã vận đơn' in fileRows[0]) || !hasPackingTimeCol) {
-          setError('Không tìm thấy cột "Mã vận đơn"/"TG Đóng kiện"/"TG Đóng hàng" trong file. Vui lòng kiểm tra lại.')
-          return
-        }
-        addPackingWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })
-        setPackingWeeks(readPackingWeeks(carrierKey))
-      } catch {
-        setError('Không đọc được file bốc đóng. Vui lòng kiểm tra lại.')
+    try {
+      const wb = await readWorkbook(file)
+      const ws = wb.Sheets[wb.SheetNames.includes('Theo dõi kiện hàng') ? 'Theo dõi kiện hàng' : wb.SheetNames[0]]
+      const fileRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+      const hasPackingTimeCol = 'TG Đóng kiện' in fileRows[0] || 'TG Đóng hàng' in fileRows[0]
+      if (fileRows.length === 0 || !('Mã vận đơn' in fileRows[0]) || !hasPackingTimeCol) {
+        setError('Không tìm thấy cột "Mã vận đơn"/"TG Đóng kiện"/"TG Đóng hàng" trong file. Vui lòng kiểm tra lại.')
+        return
       }
+      addPackingWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })
+      setPackingWeeks(readPackingWeeks(carrierKey))
+    } catch {
+      setError('Không đọc được file bốc đóng. Vui lòng kiểm tra lại.')
     }
-    reader.readAsArrayBuffer(file)
   }
 
   const removeSalesWeekEntry = (weekId) => {
@@ -550,7 +371,12 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
     problemStatuses.has(r.tinhTrangDongKien) || problemStatuses.has(r.tinhTrangGiao) ||
     r.nhomLay === '>72h' || r.nhomLay === 'Chưa lấy hàng'
   )
-  const visibleRows = statusFilter ? rows.filter(NGOAI_SAN_MATCHERS[statusFilter]) : onlyProblem ? rows.filter(isProblemRow) : rows
+  let visibleRows = rows
+  if (statusFilter) {
+    visibleRows = rows.filter(row => NGOAI_SAN_MATCHERS[statusFilter](row))
+  } else if (onlyProblem) {
+    visibleRows = rows.filter(row => isProblemRow(row))
+  }
   const problemCount = rows.filter(isProblemRow).length
   const khongKhopRows = rows.filter(r => r.tinhTrangDongKien === 'Không khớp Mã đơn')
 
@@ -717,8 +543,8 @@ function NgoaiSanPanel({ carrierKey, spxRows }) {
                   <tbody>
                     {visibleRows.length === 0 ? (
                       <tr><td colSpan={13} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
-                    ) : visibleRows.map((r, i) => (
-                      <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
+                    ) : visibleRows.map(r => (
+                      <tr key={r.maDon} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
                         <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc1 || '—'}</td>
@@ -847,8 +673,8 @@ export function FrozenNgoaiSanPanel({ frozen }) {
               <tbody>
                 {visibleRows.length === 0 ? (
                   <tr><td colSpan={12} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
-                ) : visibleRows.map((r, i) => (
-                  <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
+                ) : visibleRows.map(r => (
+                  <tr key={r.maDon} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
                     <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
                     <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
                     <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc1 || '—'}</td>
@@ -901,7 +727,7 @@ function useHoldNotes(carrierKey) {
 // Đánh dấu tay các đơn "Chưa lấy — quá 24h" là "không cần tính vào báo cáo" (vd đơn trùng, chỉ cần huỷ
 // bên SPX là xong) — loại khỏi thống kê chưa lấy/chưa giao nhưng vẫn hiện trong bảng chi tiết để theo dõi.
 function ngoaiSanExcludedKey(carrierKey) { return `carrier_ngoaisan_excluded_${carrierKey}` }
-export function readNgoaiSanExcluded(carrierKey) {
+function readNgoaiSanExcluded(carrierKey) {
   try { return JSON.parse(localStorage.getItem(ngoaiSanExcludedKey(carrierKey)) || '[]') } catch { return [] }
 }
 function useNgoaiSanExcluded(carrierKey) {
@@ -912,20 +738,6 @@ function useNgoaiSanExcluded(carrierKey) {
     localStorage.setItem(ngoaiSanExcludedKey(carrierKey), JSON.stringify(next))
   }
   return [excluded, setEntry]
-}
-
-// Đóng băng kết quả đối soát "đơn ngoại sàn" tại thời điểm lưu báo cáo tuần — dùng khi bấm "Lưu số liệu
-// tuần này" để nội dung đối soát SPX không đổi theo thời gian/dữ liệu upload thêm sau này (xem SheetReportPanel).
-export function computeFrozenNgoaiSan(carrierKey, spxRows) {
-  const salesLookup = buildSalesOrderLookup(readSalesOrderWeeks(carrierKey))
-  const packingLookup = buildPackingLookup(readPackingWeeks(carrierKey))
-  const excludedSet = new Set(readNgoaiSanExcluded(carrierKey))
-  return reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedSet)
-}
-
-// Lấy đúng dòng dữ liệu 1 tuần VTP/SPX theo id — dùng khi cần snapshot số liệu (vd đóng băng đối soát SPX)
-export function getCarrierWeekRows(carrierKey, weekId) {
-  return readCarrierWeeks(carrierKey).find(w => w.id === weekId)?.rows || []
 }
 
 function useColWidths(storageKey, columns) {
@@ -948,13 +760,64 @@ function useColWidths(storageKey, columns) {
   return [widths, setWidth]
 }
 
+function buildHoldLookupSet(holdWeeks) {
+  if (holdWeeks.length === 0) return null
+  const set = new Set()
+  for (const week of holdWeeks) {
+    for (const code of buildTrackingSet(week.rows, 'Mã vận đơn VT')) set.add(code)
+  }
+  return set
+}
+
+function selectActiveWeek(weeks, weekId, referenceDate) {
+  if (weekId) return weeks.find(w => w.id === weekId) || null
+  return closestByDate(weeks, referenceDate)
+}
+
+function carrierLookupMap(frozenLookup, internalData) {
+  if (frozenLookup) return new Map(Object.entries(frozenLookup))
+  return buildInternalOrderLookup(internalData)
+}
+
+function carrierRowClass(isExcludedRow, isUnmatchedHold) {
+  if (isExcludedRow) return 'opacity-40 hover:bg-blue-50/40'
+  if (isUnmatchedHold) return 'bg-red-50 hover:bg-red-100'
+  return 'hover:bg-blue-50/40'
+}
+
+function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, onFile, error }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <button
+        type="button"
+        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
+        onDrop={onDrop}
+        onClick={() => inputRef.current.click()}
+        className={`flex flex-col items-center justify-center gap-3 w-full h-48 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none
+          ${dragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'}`}
+      >
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${dragging ? 'bg-blue-100' : 'bg-gray-100'}`}>
+          {dragging ? <FileUp size={24} className="text-blue-500" /> : <Upload size={24} className="text-gray-400" />}
+        </div>
+        <div className="text-center">
+          <p className="text-gray-700 font-semibold text-sm">Kéo & thả file xuất {label} vào đây</p>
+          <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx</span></p>
+        </div>
+      </button>
+      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+      <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => onFile(e.target.files[0])} />
+    </div>
+  )
+}
+
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
 export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
-    () => frozenLookup ? new Map(Object.entries(frozenLookup)) : buildInternalOrderLookup(internalData),
+    () => carrierLookupMap(frozenLookup, internalData),
     [internalData, frozenLookup]
   )
   const inputRef = useRef()
@@ -967,28 +830,19 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   // File đối chiếu "Chờ giao Logistics" — xác nhận đơn "Đang lấy hàng" có đang thực sự xử lý không.
   // Mỗi lần upload là 1 tuần độc lập, không ghi đè — mã tracking được gộp từ TẤT CẢ các tuần đã upload để đối chiếu.
   const [holdWeeks, setHoldWeeks] = useState(() => readHoldWeeks(carrierKey))
-  const holdLookupSet = useMemo(() => {
-    if (holdWeeks.length === 0) return null
-    const set = new Set()
-    for (const w of holdWeeks) for (const code of buildTrackingSet(w.rows, 'Mã vận đơn VT')) set.add(code)
-    return set
-  }, [holdWeeks])
+  const holdLookupSet = useMemo(() => buildHoldLookupSet(holdWeeks), [holdWeeks])
 
-  const parseHoldFile = (file) => {
+  const parseHoldFile = async (file) => {
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
-        addHoldWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
-        setHoldWeeks(readHoldWeeks(carrierKey))
-      } catch {
-        setError('Không đọc được file Chờ giao Logistics. Vui lòng kiểm tra lại.')
-      }
+    try {
+      const wb = await readWorkbook(file)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+      addHoldWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+      setHoldWeeks(readHoldWeeks(carrierKey))
+    } catch {
+      setError('Không đọc được file Chờ giao Logistics. Vui lòng kiểm tra lại.')
     }
-    reader.readAsArrayBuffer(file)
   }
 
   const removeHoldWeekEntry = (weekId) => {
@@ -999,10 +853,10 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   const [weeks, setWeeks] = useState(() => readCarrierWeeks(carrierKey))
   // Tuần đang xem: nếu có weekId cụ thể (vd đang xem 1 báo cáo Đơn C/DTP đã lưu) thì lấy đúng file đó;
   // không thì lấy file có ngày upload gần nhất với referenceDate (ngày upload tuần Excel Đơn C/DTP đang chọn)
-  const state = weekId ? (weeks.find(w => w.id === weekId) || null) : closestByDate(weeks, referenceDate)
+  const state = selectActiveWeek(weeks, weekId, referenceDate)
 
   const [colFilters, setColFilters] = useState({})
-  const [pageSize, setPageSize] = useState(50)
+  const [pageSize, setPageSize] = useState('50')
   const [tableExpanded, setTableExpanded] = useState(false)
   const [colWidths, setColWidth] = useColWidths(carrierKey, TABLE_COLUMNS)
   const minTableWidthRef = useRef(0)
@@ -1043,24 +897,23 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   const setColFilter = (key, vals) => setColFilters(f => ({ ...f, [key]: vals }))
 
   // Mỗi lần upload tạo 1 tuần dữ liệu MỚI, độc lập — không ghi đè tuần đã có trước đó
-  const parseFile = (file) => {
+  const parseFile = async (file) => {
     setError('')
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const rows = parseCarrierFile(e.target.result, carrierType)
-        if (rows.length === 0) { setError('Không tìm thấy dữ liệu đơn hàng trong file.'); return }
-        const { droppedCount } = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
-        setWeeks(readCarrierWeeks(carrierKey))
-        if (droppedCount > 0) {
-          setError(`Bộ nhớ trình duyệt gần đầy — đã tự động bỏ ${droppedCount} tuần cũ nhất để lưu được tuần này.`)
-        }
-      } catch (err) {
-        setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
+    try {
+      const rows = parseCarrierFile(await file.arrayBuffer(), carrierType)
+      if (rows.length === 0) {
+        setError('Không tìm thấy dữ liệu đơn hàng trong file.')
+        return
       }
+      const { droppedCount } = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+      setWeeks(readCarrierWeeks(carrierKey))
+      if (droppedCount > 0) {
+        setError(`Bộ nhớ trình duyệt gần đầy — đã tự động bỏ ${droppedCount} tuần cũ nhất để lưu được tuần này.`)
+      }
+    } catch (err) {
+      setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
     }
-    reader.readAsArrayBuffer(file)
   }
 
   const handleDrop = (e) => {
@@ -1106,59 +959,37 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
 
   const activeFilters = Object.entries(colFilters).filter(([, v]) => v?.length > 0)
 
-  const filteredRows = useMemo(() => {
-    if (!state) return []
-    const q = search.toLowerCase()
-    const base = onlyUnmatched ? unmatchedRows : state.rows
-    return base.filter(row => {
-      for (const [key, vals] of activeFilters) {
-        if (!vals.includes(row[key])) return false
-      }
-      if (q) return Object.values(row).some(v => v.toLowerCase().includes(q))
-      return true
-    })
-  }, [state, search, activeFilters, onlyUnmatched, unmatchedRows])
+  const baseRows = useMemo(
+    () => (onlyUnmatched ? unmatchedRows : state?.rows) ?? [],
+    [onlyUnmatched, unmatchedRows, state]
+  )
+  const filteredRows = useMemo(
+    () => filterCarrierRows(baseRows, activeFilters, search),
+    [baseRows, activeFilters, search]
+  )
 
-  // Dữ liệu dùng để tính option cho từng cột: áp dụng mọi filter khác, trừ filter của chính cột đó (lọc liên động)
-  const dataForColumn = useCallback((excludeKey) => {
-    if (!state) return []
-    const q = search.toLowerCase()
-    return (onlyUnmatched ? unmatchedRows : state.rows).filter(row => {
-      for (const [key, vals] of activeFilters) {
-        if (key === excludeKey) continue
-        if (!vals.includes(row[key])) return false
-      }
-      if (q) return Object.values(row).some(v => v.toLowerCase().includes(q))
-      return true
-    })
-  }, [state, search, activeFilters, onlyUnmatched, unmatchedRows])
+  const dataForColumn = useCallback(
+    excludeKey => filterCarrierRows(baseRows, activeFilters, search, excludeKey),
+    [baseRows, activeFilters, search]
+  )
 
   if (!state) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
-          onDrop={handleDrop}
-          onClick={() => inputRef.current.click()}
-          className={`flex flex-col items-center justify-center gap-3 w-full h-48 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none
-            ${dragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'}`}
-        >
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${dragging ? 'bg-blue-100' : 'bg-gray-100'}`}>
-            {dragging ? <FileUp size={24} className="text-blue-500" /> : <Upload size={24} className="text-gray-400" />}
-          </div>
-          <div className="text-center">
-            <p className="text-gray-700 font-semibold text-sm">Kéo & thả file xuất {label} vào đây</p>
-            <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx</span></p>
-          </div>
-        </div>
-        {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseFile(e.target.files[0])} />
-      </div>
+      <CarrierEmptyDropZone
+        label={label}
+        dragging={dragging}
+        setDragging={setDragging}
+        onDrop={handleDrop}
+        inputRef={inputRef}
+        onFile={file => void parseFile(file)}
+        error={error}
+      />
     )
   }
 
   const effectiveTotal = stats['24h'] + stats['48h'] + stats['72h'] + stats.dangVanChuyen + stats.giaoLai + stats.hoanHang + stats.choLay
+
+  const tableRows = pageSize === 'all' ? filteredRows : filteredRows.slice(0, Number(pageSize))
 
   return (
     <div>
@@ -1186,7 +1017,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
 
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
-          <FileSpreadsheet size={15} className="text-green-600 flex-shrink-0" />
+          <FileSpreadsheet size={15} className="text-green-600 shrink-0" />
           <span className="text-green-700 font-medium truncate max-w-72">{state.fileName}</span>
           <span className="text-green-500 text-xs">({effectiveTotal} đơn, {state.rows.length} dòng)</span>
           <button onClick={removeActiveWeek} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xoá hẳn dữ liệu tuần này (các tuần khác không bị ảnh hưởng)">
@@ -1298,7 +1129,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
               <span>Hiển thị</span>
               <select
                 value={pageSize}
-                onChange={e => setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                onChange={e => setPageSize(e.target.value)}
                 className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
               >
                 {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n === 'all' ? 'Tất cả' : `${n} dòng`}</option>)}
@@ -1341,19 +1172,16 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
               <tbody>
                 {filteredRows.length === 0 ? (
                   <tr><td colSpan={TABLE_COLUMNS.length + (showNoteCol ? 1 : 0)} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
-                ) : (pageSize === 'all' ? filteredRows : filteredRows.slice(0, pageSize)).map((row, i) => {
+                ) : tableRows.map(row => {
                   const tenHang = (row['Tên hàng'] || '').trim()
                   const code = getTrackingCode(row, carrierType)
                   const isExcludedRow = hasTenHang && excludedCodes.includes(code)
                   const isUnmatchedHold = showNoteCol && isHoldStatusRow(row, carrierType) && !holdLookupSet?.has(code)
+                  const rowClass = carrierRowClass(isExcludedRow, isUnmatchedHold)
                   return (
                     <tr
-                      key={i}
-                      className={`border-b border-gray-100 text-[12px] ${
-                        isExcludedRow ? 'opacity-40 hover:bg-blue-50/40'
-                        : isUnmatchedHold ? 'bg-red-50 hover:bg-red-100'
-                        : 'hover:bg-blue-50/40'
-                      }`}
+                      key={code}
+                      className={`border-b border-gray-100 text-[12px] ${rowClass}`}
                       title={isUnmatchedHold ? 'Đơn "Đang lấy hàng" chưa khớp file Chờ giao Logistics — cần kiểm tra' : undefined}
                     >
                       {TABLE_COLUMNS.map(c => {
@@ -1407,32 +1235,3 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   )
 }
 
-// type: 'donC' | 'donDTP' — SPX Express chỉ áp dụng cho Đơn C
-export default function CarrierStats({ type }) {
-  const showSpx = type === 'donC'
-  const [tab, setTab] = useState('viettel')
-
-  return (
-    <div>
-      <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-1 mb-4 w-fit">
-        <button
-          onClick={() => setTab('viettel')}
-          className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${tab === 'viettel' ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          Viettel Post
-        </button>
-        {showSpx && (
-          <button
-            onClick={() => setTab('spx')}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${tab === 'spx' ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            SPX Express
-          </button>
-        )}
-      </div>
-
-      {tab === 'viettel' && <CarrierPanel carrierKey={`${type}_viettel`} label="Viettel Post" carrierType="viettel" />}
-      {tab === 'spx' && showSpx && <CarrierPanel carrierKey={`${type}_spx`} label="SPX Express" carrierType="spx" />}
-    </div>
-  )
-}

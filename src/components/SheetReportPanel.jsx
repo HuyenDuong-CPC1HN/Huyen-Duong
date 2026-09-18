@@ -1,9 +1,8 @@
 import { useRef } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
 import { CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, RotateCcw, XCircle } from 'lucide-react'
-import {
-  getCarrierFileStats, CarrierPanel, carrierWeekHasRows, FrozenNgoaiSanPanel,
-} from './CarrierStats'
+import { CarrierPanel, FrozenNgoaiSanPanel } from './CarrierStats'
+import { getCarrierFileStats, carrierWeekHasRows } from './carrierUtils'
 import { KpiTile, StatCard, SectionCard } from './ReportCards'
 
 const CARRIER_STAT_CARDS = [
