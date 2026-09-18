@@ -324,6 +324,40 @@ function SortableHeader({ label, sortKey, activeKey, dir, disabled, onToggle }) 
   )
 }
 
+// Bảng chi tiết lệch kiện theo mã hàng (đối chiếu với biên bản giao nhận) — dùng cho cả 2 nhóm
+// "conONhaMay" (lệch dương, tô cam) và "khac" (lệch âm, tô xám) trong buildFactoryReconciliation.
+function FactoryReconciliationTable({ rows, tone }) {
+  const lechCls = tone === 'warn' ? 'text-amber-800' : 'text-gray-600'
+  const borderCls = tone === 'warn' ? 'border-amber-200' : 'border-gray-200'
+  const rowBorderCls = tone === 'warn' ? 'border-amber-100' : 'border-gray-100'
+  return (
+    <div className={`mt-2 overflow-x-auto rounded-lg border bg-white ${borderCls}`}>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-gray-500 text-left">
+            <th className="px-2 py-1.5 font-medium whitespace-nowrap">Mã hàng</th>
+            <th className="px-2 py-1.5 font-medium">Tên hàng</th>
+            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">Đặt (2 kho)</th>
+            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">Biên bản</th>
+            <th className="px-2 py-1.5 font-medium text-right whitespace-nowrap">Lệch</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.maHang} className={`border-t ${rowBorderCls}`}>
+              <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{r.maHang}</td>
+              <td className="px-2 py-1.5 text-gray-700">{r.tenHang}</td>
+              <td className="px-2 py-1.5 text-right text-gray-600">{r.dat}</td>
+              <td className="px-2 py-1.5 text-right text-gray-600">{r.bienBan}</td>
+              <td className={`px-2 py-1.5 text-right font-semibold ${lechCls}`}>{r.lech > 0 ? `+${r.lech}` : r.lech}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, sortKey, sortDir, onToggleSort }) {
   // Sắp xếp CHỈ áp dụng khi KHÔNG Chỉnh sửa — nếu sắp cả lúc đang gõ Mã hàng/Tên hàng, mỗi ký tự gõ vào
   // sẽ đổi thứ tự ngay, dòng đang gõ nhảy vị trí liên tục ngay dưới con trỏ, trải nghiệm rất khó chịu dù
@@ -428,6 +462,8 @@ export default function NhapHangTab() {
   const [uploadingSupplement, setUploadingSupplement] = useState({ khoC: false, khoLgt: false })
   const [checkingKien, setCheckingKien] = useState(false)
   const [kienCheckResult, setKienCheckResult] = useState(null)
+  const [showFactoryDetail, setShowFactoryDetail] = useState(false)
+  const [showFactoryOther, setShowFactoryOther] = useState(false)
   const [activeId, setActiveId] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_KEY)
     const all = readBatches()
@@ -519,7 +555,7 @@ export default function NhapHangTab() {
       const warehouseWarnings = collectWarehouseWarnings(khoCPdfItems, khoLgtPdfItems)
 
       const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
-      const { khoC, khoLgt, warnings: reconciliationWarnings } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
+      const { khoC, khoLgt, warnings: reconciliationWarnings, factoryReconciliation } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
 
       const batchId = String(Date.now())
       const processedAt = new Date().toISOString()
@@ -564,6 +600,7 @@ export default function NhapHangTab() {
         warnings,
         khoC,
         khoLgt,
+        factoryReconciliation,
       })
       setBatches(readBatches())
       setActiveId(entry.id)
@@ -784,7 +821,7 @@ export default function NhapHangTab() {
       const nextWarnings = result.checked && !result.matched
         ? [...otherWarnings, `Cảnh báo: ${result.message}`]
         : otherWarnings
-      updateBatch(active.id, { warnings: nextWarnings })
+      updateBatch(active.id, { warnings: nextWarnings, factoryReconciliation: result.factoryReconciliation })
       setBatches(readBatches())
     } catch (err) {
       setKienCheckResult({ matched: false, message: err.message || 'Không đối chiếu lại được.' })
@@ -1028,6 +1065,35 @@ export default function NhapHangTab() {
           <ul className="space-y-1 text-xs text-amber-800 list-disc list-inside">
             {active.warnings.map(w => <li key={w}>{w}</li>)}
           </ul>
+
+          {active.factoryReconciliation?.conONhaMay?.length > 0 && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setShowFactoryDetail(v => !v)}
+                className="text-xs font-medium text-amber-800 underline hover:text-amber-900"
+              >
+                {showFactoryDetail ? 'Ẩn chi tiết theo mã hàng ▴' : 'Xem chi tiết theo mã hàng ▾'}
+              </button>
+              {showFactoryDetail && <FactoryReconciliationTable rows={active.factoryReconciliation.conONhaMay} tone="warn" />}
+            </div>
+          )}
+
+          {active.factoryReconciliation?.khac?.length > 0 && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setShowFactoryOther(v => !v)}
+                className="text-xs text-gray-500 underline hover:text-gray-700"
+              >
+                {showFactoryOther
+                  ? 'Ẩn mục khác ▴'
+                  : `Khác (${active.factoryReconciliation.khac.length} mã, biên bản khai nhiều hơn — không phải hàng còn ở nhà máy) ▾`}
+              </button>
+              {showFactoryOther && <FactoryReconciliationTable rows={active.factoryReconciliation.khac} tone="neutral" />}
+            </div>
+          )}
+
           <p className="text-xs text-amber-700 mt-2">Kiểm tra và sửa trực tiếp bằng nút "Chỉnh sửa" ở trên nếu cần.</p>
         </div>
       )}
