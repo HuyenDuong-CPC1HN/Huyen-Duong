@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TongDonTab from '../TongDonTab'
 
@@ -30,12 +30,17 @@ vi.mock('../CarrierStats', () => ({
   getCarrierFileStats: vi.fn(),
   pickCarrierWeekIdByDate: vi.fn(),
   carrierWeekHasRows: vi.fn(() => false),
+  computeFrozenNgoaiSan: vi.fn(() => ({ rows: [], stats: {} })),
+  getCarrierWeekRows: vi.fn(() => []),
 }))
 
+// Snapshot đã lưu, đúng shape mới: current/previous giữ nguyên (computeWeekReport gốc, không đổi) +
+// 2 khối donSan/truyenThong chứa riêng chữ nhận định của từng báo cáo.
 const report = {
   id: 'tongdon-1',
   weekKey: 'x_x',
   createdAt: '2026-08-10T08:00:00.000Z',
+  label: 'Báo cáo giao hàng - CN HCM · 10/08/2026 08:00',
   title: 'Báo cáo giao hàng - CN HCM',
   current: {
     grandTotal: 120, totalC: 70, totalDTP: 35, totalTMDT: 15,
@@ -49,11 +54,17 @@ const report = {
     gh24: 35, gh48: 9, gh72: 4, chuaGiao: 4, chuaGiaoC: 2, chuaGiaoDTP: 2,
     trucTiepTong: 52, bC: { 24: 22, 48: 7, 72: 2 }, bDTP: { 24: 13, 48: 2, 72: 2 }, rate24h: 67.3,
   },
-  insight1: 'Sản lượng tăng.', insight2: 'Giao 24h ổn định.', insight3: 'Theo dõi tồn.',
-  insight4: 'Cơ cấu đơn ổn định.', insight5: 'SPX cần theo dõi.', insight6: 'Viettel Post ổn định.',
-  verdict: 'Kết luận vận hành.',
-  sol1: 'Ưu tiên xử lý tồn.', sol2: 'Rà soát SLA.', sol3: 'Đối soát hằng ngày.',
-  sol4: 'Bố trí nguồn lực.', sol5: 'Thiết lập KPI tuần tới.',
+  donSan: {
+    ngoaiSan: null,
+    tmdtBody: 'Đơn sàn TMĐT tăng nhẹ.', ngoaiSanBody: 'Ngoại sàn ổn định.', reconNote: 'Đối soát ổn định.',
+    verdict: 'Kết luận Đơn sàn.',
+    sol1: 'Ưu tiên xử lý tồn SPX.', sol2: 'Rà soát SLA ngoại sàn.', sol3: 'Đối soát hằng ngày.', sol4: 'Theo dõi tăng trưởng.',
+  },
+  truyenThong: {
+    cocauBody: 'Cơ cấu đơn ổn định.', dtpBody: 'Đơn DTP ổn định.', cBody: 'Đơn C cần theo dõi.', vtpBody: 'Viettel Post ổn định.',
+    verdict: 'Kết luận Đơn truyền thống.',
+    sol1: 'Theo dõi năng lực Đơn C.', sol2: 'Xử lý đơn bệnh viện.', sol3: 'Nhân rộng cách làm DTP.', sol4: 'Theo dõi SLA Viettel Post.',
+  },
 }
 
 describe('TongDonTab saved-report composition', () => {
@@ -62,43 +73,40 @@ describe('TongDonTab saved-report composition', () => {
     workspaceMocks.clear()
   })
 
-  it('keeps report actions, two periods, and a tabbed internal operations panel available', () => {
+  it('keeps report actions and lets người dùng switch between 2 báo cáo Đơn sàn / Đơn truyền thống', () => {
     workspaceMocks.opsStore.setItem('tongdon_reports', JSON.stringify([report]))
 
     render(<TongDonTab onNavigate={vi.fn()} />)
 
-    expect(document.querySelector('.tongdon-tab.is-saved-report')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Công bố cho phân tích/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Chọn lại & làm lại/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Upload tuần mới/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Xuất ảnh/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Xuất ảnh PNG/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /In \/ Xuất PDF/i })).toBeInTheDocument()
-    expect(screen.getByText('TUẦN NÀY')).toBeInTheDocument()
-    expect(screen.getByText('TUẦN TRƯỚC')).toBeInTheDocument()
 
-    const periodDetailToggles = document.querySelectorAll('button[aria-controls^="tongdon-period-details-"]')
-    expect(periodDetailToggles).toHaveLength(2)
-    expect(periodDetailToggles[0]).toHaveAttribute('aria-expanded', 'false')
-    expect(document.querySelector('.tongdon-breakdown-sub')).toHaveAttribute('hidden')
-    expect(document.querySelector('.tongdon-breakdown-chips')).toHaveAttribute('hidden')
-    fireEvent.click(periodDetailToggles[0])
-    expect(periodDetailToggles[0]).toHaveAttribute('aria-expanded', 'true')
-    expect(document.querySelector('.tongdon-breakdown-sub')).not.toHaveAttribute('hidden')
-    expect(document.querySelector('.tongdon-breakdown-chips')).not.toHaveAttribute('hidden')
+    const tabDonSan = screen.getByRole('button', { name: 'Đơn sàn' })
+    const tabTruyenThong = screen.getByRole('button', { name: 'Đơn truyền thống' })
+    expect(tabDonSan).toHaveClass('active')
+    expect(tabTruyenThong).not.toHaveClass('active')
 
-    const insightToggle = document.querySelector('.tongdon-insight-toggle')
-    const insightBody = document.querySelector('.tongdon-insight-body')
-    expect(insightToggle).toHaveAttribute('aria-expanded', 'false')
-    expect(insightBody).toHaveAttribute('hidden')
-    fireEvent.click(insightToggle)
-    expect(insightToggle).toHaveAttribute('aria-expanded', 'true')
-    expect(insightBody).not.toHaveAttribute('hidden')
+    expect(screen.getByText('ĐƠN SÀN')).toBeInTheDocument()
+    expect(screen.getByText('Kết luận Đơn sàn.')).toBeInTheDocument()
+    expect(screen.getByText('Ưu tiên xử lý tồn SPX.')).toBeInTheDocument()
 
-    expect(screen.getByRole('tab', { name: 'Nhận định' })).toHaveAttribute('aria-selected', 'true')
-    expect(document.getElementById('tongdon-solutions')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: 'Giải pháp' }))
-    expect(screen.getByRole('tab', { name: 'Giải pháp' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByText('Ưu tiên xử lý tồn.')).toBeInTheDocument()
-    expect(document.querySelector('.tongdon-operations-scroll')).toBeInTheDocument()
+    fireEvent.click(tabTruyenThong)
+    expect(tabTruyenThong).toHaveClass('active')
+    expect(tabDonSan).not.toHaveClass('active')
+    expect(screen.getByText('ĐƠN TRUYỀN THỐNG')).toBeInTheDocument()
+    expect(screen.getByText('Kết luận Đơn truyền thống.')).toBeInTheDocument()
+    expect(screen.getByText('Theo dõi năng lực Đơn C.')).toBeInTheDocument()
+  })
+
+  it('shows read-only "Báo cáo đã lưu" period label instead of week pickers once saved', () => {
+    workspaceMocks.opsStore.setItem('tongdon_reports', JSON.stringify([report]))
+
+    render(<TongDonTab onNavigate={vi.fn()} />)
+
+    expect(within(document.querySelector('.tdr.is-active')).getByText(/Báo cáo đã lưu ·/)).toBeInTheDocument()
+    expect(document.querySelector('.tdr-source-picker')).not.toBeInTheDocument()
   })
 })

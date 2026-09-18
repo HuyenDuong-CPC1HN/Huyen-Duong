@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Admin v2 Geist UI migration advisory.">
+  <title>Admin v2 Geist UI advisory</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: oklch(0.985 0.002 255);
+      --surface: oklch(1 0 0);
+      --surface-muted: oklch(0.972 0.003 255);
+      --ink: oklch(0.17 0.01 255);
+      --ink-muted: oklch(0.47 0.012 255);
+      --line: oklch(0.88 0.008 255);
+      --line-strong: oklch(0.75 0.012 255);
+      --blue: oklch(0.53 0.18 255);
+      --blue-soft: oklch(0.94 0.035 255);
+      --success: oklch(0.5 0.12 150);
+      --success-soft: oklch(0.95 0.035 150);
+      --warning: oklch(0.61 0.14 70);
+      --warning-soft: oklch(0.96 0.04 70);
+      --danger: oklch(0.53 0.18 30);
+      --danger-soft: oklch(0.96 0.035 30);
+      --font-sans: "Segoe UI Variable", "Segoe UI", "Noto Sans", sans-serif;
+      --font-mono: "Cascadia Mono", "Consolas", monospace;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --space-7: 48px;
+      --space-8: 64px;
+      --radius: 8px;
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      --focus-ring: 3px solid var(--blue);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+    }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
+    button { font: inherit; }
+    h1, h2, h3, p, ul, ol { margin-top: 0; }
+    h1, h2, h3 { color: var(--ink); line-height: 1.15; text-wrap: balance; }
+    h1 { max-width: 18ch; margin-bottom: var(--space-4); font-size: clamp(2.75rem, 6vw, 4.5rem); letter-spacing: -0.035em; }
+    h2 { margin-bottom: var(--space-5); font-size: clamp(1.5rem, 3vw, 2rem); letter-spacing: -0.025em; }
+    h3 { margin-bottom: var(--space-2); font-size: 1rem; letter-spacing: -0.01em; }
+    p, li { max-width: 76ch; text-wrap: pretty; }
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: var(--space-2); }
+
+    .skip-link {
+      position: fixed;
+      z-index: 2;
+      top: var(--space-3);
+      left: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      background: var(--ink);
+      color: var(--surface);
+      transform: translateY(-200%);
+      transition: transform 160ms var(--ease-out);
+    }
+    .skip-link:focus { transform: translateY(0); }
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in oklch, var(--canvas) 92%, transparent);
+    }
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      width: min(100% - 32px, 1440px);
+      min-height: 64px;
+      margin: auto;
+    }
+    .product-mark { font-size: 0.875rem; font-weight: 650; letter-spacing: -0.01em; }
+    .product-mark span { color: var(--ink-muted); font-weight: 450; }
+    .motion-control {
+      min-height: 44px;
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 100ms var(--ease-out);
+    }
+    .motion-control:hover { border-color: var(--blue); color: var(--blue); }
+    .motion-control:active { transform: translateY(1px); }
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      width: min(100% - 32px, 1440px);
+      margin: auto;
+    }
+    .sidebar {
+      display: none;
+      padding: var(--space-7) var(--space-5);
+      border-right: 1px solid var(--line);
+    }
+    .nav-title { margin: 0 0 var(--space-3); color: var(--ink-muted); font-size: 0.75rem; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; }
+    .section-nav { display: grid; gap: var(--space-1); }
+    .section-nav a { padding: var(--space-2) var(--space-3); border-radius: 6px; color: var(--ink-muted); font-size: 0.875rem; text-decoration: none; }
+    .section-nav a:hover, .section-nav a:focus-visible { background: var(--blue-soft); color: var(--blue); }
+    main { min-width: 0; }
+    .intro { padding: var(--space-7) 0 var(--space-6); border-bottom: 1px solid var(--line); }
+    .eyebrow { margin-bottom: var(--space-3); color: var(--blue); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .lede { max-width: 68ch; margin-bottom: 0; color: var(--ink-muted); font-size: 1.125rem; }
+    .verdict {
+      display: grid;
+      gap: var(--space-4);
+      margin-top: var(--space-6);
+      padding: var(--space-5);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .verdict-label { margin: 0; color: var(--ink-muted); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .verdict strong { font-size: 1.25rem; letter-spacing: -0.02em; }
+    .verdict p { margin-bottom: 0; }
+    .content-section { padding: var(--space-7) 0; border-bottom: 1px solid var(--line); scroll-margin-top: var(--space-5); }
+    .section-copy { color: var(--ink-muted); }
+    .evidence-list { display: grid; gap: var(--space-3); padding: 0; list-style: none; }
+    .evidence-list li { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); max-width: none; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .evidence-index { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--blue); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; }
+    .evidence-list p { margin: 0; }
+    code { padding: 0.1em 0.35em; border-radius: 4px; background: var(--surface-muted); color: var(--ink); font-family: var(--font-mono); font-size: 0.875em; }
+    .scope-grid { display: grid; gap: var(--space-4); }
+    .scope-panel { padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .scope-panel h3 { display: flex; align-items: center; gap: var(--space-2); }
+    .scope-panel h3::before { width: 10px; height: 10px; border-radius: 50%; background: var(--blue); content: ""; }
+    .scope-panel.out h3::before { background: var(--ink-muted); }
+    .scope-panel ol, .scope-panel ul { margin-bottom: 0; }
+    .flow { display: grid; gap: var(--space-3); }
+    .flow-step { position: relative; display: grid; grid-template-columns: auto 1fr; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .flow-step:not(:last-child)::after { position: absolute; bottom: calc(var(--space-3) * -1); left: 28px; width: 1px; height: var(--space-3); background: var(--line-strong); content: ""; }
+    .flow-number { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--ink); color: var(--surface); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; }
+    .flow-step h3, .flow-step p { margin-bottom: 0; }
+    .flow-step p { color: var(--ink-muted); }
+    .comparison { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; min-width: 640px; }
+    th, td { padding: var(--space-4); vertical-align: top; text-align: left; }
+    th { border-bottom: 1px solid var(--line-strong); font-size: 0.875rem; }
+    td { border-top: 1px solid var(--line); color: var(--ink-muted); }
+    th:first-child { color: var(--success); }
+    th:last-child { color: var(--danger); }
+    .route { padding: var(--space-5); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--blue-soft); }
+    .route h3 { margin-bottom: var(--space-3); }
+    .route p { margin: 0; font-family: var(--font-mono); font-size: 0.875rem; line-height: 1.75; }
+    .benefit-grid { display: grid; gap: var(--space-4); }
+    .benefit, .tradeoff { padding: var(--space-5); border-radius: var(--radius); }
+    .benefit { border: 1px solid color-mix(in oklch, var(--success) 25%, var(--line)); background: var(--success-soft); }
+    .tradeoff { border: 1px solid color-mix(in oklch, var(--warning) 25%, var(--line)); background: var(--warning-soft); }
+    .benefit ul, .tradeoff ul { margin-bottom: 0; }
+    .checklist { display: grid; gap: var(--space-2); padding: 0; list-style: none; }
+    .checklist li { display: grid; grid-template-columns: 24px 1fr; gap: var(--space-3); max-width: none; padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+    .check { display: grid; place-items: center; width: 20px; height: 20px; margin-top: 3px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink-muted); font-family: var(--font-mono); font-size: 0.75rem; }
+    .metrics { display: grid; gap: var(--space-3); }
+    .metric { padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .metric strong { display: block; margin-bottom: var(--space-1); color: var(--blue); font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    .metric p { margin: 0; color: var(--ink-muted); }
+    .audit { margin: var(--space-7) 0; padding: var(--space-5); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); }
+    .audit h2 { margin-bottom: var(--space-3); }
+    .audit p { margin-bottom: 0; color: var(--ink-muted); }
+    .footer { padding: var(--space-5) 0 var(--space-7); color: var(--ink-muted); font-family: var(--font-mono); font-size: 0.75rem; }
+
+    @media (min-width: 900px) {
+      .shell { grid-template-columns: 224px minmax(0, 1fr); }
+      main { padding-left: var(--space-7); }
+      .sidebar { display: block; position: sticky; top: 0; align-self: start; max-height: 100vh; overflow: auto; }
+      .intro { padding-top: var(--space-8); }
+      .scope-grid { grid-template-columns: 1fr 1fr; }
+      .benefit-grid { grid-template-columns: 1fr 1fr; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (min-width: 1200px) {
+      .verdict { grid-template-columns: 180px 1fr; align-items: start; }
+      .metrics { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+    }
+    .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+
+    @media print {
+      :root { --canvas: oklch(1 0 0); --surface: oklch(1 0 0); --surface-muted: oklch(0.96 0 0); --ink: oklch(0.15 0 0); --ink-muted: oklch(0.36 0 0); --line: oklch(0.76 0 0); --line-strong: oklch(0.55 0 0); --blue: oklch(0.42 0.16 255); --blue-soft: oklch(0.95 0.025 255); }
+      body { font-size: 11pt; background: var(--canvas); }
+      .skip-link, .topbar, .sidebar { display: none; }
+      .shell { display: block; width: 100%; }
+      main { padding: 0; }
+      .intro, .content-section { padding: 20pt 0; break-inside: avoid; }
+      .flow-step, .scope-panel, .evidence-list li, .metric, .benefit, .tradeoff, .audit, .verdict { break-inside: avoid; }
+      .comparison { overflow: visible; }
+      table { min-width: 0; }
+      a { color: inherit; text-decoration: none; }
+      .footer { padding-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#report">Skip to report content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="product-mark">Admin v2 <span>/ Geist UI advisory</span></div>
+      <button class="motion-control" type="button" aria-pressed="false">Reduce motion</button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar" aria-label="Report sections">
+      <p class="nav-title">On this page</p>
+      <nav class="section-nav">
+        <a href="#verdict">Verdict</a>
+        <a href="#evidence">Verified evidence</a>
+        <a href="#scope">Scope and non-goals</a>
+        <a href="#flow">Decision flow</a>
+        <a href="#guidance">Do and do not</a>
+        <a href="#route">Execution route</a>
+        <a href="#outcomes">Benefits and trade-offs</a>
+        <a href="#checklist">Work checklist</a>
+        <a href="#metrics">Success metrics</a>
+        <a href="#audit">Cursor audit</a>
+      </nav>
+    </aside>
+
+    <main id="report">
+      <section class="intro" id="verdict" aria-labelledby="report-title">
+        <p class="eyebrow">Confirmed advisory</p>
+        <h1 id="report-title">Admin v2 Geist UI map</h1>
+        <p class="lede">A scoped visual-migration decision for the existing Admin application. The static prototype supplies visual direction, while the current application remains the behavior source of truth.</p>
+        <div class="verdict" role="note" aria-label="Verdict">
+          <p class="verdict-label">Verdict</p>
+          <div>
+            <strong>Proceed as a planned visual migration.</strong>
+            <p>Apply a global Geist shell, a HomeBrief hybrid, and an isolated Đơn C presentation branch. Do not cook directly from the static mock because current shared selectors and <code>SheetTab</code> serve DTP, return tracking, and damaged-goods flows.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="content-section" id="evidence" aria-labelledby="evidence-title">
+        <h2 id="evidence-title">Verified evidence</h2>
+        <ul class="evidence-list">
+          <li><span class="evidence-index" aria-hidden="true">01</span><p><code>CPC1HN Admin v2 Geist.dc.html</code> contains the Admin v2 shell, <code>#home</code>, and a dedicated inline <code>#donc</code> mock.</p></li>
+          <li><span class="evidence-index" aria-hidden="true">02</span><p><code>CPC1HN Ops Home.dc.html</code> provides the Home information architecture, but it uses the old warm and Inter visual system.</p></li>
+          <li><span class="evidence-index" aria-hidden="true">03</span><p><code>src/App.jsx</code> owns universal <code>.dashboard-*</code> shell chrome for every route.</p></li>
+          <li><span class="evidence-index" aria-hidden="true">04</span><p><code>src/components/SheetTab.jsx</code> is shared by Đơn C and DTP. Shared <code>.sheet-tab-*</code> and <code>.report-*</code> CSS is also consumed by return-tracking and damaged-goods surfaces.</p></li>
+        </ul>
+      </section>
+
+      <section class="content-section" id="scope" aria-labelledby="scope-title">
+        <h2 id="scope-title">Confirmed scope and non-goals</h2>
+        <div class="scope-grid">
+          <article class="scope-panel">
+            <h3>In scope</h3>
+            <ol>
+              <li>Apply Admin v2 Geist shell chrome globally to all routes.</li>
+              <li>Map HomeBrief with Ops Home information architecture and Admin v2 typography, surfaces, spacing, controls, and states.</li>
+              <li>Map Giao hàng Đơn C with a Don-C-only presentation branch or namespace while retaining current data, actions, storage keys, and Supabase behavior.</li>
+              <li>Keep DTP, return tracking, damaged goods, Tổng đơn, TMĐT, Nhập hàng, and other tab content designs unchanged.</li>
+              <li>Add shadcn or 21st primitives only when a mock requires a missing primitive.</li>
+              <li>Target 1440px fidelity and preserve existing mobile and tablet behavior without redesigning it.</li>
+            </ol>
+          </article>
+          <article class="scope-panel out">
+            <h3>Non-goals</h3>
+            <ul>
+              <li>Change business logic, data contracts, Supabase calls, report or export behavior, routes, or storage keys.</li>
+              <li>Redesign mobile, tablet, or a tab outside Shell, HomeBrief, and Đơn C.</li>
+              <li>Restyle generic <code>.sheet-tab-*</code> or <code>.report-*</code> selectors to achieve the Đơn C look.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="content-section" id="flow" aria-labelledby="flow-title">
+        <h2 id="flow-title">Decision flow</h2>
+        <p class="section-copy">Each decision narrows visual change to the smallest boundary that protects current behavior.</p>
+        <div class="flow">
+          <article class="flow-step"><span class="flow-number" aria-hidden="true">01</span><div><h3>Prototype evidence</h3><p>Inspect and annotate the Admin v2 shell, Ops Home information architecture, and inline <code>#donc</code> mock. Use the prototype as visual evidence, not as a workflow specification.</p></div></article>
+          <article class="flow-step"><span class="flow-number" aria-hidden="true">02</span><div><h3>Global shell decision</h3><p>Change <code>.dashboard-*</code> intentionally as a global shell migration. Every route inherits chrome, so navigation and layout smoke checks are required.</p></div></article>
+          <article class="flow-step"><span class="flow-number" aria-hidden="true">03</span><div><h3>Home hybrid decision</h3><p>Preserve Ops Home information architecture and channel derivation. Apply Admin v2 Geist typography, neutral surfaces, spacing, controls, and states without returning to warm Inter styling.</p></div></article>
+          <article class="flow-step"><span class="flow-number" aria-hidden="true">04</span><div><h3>Don-C-only branch</h3><p>Add a Đơn C root marker and scope every new selector beneath it. Branch or extract presentation only for <code>type === 'donC'</code>; retain the DTP path and shared report children.</p></div></article>
+          <article class="flow-step"><span class="flow-number" aria-hidden="true">05</span><div><h3>Verification gates</h3><p>Review, security and Snyk gates, browser checks at 1440px, <code>npm test</code>, and the production build validate the accepted implementation path.</p></div></article>
+          <article class="flow-step"><span class="flow-number" aria-hidden="true">06</span><div><h3>Cursor audit</h3><p>Stop after all verification gates and submit the completed migration for the Cursor audit. Do not extend scope during the audit handoff.</p></div></article>
+        </div>
+      </section>
+
+      <section class="content-section" id="guidance" aria-labelledby="guidance-title">
+        <h2 id="guidance-title">Implementation guardrails</h2>
+        <div class="comparison">
+          <table>
+            <thead><tr><th scope="col">What to do</th><th scope="col">What not to do</th></tr></thead>
+            <tbody>
+              <tr><td>Run <code>ak:plan</code> before <code>ak:cook</code>, mapping the three exact prototype artifacts and current App, Home, SheetTab, and CSS owners.</td><td>Cook directly from the static mock. It does not describe dynamic behavior.</td></tr>
+              <tr><td>Treat Admin v2 as the visual source of truth. Treat Ops Home as information architecture only.</td><td>Reintroduce warm <code>#f4f3ee</code> or Inter styling.</td></tr>
+              <tr><td>Use a Don-C-only root marker and presentation branch that preserves existing data, actions, storage keys, and Supabase behavior.</td><td>Infer search, refresh, export, table, or state behavior from static <code>#donc</code> HTML.</td></tr>
+              <tr><td>Use shadcn or 21st only for a primitive required by the mock and otherwise unavailable.</td><td>Alter unscoped <code>.sheet-tab-*</code>, <code>.report-*</code>, <code>:root</code>, or <code>body</code> rules for a Đơn C-only goal.</td></tr>
+              <tr><td>Smoke every route after the global shell migration, including the named protected surfaces.</td><td>Add primitives speculatively or migrate shared components without a visual requirement.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Is <code>ak:frontend-design</code> needed?</h3>
+        <p class="section-copy">Yes. Use it during the design-map step after prototype inspection. It translates the mock into existing React and CSS ownership without inventing UI, then feeds <code>ak:plan</code>; it is not a replacement for the plan or a reason to cook directly.</p>
+      </section>
+
+      <section class="content-section" id="route" aria-labelledby="route-title">
+        <h2 id="route-title">Recommended execution route</h2>
+        <div class="route">
+          <h3>Design-map first</h3>
+          <p>ak:frontend-design (prototype-to-current-UI design map) → ak:plan (file ownership, scoped CSS/JSX contract, visual acceptance) → ak:cook (only accepted phases) → code review → security gate → Snyk test + Snyk Code → browser verification + npm test && npm run build → stop for Cursor audit</p>
+        </div>
+        <p class="section-copy">Use <code>ak:frontend-design</code> during the design-map step to translate the mock into existing React and CSS ownership without inventing UI. It follows prototype inspection and feeds <code>ak:plan</code>; it does not replace planning or justify cooking directly.</p>
+      </section>
+
+      <section class="content-section" id="outcomes" aria-labelledby="outcomes-title">
+        <h2 id="outcomes-title">Benefits and trade-offs</h2>
+        <div class="benefit-grid">
+          <article class="benefit"><h3>Benefits</h3><ul><li>One coherent Geist shell while preserving existing operational behavior.</li><li>High-fidelity Đơn C without breaking DTP or other consumers of shared CSS.</li><li>Home retains established operations information architecture instead of adopting a static marketing-like mock blindly.</li></ul></article>
+          <article class="tradeoff"><h3>Trade-offs</h3><ul><li>A Don-C-specific presentation path is more code than CSS-only styling, but it is the smallest safe boundary for fidelity.</li><li>A global shell migration changes chrome on out-of-scope routes. Their content is protected, not their surrounding frame.</li><li>Static mocks do not specify dynamic states. Fidelity stops at visual composition, not invented workflow.</li></ul></article>
+        </div>
+      </section>
+
+      <section class="content-section" id="checklist" aria-labelledby="checklist-title">
+        <h2 id="checklist-title">Work checklist</h2>
+        <ul class="checklist">
+          <li><span class="check" aria-hidden="true"></span><span>Inspect and annotate the Admin v2, Ops Home, and inline <code>#donc</code> prototype sections.</span></li>
+          <li><span class="check" aria-hidden="true"></span><span>Plan global shell boundaries and every affected route smoke check.</span></li>
+          <li><span class="check" aria-hidden="true"></span><span>Plan the HomeBrief information architecture and visual split while preserving channel derivation and navigation semantics.</span></li>
+          <li><span class="check" aria-hidden="true"></span><span>Plan a Don-C-only root marker, scoped CSS, and presentation branch while retaining existing data and actions.</span></li>
+          <li><span class="check" aria-hidden="true"></span><span>Implement only the planned Shell, HomeBrief, and Đơn C surfaces.</span></li>
+          <li><span class="check" aria-hidden="true"></span><span>Verify the 1440px shell, HomeBrief, Đơn C, DTP, return tracking, and damaged goods surfaces in a real browser.</span></li>
+          <li><span class="check" aria-hidden="true"></span><span>Run review, security and Snyk gates, <code>npm test</code>, and the production build. Stop for the Cursor audit.</span></li>
+        </ul>
+      </section>
+
+      <section class="content-section" id="metrics" aria-labelledby="metrics-title">
+        <h2 id="metrics-title">Measurable success metrics</h2>
+        <div class="metrics">
+          <article class="metric"><strong>1440px fidelity</strong><p>Shell, HomeBrief, and Đơn C match the specified Admin v2 visual source at 1440px without changing observed business behavior.</p></article>
+          <article class="metric"><strong>Protected content</strong><p>DTP, return tracking, and damaged goods retain their content layout and controls under the new global shell.</p></article>
+          <article class="metric"><strong>Isolation</strong><p>No source change touches Supabase calls, storage-key strings, report or export behavior, or shared generic SheetTab and report CSS for a Don-C-only visual goal.</p></article>
+          <article class="metric"><strong>Six-surface smoke</strong><p>Browser smoke checks complete for shell, HomeBrief, Đơn C, DTP, return tracking, and damaged goods.</p></article>
+          <article class="metric"><strong>Quality gates</strong><p><code>npm test</code> and <code>npm run build</code> pass. Snyk Open Source and Snyk Code report no newly introduced issue.</p></article>
+        </div>
+      </section>
+
+      <section class="audit" id="audit" aria-labelledby="audit-title">
+        <h2 id="audit-title">Cursor audit</h2>
+        <p>The intended finish line is a completed, verified visual migration handed to Cursor for audit. The audit should confirm scope discipline, shared-selector isolation, and behavior preservation rather than prompt more visual invention.</p>
+      </section>
+
+      <footer class="footer">Advisory artifact · self-contained HTML · no network assets required</footer>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const control = document.querySelector('.motion-control');
+      if (!control) return;
+      control.addEventListener('click', () => {
+        const reduced = document.documentElement.classList.toggle('reduce-motion');
+        control.setAttribute('aria-pressed', String(reduced));
+        control.textContent = reduced ? 'Enable motion' : 'Reduce motion';
+      });
+    })();
+  </script>
+</body>
+</html>

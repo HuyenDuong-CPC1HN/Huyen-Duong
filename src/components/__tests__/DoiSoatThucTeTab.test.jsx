@@ -99,4 +99,33 @@ describe('DoiSoatThucTeTab — bấm vào thẻ tổng hợp để lọc bảng 
     expect(within(khoCSection).queryByText('A00003')).not.toBeInTheDocument()
     expect(within(khoCSection).queryByText('A00004')).not.toBeInTheDocument()
   })
+
+  it('kho không thả file quét thực tế: hiện "Không có dữ liệu thực tế để đối soát", không tính là Chưa quét', async () => {
+    // Đơn hàng có hàng "(SO)" để Kho SO cũng có hoá đơn thật (nếu chạy nhầm với mảng rỗng sẽ báo hết
+    // thành "Chưa quét") — nhưng chỉ thả file quét thực tế cho đúng 1 mình Kho C.
+    const batch = {
+      id: 'batch1',
+      processedAt: new Date().toISOString(),
+      khoC: [
+        { maHang: 'A00001', tenHang: 'Hàng khớp', soLo: 'L1', slHoaDon: 10 },
+        { maHang: 'B00001', tenHang: 'Hàng (SO)', soLo: 'L9', slHoaDon: 7 },
+      ],
+      khoLgt: [{ maHang: 'C00001', tenHang: 'Hàng LGT', soLo: 'L5', slHoaDon: 4 }],
+    }
+    store.opsStore.setItem('goods_receipt_batches', JSON.stringify([batch]))
+
+    const file = buildActualScanFile([{ maHang: 'A00001', tenHang: 'Hàng khớp', soLo: 'L1', soLuong: 10 }])
+    render(<DoiSoatThucTeTab />)
+
+    const fileInputs = document.querySelectorAll('input[type="file"]')
+    fireEvent.change(fileInputs[0], { target: { files: [file] } }) // khung Kho C là khung đầu tiên
+
+    const runButton = await screen.findByRole('button', { name: /chạy đối soát/i })
+    fireEvent.click(runButton)
+
+    await waitFor(() => expect(screen.getAllByText('Không có dữ liệu thực tế để đối soát')).toHaveLength(2))
+    // Kho LGT/SO không chạy đối soát nên không góp vào tổng "Chưa quét" dù hoá đơn 2 kho đó có dòng thật.
+    const chuaQuetTile = screen.getByText('Chưa quét').closest('button')
+    expect(within(chuaQuetTile).getByText('0')).toBeInTheDocument()
+  })
 })

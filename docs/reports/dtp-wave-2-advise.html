@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Advisory report for the Wave 2 Đơn DTP Admin v2 presentation update.">
+  <title>Wave 2 DTP presentation advisory</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: oklch(0.975 0.006 252);
+      --surface: oklch(0.995 0.002 252);
+      --surface-quiet: oklch(0.955 0.01 252);
+      --surface-accent: oklch(0.945 0.024 252);
+      --ink: oklch(0.21 0.018 252);
+      --ink-muted: oklch(0.43 0.018 252);
+      --line: oklch(0.84 0.012 252);
+      --line-strong: oklch(0.69 0.021 252);
+      --accent: oklch(0.48 0.15 255);
+      --accent-deep: oklch(0.38 0.13 255);
+      --accent-soft: oklch(0.93 0.045 255);
+      --good: oklch(0.42 0.11 150);
+      --good-soft: oklch(0.94 0.035 150);
+      --caution: oklch(0.5 0.11 68);
+      --caution-soft: oklch(0.95 0.04 68);
+      --danger: oklch(0.46 0.15 28);
+      --danger-soft: oklch(0.95 0.036 28);
+      --font-display: Georgia, "Times New Roman", serif;
+      --font-sans: "Segoe UI Variable", "Segoe UI", "Noto Sans", sans-serif;
+      --font-mono: "Cascadia Mono", Consolas, monospace;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --space-7: 48px;
+      --space-8: 64px;
+      --space-9: 96px;
+      --border: 1px;
+      --radius: 8px;
+      --radius-small: 4px;
+      --content-width: 1152px;
+      --sidebar-width: 216px;
+      --body-size: 1rem;
+      --lede-size: 1.125rem;
+      --section-size: clamp(1.625rem, 3vw, 2.25rem);
+      --hero-size: clamp(2.75rem, 5vw, 4.75rem);
+      --label-size: 0.75rem;
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      --focus: 3px solid var(--accent);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-width: 320px;
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: var(--body-size);
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+    }
+    a { color: inherit; }
+    a:focus-visible { outline: var(--focus); outline-offset: var(--space-1); }
+    h1, h2, h3, p, ul, ol { margin-top: 0; }
+    h1, h2, h3 { text-wrap: balance; }
+    h1 {
+      max-width: 14ch;
+      margin-bottom: var(--space-4);
+      font-family: var(--font-display);
+      font-size: var(--hero-size);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.03;
+    }
+    h2 {
+      max-width: 25ch;
+      margin-bottom: var(--space-5);
+      font-size: var(--section-size);
+      letter-spacing: -0.028em;
+      line-height: 1.14;
+    }
+    h3 {
+      margin-bottom: var(--space-2);
+      font-size: 1rem;
+      letter-spacing: -0.01em;
+      line-height: 1.3;
+    }
+    p, li { max-width: 72ch; text-wrap: pretty; }
+    ul, ol { padding-left: var(--space-5); }
+    li + li { margin-top: var(--space-2); }
+    code {
+      padding: 0.1em 0.28em;
+      border-radius: var(--radius-small);
+      background: var(--surface-quiet);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    .skip-link {
+      position: fixed;
+      z-index: 3;
+      top: var(--space-3);
+      left: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-small);
+      background: var(--ink);
+      color: var(--surface);
+      text-decoration: none;
+      transform: translateY(-200%);
+      transition: transform 160ms var(--ease-out);
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    .masthead { border-bottom: var(--border) solid var(--line); }
+    .masthead-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      width: min(calc(100% - var(--space-6)), var(--content-width));
+      min-height: var(--space-8);
+      margin: 0 auto;
+    }
+    .brand { margin: 0; font-size: 0.875rem; font-weight: 700; letter-spacing: -0.012em; }
+    .brand span { color: var(--ink-muted); font-weight: 450; }
+    .report-kind {
+      margin: 0;
+      color: var(--ink-muted);
+      font-family: var(--font-mono);
+      font-size: var(--label-size);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      width: min(calc(100% - var(--space-6)), var(--content-width));
+      margin: 0 auto;
+    }
+    .sidebar { display: none; }
+    main { min-width: 0; }
+    .intro {
+      padding: var(--space-8) 0 var(--space-7);
+      border-bottom: var(--border) solid var(--line);
+    }
+    .kicker {
+      margin-bottom: var(--space-3);
+      color: var(--accent-deep);
+      font-family: var(--font-mono);
+      font-size: var(--label-size);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .lede {
+      max-width: 62ch;
+      margin-bottom: 0;
+      color: var(--ink-muted);
+      font-size: var(--lede-size);
+    }
+    .verdict {
+      display: grid;
+      gap: var(--space-4);
+      margin-top: var(--space-6);
+      padding: var(--space-5);
+      border: var(--border) solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .verdict-label {
+      margin: 0;
+      color: var(--accent-deep);
+      font-family: var(--font-mono);
+      font-size: var(--label-size);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .verdict strong { display: block; margin-bottom: var(--space-2); font-size: 1.25rem; letter-spacing: -0.018em; }
+    .verdict p:last-child { margin-bottom: 0; }
+
+    .section {
+      padding: var(--space-7) 0;
+      border-bottom: var(--border) solid var(--line);
+      scroll-margin-top: var(--space-5);
+    }
+    .section-copy { color: var(--ink-muted); }
+    .fact-list, .checklist { padding: 0; list-style: none; }
+    .fact-list { display: grid; gap: var(--space-3); }
+    .fact-list li {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: var(--space-3);
+      max-width: none;
+      padding: var(--space-4);
+      border: var(--border) solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .fact-mark {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent-deep);
+      font-family: var(--font-mono);
+      font-size: var(--label-size);
+      font-weight: 700;
+    }
+    .fact-list p { margin: 0; }
+
+    .scope-grid, .outcome-grid, .option-grid { display: grid; gap: var(--space-4); }
+    .panel, .outcome, .option {
+      padding: var(--space-5);
+      border: var(--border) solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .panel > :last-child, .outcome > :last-child, .option > :last-child { margin-bottom: 0; }
+    .panel ol, .panel ul { margin-bottom: 0; }
+    .panel.in-scope h3 { color: var(--accent-deep); }
+    .panel.non-goal h3 { color: var(--ink-muted); }
+
+    .decision-figure {
+      margin: var(--space-5) 0 0;
+      padding: var(--space-4);
+      border: var(--border) solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .decision-figure svg { display: block; width: 100%; height: auto; }
+    .decision-figure figcaption { margin-top: var(--space-3); color: var(--ink-muted); font-size: 0.875rem; }
+    .mobile-flow { display: none; }
+    .mobile-flow ol { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; counter-reset: flow-step; }
+    .mobile-flow li {
+      position: relative;
+      max-width: none;
+      padding: var(--space-3) var(--space-3) var(--space-3) var(--space-6);
+      border: var(--border) solid var(--line);
+      border-radius: var(--radius-small);
+      background: var(--surface);
+      counter-increment: flow-step;
+    }
+    .mobile-flow li::before {
+      position: absolute;
+      top: var(--space-3);
+      left: var(--space-3);
+      color: var(--accent-deep);
+      font-family: var(--font-mono);
+      font-size: var(--label-size);
+      font-weight: 700;
+      content: counter(flow-step, decimal-leading-zero);
+    }
+    .mobile-flow strong { display: block; margin-bottom: var(--space-1); }
+    .mobile-flow span { color: var(--ink-muted); }
+    .svg-step { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+    .svg-strong { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
+    .svg-connector { fill: none; stroke: var(--line-strong); stroke-width: 1.5; stroke-linecap: round; }
+    .svg-arrow { fill: var(--line-strong); }
+    .svg-kicker { fill: var(--accent-deep); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.8px; }
+    .svg-title { fill: var(--ink); font-family: var(--font-sans); font-size: 15px; font-weight: 700; }
+    .svg-copy { fill: var(--ink-muted); font-family: var(--font-sans); font-size: 11px; }
+
+    .guidance { display: grid; gap: var(--space-5); }
+    .guidance-block { padding-top: var(--space-5); border-top: var(--border) solid var(--line); }
+    .guidance-block:first-child { padding-top: 0; border-top: 0; }
+    .guidance-block h3 { color: var(--accent-deep); }
+    .guidance-block.dont h3 { color: var(--danger); }
+    .guidance-block ol, .guidance-block ul { margin-bottom: 0; }
+
+    .option { background: var(--surface-quiet); }
+    .option h3 { color: var(--caution); }
+    .option p { margin-bottom: 0; color: var(--ink-muted); }
+    .outcome.benefit { border-color: color-mix(in oklch, var(--good) 30%, var(--line)); background: var(--good-soft); }
+    .outcome.tradeoff { border-color: color-mix(in oklch, var(--caution) 30%, var(--line)); background: var(--caution-soft); }
+    .outcome h3 { color: var(--good); }
+    .outcome.tradeoff h3 { color: var(--caution); }
+    .outcome ul { margin-bottom: 0; }
+
+    .checklist { display: grid; gap: var(--space-2); }
+    .checklist li {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: var(--space-3);
+      max-width: none;
+      padding: var(--space-3) 0;
+      border-bottom: var(--border) solid var(--line);
+    }
+    .check {
+      display: grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      margin-top: 3px;
+      border: var(--border) solid var(--line-strong);
+      border-radius: var(--radius-small);
+      color: var(--ink-muted);
+      font-family: var(--font-mono);
+      font-size: var(--label-size);
+    }
+    .checklist li:last-child { border-bottom: 0; }
+    .metrics { display: grid; gap: var(--space-3); }
+    .metric {
+      padding: var(--space-4);
+      border: var(--border) solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .metric strong {
+      display: block;
+      margin-bottom: var(--space-1);
+      color: var(--accent-deep);
+      font-family: var(--font-mono);
+      font-size: var(--label-size);
+      font-weight: 700;
+      letter-spacing: 0.055em;
+      text-transform: uppercase;
+    }
+    .metric p { margin-bottom: 0; color: var(--ink-muted); }
+    .closeout {
+      margin-top: var(--space-7);
+      padding: var(--space-5);
+      border: var(--border) solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface-accent);
+    }
+    .closeout h2 { margin-bottom: var(--space-3); }
+    .closeout p { margin-bottom: 0; color: var(--ink-muted); }
+    .footer {
+      padding: var(--space-5) 0 var(--space-7);
+      color: var(--ink-muted);
+      font-family: var(--font-mono);
+      font-size: var(--label-size);
+    }
+
+    @media (min-width: 720px) {
+      .scope-grid, .outcome-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .option-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .verdict { grid-template-columns: 136px minmax(0, 1fr); }
+    }
+    @media (min-width: 1024px) {
+      .shell { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+      .sidebar {
+        display: block;
+        position: sticky;
+        top: 0;
+        align-self: start;
+        max-height: 100vh;
+        padding: var(--space-7) var(--space-5) var(--space-7) 0;
+      }
+      .sidebar-title {
+        margin: 0 0 var(--space-3);
+        color: var(--ink-muted);
+        font-family: var(--font-mono);
+        font-size: var(--label-size);
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+      .section-nav { display: grid; gap: var(--space-1); }
+      .section-nav a {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-small);
+        color: var(--ink-muted);
+        font-size: 0.875rem;
+        text-decoration: none;
+        transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out), transform 100ms var(--ease-out);
+      }
+      .section-nav a:hover { background: var(--accent-soft); color: var(--accent-deep); transform: translateX(var(--space-1)); }
+      .section-nav a:active { transform: translateX(0); }
+      main { padding-left: var(--space-7); }
+      .intro { padding-top: var(--space-9); }
+      .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 480px) {
+      .masthead-inner, .shell { width: min(calc(100% - var(--space-4) * 2), var(--content-width)); }
+      .report-kind { display: none; }
+      .intro, .section { padding-top: var(--space-6); padding-bottom: var(--space-6); }
+      .verdict, .panel, .outcome, .option, .closeout { padding: var(--space-4); }
+      .decision-figure { padding: var(--space-3); }
+      .decision-figure svg { display: none; }
+      .mobile-flow { display: block; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+    @media print {
+      body { background: var(--surface); }
+      .skip-link, .masthead, .sidebar { display: none; }
+      .shell { display: block; width: 100%; }
+      main { padding: 0; }
+      .intro, .section { break-inside: avoid; }
+      .verdict, .panel, .outcome, .option, .metric, .closeout { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#report">Skip to report content</a>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <p class="brand">Admin v2 <span>/ Wave 2 advisory</span></p>
+      <p class="report-kind">DTP presentation scope</p>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar" aria-label="Report sections">
+      <p class="sidebar-title">On this page</p>
+      <nav class="section-nav">
+        <a href="#verdict">Verdict</a>
+        <a href="#requirements">Confirmed requirements</a>
+        <a href="#rationale">Decision rationale</a>
+        <a href="#guidance">Do and do not</a>
+        <a href="#alternatives">Alternatives</a>
+        <a href="#outcomes">Benefits and trade-offs</a>
+        <a href="#checklist">Work checklist</a>
+        <a href="#metrics">Success metrics</a>
+      </nav>
+    </aside>
+
+    <main id="report">
+      <section class="intro" id="verdict" aria-labelledby="report-title">
+        <p class="kicker">Confirmed advisory</p>
+        <h1 id="report-title">Wave 2 DTP presentation</h1>
+        <p class="lede">A narrow addition to the current <code>vinh-phu</code> Admin v2 change set that lets Đơn DTP share the Wave 1 Geist surface already present there.</p>
+        <div class="verdict" role="note" aria-label="Verdict">
+          <p class="verdict-label">Verdict</p>
+          <div>
+            <strong>Proceed, but only in the current <code>vinh-phu</code> change set.</strong>
+            <p>The scope is a one-file CSS refactor plus a one-line JSX change. The Wave 1 Đơn C composition is stable enough to reuse on <code>vinh-phu</code>, but it is not merged to <code>master</code>. DTP must remain in the same Cursor audit and merge cycle. The risk is accidental regression of Đơn C, Return, or Damaged, contained by preserving unscoped selectors and verifying the characterization suite plus browser smoke.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="requirements" aria-labelledby="requirements-title">
+        <h2 id="requirements-title">Confirmed requirements and goals</h2>
+        <p class="section-copy">On <code>vinh-phu</code>, Đơn DTP remains on the old warm and cpc-blue surfaces while Đơn C uses Admin v2 Geist styling. Reviewers see two product tabs with visibly mismatched visual quality in the current Admin v2 change set.</p>
+        <ul class="fact-list">
+          <li><span class="fact-mark" aria-hidden="true">01</span><p><code>src/components/SheetTab.jsx</code>: Đơn C keeps <code>.donc-v2</code> only. Đơn DTP adds <code>.dtp-v2</code> only. No other type gets either class.</p></li>
+          <li><span class="fact-mark" aria-hidden="true">02</span><p><code>src/index.css</code>: every existing <code>.donc-v2</code> rule becomes a grouped selector. Root rules use <code>.donc-v2, .dtp-v2</code>; descendant rules preserve the full selector path, such as <code>.donc-v2 .child, .dtp-v2 .child</code>. Both types share declared values without copied blocks.</p></li>
+          <li><span class="fact-mark" aria-hidden="true">03</span><p>Return, Damaged, unscoped <code>.sheet-tab-*</code>, and <code>.report-*</code> CSS remain unchanged. Business logic, data contracts, Supabase calls, routes, and storage keys remain unchanged.</p></li>
+          <li><span class="fact-mark" aria-hidden="true">04</span><p>Verify <code>SheetTab.characterization.test.jsx</code> and browser smoke at 1440px for Đơn C, Đơn DTP, Return, and Damaged.</p></li>
+        </ul>
+        <div class="scope-grid">
+          <article class="panel in-scope">
+            <h3>Combined-scope constraint</h3>
+            <p>Admin v2 Geist Wave 1 exists on <code>vinh-phu</code> and <code>feat/admin-v2-geist-ui-map</code>, not on <code>master</code>. Keep DTP on <code>vinh-phu</code>; Cursor audits the combined scope before its single merge to <code>master</code>.</p>
+          </article>
+          <article class="panel non-goal">
+            <h3>Non-goals</h3>
+            <p>Do not redesign Return, Tổng đơn, Damaged, mobile, or unscoped CSS. Do not add components, shadcn primitives, or behavior changes.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="rationale" aria-labelledby="rationale-title">
+        <h2 id="rationale-title">Decision rationale</h2>
+        <p class="section-copy">The composition mirrors the implementation boundary. The class is applied only at the shared root, then existing presentation values are reused through explicitly paired selectors.</p>
+        <figure class="decision-figure" aria-labelledby="flow-caption">
+          <svg viewBox="0 0 660 228" role="img" aria-labelledby="flow-title flow-description">
+            <title id="flow-title">Wave 2 decision flow</title>
+            <desc id="flow-description">The flow moves from observed visual inconsistency to reuse of the stable Wave 1 composition, then a DTP-only selector scope, then validation of affected and protected surfaces.</desc>
+            <path class="svg-connector" d="M155 114H192M318 114H355M481 114H518" />
+            <path class="svg-arrow" d="M188 109L198 114L188 119Z M351 109L361 114L351 119Z M514 109L524 114L514 119Z" />
+            <rect class="svg-step" x="4" y="58" width="151" height="112" rx="8" />
+            <text class="svg-kicker" x="20" y="84">OBSERVED</text>
+            <text class="svg-title" x="20" y="109">Inconsistent tabs</text>
+            <text class="svg-copy" x="20" y="132">DTP on vinh-phu uses</text>
+            <text class="svg-copy" x="20" y="147">old warm and cpc-blue.</text>
+            <rect class="svg-step" x="198" y="58" width="120" height="112" rx="8" />
+            <text class="svg-kicker" x="214" y="84">REUSE</text>
+            <text class="svg-title" x="214" y="109">Wave 1</text>
+            <text class="svg-copy" x="214" y="132">Stable on vinh-phu,</text>
+            <text class="svg-copy" x="214" y="147">but not on master.</text>
+            <rect class="svg-strong" x="361" y="46" width="120" height="136" rx="8" />
+            <text class="svg-kicker" x="377" y="72">CONSTRAIN</text>
+            <text class="svg-title" x="377" y="97">DTP only</text>
+            <text class="svg-copy" x="377" y="120">Use <tspan font-family="Cascadia Mono, Consolas, monospace">.dtp-v2</tspan> only</text>
+            <text class="svg-copy" x="377" y="135">for <tspan font-family="Cascadia Mono, Consolas, monospace">type === 'donDTP'</tspan>.</text>
+            <text class="svg-copy" x="377" y="150">Keep full selector paths.</text>
+            <rect class="svg-step" x="524" y="58" width="132" height="112" rx="8" />
+            <text class="svg-kicker" x="540" y="84">VERIFY</text>
+            <text class="svg-title" x="540" y="109">Four surfaces</text>
+            <text class="svg-copy" x="540" y="132">Đơn C, DTP, Return,</text>
+            <text class="svg-copy" x="540" y="147">and Damaged at 1440px.</text>
+          </svg>
+          <div class="mobile-flow">
+            <ol aria-label="Wave 2 decision flow">
+              <li><strong>Observed inconsistency</strong><span>On <code>vinh-phu</code>, DTP retains old warm and cpc-blue surfaces while Đơn C is Admin v2.</span></li>
+              <li><strong>Reuse Wave 1</strong><span>Reuse the stable Đơn C composition on <code>vinh-phu</code>. It is not yet on <code>master</code>.</span></li>
+              <li><strong>Constrain DTP scope</strong><span>Apply <code>.dtp-v2</code> only for <code>type === 'donDTP'</code>, preserve complete selector paths, and keep both waves in one audit cycle.</span></li>
+              <li><strong>Verify surfaces</strong><span>Check Đơn C, Đơn DTP, Return, and Damaged at 1440px.</span></li>
+            </ol>
+          </div>
+          <figcaption id="flow-caption">A visible inconsistency is addressed through existing scoped composition, not a shared-selector redesign.</figcaption>
+        </figure>
+      </section>
+
+      <section class="section" id="guidance" aria-labelledby="guidance-title">
+        <h2 id="guidance-title">Do and do not</h2>
+        <div class="guidance">
+          <div class="guidance-block">
+            <h3>Do</h3>
+            <ol>
+              <li>Inspect the <code>.donc-v2</code> block in <code>index.css</code> around lines 1883 to 2004 and after. List each unique root-level and descendant selector. Confirm the rules are presentational only.</li>
+              <li>Change the root class expression from <code>${isDonC ? 'donc-v2' : ''}</code> to <code>${isDonC ? 'donc-v2' : type === 'donDTP' ? 'dtp-v2' : ''}</code>, or the equivalent that tests <code>type === 'donC'</code> first.</li>
+              <li>Replace each root selector with <code>.donc-v2, .dtp-v2</code>. For each descendant, repeat the full path, such as <code>.donc-v2 .sheet-tab-shell, .dtp-v2 .sheet-tab-shell</code>.</li>
+              <li>Run the characterization test and use browser smoke to confirm Đơn C is unchanged, Đơn DTP matches it, and Return and Damaged are unchanged.</li>
+              <li>Hand off the combined Admin v2 scope to Cursor for review and Snyk audit before the single merge from <code>vinh-phu</code> to <code>master</code>.</li>
+            </ol>
+          </div>
+          <div class="guidance-block dont">
+            <h3>Do not</h3>
+            <ul>
+              <li>Do not use <code>${isDonC ? 'donc-v2' : 'dtp-v2'}</code>. It gives every non-Đơn C type the DTP class, including TMĐT, Tổng đơn, and Nhập hàng.</li>
+              <li>Do not append a bare <code>, .dtp-v2</code> to a descendant selector. <code>.donc-v2 .sheet-tab-shell, .dtp-v2</code> loses the descendant relationship.</li>
+              <li>Do not copy <code>.donc-v2</code> blocks into new <code>.dtp-v2</code> blocks. Grouped selectors share declarations without doubling maintenance.</li>
+              <li>Do not add <code>.dtp-v2</code> inside <code>SheetTab</code> beyond the root. Descendant styling comes from the grouped root selectors.</li>
+              <li>Do not alter <code>ThongKeGiaoHang</code>, <code>ThongKeDoiTac</code>, <code>DataTable</code>, <code>SheetReportPanel</code>, or <code>useSheetReportActions</code>. They are outside the confirmed presentation-only scope.</li>
+              <li>Do not refactor or clean up adjacent unscoped <code>.sheet-tab-*</code> rules while making this presentation-only change.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="alternatives" aria-labelledby="alternatives-title">
+        <h2 id="alternatives-title">Alternatives, deferred</h2>
+        <p class="section-copy">These options could be worthwhile only if the pattern expands. They are not requirements for this wave.</p>
+        <div class="option-grid">
+          <article class="option">
+            <h3>CSS custom properties</h3>
+            <p>Shared tokens such as <code>--v2-surface-bg</code> could avoid selector edits. This is a larger refactor, so note it only if the pattern spreads.</p>
+          </article>
+          <article class="option">
+            <h3>Shared admin utility</h3>
+            <p>A higher-level <code>.admin-v2</code> class could replace both names, but it requires checking every consumer and is premature before a third tab adopts the look.</p>
+          </article>
+          <article class="option">
+            <h3>CSS rule grouping</h3>
+            <p>Grouping structural rules before visual overrides could ease future additions. It is a refactor, not part of the present requirement.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="outcomes" aria-labelledby="outcomes-title">
+        <h2 id="outcomes-title">Benefits and trade-offs</h2>
+        <div class="outcome-grid">
+          <article class="outcome benefit">
+            <h3>Benefits</h3>
+            <ul>
+              <li>Đơn C and Đơn DTP show one consistent Admin v2 Geist look immediately.</li>
+              <li>Each existing <code>.donc-v2</code> rule changes once into a grouped form, making the diff straightforward to audit.</li>
+              <li>Return, Damaged, and other surfaces remain protected because unscoped selectors are untouched.</li>
+              <li>The existing <code>.donc-v2</code> composition is already implemented and locally verifiable on the current Admin v2 branch. DTP reuses its declared values unchanged.</li>
+            </ul>
+          </article>
+          <article class="outcome tradeoff">
+            <h3>Trade-offs</h3>
+            <ul>
+              <li>Two class names still express the same visual intent. A shared class becomes worthwhile if a third tab adopts the look.</li>
+              <li>Đơn C and DTP remain coupled until the Admin v2 work reaches <code>master</code>. Any Wave 1 change before Cursor audit must be reviewed against DTP too, so both changes share one audit and merge cycle.</li>
+              <li>The characterization tests run in Node, not a browser. The 1440px visual check remains manual until visual regression exists in CI.</li>
+              <li>Proceed with grouped selectors only while DTP remains in the same <code>vinh-phu</code> change set. If it moves to another branch or Wave 1 changes materially, re-check the composition and merge plan first.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="checklist" aria-labelledby="checklist-title">
+        <h2 id="checklist-title">Implementation checklist</h2>
+        <ul class="checklist">
+          <li><span class="check" aria-hidden="true">□</span><span>List every <code>.donc-v2</code> selector in <code>index.css</code>. Distinguish root-level from descendant rules and confirm all are presentational.</span></li>
+          <li><span class="check" aria-hidden="true">□</span><span>In <code>SheetTab.jsx</code>, apply <code>.donc-v2</code> only for Đơn C and <code>.dtp-v2</code> only when <code>type === 'donDTP'</code>. Confirm TMDT, Tổng đơn, and other types receive neither class.</span></li>
+          <li><span class="check" aria-hidden="true">□</span><span>Replace each root <code>.donc-v2</code> rule with <code>.donc-v2, .dtp-v2</code>. Preserve each descendant selector path by adding the equivalent <code>.dtp-v2 .child</code> sibling. Add no blocks and delete no rules.</span></li>
+          <li><span class="check" aria-hidden="true">□</span><span>Run <code>SheetTab.characterization.test.jsx</code>. Both DonC and DonDTP suites must pass.</span></li>
+          <li><span class="check" aria-hidden="true">□</span><span>At 1440px, smoke Đơn C, Đơn DTP, Return, and Damaged. Confirm TMĐT and Tổng đơn are classless and visually unchanged.</span></li>
+          <li><span class="check" aria-hidden="true">□</span><span>Run <code>npm run build</code> and require a clean build.</span></li>
+          <li><span class="check" aria-hidden="true">□</span><span>Hand off the combined Admin v2 scope to Cursor for review and Snyk scan before the single <code>vinh-phu</code> to <code>master</code> merge.</span></li>
+        </ul>
+      </section>
+
+      <section class="section" id="metrics" aria-labelledby="metrics-title">
+        <h2 id="metrics-title">Success metrics</h2>
+        <div class="metrics">
+          <article class="metric"><strong>Characterization</strong><p><code>npm test</code> passes, including <code>SheetTab.characterization.test.jsx</code> for both <code>donC</code> and <code>donDTP</code>.</p></article>
+          <article class="metric"><strong>Build</strong><p><code>npm run build</code> exits with code 0.</p></article>
+          <article class="metric"><strong>DTP match</strong><p>At 1440px, Đơn DTP matches Đơn C pixel-for-pixel in layout, color, and spacing.</p></article>
+          <article class="metric"><strong>Protected surfaces</strong><p>At 1440px, Return tracking and Damaged goods are visually unchanged from before the CSS edit.</p></article>
+          <article class="metric"><strong>Other types</strong><p>At 1440px, TMĐT, Tổng đơn, and other non-Đơn C or non-DTP surfaces receive no class and remain visually unchanged.</p></article>
+          <article class="metric"><strong>Scope integrity</strong><p>No class name is introduced beyond <code>.dtp-v2</code> on the SheetTab root for <code>type === 'donDTP'</code>. Routes, storage keys, Supabase calls, and business logic files do not change.</p></article>
+        </div>
+        <div class="closeout">
+          <h2>Merge condition</h2>
+          <p>Cursor audit completes for the combined Admin v2 Wave 1 plus DTP scope before <code>vinh-phu</code> merges to <code>master</code>.</p>
+        </div>
+      </section>
+
+      <footer class="footer">Source: <code>docs/reports/dtp-wave-2-advise.md</code>. Advisory only.</footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -129,16 +129,25 @@ export function createGoodsReceiptBatchesRepository(client) {
       return files.getSignedUrl(storagePath)
     },
 
-    async searchByMaHang(maHang, limit = 200) {
-      const q = String(maHang || '').trim()
+    // Tìm theo Mã hàng HOẶC Tên hàng — chạy 2 truy vấn riêng (thay vì 1 truy vấn .or()) để tránh phải tự
+    // escape dấu phẩy/ngoặc đơn trong chuỗi gõ tay (cú pháp filter .or() của PostgREST dùng chính các ký
+    // tự đó để phân tách điều kiện, tên hàng thực tế hay có dấu ngoặc ghi chú quy cách đóng gói), rồi gộp
+    // + loại trùng theo id (1 dòng có thể khớp cả 2 điều kiện).
+    async searchByMaHangOrTenHang(query, limit = 200) {
+      const q = String(query || '').trim()
       if (!q) return []
-      const { data, error } = await lineTable()
-        .select('*, goods_receipt_batches(processed_at, pdf_file_name, excel_c_file_name, excel_lgt_file_name)')
-        .ilike('ma_hang', `%${q}%`)
-        .order('created_at', { ascending: false })
-        .limit(limit)
-      fail(error)
-      return data || []
+      const selectCols = '*, goods_receipt_batches(processed_at, pdf_file_name, excel_c_file_name, excel_lgt_file_name)'
+      const [byMaHang, byTenHang] = await Promise.all([
+        lineTable().select(selectCols).ilike('ma_hang', `%${q}%`).order('created_at', { ascending: false }).limit(limit),
+        lineTable().select(selectCols).ilike('ten_hang', `%${q}%`).order('created_at', { ascending: false }).limit(limit),
+      ])
+      fail(byMaHang.error)
+      fail(byTenHang.error)
+      const merged = new Map()
+      for (const row of [...(byMaHang.data || []), ...(byTenHang.data || [])]) merged.set(row.id, row)
+      return [...merged.values()]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, limit)
     },
   }
 }

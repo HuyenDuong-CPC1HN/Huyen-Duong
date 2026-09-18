@@ -18,9 +18,11 @@ function loadBuffer(path) {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
 }
 
+// hanDung ở đây CỐ TÌNH đã là dd/mm/yyyy (không phải ISO) — đúng thật với DamagedGoodsRecordForm.jsx, nơi
+// "Hạn dùng" của Kho C/DTP là 1 ô <input> gõ tay tự do, không phải ngày ISO như hàng cận date/Kho A.
 function makeItem(overrides = {}) {
   return {
-    maHang: 'W00517', tenHang: 'Falgankid', soLo: '020126', hanDung: '2029-01-15',
+    maHang: 'W00517', tenHang: 'Falgankid', soLo: '020126', hanDung: '15/01/2029',
     kho: '020102', dvt: 'ONG', soLuong: 60, quyCach: 'Hộp 20 ống',
     ghiChu: 'Hàng gãy, vỡ ống đổi cho Tân Thịnh (DP Linh Hà)',
     ...overrides,
@@ -60,7 +62,7 @@ describe('exportDamagedGoods — Biên bản Xử lý (Excel), riêng mẫu Kho 
     expect(cell(18, 'B')).toBe('W00517')
     expect(cell(18, 'C')).toBe('Falgankid')
     expect(cell(18, 'D')).toBe('020126')
-    expect(cell(18, 'E')).toBe('15/01/2029')
+    expect(cell(18, 'E')).toBe('15/01/2029') // ghi thẳng nguyên văn ô nhập tay, không reformat (khác Kho A)
     expect(cell(18, 'F')).toBe('020102') // cột Kho — khác mẫu hàng cận date, phải đúng vị trí này
     expect(cell(18, 'G')).toBe('ONG')
     expect(cell(18, 'H')).toBe('60')

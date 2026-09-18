@@ -4,100 +4,21 @@ import { supabase } from '../supabase'
 import { createAnalyticsPackagesRepository } from '../data/analyticsPackages'
 import { evaluateCompletion } from '../analytics/completionGate'
 import { buildWeekKpiPackage } from '../analytics/buildWeekKpiPackage'
-import { RefreshCw, ClipboardList, ChevronDown, ChevronUp, Download, Printer, AlertCircle, Upload, RotateCcw } from 'lucide-react'
+import { RefreshCw, ClipboardList, ChevronDown, ChevronUp, Download, Printer, Upload, RotateCcw } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { useWeeklyData } from '../useWeeklyData'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
 import { readSheetReports } from '../utils/sheetReports'
 import {
-  getCarrierFileStats, pickCarrierWeekIdByDate, carrierWeekHasRows,
+  getCarrierFileStats, pickCarrierWeekIdByDate, carrierWeekHasRows, computeFrozenNgoaiSan, getCarrierWeekRows,
 } from './CarrierStats'
+import { pct, buildDonSanNarrative, buildDonTruyenThongNarrative } from './tongDonNarrative'
+import TongDonReportDonSan from './TongDonReportDonSan'
+import TongDonReportDonTruyenThong from './TongDonReportDonTruyenThong'
 
 function readJSON(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback } catch { return fallback }
-}
-function pct(part, total) { return total ? Math.round((part / total) * 100 * 10) / 10 : 0 }
-function fmtPctSigned(v) { return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` }
-
-function deltaPctOf(previousValue, currentValue) {
-  if (previousValue) return ((currentValue - previousValue) / previousValue) * 100
-  if (currentValue > 0) return 100
-  return 0
-}
-
-function trendWord(value) {
-  return value >= 0 ? 'tăng' : 'giảm'
-}
-
-function carrierInsight({ carrier, currentTotal, previousTotal, currentDvcPct, previousDvcPct, dvcUp, noData, followUp }) {
-  if (currentTotal === 0) return noData
-  const volumeTrend = trendWord(deltaPctOf(previousTotal, currentTotal))
-  const dvcTrend = trendWord(dvcUp ? 1 : -1)
-  const followUpText = dvcUp ? followUp : ''
-  return `Đơn qua ${carrier} ${volumeTrend} từ ${previousTotal.toLocaleString('vi-VN')} lên ${currentTotal.toLocaleString('vi-VN')} đơn, tỷ lệ "đang vận chuyển" ${dvcTrend} từ ${previousDvcPct}% lên ${currentDvcPct}%${followUpText}.`
-}
-
-function buildReportNarrative(current, previous) {
-  const totalDeltaPct = deltaPctOf(previous.grandTotal, current.grandTotal)
-  const groupDeltas = [
-    { name: 'Đơn C', pct: deltaPctOf(previous.totalC, current.totalC), abs: current.totalC - previous.totalC },
-    { name: 'Đơn DTP', pct: deltaPctOf(previous.totalDTP, current.totalDTP), abs: current.totalDTP - previous.totalDTP },
-    { name: 'Sàn TMĐT (SO3+SO6)', pct: deltaPctOf(previous.totalTMDT, current.totalTMDT), abs: current.totalTMDT - previous.totalTMDT },
-  ]
-  const topGroup = [...groupDeltas].sort((a, b) => Math.abs(b.abs) - Math.abs(a.abs))[0]
-  const cDelta = groupDeltas[0]
-  const dtpDelta = groupDeltas[1]
-  const rate24hDrop = current.rate24h < previous.rate24h
-  const chuaGiaoUp = current.chuaGiao > previous.chuaGiao
-  const spxCurTotal = current.spxC?.total || 0
-  const spxPrevTotal = previous.spxC?.total || 0
-  const spxCurDVCPct = pct(current.spxC?.stats?.dangVanChuyen || 0, spxCurTotal)
-  const spxPrevDVCPct = pct(previous.spxC?.stats?.dangVanChuyen || 0, spxPrevTotal)
-  const spxDVCUp = spxCurDVCPct > spxPrevDVCPct
-  const vtpCurTotal = (current.viettelC?.total || 0) + (current.viettelDTP?.total || 0)
-  const vtpPrevTotal = (previous.viettelC?.total || 0) + (previous.viettelDTP?.total || 0)
-  const vtpCurDVC = (current.viettelC?.stats?.dangVanChuyen || 0) + (current.viettelDTP?.stats?.dangVanChuyen || 0)
-  const vtpPrevDVC = (previous.viettelC?.stats?.dangVanChuyen || 0) + (previous.viettelDTP?.stats?.dangVanChuyen || 0)
-  const vtpCurDVCPct = pct(vtpCurDVC, vtpCurTotal)
-  const vtpPrevDVCPct = pct(vtpPrevDVC, vtpPrevTotal)
-  const vtpDVCUp = vtpCurDVCPct > vtpPrevDVCPct
-  const totalTrend = trendWord(totalDeltaPct)
-  const topGroupPrefix = topGroup.pct >= 0 ? '+' : ''
-  const autoInsight1 = `Tổng đơn ${totalTrend} ${Math.abs(totalDeltaPct).toFixed(1)}%, chủ yếu ${totalDeltaPct >= 0 ? 'đến từ' : 'do'} nhóm ${topGroup.name} (${topGroupPrefix}${topGroup.pct.toFixed(1)}%).`
-  const deliveryParts = [rate24hDrop
-    ? `Tỷ lệ giao trực tiếp 24h giảm từ ${previous.rate24h.toFixed(1)}% xuống ${current.rate24h.toFixed(1)}%`
-    : `Tỷ lệ giao trực tiếp 24h ổn định/cải thiện, đạt ${current.rate24h.toFixed(1)}%`]
-  if (chuaGiaoUp) deliveryParts.push(`đơn chưa giao tăng từ ${previous.chuaGiao} lên ${current.chuaGiao} đơn`)
-  else if (current.chuaGiao > 0) deliveryParts.push(`đơn chưa giao ở mức ${current.chuaGiao} đơn`)
-  let autoInsight3 = 'Không phát sinh vấn đề đáng chú ý; các chỉ số giao hàng trong tuần ổn định.'
-  if (chuaGiaoUp && totalDeltaPct > 0) autoInsight3 = `Sản lượng đơn tăng mạnh (${topGroupPrefix}${totalDeltaPct.toFixed(1)}%) trong khi năng lực xử lý giao hàng trực tiếp chưa theo kịp, khiến số đơn chưa giao tăng.`
-  else if (rate24hDrop) autoInsight3 = `Tỷ lệ giao 24h giảm dù sản lượng ${totalTrend} ${Math.abs(totalDeltaPct).toFixed(1)}% — cần rà soát nguyên nhân chậm giao.`
-  const autoInsight4 = `Đơn C ${trendWord(cDelta.abs)} ${Math.abs(cDelta.abs).toLocaleString('vi-VN')} đơn (${fmtPctSigned(cDelta.pct)}), Đơn DTP ${trendWord(dtpDelta.abs)} ${Math.abs(dtpDelta.abs).toLocaleString('vi-VN')} đơn (${fmtPctSigned(dtpDelta.pct)}) so với tuần trước.`
-  const autoSol1 = chuaGiaoUp
-    ? `Ưu tiên xử lý ${current.chuaGiao} đơn chưa giao ngay đầu tuần tới, đặc biệt nhóm phát sinh nhiều nhất.`
-    : 'Duy trì tiến độ xử lý đơn chưa giao như tuần này.'
-  const autoSol2 = rate24hDrop
-    ? 'Rà soát SLA giao 24h, ưu tiên các đơn đã quá hạn và gom tuyến theo khu vực.'
-    : `Tiếp tục duy trì tỷ lệ giao 24h hiện tại (${current.rate24h.toFixed(1)}%).`
-  const autoSol4 = totalDeltaPct > 15
-    ? `Chuẩn bị thêm nhân sự/năng lực xử lý do sản lượng nhóm ${topGroup.name} tăng cao.`
-    : 'Theo dõi sát biến động sản lượng để chủ động bố trí nguồn lực.'
-
-  const chuaGiaoMessage = chuaGiaoUp
-    ? `Tồn "chưa giao" tăng lên ${current.chuaGiao} đơn — cần ưu tiên xử lý ngay đầu tuần tới.`
-    : `Tồn "chưa giao" đang ở mức kiểm soát được (${current.chuaGiao} đơn).`
-  const autoVerdict = `Tuần này ${totalTrend} ${Math.abs(totalDeltaPct).toFixed(1)}% so với tuần trước (${current.grandTotal.toLocaleString('vi-VN')} đơn). ${deliveryParts[0]}. ${chuaGiaoMessage}`
-  return {
-    totalDeltaPct, topGroup, rate24hDrop, chuaGiaoUp, needsAttention: chuaGiaoUp || rate24hDrop || totalDeltaPct > 15,
-    cocauWarn: (cDelta.abs >= 0) !== (dtpDelta.abs >= 0), spxCurTotal, spxDVCUp, vtpCurTotal, vtpDVCUp,
-    autoInsight1, autoInsight2: `${deliveryParts.join('; ')}.`, autoInsight3, autoInsight4,
-    autoInsight5: carrierInsight({ carrier: 'SPX Express', currentTotal: spxCurTotal, previousTotal: spxPrevTotal, currentDvcPct: spxCurDVCPct, previousDvcPct: spxPrevDVCPct, dvcUp: spxDVCUp, noData: 'Không có dữ liệu SPX Express trong tuần này.', followUp: ' — cần rà soát nguyên nhân tồn vận chuyển' }),
-    autoInsight6: carrierInsight({ carrier: 'Viettel Post', currentTotal: vtpCurTotal, previousTotal: vtpPrevTotal, currentDvcPct: vtpCurDVCPct, previousDvcPct: vtpPrevDVCPct, dvcUp: vtpDVCUp, noData: 'Không có dữ liệu Viettel Post trong tuần này.', followUp: ' — cần xác nhận năng lực xử lý' }),
-    autoSol1, autoSol2, autoSol3: 'Đối soát hằng ngày với Viettel Post và SPX cho các đơn đang vận chuyển kéo dài.', autoSol4,
-    autoSol5: 'Thiết lập KPI tuần tới: Giao 24h ≥ 80% | Chưa giao < 10% tổng đơn trực tiếp.', autoVerdict,
-    priority1: chuaGiaoUp ? 'high' : 'low', priority2: rate24hDrop ? 'high' : 'low', priority4: totalDeltaPct > 15 ? 'high' : 'low',
-  }
 }
 
 // ---- Field lưu theo tuần (dùng cho các số liệu không có sẵn trong Excel: chưa giao, hàng gửi, nhân sự, kết luận...) ----
@@ -253,6 +174,19 @@ function statsForCarrierWeekId(carrierKey, carrierType, weekId, contextEntry) {
   return findFrozenCarrierStats(weekId)
 }
 
+// Đối soát Đơn ngoại sàn (SPX COD) theo Mã đơn, mốc 1..4 — chỉ tính cho ĐÚNG 1 tuần (không so sánh 2 tuần,
+// khác với mọi số liệu khác trong tab này), vì đây là bảng "sức khoẻ vận hành" của tuần hiện tại chứ không
+// phải chỉ số so sánh. Ưu tiên dữ liệu SPX còn sống (tính trực tiếp, luôn mới nhất); nếu rows đã bị xoá
+// (Excel gốc đã dọn sau khi "Lưu số liệu tuần này") thì lấy đúng bản đã đóng băng trong báo cáo Đơn C đã lưu.
+function ngoaiSanForWeekId(spxWeekId) {
+  if (!spxWeekId) return null
+  if (carrierWeekHasRows('donC_spx', spxWeekId)) {
+    return { data: computeFrozenNgoaiSan('donC_spx', getCarrierWeekRows('donC_spx', spxWeekId)), frozen: false }
+  }
+  const report = readSheetReports('donC').find(r => r.spxWeekId === spxWeekId && r.ngoaiSanFrozen)
+  return report ? { data: report.ngoaiSanFrozen, frozen: true } : null
+}
+
 function buildGroups(data) {
   const g = { tructiep: [], chanhxe: [], viettel: [], spx: [] }
   for (const row of data) g[partnerType(row)]?.push(row)
@@ -295,7 +229,8 @@ function trucTiepStatsFor(entry) {
   return { b: trucTiepBuckets(groups.tructiep), chanhXeCount: groups.chanhxe.length }
 }
 
-// Tổng hợp toàn bộ chỉ số cho 1 tuần (Đơn C + Đơn DTP), có thể là tuần hiện tại hoặc tuần trước
+// Tổng hợp toàn bộ chỉ số cho 1 tuần (Đơn C + Đơn DTP), có thể là tuần hiện tại hoặc tuần trước — dùng
+// nguyên vẹn cho cả 2 báo cáo (Đơn sàn đọc totalTMDT/spxC, Đơn truyền thống đọc phần còn lại)
 function computeWeekReport({ entryC, entryDTP, tmdtTotal, viettelCompareC, spxCompareC, viettelCompareDTP }) {
   const weekIdC = entryC?.id || 'live'
   const weekIdDTP = entryDTP?.id || 'live'
@@ -341,328 +276,6 @@ function computeWeekReport({ entryC, entryDTP, tmdtTotal, viettelCompareC, spxCo
   }
 }
 
-// ---------- Design system: 2 màu nhất quán cho toàn bộ báo cáo — CURRENT = xanh lá (kỳ hiện tại/tuần này),
-// PREVIOUS = cam (kỳ so sánh/tuần trước). Không dùng màu nền/viền riêng theo từng khối nội dung nữa — chỉ
-// còn 3 cấp chữ (số liệu lớn → tiêu đề → mô tả) và màu trạng thái (tăng/giảm, mức ưu tiên) mang ý nghĩa dữ liệu. ----------
-const CURRENT_COLOR = 'var(--color-current, #16a67a)'
-const PREVIOUS_COLOR = 'var(--color-previous, #e8912a)'
-const TONE = {
-  '24h': 'var(--color-current, #16a67a)', '48h': 'var(--color-previous, #e8912a)', '72h': 'var(--color-red, #e14b4b)', dangVanChuyen: 'var(--text-secondary, #6b7280)',
-  chuaGiao: 'var(--text-secondary, #6b7280)', giaoLai: 'var(--color-purple, #7c5cd6)', hoanHang: 'var(--color-red, #e14b4b)', choLay: 'var(--color-blue, #3b6fd6)',
-}
-
-// Cấp 3: legend biểu đồ dùng chung 1 kiểu duy nhất cho mọi section (chấm màu vuông nhỏ + nhãn)
-function ChartLegend({ items }) {
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1">
-      {items.map((l) => (
-        <span key={l.label} className="text-[10px] flex items-center gap-1" style={{ color: 'var(--text-secondary, #6b7280)' }}>
-          <span className="w-1.5 h-1.5 rounded-sm inline-block shrink-0" style={{ background: l.color }} />{l.label}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-function KpiCard({ label, cur, prev }) {
-  let delta = 0
-  if (prev) delta = ((cur - prev) / prev) * 100
-  else if (cur > 0) delta = 100
-  const up = delta >= 0
-  return (
-    <div className="tongdon-kpi min-w-0 rounded-xl p-5" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))', border: '1px solid var(--border-color, #e5e7eb)' }}>
-      <div className="text-[13px] mb-1.5" style={{ color: 'var(--text-secondary, #6b7280)' }}>{label}</div>
-      <div className="flex items-baseline gap-2 mb-1.5">
-        <span className="font-bold text-[28px] leading-[1.1]" style={{ color: 'var(--text-primary, #1a1d23)' }}>{cur.toLocaleString('vi-VN')}</span>
-        <span className="text-[16px]" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>/ {prev.toLocaleString('vi-VN')}</span>
-      </div>
-      <span className="text-[13px] font-semibold mt-1.5 block" style={{ color: up ? 'var(--color-current, #16a67a)' : 'var(--color-red, #e14b4b)' }}>
-        {up ? '▲' : '▼'} {Math.abs(cur - prev).toLocaleString('vi-VN')} đơn ({fmtPctSigned(delta)})
-      </span>
-    </div>
-  )
-}
-
-// Tiêu đề trang: chữ đen thường (không banner màu), chấm xanh lá/cam ở góc phải chú thích kỳ hiện tại/so sánh
-function PageHeader({ title, editable, onTitleChange, subtitle, currentDate, previousDate }) {
-  return (
-    <div className="tongdon-page-header flex items-start justify-between gap-4 flex-wrap pb-4" style={{ borderBottom: '1px solid var(--border-color, #e5e7eb)' }}>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Báo cáo giao ban tuần</div>
-        {editable ? (
-          <input
-            value={title} onChange={e => onTitleChange(e.target.value)}
-            className="text-[28px] font-bold border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded px-1 bg-transparent w-full my-1"
-            style={{ color: 'var(--text-primary, #1a1d23)' }}
-          />
-        ) : (
-          <h2 className="text-[28px] font-bold my-1" style={{ color: 'var(--text-primary, #1a1d23)' }}>{title}</h2>
-        )}
-        <p className="text-[13px]" style={{ color: 'var(--text-secondary, #6b7280)' }}>{subtitle}</p>
-      </div>
-      <div className="flex gap-4 shrink-0 text-[13px] items-center" style={{ color: 'var(--text-secondary, #6b7280)' }}>
-        <span className="flex items-center">
-          <span className="w-2 h-2 rounded-full shrink-0 mr-1.5" style={{ background: CURRENT_COLOR }} />
-          Tuần này{currentDate ? ` · ${currentDate}` : ''}
-        </span>
-        <span className="flex items-center">
-          <span className="w-2 h-2 rounded-full shrink-0 mr-1.5" style={{ background: PREVIOUS_COLOR }} />
-          Tuần trước{previousDate ? ` · ${previousDate}` : ''}
-        </span>
-      </div>
-    </div>
-  )
-}
-
-// Tiêu đề khối nội dung: chữ đen thường, không nền màu/số tròn — chỉ eyebrow nhỏ + tiêu đề đậm
-function SectionHeading({ id, eyebrow, title, subtitle }) {
-  return (
-    <div className="tongdon-section-heading mb-4">
-      {eyebrow && <div className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{eyebrow}</div>}
-      <h3 id={id} className="font-bold text-xl" style={{ color: 'var(--text-primary, #1a1d23)' }}>{title}</h3>
-      {subtitle && <p className="text-[13px] mt-1" style={{ color: 'var(--text-secondary, #6b7280)' }}>{subtitle}</p>}
-    </div>
-  )
-}
-
-function BreakdownRow({ name, sub, value, pctOfTotal, color, chips, showDetails }) {
-  return (
-    <div className="mb-3 last:mb-0">
-      <div className="grid grid-cols-[110px_1fr_66px] items-center gap-3">
-        <div className="text-[13px] font-medium leading-tight" style={{ color: 'var(--text-primary, #1a1d23)' }}>
-          {name}<span className="tongdon-breakdown-sub block text-[10px] font-normal mt-0.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }} hidden={!showDetails}>{sub}</span>
-        </div>
-        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--border-color, #e5e7eb)' }}>
-          <div className="h-full rounded-full" style={{ width: `${Math.min(pctOfTotal, 100)}%`, background: color }} />
-        </div>
-        <div className="text-[13px] text-right" style={{ color: 'var(--text-primary, #1a1d23)' }}>{value.toLocaleString('vi-VN')}</div>
-      </div>
-      {chips && chips.length > 0 && (
-        <div className="tongdon-breakdown-chips flex flex-wrap gap-1.5 mt-1.5 pl-30.5" hidden={!showDetails}>
-          {chips.map((c) => (
-            <span key={c} className="text-[10px] rounded px-1.5 py-0.5" style={{ color: 'var(--text-secondary, #6b7280)', background: 'var(--bg-card-subtle, #fafbfc)' }}>{c}</span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function StackBar({ segments }) {
-  const total = segments.reduce((s, x) => s + (x.value || 0), 0)
-  return (
-    <div className="flex overflow-hidden rounded-full" style={{ height: '10px', background: 'var(--border-color, #e5e7eb)' }}>
-      {total > 0 && segments.map((s) => s.value > 0 && (
-        <div key={s.label} style={{ width: `${(s.value / total) * 100}%`, background: s.color }} title={`${s.label || ''}: ${s.value}`} />
-      ))}
-    </div>
-  )
-}
-
-function CarrierBlock({ color, name, total, groups, legend }) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-2">
-        <span className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: 'var(--text-primary, #1a1d23)' }}>
-          <span className="w-1.5 h-1.5 rounded-sm inline-block" style={{ background: color }} />{name}
-        </span>
-        <span className="text-xs" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{total.toLocaleString('vi-VN')} đơn</span>
-      </div>
-      <div className="flex flex-col gap-2.5">
-        {groups.map((g) => (
-          <div key={g.label}>
-            <div className="flex justify-between text-[11px] mb-1" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>
-              <span>{g.label} — {g.value.toLocaleString('vi-VN')} ({g.pctOfTotal}%)</span>
-            </div>
-            <StackBar segments={g.segments} />
-          </div>
-        ))}
-      </div>
-      <div className="mt-2">
-        <ChartLegend items={legend} />
-      </div>
-    </div>
-  )
-}
-
-// R = kết quả computeWeekReport cho 1 tuần (current hoặc previous)
-// Thẻ "Tổng quan đơn hàng" — pill tiêu đề màu (xanh lá/cam theo kỳ) gắn liền phần thân trắng bên dưới thành 1 khối bo tròn
-function WeekSummaryCard({ label, tag, color, bg, R, detailsOpen, detailsId, onToggleDetails }) {
-  return (
-    <div className="tongdon-week-summary rounded-2xl p-6" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))', border: '1px solid var(--border-color, #e5e7eb)', borderTop: `3px solid ${color}` }}>
-      <div className="flex items-center justify-between mb-4">
-        <span className="font-bold text-lg" style={{ color: 'var(--text-primary, #1a1d23)' }}>{label}</span>
-        <span className="text-[11px] font-bold px-2.5 py-0.75 rounded-full tracking-wide" style={{ background: bg, color }}>{tag}</span>
-      </div>
-      <div className="text-xs uppercase tracking-wide font-semibold mb-3" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>Tổng quan đơn hàng</div>
-      <div className="flex items-baseline gap-2 pb-4 mb-4" style={{ borderBottom: '1px solid var(--border-color, #e5e7eb)' }}>
-        <span className="font-bold text-4xl" style={{ color: 'var(--text-primary, #1a1d23)' }}>{R.grandTotal.toLocaleString('vi-VN')}</span>
-        <span className="text-xs" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>đơn kho HCM</span>
-      </div>
-      <BreakdownRow name="Đơn C" sub={`${pct(R.totalC, R.grandTotal)}% tổng đơn kho`} value={R.totalC} pctOfTotal={pct(R.totalC, R.grandTotal)} color="var(--color-blue, #3b6fd6)" showDetails={detailsOpen}
-        chips={[`Trực tiếp ${R.tructiepTotalC.toLocaleString('vi-VN')}`, `Chành xe ${R.chanhXeTotal.toLocaleString('vi-VN')}`, `COD (VTP,SPX) ${R.codC.toLocaleString('vi-VN')}`]} />
-      <BreakdownRow name="Đơn DTP" sub={`${pct(R.totalDTP, R.grandTotal)}% tổng đơn kho`} value={R.totalDTP} pctOfTotal={pct(R.totalDTP, R.grandTotal)} color="var(--color-purple, #7c5cd6)" showDetails={detailsOpen}
-        chips={[`Trực tiếp ${R.tructiepTotalDTP.toLocaleString('vi-VN')}`, `COD Viettelpost ${R.codDTP.toLocaleString('vi-VN')}`]} />
-      <BreakdownRow name="SO3 + SO6" sub="Shopee, TikTok" value={R.totalTMDT} pctOfTotal={pct(R.totalTMDT, R.grandTotal)} color={color} showDetails={detailsOpen} />
-      <button
-        type="button"
-        className="tongdon-period-details-toggle"
-        aria-expanded={detailsOpen}
-        aria-controls={detailsId}
-        onClick={onToggleDetails}
-      >
-        {detailsOpen ? 'Ẩn chi tiết' : 'Chi tiết'}
-      </button>
-    </div>
-  )
-}
-
-// 3 thẻ chi tiết theo kênh (Giao trực tiếp / Viettel Post / SPX Express) — mỗi thẻ tách riêng, có viền/bóng
-// và khoảng cách rõ ràng, không gộp chung 1 khối như WeekSummaryCard nữa (đúng bố cục mẫu tham khảo)
-function WeekDetailCards({ R }) {
-  const tructiepTotal = R.tructiepTotalC + R.tructiepTotalDTP
-  const vtpTotal = (R.viettelC?.total || 0) + (R.viettelDTP?.total || 0)
-  const spxTotal = R.spxC?.total || 0
-
-  const vtpSegments = (stats) => stats ? [
-    { value: stats['24h'], color: TONE['24h'], label: '24h' },
-    { value: stats['48h'], color: TONE['48h'], label: '48h' },
-    { value: stats['72h'], color: TONE['72h'], label: '72h' },
-    { value: stats.dangVanChuyen, color: TONE.dangVanChuyen, label: 'Đang vận chuyển' },
-    { value: stats.choLay || 0, color: TONE.choLay, label: 'Chờ lấy' },
-    { value: stats.giaoLai, color: TONE.giaoLai, label: 'Đang giao hàng' },
-    { value: stats.hoanHang, color: TONE.hoanHang, label: 'Hoàn hàng' },
-  ] : []
-
-  return (
-    <div className="tongdon-week-details space-y-4">
-      <div className="tongdon-carrier-panel rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #e5e7eb)' }}>
-        <CarrierBlock color={TONE['24h']} name="Giao hàng trực tiếp" total={tructiepTotal}
-          groups={[
-            { label: 'Đơn C', value: R.tructiepTotalC, pctOfTotal: pct(R.tructiepTotalC, tructiepTotal),
-              segments: [
-                { value: R.bC[24], color: TONE['24h'], label: '24h' },
-                { value: R.bC[48], color: TONE['48h'], label: '48h' },
-                { value: R.bC[72], color: TONE['72h'], label: '72h' },
-                { value: R.chuaGiaoC, color: TONE.chuaGiao, label: 'Chưa giao' },
-              ] },
-            { label: 'Đơn DTP', value: R.tructiepTotalDTP, pctOfTotal: pct(R.tructiepTotalDTP, tructiepTotal),
-              segments: [
-                { value: R.bDTP[24], color: TONE['24h'], label: '24h' },
-                { value: R.bDTP[48], color: TONE['48h'], label: '48h' },
-                { value: R.bDTP[72], color: TONE['72h'], label: '72h' },
-                { value: R.chuaGiaoDTP, color: TONE.chuaGiao, label: 'Chưa giao' },
-              ] },
-          ]}
-          legend={[
-            { label: 'Giao 24h', color: TONE['24h'] }, { label: 'Giao 48h', color: TONE['48h'] },
-            { label: 'Giao 72h', color: TONE['72h'] }, { label: `Chưa giao (${R.chuaGiao} đơn)`, color: TONE.chuaGiao },
-          ]}
-        />
-      </div>
-
-      <div className="tongdon-carrier-panel rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #e5e7eb)' }}>
-        <CarrierBlock color={TONE.giaoLai} name="Viettel Post" total={vtpTotal}
-          groups={[
-            R.viettelC && { label: 'Đơn C', value: R.viettelC.total, pctOfTotal: pct(R.viettelC.total, vtpTotal), segments: vtpSegments(R.viettelC.stats) },
-            R.viettelDTP && { label: 'Đơn DTP', value: R.viettelDTP.total, pctOfTotal: pct(R.viettelDTP.total, vtpTotal), segments: vtpSegments(R.viettelDTP.stats) },
-          ].filter(Boolean)}
-          legend={[
-            { label: '24h', color: TONE['24h'] }, { label: '48h', color: TONE['48h'] }, { label: '72h', color: TONE['72h'] },
-            { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Chờ lấy', color: TONE.choLay },
-            { label: 'Đang giao hàng', color: TONE.giaoLai }, { label: 'Hoàn hàng', color: TONE.hoanHang },
-          ]}
-        />
-      </div>
-
-      {R.spxC && (
-        <div className="tongdon-carrier-panel rounded-lg p-4" style={{ background: 'var(--bg-card-subtle, #fafbfc)', border: '1px solid var(--border-color, #e5e7eb)' }}>
-          <CarrierBlock color="var(--color-previous, #e8912a)" name="SPX Express" total={spxTotal}
-            groups={[{ label: 'Đơn C', value: R.spxC.total, pctOfTotal: 100, segments: vtpSegments(R.spxC.stats) }]}
-            legend={[
-              { label: '24h', color: TONE['24h'] }, { label: '48h', color: TONE['48h'] }, { label: '72h', color: TONE['72h'] },
-              { label: 'Đang vận chuyển', color: TONE.dangVanChuyen }, { label: 'Đang giao hàng', color: TONE.giaoLai },
-            ]}
-          />
-        </div>
-      )}
-    </div>
-  )
-}
-
-const INSIGHT_TONE = { pos: 'var(--color-current, #16a67a)', neg: 'var(--color-red, #e14b4b)', warn: 'var(--color-previous, #e8912a)', neutral: 'var(--text-secondary, #6b7280)' }
-
-function InsightCardV2({ tag, tone, title, body, onBodyChange, placeholder, expanded, insightId, onToggle }) {
-  const c = INSIGHT_TONE[tone] || INSIGHT_TONE.neutral
-  const isEditable = Boolean(onBodyChange)
-  return (
-    <div className="tongdon-insight min-w-0 rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))', border: '1px solid var(--border-color, #e5e7eb)', borderLeft: `3px solid ${c}` }}>
-      <span className="block text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{tag}</span>
-      <div className="text-[15px] font-semibold mb-1.5 leading-snug" style={{ color: 'var(--text-primary, #1a1d23)' }}>{title}</div>
-      {!isEditable && (
-        <button type="button" className="tongdon-insight-toggle" aria-expanded={Boolean(expanded)} aria-controls={insightId} onClick={onToggle}>
-          {expanded ? 'Thu gọn' : 'Mở rộng'}
-        </button>
-      )}
-      <div id={insightId} className="tongdon-insight-body" hidden={!isEditable && !expanded}>
-        {isEditable ? (
-          <textarea
-            value={body} onChange={e => onBodyChange(e.target.value)} placeholder={placeholder} rows={3}
-            className="w-full text-[13px] leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
-            style={{ color: 'var(--text-secondary, #6b7280)' }}
-          />
-        ) : (
-          <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary, #6b7280)' }}>{body}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function VerdictBox({ text, onChange }) {
-  return (
-    <div className="tongdon-verdict rounded-xl py-4 px-6" style={{ background: 'var(--color-current-bg, #e8f7f1)', borderLeft: `4px solid ${CURRENT_COLOR}` }}>
-      <div className="flex items-center gap-1.5 font-bold text-sm mb-2" style={{ color: CURRENT_COLOR }}>
-        <span>✓</span> KẾT LUẬN
-      </div>
-      {onChange ? (
-        <textarea
-          value={text} onChange={e => onChange(e.target.value)} rows={3}
-          className="w-full text-sm leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
-          style={{ color: 'var(--text-primary, #1a1d23)' }}
-        />
-      ) : (
-        <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary, #1a1d23)' }}>{text}</p>
-      )}
-    </div>
-  )
-}
-
-const PRIORITY = {
-  high: { label: 'Ưu tiên cao', bg: 'var(--color-red-bg, #fceaea)', color: 'var(--color-red, #e14b4b)' },
-  mid: { label: 'Ưu tiên vừa', bg: 'var(--color-previous-bg, #fdf1e2)', color: 'var(--color-previous, #e8912a)' },
-  low: { label: 'Theo dõi', bg: '#f1f2f4', color: 'var(--text-secondary, #6b7280)' },
-}
-
-function PlanItem({ num, text, onChange, priority }) {
-  const pr = PRIORITY[priority] || PRIORITY.low
-  return (
-    <div className="tongdon-plan-item p-4 grid grid-cols-[24px_1fr_92px] gap-4 items-start" style={{ background: 'var(--bg-card, #ffffff)', borderBottom: '1px solid var(--border-color, #e5e7eb)' }}>
-      <span className="font-bold text-[13px] leading-tight" style={{ color: 'var(--text-tertiary, #9ca3af)' }}>{String(num).padStart(2, '0')}</span>
-      {onChange ? (
-        <textarea
-          value={text} onChange={e => onChange(e.target.value)} rows={2}
-          className="w-full text-[13px] leading-relaxed resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded bg-transparent"
-          style={{ color: 'var(--text-secondary, #6b7280)' }}
-        />
-      ) : (
-        <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary, #6b7280)' }}>{text}</p>
-      )}
-      <span className="text-[11px] font-bold text-center px-3 py-1 rounded-full h-fit" style={{ background: pr.bg, color: pr.color }}>{pr.label}</span>
-    </div>
-  )
-}
-
 function SourceRow({ label, pick }) {
   if (pick.options.length === 0) {
     return (
@@ -698,7 +311,7 @@ function SourceRow({ label, pick }) {
 // tự khớp theo ngày của Đơn C/DTP tương ứng — xem chi tiết thì qua đúng tab tương ứng, không lặp lại ở đây.
 function DataSourcePicker({ open, onToggle, donCPick, donDTPPick, tmdtPick }) {
   return (
-    <div className="tongdon-source-picker rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))' }}>
+    <div className="tdr-source-picker rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))' }}>
       <button type="button" onClick={onToggle} className="w-full flex items-center justify-between text-left">
         <span className="text-sm font-semibold" style={{ color: 'var(--text-primary, #1a1d23)' }}>Chọn tuần so sánh — Viettel Post/SPX tự khớp theo tuần Đơn C/DTP</span>
         {open ? <ChevronUp size={15} className="text-gray-400 shrink-0" /> : <ChevronDown size={15} className="text-gray-400 shrink-0" />}
@@ -768,6 +381,8 @@ export default function TongDonTab({ onNavigate }) {
   const viettelDTP_current = useMemo(() => ({ weekId: viettelDTPWeekIdCurrent, stats: statsForCarrierWeekId('donDTP_viettel', 'viettel', viettelDTPWeekIdCurrent, donDTPCurrentEntry) }), [viettelDTPWeekIdCurrent, donDTPCurrentEntry])
   const viettelDTP_previous = useMemo(() => ({ weekId: viettelDTPWeekIdPrevious, stats: statsForCarrierWeekId('donDTP_viettel', 'viettel', viettelDTPWeekIdPrevious, donDTPPreviousEntry) }), [viettelDTPWeekIdPrevious, donDTPPreviousEntry])
 
+  const ngoaiSanCurrent = useMemo(() => ngoaiSanForWeekId(spxCWeekIdCurrent), [spxCWeekIdCurrent])
+
   const liveCurrent = useMemo(() => computeWeekReport({
     entryC: donCCurrentEntry, entryDTP: donDTPCurrentEntry, tmdtTotal: tmdtCurrent,
     viettelCompareC: viettelC_current.stats, spxCompareC: spxC_current.stats, viettelCompareDTP: viettelDTP_current.stats,
@@ -779,9 +394,7 @@ export default function TongDonTab({ onNavigate }) {
   }), [donCPreviousEntry, donDTPPreviousEntry, tmdtPrev, viettelC_previous.stats, spxC_previous.stats, viettelDTP_previous.stats])
 
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false)
-  const [operationsView, setOperationsView] = useState('insights')
-  const [periodDetails, setPeriodDetails] = useState({ current: false, previous: false })
-  const [expandedInsights, setExpandedInsights] = useState({})
+  const [activeTab, setActiveTab] = useState('donsan')
 
   // ---- Báo cáo đã lưu: chỉ giữ ĐÚNG 1 bản (tuần mới nhất đã lưu), không lưu thành danh sách lịch sử.
   // Mỗi tuần chỉ lưu 1 lần — hễ đúng weekKey đã lưu thì tự động khoá lại (read-only), không có nút quay lại
@@ -803,18 +416,72 @@ export default function TongDonTab({ onNavigate }) {
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState('')
 
-  // Xuất dashboard Tổng đơn thành 1 ảnh PNG để đính kèm/gửi báo cáo, không cần chụp màn hình tay
-  const exportRef = useRef(null)
+  const current = snapshot ? snapshot.current : liveCurrent
+  const previous = snapshot ? snapshot.previous : livePrevious
+  const ngoaiSan = snapshot ? snapshot.donSan?.ngoaiSan : ngoaiSanCurrent
+
+  const donSanAuto = useMemo(() => buildDonSanNarrative(current, previous, ngoaiSan), [current, previous, ngoaiSan])
+  const truyenThongAuto = useMemo(() => buildDonTruyenThongNarrative(current, previous), [current, previous])
+
+  // Mỗi trường chữ (nhận định/kết luận/giải pháp) của 2 báo cáo đều sửa tay được và lưu riêng theo tuần —
+  // liệt kê tường minh từng useWeekField (không gọi trong vòng lặp) để đúng luật Rules of Hooks.
+  const [donSan_tmdtBodyLive, setDonSanTmdtBody] = useWeekField(weekKey, 'donsan_tmdtBody', donSanAuto.tmdtBody)
+  const [donSan_ngoaiSanBodyLive, setDonSanNgoaiSanBody] = useWeekField(weekKey, 'donsan_ngoaiSanBody', donSanAuto.ngoaiSanBody)
+  const [donSan_reconNoteLive, setDonSanReconNote] = useWeekField(weekKey, 'donsan_reconNote', donSanAuto.reconNote)
+  const [donSan_verdictLive, setDonSanVerdict] = useWeekField(weekKey, 'donsan_verdict', donSanAuto.verdict)
+  const [donSan_sol1Live, setDonSanSol1] = useWeekField(weekKey, 'donsan_sol1', donSanAuto.sol1)
+  const [donSan_sol2Live, setDonSanSol2] = useWeekField(weekKey, 'donsan_sol2', donSanAuto.sol2)
+  const [donSan_sol3Live, setDonSanSol3] = useWeekField(weekKey, 'donsan_sol3', donSanAuto.sol3)
+  const [donSan_sol4Live, setDonSanSol4] = useWeekField(weekKey, 'donsan_sol4', donSanAuto.sol4)
+
+  const [tt_cocauBodyLive, setTtCocauBody] = useWeekField(weekKey, 'truyenthong_cocauBody', truyenThongAuto.cocauBody)
+  const [tt_dtpBodyLive, setTtDtpBody] = useWeekField(weekKey, 'truyenthong_dtpBody', truyenThongAuto.dtpBody)
+  const [tt_cBodyLive, setTtCBody] = useWeekField(weekKey, 'truyenthong_cBody', truyenThongAuto.cBody)
+  const [tt_vtpBodyLive, setTtVtpBody] = useWeekField(weekKey, 'truyenthong_vtpBody', truyenThongAuto.vtpBody)
+  const [tt_verdictLive, setTtVerdict] = useWeekField(weekKey, 'truyenthong_verdict', truyenThongAuto.verdict)
+  const [tt_sol1Live, setTtSol1] = useWeekField(weekKey, 'truyenthong_sol1', truyenThongAuto.sol1)
+  const [tt_sol2Live, setTtSol2] = useWeekField(weekKey, 'truyenthong_sol2', truyenThongAuto.sol2)
+  const [tt_sol3Live, setTtSol3] = useWeekField(weekKey, 'truyenthong_sol3', truyenThongAuto.sol3)
+  const [tt_sol4Live, setTtSol4] = useWeekField(weekKey, 'truyenthong_sol4', truyenThongAuto.sol4)
+
+  const donSanFieldsLive = {
+    tmdtBody: donSan_tmdtBodyLive, ngoaiSanBody: donSan_ngoaiSanBodyLive, reconNote: donSan_reconNoteLive, verdict: donSan_verdictLive,
+    sol1: donSan_sol1Live, sol2: donSan_sol2Live, sol3: donSan_sol3Live, sol4: donSan_sol4Live,
+  }
+  const donSanSetters = {
+    tmdtBody: setDonSanTmdtBody, ngoaiSanBody: setDonSanNgoaiSanBody, reconNote: setDonSanReconNote, verdict: setDonSanVerdict,
+    sol1: setDonSanSol1, sol2: setDonSanSol2, sol3: setDonSanSol3, sol4: setDonSanSol4,
+  }
+  const truyenThongFieldsLive = {
+    cocauBody: tt_cocauBodyLive, dtpBody: tt_dtpBodyLive, cBody: tt_cBodyLive, vtpBody: tt_vtpBodyLive, verdict: tt_verdictLive,
+    sol1: tt_sol1Live, sol2: tt_sol2Live, sol3: tt_sol3Live, sol4: tt_sol4Live,
+  }
+  const truyenThongSetters = {
+    cocauBody: setTtCocauBody, dtpBody: setTtDtpBody, cBody: setTtCBody, vtpBody: setTtVtpBody, verdict: setTtVerdict,
+    sol1: setTtSol1, sol2: setTtSol2, sol3: setTtSol3, sol4: setTtSol4,
+  }
+
+  const donSanFields = snapshot ? snapshot.donSan : donSanFieldsLive
+  const truyenThongFields = snapshot ? snapshot.truyenThong : truyenThongFieldsLive
+
+  const handleDonSanFieldChange = (key, value) => { donSanSetters[key]?.(value) }
+  const handleTruyenThongFieldChange = (key, value) => { truyenThongSetters[key]?.(value) }
+
+  // Xuất báo cáo đang mở (Đơn sàn/Đơn truyền thống) thành 1 ảnh PNG để đính kèm/gửi báo cáo
+  const exportRefDonSan = useRef(null)
+  const exportRefTruyenThong = useRef(null)
   const [exporting, setExporting] = useState(false)
   const handleExportImage = async () => {
-    if (!exportRef.current) return
+    const node = activeTab === 'donsan' ? exportRefDonSan.current : exportRefTruyenThong.current
+    if (!node) return
     setExporting(true)
     try {
       await new Promise((resolve) => requestAnimationFrame(resolve))
-      const dataUrl = await toPng(exportRef.current, { backgroundColor: '#f5f6f8', pixelRatio: 2 })
+      const dataUrl = await toPng(node, { backgroundColor: '#ffffff', pixelRatio: 2 })
       const a = document.createElement('a')
+      const suffix = activeTab === 'donsan' ? 'DonSan' : 'DonTruyenThong'
       a.href = dataUrl
-      a.download = `TongDon_${(reportTitle || 'BaoCao').replace(/[^\p{L}\p{N}]+/gu, '_')}.png`
+      a.download = `${suffix}_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '_')}.png`
       a.click()
     } catch {
       window.alert('Không xuất được ảnh, vui lòng thử lại.')
@@ -823,74 +490,15 @@ export default function TongDonTab({ onNavigate }) {
     }
   }
 
-  const current = snapshot ? snapshot.current : liveCurrent
-  const previous = snapshot ? snapshot.previous : livePrevious
-
-  // Trường nhập tay theo tuần hiện tại
-  const [reportTitleLive, setReportTitle] = useWeekField(weekKey, 'title', 'Báo cáo giao hàng - CN HCM')
-  const reportTitle = snapshot ? snapshot.title : reportTitleLive
-
-  const narrative = buildReportNarrative(current, previous)
-  const {
-    totalDeltaPct, topGroup, rate24hDrop, chuaGiaoUp, needsAttention, cocauWarn,
-    spxCurTotal, spxDVCUp, vtpCurTotal, vtpDVCUp,
-    autoInsight1, autoInsight2, autoInsight3, autoInsight4,
-    autoInsight5, autoInsight6, autoSol1, autoSol2, autoSol3, autoSol4, autoSol5,
-    autoVerdict, priority1, priority2, priority4,
-  } = narrative
-
-  let attentionReason = 'sản lượng biến động mạnh'
-  if (chuaGiaoUp) attentionReason = 'tồn đơn chưa giao đang tăng'
-  else if (rate24hDrop) attentionReason = 'tốc độ giao 24h đang giảm'
-
-  let spxTone = 'pos'
-  if (spxCurTotal === 0) spxTone = 'neutral'
-  else if (spxDVCUp) spxTone = 'warn'
-
-  let vtpTone = 'pos'
-  if (vtpCurTotal === 0) vtpTone = 'neutral'
-  else if (vtpDVCUp) vtpTone = 'warn'
-
-  const insight3Tone = chuaGiaoUp && totalDeltaPct > 0 ? 'warn' : 'neutral'
-
-  const [insight1Live, setInsight1] = useWeekField(weekKey, 'insight1', autoInsight1)
-  const [insight2Live, setInsight2] = useWeekField(weekKey, 'insight2', autoInsight2)
-  const [insight3Live, setInsight3] = useWeekField(weekKey, 'insight3', autoInsight3)
-  const [insight4Live, setInsight4] = useWeekField(weekKey, 'insight4', autoInsight4)
-  const [insight5Live, setInsight5] = useWeekField(weekKey, 'insight5', autoInsight5)
-  const [insight6Live, setInsight6] = useWeekField(weekKey, 'insight6', autoInsight6)
-  const insight1 = snapshot ? snapshot.insight1 : insight1Live
-  const insight2 = snapshot ? snapshot.insight2 : insight2Live
-  const insight3 = snapshot ? snapshot.insight3 : insight3Live
-  const insight4 = snapshot ? snapshot.insight4 : insight4Live
-  const insight5 = snapshot ? snapshot.insight5 : insight5Live
-  const insight6 = snapshot ? snapshot.insight6 : insight6Live
-
-  const [sol1Live, setSol1] = useWeekField(weekKey, 'sol1', autoSol1)
-  const [sol2Live, setSol2] = useWeekField(weekKey, 'sol2', autoSol2)
-  const [sol3Live, setSol3] = useWeekField(weekKey, 'sol3', autoSol3)
-  const [sol4Live, setSol4] = useWeekField(weekKey, 'sol4', autoSol4)
-  const [sol5Live, setSol5] = useWeekField(weekKey, 'sol5', autoSol5)
-  const sol1 = snapshot ? snapshot.sol1 : sol1Live
-  const sol2 = snapshot ? snapshot.sol2 : sol2Live
-  const sol3 = snapshot ? snapshot.sol3 : sol3Live
-  const sol4 = snapshot ? snapshot.sol4 : sol4Live
-  const sol5 = snapshot ? snapshot.sol5 : sol5Live
-
-  const [verdictLive, setVerdict] = useWeekField(weekKey, 'verdict', autoVerdict)
-  const verdict = snapshot ? snapshot.verdict : verdictLive
-
   const saveReport = async () => {
     const id = String(Date.now())
-    const label = `${reportTitleLive || 'Báo cáo'} · ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+    const label = `Báo cáo giao hàng - CN HCM · ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
     const entry = {
       id, weekKey, createdAt: new Date().toISOString(), label,
       current: liveCurrent, previous: livePrevious,
-      title: reportTitleLive,
-      insight1: insight1Live, insight2: insight2Live, insight3: insight3Live,
-      insight4: insight4Live, insight5: insight5Live, insight6: insight6Live,
-      verdict: verdictLive,
-      sol1: sol1Live, sol2: sol2Live, sol3: sol3Live, sol4: sol4Live, sol5: sol5Live,
+      title: 'Báo cáo giao hàng - CN HCM',
+      donSan: { ngoaiSan: ngoaiSanCurrent, ...donSanFieldsLive },
+      truyenThong: { ...truyenThongFieldsLive },
     }
     const next = [entry]
     setSavingReport(true)
@@ -953,6 +561,11 @@ export default function TongDonTab({ onNavigate }) {
     )
   }
 
+  const fmtDate = (at) => (at && !Number.isNaN(new Date(at).getTime()) ? new Date(at).toLocaleDateString('vi-VN') : null)
+  const currentPeriodLabel = !isReadOnly ? fmtDate(donCCurrentEntry?.at) : null
+  const previousPeriodLabel = !isReadOnly ? fmtDate(donCPreviousEntry?.at) : null
+  const savedAtLabel = isReadOnly ? new Date(snapshot.createdAt).toLocaleString('vi-VN') : null
+
   let publishBtnText = 'Công bố cho phân tích'
   if (isPublished) publishBtnText = 'Đã công bố cho phân tích'
   else if (publishing) publishBtnText = 'Đang công bố...'
@@ -970,9 +583,22 @@ export default function TongDonTab({ onNavigate }) {
   }
 
   return (
-    <div className={`tongdon-tab ${isReadOnly ? 'is-saved-report' : ''}`}>
-      <div className="tongdon-shell">
-        <div className="tongdon-toolbar" aria-label="Thao tác báo cáo Tổng đơn">
+    <div className="tdr-tab">
+      <div className="tdr-controls">
+        <div className="tdr-tabswitch">
+          <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn sàn</button>
+          <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
+        </div>
+        {!isReadOnly && (
+          <DataSourcePicker
+            open={sourcePickerOpen}
+            onToggle={() => setSourcePickerOpen(o => !o)}
+            donCPick={donCPick}
+            donDTPPick={donDTPPick}
+            tmdtPick={tmdtPick}
+          />
+        )}
+        <div className="tdr-toolbar">
           {isReadOnly ? (
             <>
               <button
@@ -980,133 +606,67 @@ export default function TongDonTab({ onNavigate }) {
                 type="button"
                 disabled={!completion.ok || publishing || isPublished}
                 title={publishTitle}
-                className="tongdon-action is-publish"
+                className="tdr-btn is-publish"
               >
                 <ClipboardList size={13} /> {publishBtnText}
               </button>
               <button
                 type="button"
                 onClick={deleteReport}
-                className="tongdon-action is-reselect"
+                className="tdr-btn is-reselect"
                 title="Xoá báo cáo đã lưu để chọn lại tuần so sánh và làm lại (dùng khi lỡ chọn nhầm tuần)"
               >
-                <RotateCcw size={13} /> Chọn lại & làm lại
+                <RotateCcw size={13} /> Chọn lại &amp; làm lại
               </button>
               {onNavigate && (
-                <button type="button" onClick={() => onNavigate('donC')} className="tongdon-action is-primary">
+                <button type="button" onClick={() => onNavigate('donC')} className="tdr-btn is-primary">
                   <Upload size={13} /> Upload tuần mới
                 </button>
               )}
             </>
           ) : (
-            <button type="button" onClick={() => { void saveReport() }} disabled={savingReport} className="tongdon-action is-primary">
+            <button type="button" onClick={() => { void saveReport() }} disabled={savingReport} className="tdr-btn is-primary">
               <ClipboardList size={13} /> {savingReport ? 'Đang lưu...' : 'Lưu báo cáo tuần này'}
             </button>
           )}
-          <button
-            type="button"
-            onClick={handleExportImage}
-            disabled={exporting}
-            className="tongdon-action"
-          >
-            <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh'}
+          <button type="button" onClick={handleExportImage} disabled={exporting} className="tdr-btn">
+            <Download size={13} /> {exporting ? 'Đang xuất...' : 'Xuất ảnh PNG'}
           </button>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="tongdon-action"
-          >
+          <button type="button" onClick={() => window.print()} className="tdr-btn">
             <Printer size={13} /> In / Xuất PDF
           </button>
         </div>
-        {publishError && <p role="alert" className="tongdon-publish-error">{publishError}</p>}
+      </div>
+      {publishError && <p role="alert" className="tdr-error">{publishError}</p>}
 
-        <div ref={exportRef} className={`tongdon-report ${exporting ? 'is-exporting' : ''}`}>
-          <PageHeader
-            title={reportTitle}
-            editable={!isReadOnly}
-            onTitleChange={setReportTitle}
-            subtitle={isReadOnly
-              ? `Báo cáo đã lưu · ${new Date(snapshot.createdAt).toLocaleString('vi-VN')}`
-              : 'Đánh giá tổng quan · Kết luận · Giải pháp cho tuần tiếp theo'}
-            currentDate={!isReadOnly && donCCurrentEntry?.at && !Number.isNaN(new Date(donCCurrentEntry.at).getTime()) ? new Date(donCCurrentEntry.at).toLocaleDateString('vi-VN') : null}
-            previousDate={!isReadOnly && donCPreviousEntry?.at && !Number.isNaN(new Date(donCPreviousEntry.at).getTime()) ? new Date(donCPreviousEntry.at).toLocaleDateString('vi-VN') : null}
-          />
-
-          {!isReadOnly && (
-            <DataSourcePicker
-              open={sourcePickerOpen}
-              onToggle={() => setSourcePickerOpen(o => !o)}
-              donCPick={donCPick}
-              donDTPPick={donDTPPick}
-              tmdtPick={tmdtPick}
-            />
-          )}
-
-          <div className="tongdon-kpi-strip" aria-label="Chỉ số tổng quan">
-            <KpiCard label="Tổng đơn kho HCM" cur={current.grandTotal} prev={previous.grandTotal} />
-            <KpiCard label="Đơn C" cur={current.totalC} prev={previous.totalC} />
-            <KpiCard label="Đơn DTP" cur={current.totalDTP} prev={previous.totalDTP} />
-            <KpiCard label="SO3 + SO6 (Shopee, TikTok)" cur={current.totalTMDT} prev={previous.totalTMDT} />
-          </div>
-
-          <div className="tongdon-workspace-grid">
-            <section className="tongdon-comparison" aria-labelledby="tongdon-comparison-title">
-              <SectionHeading id="tongdon-comparison-title" title="So sánh tuần này / tuần trước" />
-              <div className="tongdon-period-grid">
-                <div className="tongdon-period">
-                  <WeekSummaryCard label="TUẦN NÀY" tag="MỚI NHẤT" color={CURRENT_COLOR} bg="var(--color-current-bg, #e8f7f1)" R={current} detailsOpen={periodDetails.current} detailsId="tongdon-period-details-current" onToggleDetails={() => setPeriodDetails(details => ({ ...details, current: !details.current }))} />
-                  <div id="tongdon-period-details-current" className="tongdon-period-details" hidden={!periodDetails.current}>
-                    <WeekDetailCards R={current} />
-                  </div>
-                </div>
-                <div className="tongdon-period">
-                  <WeekSummaryCard label="TUẦN TRƯỚC" tag="LIỀN KỀ" color={PREVIOUS_COLOR} bg="var(--color-previous-bg, #fdf1e2)" R={previous} detailsOpen={periodDetails.previous} detailsId="tongdon-period-details-previous" onToggleDetails={() => setPeriodDetails(details => ({ ...details, previous: !details.previous }))} />
-                  <div id="tongdon-period-details-previous" className="tongdon-period-details" hidden={!periodDetails.previous}>
-                    <WeekDetailCards R={previous} />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="tongdon-operations" aria-labelledby="tongdon-operations-title">
-              <SectionHeading id="tongdon-operations-title" eyebrow="Nhận định vận hành" title="Nhận định & giải pháp" />
-
-            {needsAttention && (
-              <div className="tongdon-attention flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-                <AlertCircle size={15} className="shrink-0" />
-                <span>
-                  Cần chú ý — {attentionReason} so với tuần trước.
-                </span>
-              </div>
-            )}
-
-            <div className="tongdon-operation-tabs" role="tablist" aria-label="Nội dung vận hành">
-              <button id="tongdon-insights-tab" type="button" role="tab" aria-selected={operationsView === 'insights'} aria-controls="tongdon-insights" onClick={() => setOperationsView('insights')}>Nhận định</button>
-              <button id="tongdon-solutions-tab" type="button" role="tab" aria-selected={operationsView === 'solutions'} aria-controls="tongdon-solutions" onClick={() => setOperationsView('solutions')}>Giải pháp</button>
-            </div>
-
-            <div id="tongdon-insights" role="tabpanel" aria-labelledby="tongdon-insights-tab" tabIndex="0" hidden={operationsView !== 'insights'} className="tongdon-operations-scroll">
-              <div className="tongdon-insight-grid">
-                <InsightCardV2 tag="Sản lượng" tone={totalDeltaPct >= 0 ? 'pos' : 'neg'} title={topGroup.name + (topGroup.pct >= 0 ? ' tăng' : ' giảm') + ' chi phối biến động tổng đơn'} body={insight1} onBodyChange={isReadOnly ? undefined : setInsight1} placeholder="VD: Tổng đơn tăng X%, chủ yếu từ nhóm..." expanded={expandedInsights.insight1} insightId="tongdon-insight-body-1" onToggle={() => setExpandedInsights(insights => ({ ...insights, insight1: !insights.insight1 }))} />
-                <InsightCardV2 tag="Cơ cấu đơn" tone={cocauWarn ? 'warn' : 'neutral'} title="Đơn C và Đơn DTP bù trừ lẫn nhau" body={insight4} onBodyChange={isReadOnly ? undefined : setInsight4} expanded={expandedInsights.insight4} insightId="tongdon-insight-body-4" onToggle={() => setExpandedInsights(insights => ({ ...insights, insight4: !insights.insight4 }))} />
-                <InsightCardV2 tag="Tốc độ giao" tone={rate24hDrop ? 'neg' : 'pos'} title="Hiệu suất giao hàng trực tiếp" body={insight2} onBodyChange={isReadOnly ? undefined : setInsight2} expanded={expandedInsights.insight2} insightId="tongdon-insight-body-2" onToggle={() => setExpandedInsights(insights => ({ ...insights, insight2: !insights.insight2 }))} />
-                <InsightCardV2 tag="SPX Express" tone={spxTone} title="Sản lượng & tồn vận chuyển SPX" body={insight5} onBodyChange={isReadOnly ? undefined : setInsight5} expanded={expandedInsights.insight5} insightId="tongdon-insight-body-5" onToggle={() => setExpandedInsights(insights => ({ ...insights, insight5: !insights.insight5 }))} />
-                <InsightCardV2 tag="Viettel Post" tone={vtpTone} title="Sản lượng & tồn vận chuyển Viettel Post" body={insight6} onBodyChange={isReadOnly ? undefined : setInsight6} expanded={expandedInsights.insight6} insightId="tongdon-insight-body-6" onToggle={() => setExpandedInsights(insights => ({ ...insights, insight6: !insights.insight6 }))} />
-                <InsightCardV2 tag="Nguyên nhân" tone={insight3Tone} title="Nguyên nhân chính cần lưu ý" body={insight3} onBodyChange={isReadOnly ? undefined : setInsight3} expanded={expandedInsights.insight3} insightId="tongdon-insight-body-3" onToggle={() => setExpandedInsights(insights => ({ ...insights, insight3: !insights.insight3 }))} />
-              </div>
-              <VerdictBox text={verdict} onChange={isReadOnly ? undefined : setVerdict} />
-            </div>
-            <div id="tongdon-solutions" role="tabpanel" aria-labelledby="tongdon-solutions-tab" tabIndex="0" hidden={operationsView !== 'solutions'} className="tongdon-operations-scroll tongdon-solution-list">
-              <PlanItem num={1} text={sol1} onChange={isReadOnly ? undefined : setSol1} priority={priority1} />
-              <PlanItem num={2} text={sol2} onChange={isReadOnly ? undefined : setSol2} priority={priority2} />
-              <PlanItem num={3} text={sol3} onChange={isReadOnly ? undefined : setSol3} priority="mid" />
-              <PlanItem num={4} text={sol4} onChange={isReadOnly ? undefined : setSol4} priority={priority4} />
-              <PlanItem num={5} text={sol5} onChange={isReadOnly ? undefined : setSol5} priority="low" />
-            </div>
-            </section>
-          </div>
-        </div>
+      <div className="tdr-page-wrap">
+        <TongDonReportDonSan
+          ref={exportRefDonSan}
+          active={activeTab === 'donsan'}
+          isReadOnly={isReadOnly}
+          currentPeriodLabel={currentPeriodLabel}
+          previousPeriodLabel={previousPeriodLabel}
+          savedAtLabel={savedAtLabel}
+          current={current}
+          previous={previous}
+          ngoaiSan={ngoaiSan}
+          narrative={donSanAuto}
+          fields={donSanFields}
+          onFieldChange={isReadOnly ? undefined : handleDonSanFieldChange}
+        />
+        <TongDonReportDonTruyenThong
+          ref={exportRefTruyenThong}
+          active={activeTab === 'truyenthong'}
+          isReadOnly={isReadOnly}
+          currentPeriodLabel={currentPeriodLabel}
+          previousPeriodLabel={previousPeriodLabel}
+          savedAtLabel={savedAtLabel}
+          current={current}
+          previous={previous}
+          narrative={truyenThongAuto}
+          fields={truyenThongFields}
+          onFieldChange={isReadOnly ? undefined : handleTruyenThongFieldChange}
+        />
       </div>
     </div>
   )
