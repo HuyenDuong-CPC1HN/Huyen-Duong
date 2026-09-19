@@ -44,14 +44,27 @@ function parseSpxDateTime(str) {
   return new Date(Number(yyyy), Number(MM) - 1, Number(dd), Number(hh), Number(mm))
 }
 
-// File "bốc đóng" xuất "TG Đóng kiện" theo dd/mm/yyyy HH:mm
+// File "bốc đóng" xuất "TG Đóng kiện" theo dd/mm/yyyy HH:mm (năm 4 chữ số, ngày đứng trước tháng).
+// Riêng cột "TG Đóng hàng" (kênh website, dùng chung hàm này qua getPackingTimeRaw) có ô Excel định dạng
+// "m/d/yy h:mm" (kiểu Mỹ: THÁNG đứng trước ngày, năm chỉ 2 chữ số) — đã xác nhận trực tiếp qua number_format
+// thật của cột này trong file "bao_cao_giao_nhan.xlsx" ("m/d/yy h:mm"), SheetJS (raw:false) trả ra đúng
+// chuỗi theo định dạng đó. Trước đây chỉ nhận năm 4 chữ số nên toàn bộ các dòng dạng này bị đọc thành
+// null — "Mốc 2 (Đóng kiện)" luôn hiện "chưa có dữ liệu" dù cột thực ra có giá trị. Phân biệt 2 định dạng
+// bằng ĐỘ DÀI NĂM (4 số vs 2 số) — không nhầm lẫn vì đây là 2 nguồn cột khác hẳn nhau.
 function parseVnDateTime(str) {
   const s = clean(str)
   if (!s) return null
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/)
-  if (!m) return null
-  const [, dd, MM, yyyy, hh, mm] = m
-  return new Date(Number(yyyy), Number(MM) - 1, Number(dd), Number(hh), Number(mm))
+  const mFull = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/)
+  if (mFull) {
+    const [, dd, MM, yyyy, hh, mm] = mFull
+    return new Date(Number(yyyy), Number(MM) - 1, Number(dd), Number(hh), Number(mm))
+  }
+  const mUs2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})/)
+  if (mUs2) {
+    const [, MM, dd, yy, hh, mm] = mUs2
+    return new Date(2000 + Number(yy), Number(MM) - 1, Number(dd), Number(hh), Number(mm))
+  }
+  return null
 }
 
 function fmtDateTime(d) {
