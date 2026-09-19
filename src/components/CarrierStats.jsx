@@ -293,7 +293,15 @@ const NGOAI_SAN_MATCHERS = {
 
 // Đối soát "đơn ngoại sàn" (SPX COD) theo 4 mốc thời gian — xem reconcileNgoaiSan.js.
 // Chỉ hiển thị trong tab SPX (carrierType === 'spx').
-function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê' }) {
+const DEFAULT_NGOAI_SAN_NOTE = (
+  <>
+    Mốc 1: Tạo lúc (Danh sách thống kê) · Mốc 2: Đóng kiện (file bốc đóng, nối qua Mã vận đơn) · Mốc 3: SPX lấy hàng ·
+    Mốc 4: SPX giao hàng thành công. A) Đóng kiện (M1→M2) đạt khi ≤24h. B) SPX lấy hàng (M2→M3) tính theo nhóm 24h/48h/72h
+    kể từ lúc đóng kiện xong. C) Giao hàng (M1→M4) đạt khi ≤48h.
+  </>
+)
+
+function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE }) {
   const salesInputRef = useRef()
   const packingInputRef = useRef()
   const [error, setError] = useState('')
@@ -386,11 +394,7 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
         <Truck size={16} className="text-[#1e3a5f]" />
         <h3 className="font-semibold text-gray-800 text-sm">Đối soát đơn ngoại sàn (SPX COD) — theo 4 mốc thời gian</h3>
       </div>
-      <p className="text-xs text-gray-400 mb-3">
-        Mốc 1: Tạo lúc (Danh sách thống kê) · Mốc 2: Đóng kiện (file bốc đóng, nối qua Mã vận đơn) · Mốc 3: SPX lấy hàng ·
-        Mốc 4: SPX giao hàng thành công. A) Đóng kiện (M1→M2) đạt khi ≤24h. B) SPX lấy hàng (M2→M3) tính theo nhóm 24h/48h/72h
-        kể từ lúc đóng kiện xong. C) Giao hàng (M1→M4) đạt khi ≤48h.
-      </p>
+      <p className="text-xs text-gray-400 mb-3">{note}</p>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <button
@@ -818,7 +822,7 @@ function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, 
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê' }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => carrierLookupMap(frozenLookup, internalData),
@@ -1042,7 +1046,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       {carrierType === 'spx' && (
         frozenNgoaiSan
           ? <FrozenNgoaiSanPanel frozen={frozenNgoaiSan} />
-          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} salesFileNoun={salesFileNoun} />
+          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} salesFileNoun={salesFileNoun} note={ngoaiSanNote} />
       )}
 
       {showNoteCol && (

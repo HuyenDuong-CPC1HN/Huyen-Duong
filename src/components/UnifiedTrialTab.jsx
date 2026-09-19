@@ -17,6 +17,19 @@ const SHOP_CLS = {
   L00704: 'bg-purple-50 border-purple-200 text-purple-700',
 }
 
+// Note rút gọn cho panel Đối soát đơn ngoại sàn — bỏ nhắc "file bốc đóng" vì tab này đã tự động lấy
+// Mốc 2 từ file Đơn SO (không còn nút upload tay), khác với Đơn C production vẫn cần upload tay.
+const NGOAI_SAN_NOTE = (
+  <>
+    Mốc 1: Sales order <br />
+    Mốc 2: Kho đóng kiện <br />
+    Mốc 3: SPX lấy hàng <br />
+    Mốc 4: SPX giao hàng thành công. <br />
+    A) Đóng kiện (M1→M2) đạt khi ≤24h. B) SPX lấy hàng (M2→M3) tính theo nhóm 24h/48h/72h kể từ lúc đóng kiện xong.
+    C) Giao hàng (M1→M4) đạt khi ≤48h.
+  </>
+)
+
 // "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx")
 // cần 2 nguồn: "Sales Order" (Mốc 1, người dùng upload tay qua đúng nút có sẵn trong
 // NgoaiSanPanel) và "file bốc đóng" (Mốc 2). Mốc 2 với kênh Ngoại sàn thực ra đã có sẵn trong
@@ -242,6 +255,7 @@ function DonSanView({ rosterSet }) {
             referenceDate={meta?.uploadedAt}
             hidePackingUpload
             salesFileNoun="Sales Order"
+            ngoaiSanNote={NGOAI_SAN_NOTE}
           />
         </SectionCard>
       </div>
