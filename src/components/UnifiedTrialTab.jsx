@@ -5,16 +5,43 @@ import ExcelUpload from './ExcelUpload'
 import UnifiedTrialChannelDetail from './UnifiedTrialChannelDetail'
 import { CarrierPanel } from './CarrierStats'
 import { KpiTile, SectionCard } from './ReportCards'
-import { splitDonSO, splitDonTruyenThong } from '../utils/unifiedTrialSplit'
+import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 
+// Màu nền theo shop — khớp bảng màu STORE_CLS đang dùng ở TmdtTab.jsx (không import chung,
+// tab thử nghiệm này vẫn giữ biến riêng để độc lập).
+const SHOP_CLS = {
+  L00702: 'bg-blue-50 border-blue-200 text-blue-700',
+  L00671: 'bg-orange-50 border-orange-200 text-orange-700',
+  L00703: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+  L00704: 'bg-purple-50 border-purple-200 text-purple-700',
+}
+
+// Note rút gọn cho panel Đối soát đơn ngoại sàn — bỏ nhắc "file bốc đóng" vì tab này đã tự động lấy
+// Mốc 2 từ file Đơn SO (không còn nút upload tay), khác với Đơn C production vẫn cần upload tay.
+const NGOAI_SAN_NOTE = (
+  <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">
+    <div className="space-y-0.5">
+      <div>Mốc 1: Sales order</div>
+      <div>Mốc 2: Kho đóng kiện</div>
+      <div>Mốc 3: SPX lấy hàng</div>
+      <div>Mốc 4: SPX giao hàng thành công.</div>
+    </div>
+    <div className="space-y-0.5">
+      <div>A) Đóng kiện (M1→M2) đạt khi ≤24h.</div>
+      <div>B) SPX lấy hàng (M2→M3) tính theo nhóm 24h/48h/72h kể từ lúc đóng kiện xong.</div>
+      <div>C) Giao hàng (M1→M4) đạt khi ≤48h.</div>
+    </div>
+  </div>
+)
+
 // "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx")
-// cần 2 nguồn: "Danh sách thống kê" (Mốc 1, người dùng upload tay qua đúng nút có sẵn trong
+// cần 2 nguồn: "Sales Order" (Mốc 1, người dùng upload tay qua đúng nút có sẵn trong
 // NgoaiSanPanel) và "file bốc đóng" (Mốc 2). Mốc 2 với kênh Ngoại sàn thực ra đã có sẵn trong
 // chính file Đơn SO (cột "TG Đóng hàng" + "Mã vận đơn") — nên ở đây tự ghi thẳng vào đúng ô nhớ
 // NgoaiSanPanel đọc (`carrier_packingweeks_<carrierKey>`) mỗi khi có file Đơn SO mới, khỏi phải
-// upload thêm 1 file "bốc đóng" riêng. Không sửa CarrierStats.jsx — chỉ ghi vào đúng key nó đã
-// đọc sẵn, đúng format {id, fileName, uploadedAt, rows} như addPackingWeek() nội bộ vẫn ghi.
+// upload thêm 1 file "bốc đóng" riêng. Nút "Upload File bốc đóng" bị dư nên đã ẩn qua prop
+// `hidePackingUpload` (thêm trong CarrierStats.jsx, mặc định tắt — Đơn C/DTP không bị ảnh hưởng).
 function seedNgoaiSanPackingWeek(carrierKey, ngoaiSanRows, uploadedAt) {
   const entry = { id: uploadedAt, fileName: 'Tự động lấy từ file Đơn SO (cột TG Đóng hàng)', uploadedAt, rows: ngoaiSanRows }
   localStorage.setItem(`carrier_packingweeks_${carrierKey}`, JSON.stringify([entry]))
@@ -171,6 +198,9 @@ function DonSanView({ rosterSet }) {
   )
   const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(hcmRows), [hcmRows])
   const total = tmdt.length + ngoaiSan.length
+  const { shops } = useMemo(() => splitTmdtByShop(tmdt), [tmdt])
+  const shopCol1 = shops.slice(0, 2)
+  const shopCol2 = shops.slice(2, 4)
 
   const ngoaiSanCarrierKey = 'unifiedTrial_donSO_spx'
   useEffect(() => {
@@ -198,10 +228,28 @@ function DonSanView({ rosterSet }) {
       </div>
 
       <div className="space-y-4 mt-4">
-        <SectionCard title="Đối soát ngoại sàn (SPX COD)" total={ngoaiSan.length}>
+        <SectionCard title="ĐƠN SÀN TMĐT CHI TIẾT THEO SHOP" total={tmdt.length}>
+          <div className="grid grid-cols-2 gap-3">
+            {[shopCol1, shopCol2].map((col, i) => (
+              <div key={i} className="space-y-2">
+                {col.map(shop => (
+                  <div key={shop.code} className={`flex items-center justify-between px-3 py-3 rounded-xl border-2 ${SHOP_CLS[shop.code]}`}>
+                    <div className="flex items-center gap-2 text-sm min-w-0">
+                      <span className="font-semibold truncate">{shop.label}</span>
+                      <span className="text-xs font-mono shrink-0 opacity-60">{shop.code}</span>
+                    </div>
+                    <span className="text-lg font-bold shrink-0">{shop.count.toLocaleString('vi-VN')}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="ĐỐI SOÁT ĐƠN WEBSITE" total={ngoaiSan.length}>
           <p className="text-xs text-gray-400 mb-3">
             Mốc "Đóng kiện" tự động lấy từ cột "TG Đóng hàng" trong file Đơn SO vừa upload — chỉ cần
-            upload thêm "Danh sách thống kê" (Mốc 1) và file SPX xuất (Mốc 3/4) ở khung bên dưới.
+            upload thêm "Sales Order" (Mốc 1) và file SPX xuất (Mốc 3/4) ở khung bên dưới.
           </p>
           <CarrierPanel
             key={meta?.uploadedAt}
@@ -210,6 +258,9 @@ function DonSanView({ rosterSet }) {
             carrierType="spx"
             internalData={ngoaiSan}
             referenceDate={meta?.uploadedAt}
+            hidePackingUpload
+            salesFileNoun="Sales Order"
+            ngoaiSanNote={NGOAI_SAN_NOTE}
           />
         </SectionCard>
       </div>
