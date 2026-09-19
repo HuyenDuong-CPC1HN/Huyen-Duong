@@ -2,13 +2,14 @@
 export function parseDate(str) {
   if (!str) return null
   const s = String(str).trim()
-  const m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/)
+  const re = /(\d{1,2})[/-](\d{1,2})[/-](\d{4})/
+  const m = re.exec(s)
   if (!m) return null
   return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]))
 }
 
 // Số ngày chênh lệch giữa Ngày tạo kiện và Ngày giao hàng (chỉ tính ngày, bỏ qua giờ)
-export function diffDays(row) {
+function diffDays(row) {
   const d1 = parseDate(row['Ngày tạo kiện'])
   const d2 = parseDate(row['Ngày giao hàng'])
   if (!d1 || !d2) return null

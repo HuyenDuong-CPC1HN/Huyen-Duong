@@ -42,6 +42,17 @@ function notifyError(error) {
   window.dispatchEvent(new CustomEvent('ops-store-error', { detail: error.message || String(error) }))
 }
 
+async function loadOptional(pattern, loadFn, fallback) {
+  try {
+    return await loadFn()
+  } catch (error) {
+    const message = error?.message || String(error)
+    if (!new RegExp(pattern + '|schema cache', 'i').test(message)) throw error
+    if (fallback) fallback()
+    return undefined
+  }
+}
+
 async function loadWeeks(client, channel) {
   const repo = createReportWeeksRepository(client)
   const records = await repo.list(channel)
@@ -161,45 +172,19 @@ export async function loadWorkspace(client = supabase) {
   if (!client) throw new Error('Thiếu cấu hình Supabase.')
   values.clear()
   await Promise.all([loadWeeks(client, 'donC'), loadWeeks(client, 'donDTP'), loadCarriers(client)])
-  try {
-    await loadSalesOrderWeeks(client)
-  } catch (error) {
-    const message = error?.message || String(error)
-    // Migration đối soát "đơn ngoại sàn" SPX COD có thể chưa được áp dụng — không chặn workspace chính vì việc này.
-    if (!/carrier_sales_order_weeks|schema cache/i.test(message)) throw error
-  }
-  try {
-    await loadPackingWeeks(client)
-  } catch (error) {
-    const message = error?.message || String(error)
-    // Migration đối soát "đơn ngoại sàn" SPX COD (mốc đóng kiện) có thể chưa được áp dụng.
-    if (!/carrier_packing_weeks|schema cache/i.test(message)) throw error
-  }
-  try {
-    await loadExpiryStock(client)
-  } catch (error) {
-    const message = error?.message || String(error)
-    // Migration tồn kho cận date có thể chưa được áp dụng — không chặn workspace chính vì việc này.
-    if (!/expiry_stock_months|schema cache/i.test(message)) throw error
+  await loadOptional('carrier_sales_order_weeks', () => loadSalesOrderWeeks(client))
+  await loadOptional('carrier_packing_weeks', () => loadPackingWeeks(client))
+  await loadOptional('expiry_stock_months', () => loadExpiryStock(client), () => {
     put('expiry_stock_months', encode([]))
     put('expiry_stock_active', '')
-  }
-  try {
-    await loadGoodsReceipt(client)
-  } catch (error) {
-    const message = error?.message || String(error)
-    if (!/goods_receipt_batches|goods_receipt_lines|schema cache/i.test(message)) throw error
+  })
+  await loadOptional('goods_receipt_batches|goods_receipt_lines', () => loadGoodsReceipt(client), () => {
     put('goods_receipt_batches', encode([]))
     put('goods_receipt_active', '')
-  }
-  try {
-    await loadReturnRecords(client)
-  } catch (error) {
-    const message = error?.message || String(error)
-    // Migration theo dõi nhập trả lại có thể chưa được áp dụng — không chặn workspace chính vì việc này.
-    if (!/return_records|return_record_invoices|return_record_products|schema cache/i.test(message)) throw error
+  })
+  await loadOptional('return_records|return_record_invoices|return_record_products', () => loadReturnRecords(client), () => {
     put('return_records', encode([]))
-  }
+  })
   const [donCReports, donDtpReports, tongdon, tmdt, settingsResult] = await Promise.all([
     createSheetReportsRepository(client).list('donC'),
     createSheetReportsRepository(client).list('donDTP'),
@@ -208,17 +193,7 @@ export async function loadWorkspace(client = supabase) {
     client.from('ops_settings').select('key,value'),
   ])
   if (settingsResult.error) throw new Error(settingsResult.error.message)
-
-  let reportingCycles = []
-  try {
-    reportingCycles = await createReportingCyclesRepository(client).list()
-  } catch (error) {
-    const message = error?.message || String(error)
-    // Analytics migration may not be applied yet — do not block core ops workspace.
-    if (!/reporting_cycles|schema cache/i.test(message)) throw error
-    reportingCycles = []
-  }
-
+  const reportingCycles = await loadOptional('reporting_cycles', () => createReportingCyclesRepository(client).list()) || []
   put('sheet_reports_donC', encode(donCReports))
   put('sheet_reports_donDTP', encode(donDtpReports))
   put('tongdon_reports', encode(tongdon))
@@ -231,11 +206,6 @@ export async function refreshReportingCycles(client = supabase) {
   const reportingCycles = await createReportingCyclesRepository(client).list()
   put('reporting_cycles', encode(reportingCycles))
   return reportingCycles
-}
-
-export function clearWorkspaceCache() {
-  values.clear()
-  pendingCollectionChanges.clear()
 }
 
 async function syncWeeks(key) {
@@ -470,8 +440,8 @@ export const opsStore = {
       if (key.startsWith('weeks_')) return syncWeeks(key)
       if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
       if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
-  if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key)
-  if (key.startsWith('carrier_packingweeks_')) return syncPackingWeeks(key)
+      if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key)
+      if (key.startsWith('carrier_packingweeks_')) return syncPackingWeeks(key)
       if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
       if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
       if (key === 'return_records') return syncReturnRecords(key)
