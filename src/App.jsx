@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass } from 'lucide-react'
+import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass, FlaskConical } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -17,6 +17,7 @@ import cpcLogo from './assets/cpc1hn_logo.png'
 
 const SheetTab = lazy(() => import('./components/SheetTab'))
 const TongDonTab = lazy(() => import('./components/TongDonTab'))
+const UnifiedTrialTab = lazy(() => import('./components/UnifiedTrialTab'))
 
 const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
@@ -29,6 +30,7 @@ const NAV = [
       { id: 'donC',    label: 'Giao hàng Đơn C',    icon: Truck },
       { id: 'donDTP',  label: 'Giao hàng Đơn DTP',  icon: Package },
       { id: 'tmdt',    label: 'Đơn hàng Sàn TMĐT',  icon: ShoppingBag },
+      { id: 'gopKenh', label: 'Gộp kênh (Thử nghiệm)', icon: FlaskConical },
     ],
   },
   { id: 'tonkhocandate', label: 'Tồn kho cận date', icon: CalendarClock },
@@ -70,6 +72,7 @@ const BREADCRUMB = {
   donC:     ['Trang chủ', 'Báo cáo giao hàng', 'Giao hàng Đơn C'],
   donDTP:   ['Trang chủ', 'Báo cáo giao hàng', 'Giao hàng Đơn DTP'],
   tmdt:     ['Trang chủ', 'Báo cáo giao hàng', 'Đơn hàng Sàn TMĐT'],
+  gopKenh:  ['Trang chủ', 'Báo cáo giao hàng', 'Gộp kênh (Thử nghiệm)'],
   tonkhocandate: ['Trang chủ', 'Tồn kho cận date'],
   hangchamluanchuyen: ['Trang chủ', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
@@ -439,6 +442,7 @@ function AppContent({ user }) {
           {active === 'donC' && <Suspense fallback={tabLoadingState}><SheetTab type="donC" /></Suspense>}
           {active === 'donDTP' && <Suspense fallback={tabLoadingState}><SheetTab type="donDTP" /></Suspense>}
           {active === 'tmdt'    && <TmdtTab />}
+          {active === 'gopKenh' && <Suspense fallback={tabLoadingState}><UnifiedTrialTab /></Suspense>}
           {active === 'tonkhocandate' && <ExpiryStockTab />}
           {active === 'hangchamluanchuyen' && <SlowMovingStockTab />}
           {active === 'nhaphang' && <NhapHangTab />}
