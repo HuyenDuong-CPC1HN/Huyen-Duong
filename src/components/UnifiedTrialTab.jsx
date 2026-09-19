@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Package, ShoppingBag, Globe, RefreshCw } from 'lucide-react'
+import { Package, ShoppingBag, Globe, RefreshCw, Users, AlertTriangle } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import ExcelUpload from './ExcelUpload'
 import UnifiedTrialChannelDetail from './UnifiedTrialChannelDetail'
 import { CarrierPanel } from './CarrierStats'
 import { KpiTile, SectionCard } from './ReportCards'
 import { splitDonSO, splitDonTruyenThong } from '../utils/unifiedTrialSplit'
+import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 
 // "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx")
 // cần 2 nguồn: "Danh sách thống kê" (Mốc 1, người dùng upload tay qua đúng nút có sẵn trong
@@ -30,6 +31,7 @@ const SO_ROWS_KEY = 'unified_trial_donSO_rows'
 const SO_META_KEY = 'unified_trial_donSO_meta'
 const TT_ROWS_KEY = 'unified_trial_donTT_rows'
 const TT_META_KEY = 'unified_trial_donTT_meta'
+const STAFF_ROSTER_KEY = 'unified_trial_hcm_staff_roster'
 
 function readJSON(key, fallback) {
   try {
@@ -38,6 +40,95 @@ function readJSON(key, fallback) {
   } catch {
     return fallback
   }
+}
+
+// Danh sách nhân sự kho HCM dùng chung cho cả 2 pill (Đơn SO / Đơn truyền thống) — mỗi dòng 1
+// người, dán y hệt định dạng "Tên (SĐT)" trong cột "Bốc hàng"/"Đóng hàng" của Excel. Một đơn chỉ
+// tính là của kho HCM khi CẢ 2 (Bốc hàng và Đóng hàng) đều là người trong danh sách này.
+// Danh sách này cố định, ít khi sửa — đặt gọn thành 1 nút nhỏ + popover ở góc phải header, không
+// chiếm chỗ cố định ở đầu trang như trước.
+function StaffRosterEditor({ rosterText, onChange }) {
+  const [open, setOpen] = useState(false)
+  const count = rosterText.split('\n').map(s => s.trim()).filter(Boolean).length
+
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)} className="sheet-tab-action">
+        <Users size={13} />
+        Nhân sự kho HCM ({count})
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 z-20 w-96 bg-white border border-gray-200 rounded-xl shadow-lg p-3">
+            <p className="text-xs text-gray-400 mb-2">
+              Dán danh sách nhân sự kho HCM, mỗi dòng 1 người, đúng định dạng "Tên (SĐT)" như trong
+              cột "Bốc hàng"/"Đóng hàng" của Excel. Đơn chỉ tính của kho HCM khi cả Bốc hàng lẫn Đóng
+              hàng đều là người trong danh sách — lệch nhau (1 trong 2) sẽ bị cảnh báo riêng, không
+              tính vào tổng.
+            </p>
+            <textarea
+              value={rosterText}
+              onChange={e => onChange(e.target.value)}
+              placeholder={'Phạm Thị Kiều Mi (0941512763)\nBùi Thị Diễm Duy (0354240857)\n...'}
+              rows={8}
+              className="w-full text-sm font-mono border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            <p className="text-xs text-gray-400 mt-2">
+              {count === 0
+                ? 'Chưa nhập danh sách — mọi đơn tạm tính là kho HCM, chưa lọc gì.'
+                : `Đang lọc theo ${count} nhân sự.`}
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function MismatchWarning({ mismatchRows, otherCount }) {
+  const [open, setOpen] = useState(false)
+  if (mismatchRows.length === 0 && otherCount === 0) return null
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 mb-4 text-sm">
+      <div className="flex items-center gap-2 text-amber-800">
+        <AlertTriangle size={15} className="shrink-0" />
+        <span>
+          {otherCount > 0 && `${otherCount} đơn không thuộc kho HCM đã loại khỏi thống kê. `}
+          {mismatchRows.length > 0 && `${mismatchRows.length} đơn bốc/đóng LỆCH kho (1 trong 2 không khớp danh sách) — cần kiểm tra lại.`}
+        </span>
+      </div>
+      {mismatchRows.length > 0 && (
+        <>
+          <button type="button" onClick={() => setOpen(o => !o)} className="text-xs text-blue-600 hover:underline mt-1">
+            {open ? 'Ẩn danh sách' : `Xem ${mismatchRows.length} đơn lệch kho`}
+          </button>
+          {open && (
+            <div className="mt-2 overflow-x-auto rounded-lg border border-amber-100 bg-white">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-amber-100/50 border-b border-amber-100">
+                    <th className="px-3 py-2 text-left font-semibold">Mã kiện hàng</th>
+                    <th className="px-3 py-2 text-left font-semibold">Bốc hàng</th>
+                    <th className="px-3 py-2 text-left font-semibold">Đóng hàng</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mismatchRows.map((row, i) => (
+                    <tr key={`${row['Mã kiện hàng']}-${i}`} className="border-b border-gray-50 last:border-0">
+                      <td className="px-3 py-1.5">{row['Mã kiện hàng'] || '—'}</td>
+                      <td className="px-3 py-1.5">{row['Bốc hàng'] || '—'}</td>
+                      <td className="px-3 py-1.5">{row['Đóng hàng'] || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
 }
 
 function FileSlot({ meta, onReplace, uploadNode }) {
@@ -60,7 +151,7 @@ function FileSlot({ meta, onReplace, uploadNode }) {
   )
 }
 
-function DonSanView() {
+function DonSanView({ rosterSet }) {
   const [meta, setMeta] = useState(() => readJSON(SO_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(SO_ROWS_KEY, null))
   const [replacing, setReplacing] = useState(false)
@@ -74,7 +165,11 @@ function DonSanView() {
     setReplacing(false)
   }
 
-  const { tmdt, ngoaiSan } = useMemo(() => rows ? splitDonSO(rows) : { tmdt: [], ngoaiSan: [] }, [rows])
+  const { hcmRows, otherRows, mismatchRows } = useMemo(
+    () => splitByWarehouseStaff(rows || [], rosterSet),
+    [rows, rosterSet],
+  )
+  const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(hcmRows), [hcmRows])
   const total = tmdt.length + ngoaiSan.length
 
   const ngoaiSanCarrierKey = 'unifiedTrial_donSO_spx'
@@ -95,6 +190,7 @@ function DonSanView() {
   return (
     <div>
       <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />
+      <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
       <div className="report-kpi-grid is-three-column">
         <KpiTile icon={Package} value={total} label="Tổng Đơn sàn" cls="text-[#1e3a5f]" />
         <KpiTile icon={ShoppingBag} value={tmdt.length} label="Đơn sàn TMĐT (Shopee, TikTok)" pctOfTotal={total ? Math.round((tmdt.length / total) * 100) : 0} cls="text-blue-700" />
@@ -121,7 +217,7 @@ function DonSanView() {
   )
 }
 
-function DonTruyenThongView() {
+function DonTruyenThongView({ rosterSet }) {
   const [meta, setMeta] = useState(() => readJSON(TT_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(TT_ROWS_KEY, null))
   const [replacing, setReplacing] = useState(false)
@@ -136,7 +232,11 @@ function DonTruyenThongView() {
     setReplacing(false)
   }
 
-  const { donC, donDTP } = useMemo(() => rows ? splitDonTruyenThong(rows) : { donC: [], donDTP: [] }, [rows])
+  const { hcmRows, otherRows, mismatchRows } = useMemo(
+    () => splitByWarehouseStaff(rows || [], rosterSet),
+    [rows, rosterSet],
+  )
+  const { donC, donDTP } = useMemo(() => splitDonTruyenThong(hcmRows), [hcmRows])
 
   const uploadNode = (
     <ExcelUpload onData={onData} fileName="" onClear={() => {}} />
@@ -151,6 +251,7 @@ function DonTruyenThongView() {
   return (
     <div>
       <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />
+      <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
 
       <div className="tdr-tabswitch" style={{ marginBottom: 16 }}>
         <button type="button" className={channel === 'donC' ? 'active' : ''} onClick={() => setChannel('donC')}>
@@ -174,22 +275,30 @@ function DonTruyenThongView() {
 
 export default function UnifiedTrialTab() {
   const [activeTab, setActiveTab] = useState('donsan')
+  const [rosterText, setRosterText] = useState(() => localStorage.getItem(STAFF_ROSTER_KEY) || '')
+
+  const onRosterChange = (text) => {
+    setRosterText(text)
+    localStorage.setItem(STAFF_ROSTER_KEY, text)
+  }
+  const rosterSet = useMemo(() => parseStaffRoster(rosterText), [rosterText])
 
   return (
     <div className="sheet-tab donc-v2">
       <div className="sheet-tab-shell">
         <header className="sheet-tab-context">
           <span>Gộp kênh (Thử nghiệm) — chạy song song, chưa thay thế 3 tab cũ</span>
+          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
         </header>
 
-        <div className="tdr-tabswitch">
+        <div className="tdr-tabswitch" style={{ marginTop: 16 }}>
           <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn SO</button>
           <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
         </div>
 
         <div className="sheet-tab-report">
-          {activeTab === 'donsan' && <DonSanView />}
-          {activeTab === 'truyenthong' && <DonTruyenThongView />}
+          {activeTab === 'donsan' && <DonSanView rosterSet={rosterSet} />}
+          {activeTab === 'truyenthong' && <DonTruyenThongView rosterSet={rosterSet} />}
         </div>
       </div>
     </div>
