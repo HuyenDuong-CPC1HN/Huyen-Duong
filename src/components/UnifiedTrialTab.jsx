@@ -20,14 +20,19 @@ const SHOP_CLS = {
 // Note rút gọn cho panel Đối soát đơn ngoại sàn — bỏ nhắc "file bốc đóng" vì tab này đã tự động lấy
 // Mốc 2 từ file Đơn SO (không còn nút upload tay), khác với Đơn C production vẫn cần upload tay.
 const NGOAI_SAN_NOTE = (
-  <>
-    Mốc 1: Sales order <br />
-    Mốc 2: Kho đóng kiện <br />
-    Mốc 3: SPX lấy hàng <br />
-    Mốc 4: SPX giao hàng thành công. <br />
-    A) Đóng kiện (M1→M2) đạt khi ≤24h. B) SPX lấy hàng (M2→M3) tính theo nhóm 24h/48h/72h kể từ lúc đóng kiện xong.
-    C) Giao hàng (M1→M4) đạt khi ≤48h.
-  </>
+  <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">
+    <div className="space-y-0.5">
+      <div>Mốc 1: Sales order</div>
+      <div>Mốc 2: Kho đóng kiện</div>
+      <div>Mốc 3: SPX lấy hàng</div>
+      <div>Mốc 4: SPX giao hàng thành công.</div>
+    </div>
+    <div className="space-y-0.5">
+      <div>A) Đóng kiện (M1→M2) đạt khi ≤24h.</div>
+      <div>B) SPX lấy hàng (M2→M3) tính theo nhóm 24h/48h/72h kể từ lúc đóng kiện xong.</div>
+      <div>C) Giao hàng (M1→M4) đạt khi ≤48h.</div>
+    </div>
+  </div>
 )
 
 // "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx")

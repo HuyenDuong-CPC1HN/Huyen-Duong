@@ -394,7 +394,7 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
         <Truck size={16} className="text-[#1e3a5f]" />
         <h3 className="font-semibold text-gray-800 text-sm">Đối soát đơn ngoại sàn (SPX COD) — theo 4 mốc thời gian</h3>
       </div>
-      <p className="text-xs text-gray-400 mb-3">{note}</p>
+      <div className="text-xs text-gray-400 mb-3">{note}</div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <button
