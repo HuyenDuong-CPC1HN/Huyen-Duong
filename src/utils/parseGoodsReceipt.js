@@ -444,6 +444,31 @@ function parseDeliveryNoteDeclaredTotal(pdfText) {
   return m ? Number(m[1]) : null
 }
 
+// Ngày ghi trên biên bản giao nhận ("Ngày X tháng Y năm Z", cùng dòng thông tin tài xế) — dùng để
+// phân biệt "nhiều file CÙNG 1 chuyến" (cùng ngày, 1 file tổng + các file con, lấy MAX — xem
+// sumDeclaredTotalsByDate) với "chuyến giao BỔ SUNG riêng" (khác ngày, hàng giao thêm/giao bù, phải
+// CỘNG DỒN). Không đọc được ngày thì coi như "không rõ ngày" (gộp chung 1 nhóm, giữ hành vi cũ).
+function parseDeliveryNoteDate(pdfText) {
+  const compact = String(pdfText || '').replace(/\s+/g, ' ')
+  const m = /Ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})/i.exec(compact)
+  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : ''
+}
+
+// Cộng dồn "Tổng cả đơn" của tất cả biên bản giao nhận: gộp theo NGÀY ghi trên biên bản — các biên
+// bản CÙNG NGÀY lấy số LỚN NHẤT (giả định có 1 file tổng đã gộp sẵn các file con của cùng chuyến,
+// cộng dồn sẽ đếm trùng — xem ghi chú ở buildReceiptFromFiles), rồi CỘNG DỒN giữa các NGÀY KHÁC NHAU
+// (mỗi ngày là 1 chuyến giao riêng, kể cả chuyến giao bổ sung/giao bù cho cùng đợt hàng).
+function sumDeclaredTotalsByDate(pdfTexts) {
+  const maxByDate = new Map()
+  for (const text of pdfTexts) {
+    const total = parseDeliveryNoteDeclaredTotal(text)
+    if (total === null) continue
+    const date = parseDeliveryNoteDate(text)
+    maxByDate.set(date, Math.max(maxByDate.get(date) ?? 0, total))
+  }
+  return [...maxByDate.values()].reduce((sum, v) => sum + v, 0)
+}
+
 function sumKien(rows) {
   return rows.reduce((sum, row) => sum + (row.kienNguyen ?? 0) + (row.kienLe ?? 0), 0)
 }
@@ -574,13 +599,14 @@ export function buildReceiptFromFiles({
     }
   }
 
-  // Khi có nhiều biên bản giao nhận cho cùng chuyến (vd 1 file tổng của CPC1HN + 1 file riêng của DTP xác
-  // nhận phần hàng chuyển tiếp), file tổng thường đã gộp sẵn phần gửi đi DTP vào 1 dòng không mã hàng (vd
-  // "HÀNG GỬI DTP") — CỘNG DỒN tổng của tất cả các file sẽ đếm trùng đúng phần đó. Lấy số LỚN NHẤT trong
-  // các "Tổng cả đơn" (chính là file tổng/toàn chuyến) thay vì cộng dồn.
+  // Khi có nhiều biên bản giao nhận: các file CÙNG NGÀY cho cùng chuyến (vd 1 file tổng của CPC1HN + 1
+  // file riêng của DTP xác nhận phần hàng chuyển tiếp) — file tổng thường đã gộp sẵn phần gửi đi DTP vào
+  // 1 dòng không mã hàng (vd "HÀNG GỬI DTP"), cộng dồn sẽ đếm trùng đúng phần đó, nên lấy số LỚN NHẤT
+  // trong ngày. Các file KHÁC NGÀY là chuyến giao bổ sung/giao bù riêng — CỘNG DỒN giữa các ngày (xem
+  // sumDeclaredTotalsByDate).
   const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
   if (declaredTotals.length > 0) {
-    const declaredTotal = Math.max(...declaredTotals)
+    const declaredTotal = sumDeclaredTotalsByDate(pdfTexts)
     const actualTotal = sumKien(khoC) + sumKien(khoLgt)
     if (declaredTotal !== actualTotal) {
       warnings.push(
@@ -605,9 +631,10 @@ export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [] }) {
   if (declaredTotals.length === 0) {
     return { checked: false, message: 'Không đọc được "Tổng cả đơn ... Kiện" từ (các) biên bản giao nhận đã lưu.' }
   }
-  // Nhiều file cùng chuyến (vd tổng CPC1HN + riêng DTP) — file tổng đã gộp sẵn phần gửi đi kho khác vào 1
-  // dòng không mã hàng, cộng dồn sẽ đếm trùng. Lấy số lớn nhất (chính là file tổng/toàn chuyến).
-  const declaredTotal = Math.max(...declaredTotals)
+  // Nhiều file cùng chuyến, cùng ngày (vd tổng CPC1HN + riêng DTP) — file tổng đã gộp sẵn phần gửi đi kho
+  // khác vào 1 dòng không mã hàng, cộng dồn sẽ đếm trùng, nên lấy số lớn nhất trong ngày. Khác ngày là
+  // chuyến giao bổ sung riêng — cộng dồn giữa các ngày (xem sumDeclaredTotalsByDate).
+  const declaredTotal = sumDeclaredTotalsByDate(pdfTexts)
   const actualTotal = sumKien(khoC) + sumKien(khoLgt)
   const matched = declaredTotal === actualTotal
   return {
