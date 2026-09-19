@@ -275,11 +275,11 @@ function DonTruyenThongView({ rosterSet }) {
 
 export default function UnifiedTrialTab() {
   const [activeTab, setActiveTab] = useState('donsan')
-  const [rosterText, setRosterText] = useState(() => localStorage.getItem(STAFF_ROSTER_KEY) || '')
+  const [rosterText, setRosterText] = useState(() => readJSON(STAFF_ROSTER_KEY, ''))
 
   const onRosterChange = (text) => {
     setRosterText(text)
-    localStorage.setItem(STAFF_ROSTER_KEY, text)
+    localStorage.setItem(STAFF_ROSTER_KEY, JSON.stringify(text))
   }
   const rosterSet = useMemo(() => parseStaffRoster(rosterText), [rosterText])
 
