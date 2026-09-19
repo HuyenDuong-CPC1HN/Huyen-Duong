@@ -1,5 +1,11 @@
 {
   "css.lint.unknownAtRules": "ignore",
   "scss.lint.unknownAtRules": "ignore",
-  "css.customData": [".vscode/css-custom-data.json"]
+  "css.customData": [
+    ".vscode/css-custom-data.json"
+  ],
+  "sonarlint.connectedMode.project": {
+    "connectionId": "tietvinhphu",
+    "projectKey": "tietvinhphu"
+  }
 }

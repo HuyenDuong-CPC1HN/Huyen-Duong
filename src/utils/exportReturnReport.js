@@ -15,7 +15,7 @@ const TEMPLATES = {
 function pad2(n) { return String(n).padStart(2, '0') }
 
 // Tách 1 mốc ngày giờ (ISO hoặc Date) thành các phần ngày/tháng/năm/giờ dùng cho biên bản
-export function splitDatetime(value) {
+function splitDatetime(value) {
   const d = value ? new Date(value) : new Date()
   return {
     ngay: pad2(d.getDate()),

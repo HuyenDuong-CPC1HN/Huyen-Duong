@@ -35,7 +35,6 @@ const workspaceMocks = vi.hoisted(() => {
 })
 vi.mock('../../data/workspace', () => ({
   loadWorkspace: vi.fn().mockResolvedValue(undefined),
-  clearWorkspaceCache: workspaceMocks.clear,
   opsStore: workspaceMocks.opsStore,
 }))
 

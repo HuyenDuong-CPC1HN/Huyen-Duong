@@ -2,13 +2,7 @@ import { useState, useEffect } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
 import { Plus, Trash2, BarChart2, X, Save } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-
-const STORES = [
-  'Zentokid Vietnam Shopee',
-  'Zentokid Vietnam',
-  'Dược Phẩm CPC1HN',
-  'DTP Sức Khỏe',
-]
+import { TMDT_STORES as STORES } from '../config'
 
 const STORE_COLORS = ['#3b82f6', '#f97316', '#10b981', '#a855f7']
 
@@ -65,8 +59,8 @@ export default function TmdtTab() {
       dateFrom,
       dateTo,
       label: rangeLabel(dateFrom, dateTo),
-      counts: Object.fromEntries(STORES.map(s => [s, parseInt(counts[s]) || 0])),
-      total: STORES.reduce((sum, s) => sum + (parseInt(counts[s]) || 0), 0),
+      counts: Object.fromEntries(STORES.map(s => [s, Number.parseInt(counts[s]) || 0])),
+      total: STORES.reduce((sum, s) => sum + (Number.parseInt(counts[s]) || 0), 0),
     }
     if (existing >= 0) {
       setReports(prev => prev.map((r, i) => i === existing ? entry : r))
@@ -104,7 +98,7 @@ export default function TmdtTab() {
         <p className="text-xs text-gray-400 mb-2">Tuần mới nhất: {latestReport.label}</p>
       )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        {storeTotals.map((s, i) => (
+        {storeTotals.map((s) => (
           <div key={s.store} className={`rounded-xl border-2 p-4 ${STORE_CLS[s.store]}`}>
             <div className="text-xs font-semibold mb-2 leading-tight">{s.store}</div>
             <div className="text-3xl font-bold">{s.total}</div>
@@ -158,7 +152,7 @@ export default function TmdtTab() {
             </div>
             <form onSubmit={handleSubmit} className="p-6">
               <div className="mb-5">
-                <label className="block text-xs font-medium text-gray-600 mb-2">Thời gian báo cáo</label>
+                <span className="block text-xs font-medium text-gray-600 mb-2">Thời gian báo cáo</span>
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
                     <div className="text-xs text-gray-400 mb-1">Từ ngày</div>
@@ -192,7 +186,7 @@ export default function TmdtTab() {
               </div>
               <div className="space-y-3 mb-6">
                 <div className="text-xs font-medium text-gray-600 mb-2">Tổng đơn hàng mỗi cửa hàng</div>
-                {STORES.map((s, i) => (
+                {STORES.map((s) => (
                   <div key={s} className="flex items-center gap-3">
                     <div className={`flex-1 text-sm px-3 py-2 rounded-lg border ${STORE_CLS[s]} font-medium`}>
                       {s}
@@ -211,7 +205,7 @@ export default function TmdtTab() {
               <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                 <span className="text-sm text-gray-500">
                   Tổng: <strong className="text-gray-800">
-                    {STORES.reduce((sum, s) => sum + (parseInt(counts[s]) || 0), 0)} đơn
+                    {STORES.reduce((sum, s) => sum + (Number.parseInt(counts[s]) || 0), 0)} đơn
                   </strong>
                 </span>
                 <div className="flex gap-2">

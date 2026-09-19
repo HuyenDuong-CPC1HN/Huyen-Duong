@@ -4,3 +4,6 @@ dist/
 .env.local
 firebase-service-account.json
 .gitnexus
+.scannerwork/
+.agents/
+coverage/
