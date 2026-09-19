@@ -45,32 +45,44 @@ function readJSON(key, fallback) {
 // Danh sách nhân sự kho HCM dùng chung cho cả 2 pill (Đơn SO / Đơn truyền thống) — mỗi dòng 1
 // người, dán y hệt định dạng "Tên (SĐT)" trong cột "Bốc hàng"/"Đóng hàng" của Excel. Một đơn chỉ
 // tính là của kho HCM khi CẢ 2 (Bốc hàng và Đóng hàng) đều là người trong danh sách này.
-function StaffRosterEditor({ rosterText, onChange, matchCount }) {
+// Danh sách này cố định, ít khi sửa — đặt gọn thành 1 nút nhỏ + popover ở góc phải header, không
+// chiếm chỗ cố định ở đầu trang như trước.
+function StaffRosterEditor({ rosterText, onChange }) {
   const [open, setOpen] = useState(false)
   const count = rosterText.split('\n').map(s => s.trim()).filter(Boolean).length
 
   return (
-    <SectionCard title="Nhân sự kho HCM (lọc đơn đúng kho)" total={count} icon={Users} defaultOpen={open}>
-      <p className="text-xs text-gray-400 mb-2">
-        Dán danh sách nhân sự kho HCM, mỗi dòng 1 người, đúng định dạng "Tên (SĐT)" như trong cột
-        "Bốc hàng"/"Đóng hàng" của Excel. Đơn chỉ tính của kho HCM khi cả Bốc hàng lẫn Đóng hàng đều
-        là người trong danh sách — lệch nhau (1 trong 2) sẽ bị cảnh báo riêng, không tính vào tổng.
-      </p>
-      <textarea
-        value={rosterText}
-        onChange={e => { onChange(e.target.value); setOpen(true) }}
-        placeholder={'Phạm Thị Kiều Mi (0941512763)\nBùi Thị Diễm Duy (0354240857)\n...'}
-        rows={6}
-        className="w-full text-sm font-mono border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
-      />
-      {matchCount !== undefined && (
-        <p className="text-xs text-gray-400 mt-2">
-          {count === 0
-            ? 'Chưa nhập danh sách — mọi đơn tạm tính là kho HCM, chưa lọc gì.'
-            : `Đang lọc theo ${count} nhân sự.`}
-        </p>
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)} className="sheet-tab-action">
+        <Users size={13} />
+        Nhân sự kho HCM ({count})
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 z-20 w-96 bg-white border border-gray-200 rounded-xl shadow-lg p-3">
+            <p className="text-xs text-gray-400 mb-2">
+              Dán danh sách nhân sự kho HCM, mỗi dòng 1 người, đúng định dạng "Tên (SĐT)" như trong
+              cột "Bốc hàng"/"Đóng hàng" của Excel. Đơn chỉ tính của kho HCM khi cả Bốc hàng lẫn Đóng
+              hàng đều là người trong danh sách — lệch nhau (1 trong 2) sẽ bị cảnh báo riêng, không
+              tính vào tổng.
+            </p>
+            <textarea
+              value={rosterText}
+              onChange={e => onChange(e.target.value)}
+              placeholder={'Phạm Thị Kiều Mi (0941512763)\nBùi Thị Diễm Duy (0354240857)\n...'}
+              rows={8}
+              className="w-full text-sm font-mono border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            <p className="text-xs text-gray-400 mt-2">
+              {count === 0
+                ? 'Chưa nhập danh sách — mọi đơn tạm tính là kho HCM, chưa lọc gì.'
+                : `Đang lọc theo ${count} nhân sự.`}
+            </p>
+          </div>
+        </>
       )}
-    </SectionCard>
+    </div>
   )
 }
 
@@ -276,13 +288,10 @@ export default function UnifiedTrialTab() {
       <div className="sheet-tab-shell">
         <header className="sheet-tab-context">
           <span>Gộp kênh (Thử nghiệm) — chạy song song, chưa thay thế 3 tab cũ</span>
+          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
         </header>
 
-        <div className="mb-4">
-          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} matchCount={rosterSet.size} />
-        </div>
-
-        <div className="tdr-tabswitch">
+        <div className="tdr-tabswitch" style={{ marginTop: 16 }}>
           <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn SO</button>
           <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
         </div>
