@@ -5,7 +5,7 @@ import ExcelUpload from './ExcelUpload'
 import UnifiedTrialChannelDetail from './UnifiedTrialChannelDetail'
 import { CarrierPanel } from './CarrierStats'
 import { KpiTile, SectionCard } from './ReportCards'
-import { splitDonSO, splitDonTruyenThong } from '../utils/unifiedTrialSplit'
+import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 
 // "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx")
@@ -171,6 +171,9 @@ function DonSanView({ rosterSet }) {
   )
   const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(hcmRows), [hcmRows])
   const total = tmdt.length + ngoaiSan.length
+  const { shops } = useMemo(() => splitTmdtByShop(tmdt), [tmdt])
+  const shopCol1 = shops.slice(0, 2)
+  const shopCol2 = shops.slice(2, 4)
 
   const ngoaiSanCarrierKey = 'unifiedTrial_donSO_spx'
   useEffect(() => {
@@ -198,7 +201,25 @@ function DonSanView({ rosterSet }) {
       </div>
 
       <div className="space-y-4 mt-4">
-        <SectionCard title="Đối soát ngoại sàn (SPX COD)" total={ngoaiSan.length}>
+        <SectionCard title="ĐƠN SÀN TMĐT CHI TIẾT THEO SHOP" total={tmdt.length}>
+          <div className="grid grid-cols-2 gap-3">
+            {[shopCol1, shopCol2].map((col, i) => (
+              <div key={i} className="space-y-2">
+                {col.map(shop => (
+                  <div key={shop.code} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-100 bg-white">
+                    <div className="flex items-center gap-2 text-sm text-gray-700 min-w-0">
+                      <span className="font-medium truncate">{shop.label}</span>
+                      <span className="text-xs text-gray-400 font-mono shrink-0">{shop.code}</span>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-800 shrink-0">{shop.count.toLocaleString('vi-VN')}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="ĐỐI SOÁT ĐƠN WEBSITE" total={ngoaiSan.length}>
           <p className="text-xs text-gray-400 mb-3">
             Mốc "Đóng kiện" tự động lấy từ cột "TG Đóng hàng" trong file Đơn SO vừa upload — chỉ cần
             upload thêm "Danh sách thống kê" (Mốc 1) và file SPX xuất (Mốc 3/4) ở khung bên dưới.
