@@ -1,6 +1,9 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TongDonTab from '../TongDonTab'
+
+const toPngMock = vi.fn()
+vi.mock('html-to-image', () => ({ toPng: (...args) => toPngMock(...args) }))
 
 const workspaceMocks = vi.hoisted(() => {
   const values = new Map()
@@ -108,5 +111,35 @@ describe('TongDonTab saved-report composition', () => {
 
     expect(within(document.querySelector('.tdr.is-active')).getByText(/Báo cáo đã lưu ·/)).toBeInTheDocument()
     expect(document.querySelector('.tdr-source-picker')).not.toBeInTheDocument()
+  })
+
+  it('bật tạm class "tdr-export-cream" (nền/viền/chữ + khổ 1180px khớp mẫu) đúng lúc chụp ảnh, tắt lại ngay sau đó', async () => {
+    workspaceMocks.opsStore.setItem('tongdon_reports', JSON.stringify([report]))
+    let classDuringCapture = null
+    toPngMock.mockImplementation((node) => {
+      // toPng "chụp" DOM ngay tại thời điểm gọi — đúng lúc này class kem PHẢI đang có mặt.
+      classDuringCapture = node.classList.contains('tdr-export-cream')
+      return Promise.resolve('data:image/png;base64,fake')
+    })
+
+    // jsdom không tự chạy vòng lặp requestAnimationFrame — cho chạy callback ngay để await trong
+    // handleExportImage không treo mãi (bản thân component chỉ cần "đợi 1 frame" trước khi chụp).
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => { cb(); return 0 })
+
+    render(<TongDonTab onNavigate={vi.fn()} />)
+    const node = document.querySelector('.tdr.is-active')
+    expect(node.classList.contains('tdr-export-cream')).toBe(false)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Xuất ảnh PNG/i }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    rafSpy.mockRestore()
+
+    expect(toPngMock).toHaveBeenCalledWith(node, { backgroundColor: '#f5f4f0', pixelRatio: 1 })
+    expect(classDuringCapture).toBe(true)
+    // Sau khi xuất xong, màn hình đang xem phải trở lại đúng giao diện thường — không bị kẹt kiểu kem.
+    expect(node.classList.contains('tdr-export-cream')).toBe(false)
   })
 })

@@ -555,9 +555,13 @@ export default function TongDonTab({ onNavigate }) {
     const node = activeTab === 'donsan' ? exportRefDonSan.current : exportRefTruyenThong.current
     if (!node) return
     setExporting(true)
+    // Bật tạm biến thể "kem" (nền/viền/chữ + khổ 1180px) đúng mẫu người dùng cung cấp — chỉ trong lúc chụp
+    // ảnh, không đổi màn hình đang xem; toPng chụp DOM tại đúng thời điểm gọi nên phải add class TRƯỚC,
+    // remove SAU khi đã lấy xong dataUrl (kể cả khi lỗi, để không bị kẹt lại kiểu kem trên màn hình).
+    node.classList.add('tdr-export-cream')
     try {
       await new Promise((resolve) => requestAnimationFrame(resolve))
-      const dataUrl = await toPng(node, { backgroundColor: '#ffffff', pixelRatio: 2 })
+      const dataUrl = await toPng(node, { backgroundColor: '#f5f4f0', pixelRatio: 1 })
       const a = document.createElement('a')
       const suffix = activeTab === 'donsan' ? 'DonSan' : 'DonTruyenThong'
       a.href = dataUrl
@@ -566,6 +570,7 @@ export default function TongDonTab({ onNavigate }) {
     } catch {
       window.alert('Không xuất được ảnh, vui lòng thử lại.')
     } finally {
+      node.classList.remove('tdr-export-cream')
       setExporting(false)
     }
   }
