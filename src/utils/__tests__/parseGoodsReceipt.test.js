@@ -340,6 +340,26 @@ describe('parseGoodsReceipt', () => {
     expect(result).toMatchObject({ checked: true, matched: true, declaredTotal: 423 })
   })
 
+  it('nhiều biên bản giao nhận KHÁC NGÀY (chuyến giao bổ sung/giao bù riêng): cộng dồn, không lấy max', () => {
+    // Chuyến ngày 18/09 giao 400 kiện, ngày 19/09 giao bổ sung thêm 45 kiện (cùng đơn hàng, giao thiếu
+    // hôm trước bù hôm sau) -> phải cộng dồn 400+45=445, không phải lấy max(400,45)=400 như trước đây
+    // (lỗi thực tế người dùng gặp phải: thêm biên bản chuyến bổ sung nhưng tổng không tăng).
+    const pdfNgay18 = 'Ngày 18 tháng 09 năm 2026 Họ và tên: Tài xế A Biển số xe: 29E-111.11 SĐT liên hệ: 0900000001 '
+      + '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 400 272 Tổng cả đơn 400 Kiện'
+    const pdfNgay19 = 'Ngày 19 tháng 09 năm 2026 Họ và tên: Tài xế B Biển số xe: 29E-222.22 SĐT liên hệ: 0900000002 '
+      + '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 45 272 Tổng cả đơn 45 Kiện'
+    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '612', 'Lượng cần': 272, 'Số kiện cần': 445, ĐVT: 'TUYP' }])
+    const { warnings } = buildReceiptFromFiles({
+      khoCRows: readWarehouseExportRows(excelC),
+      khoLgtRows: [],
+      pdfTexts: [pdfNgay18, pdfNgay19],
+    })
+    expect(warnings).toHaveLength(0) // 400+45=445 khớp đúng 445 kiện đã tách -> không cảnh báo
+
+    const result = recheckKienTotal({ khoC: readWarehouseExportRows(excelC), khoLgt: [], pdfTexts: [pdfNgay18, pdfNgay19] })
+    expect(result).toMatchObject({ checked: true, matched: true, declaredTotal: 445 })
+  })
+
   it('keeps multi-token số lô intact (vd "1 14") instead of chopping it down to 1 token', () => {
     // Số lô thật ghi 2 token cách nhau bởi khoảng trắng — trước đây bị cắt mất token đầu.
     const pdfText = '9 L01021 Liproin - Hộp 1 tuýp 5g 1 14 1 1 867 167h thùng số 1 '
