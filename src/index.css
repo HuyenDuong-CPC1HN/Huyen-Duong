@@ -906,6 +906,21 @@ body {
 }
 .tdr.is-active { display: block; }
 
+/* ---- Biến thể "kem" chỉ bật tạm lúc xuất ảnh PNG (xem handleExportImage, TongDonTab.jsx) — khớp đúng
+   mẫu màu/khổ ảnh người dùng cung cấp: nền kem phẳng (không còn "tờ giấy trắng nổi khối" như mặc định),
+   viền/chữ ấm hơn, khổ rộng 1180px để 4 cột KPI không bị chật. Không đổi bảng màu bên trong từng thẻ con
+   (KPI/tile/pill/callout...) vì chúng đã dùng đúng các biến --color-current/--color-red/--border-color
+   sẵn có — chỉ cần đổi biến ở cấp .tdr là toàn bộ khối con tự động ăn theo đúng tông màu mới. ---- */
+.tdr.tdr-export-cream {
+  width: 1180px;
+  max-width: 1180px;
+  background: #f5f4f0;
+  box-shadow: none;
+  padding: 28px 32px 36px;
+  --border-color: #e4e2d9;
+  --text-primary: #1f2a26;
+}
+
 .tdr-eyebrow {
   font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   color: var(--text-tertiary); margin-bottom: 10px;
