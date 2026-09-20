@@ -187,7 +187,7 @@ export default function UnifiedTrialChannelDetail({
       </div>
 
       <div className="space-y-4">
-        <SectionCard title="Giao hàng trực tiếp" total={trucTiepBadge} icon={CheckCircle} defaultOpen={false}>
+        <SectionCard title="Giao hàng trực tiếp" total={trucTiepBadge} icon={CheckCircle} defaultOpen={readOnly}>
           <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
             {STAT_COLS.map(col => (
               <StatCard key={col.key} icon={col.icon} value={trucTiepStats[col.key]} label={col.label} cls={col.cls} />
@@ -218,7 +218,7 @@ export default function UnifiedTrialChannelDetail({
         </SectionCard>
 
         {showChanhXe && (
-          <SectionCard title="Giao qua Chành xe" total={chanhXeBadge} icon={Truck} defaultOpen={false}>
+          <SectionCard title="Giao qua Chành xe" total={chanhXeBadge} icon={Truck} defaultOpen={readOnly}>
             <div className="text-sm text-gray-500 flex items-center gap-2">
               <Package size={15} className="text-gray-400" />
               Tổng số đơn đã gửi qua chành: <strong className="text-gray-800 ml-1">{chanhXeCount} đơn</strong>
@@ -247,11 +247,11 @@ export default function UnifiedTrialChannelDetail({
 
         <SectionCard title="Giao qua đối tác vận chuyển" total={doitacTotal} icon={Truck}>
           <div className="space-y-3">
-            <SectionCard title="Viettel Post" total={viettelCount} icon={Truck} defaultOpen={false}>
+            <SectionCard title="Viettel Post" total={viettelCount} icon={Truck} defaultOpen={readOnly}>
               <CarrierPanel {...viettelPanelProps} />
             </SectionCard>
             {showSpx && (
-              <SectionCard title="SPX Express" total={spxCount} icon={Truck} defaultOpen={false}>
+              <SectionCard title="SPX Express" total={spxCount} icon={Truck} defaultOpen={readOnly}>
                 <CarrierPanel {...spxPanelProps} />
               </SectionCard>
             )}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Package, ShoppingBag, Globe, RefreshCw, Users, AlertTriangle, Save } from 'lucide-react'
+import { Package, ShoppingBag, Globe, RefreshCw, Users, AlertTriangle, Save, Pencil, Check, X } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import ExcelUpload from './ExcelUpload'
 import UnifiedTrialChannelDetail from './UnifiedTrialChannelDetail'
@@ -9,7 +9,7 @@ import { KpiTile, SectionCard } from './ReportCards'
 import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
-import { readTrialReports, saveTrialReport } from '../utils/unifiedTrialReports'
+import { readTrialReports, saveTrialReport, renameTrialReport } from '../utils/unifiedTrialReports'
 
 const NGOAI_SAN_CARRIER_KEY = 'unifiedTrial_donSO_spx'
 
@@ -199,18 +199,60 @@ function SaveWeekButton({ onSave, alreadySaved }) {
   )
 }
 
-function SavedWeekPicker({ reports, viewingId, onChange }) {
+// Đổi tên tuần đã lưu — mặc định label là "<tên file> · <ngày upload>", bấm bút chì để sửa lại
+// thành tên tuần báo cáo thật (vd "Tuần 12.09 - 18.09.2026") cho dễ nhận ra khi chọn lại sau này.
+function SavedWeekPicker({ reports, viewingId, onChange, onRename }) {
+  const [editing, setEditing] = useState(false)
+  const [label, setLabel] = useState('')
+  const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
+
+  const startEdit = () => {
+    setLabel(viewingEntry?.label || '')
+    setEditing(true)
+  }
+  const confirmEdit = () => {
+    if (label.trim() && viewingId) onRename(viewingId, label.trim())
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          autoFocus
+          value={label}
+          onChange={e => setLabel(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') confirmEdit()
+            if (e.key === 'Escape') setEditing(false)
+          }}
+          placeholder="vd: Tuần 12.09 - 18.09.2026"
+          className="text-xs border border-blue-300 rounded-lg px-2 py-1.5 w-64 focus:outline-none"
+        />
+        <button type="button" onClick={confirmEdit} className="p-1.5 rounded hover:bg-green-100 text-green-600"><Check size={13} /></button>
+        <button type="button" onClick={() => setEditing(false)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400"><X size={13} /></button>
+      </div>
+    )
+  }
+
   return (
-    <select
-      value={viewingId || ''}
-      onChange={e => onChange(e.target.value || null)}
-      className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-    >
-      <option value="">— Xem trực tiếp (tuần hiện tại) —</option>
-      {reports.map(r => (
-        <option key={r.id} value={r.id}>{r.label}</option>
-      ))}
-    </select>
+    <div className="flex items-center gap-1">
+      <select
+        value={viewingId || ''}
+        onChange={e => onChange(e.target.value || null)}
+        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+      >
+        <option value="">— Xem trực tiếp (tuần hiện tại) —</option>
+        {reports.map(r => (
+          <option key={r.id} value={r.id}>{r.label}</option>
+        ))}
+      </select>
+      {viewingEntry && (
+        <button type="button" onClick={startEdit} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Sửa tên tuần">
+          <Pencil size={13} />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -388,7 +430,10 @@ function DonSanView({ rosterSet }) {
     <div>
       <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />
       <div className="flex items-center justify-between gap-2 mb-4">
-        <SavedWeekPicker reports={reports} viewingId={viewingId} onChange={setViewingId} />
+        <SavedWeekPicker
+          reports={reports} viewingId={viewingId} onChange={setViewingId}
+          onRename={(id, label) => setReports(renameTrialReport('donSO', id, label))}
+        />
         {!viewingId && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
       </div>
 
@@ -482,7 +527,10 @@ function DonTruyenThongView({ rosterSet }) {
     <div>
       <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />
       <div className="flex items-center justify-between gap-2 mb-4">
-        <SavedWeekPicker reports={reports} viewingId={viewingId} onChange={setViewingId} />
+        <SavedWeekPicker
+          reports={reports} viewingId={viewingId} onChange={setViewingId}
+          onRename={(id, label) => setReports(renameTrialReport('donTruyenThong', id, label))}
+        />
         {!viewingId && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
       </div>
 

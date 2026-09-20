@@ -34,3 +34,11 @@ export function removeTrialReport(kind, id) {
   localStorage.setItem(storageKey(kind), JSON.stringify(next))
   return next
 }
+
+// Đổi tên tuần đã lưu — mặc định label là "<tên file> · <ngày upload>", người dùng có thể sửa lại
+// thành tên tuần báo cáo thật (vd "Tuần 12.09 - 18.09.2026") cho dễ nhận ra sau này.
+export function renameTrialReport(kind, id, label) {
+  const next = readTrialReports(kind).map(r => r.id === id ? { ...r, label } : r)
+  localStorage.setItem(storageKey(kind), JSON.stringify(next))
+  return next
+}
