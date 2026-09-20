@@ -86,7 +86,7 @@ describe('exportGoodsReceipt', () => {
 
   it('điền đúng cột theo mẫu giấy — chỉ điền Hoá đơn trong nhóm Số lượng, Thực tế/Chênh lệch/Hư hỏng/Tình trạng để trống cho người kiểm hàng tự điền tay', async () => {
     const templateBuffer = loadTemplateBuffer()
-    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { metadata: { noiNhan: 'Kho C' }, processedAt: PROCESSED_AT })
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { metadata: {}, warehouse: 'C' })
     const sheetXml = sheetXmlOf(bytes)
     const sst = sharedStringsOf(bytes)
     const doc = new DOMParser().parseFromString(sheetXml, 'application/xml')
@@ -111,12 +111,41 @@ describe('exportGoodsReceipt', () => {
     expect(cell(15, 'K').querySelector('v')).toBeNull()
     expect(cell(15, 'L').querySelector('v')).toBeNull()
 
-    // Số hóa đơn tự sinh theo mã BBGNddmmyyyy từ ngày xử lý chuyến hàng, không lấy từ PDF.
-    expect(cellText(6, 'B')).toBe('Số hóa đơn : BBGN04092026')
-    expect(cellText(8, 'B')).toContain('Kho C')
+    // Số hóa đơn để trống cho người dùng tự điền tay — giữ nguyên dòng chấm chấm gốc của mẫu.
+    expect(cellText(6, 'B')).toBe('Số hóa đơn : …………………………………….')
+    // Nơi nhận cố định theo kho đang xuất, không suy đoán từ PDF/metadata.
+    expect(cellText(8, 'B')).toBe('Nơi nhận : CPC1HN - Chi nhánh Hồ Chí Minh')
 
     // Ảnh/logo (drawing) vẫn được tham chiếu — không bị SheetJS-style xoá mất.
     expect(sheetXml).toContain('<drawing r:id="rId2"/>')
+  })
+
+  it('Nơi nhận Kho LGT ghi đúng "LGT - Chi nhánh Hồ Chí Minh" (khác Kho C) — không phải nơi hàng xuất đi, mà là chi nhánh mình nhận hàng', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { metadata: {}, warehouse: 'LGT' })
+    const doc = new DOMParser().parseFromString(sheetXmlOf(bytes), 'application/xml')
+    const sstDoc = new DOMParser().parseFromString(sharedStringsOf(bytes), 'application/xml')
+    const sharedText = i => sstDoc.documentElement.getElementsByTagName('si')[i]?.textContent || ''
+    const cellText = (row, col) => {
+      const c = doc.querySelector(`c[r="${col}${row}"]`)
+      const v = c?.querySelector('v')?.textContent
+      return v === undefined ? null : (c.getAttribute('t') === 's' ? sharedText(Number(v)) : v)
+    }
+    expect(cellText(8, 'B')).toBe('Nơi nhận : LGT - Chi nhánh Hồ Chí Minh')
+  })
+
+  it('Ngày, giờ nhận luôn để trống — không tự điền theo ngày trên PDF biên bản giao nhận (từng bị điền sai)', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    // ngayNhap mô phỏng đúng field mà parsePdfMetadata() trả về — trước đây bị dùng làm fallback sai.
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], {
+      metadata: { ngayNhap: '28/08/2026', benNhanHang: 'CPC1 Hà Nội - Chi nhánh Hồ Chí Minh' },
+      warehouse: 'C',
+    })
+    const doc = new DOMParser().parseFromString(sheetXmlOf(bytes), 'application/xml')
+    const sstDoc = new DOMParser().parseFromString(sharedStringsOf(bytes), 'application/xml')
+    const cell = doc.querySelector('c[r="B9"]')
+    const idx = Number(cell.querySelector('v').textContent)
+    expect(sstDoc.documentElement.getElementsByTagName('si')[idx].textContent).toBe('Ngày, giờ nhận :………………………………….')
   })
 
   it('Kiện nguyên/Kiện lẻ bằng 0 vẫn hiện "0" (dữ liệu thật), không bị coi như trống', async () => {

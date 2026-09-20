@@ -24,29 +24,28 @@ const CLONE_STYLE_ROW = 26 // dòng dữ liệu cuối cùng có sẵn trong m�
 const QUANTITY_COLS = ['F', 'G', 'H']
 
 // 5 dòng thông tin đầu mẫu (B7:B11) mỗi dòng là 1 chuỗi gộp sẵn "Nhãn : ………" — điền giá trị thật bằng
-// cách nối thêm sau dấu ":", giữ nguyên phần nhãn. Riêng "Số hóa đơn" (B6) không lấy từ PDF mà tự sinh
-// theo mã nội bộ BBGNddmmyyyy (Biên bản giao nhận + ngày xử lý chuyến hàng) — xem formatBBGNCode().
+// cách nối thêm sau dấu ":", giữ nguyên phần nhãn. "Số hóa đơn" (B6), "Ngày, giờ nhận" (B9) để trống
+// (giữ nguyên chấm chấm của mẫu) — người dùng tự điền tay, không tự sinh/suy đoán giá trị (từng tự sinh
+// mã BBGNddmmyyyy cho Số hóa đơn và tự điền ngày từ PDF biên bản giao nhận cho Ngày giờ nhận, đều sai vì
+// không phải giá trị thật cần ghi).
 const HEADER_FIELDS = [
   { row: 7, prefix: 'Số hợp đồng :', key: 'soHopDong' },
-  { row: 8, prefix: 'Nơi nhận :', key: 'noiNhan' },
-  { row: 9, prefix: 'Ngày, giờ nhận :', key: 'ngayGioNhan' },
   { row: 10, prefix: 'Ngày, giờ kiểm :', key: 'ngayGioKiem' },
   { row: 11, prefix: 'Kết quả kiểm :', key: 'ketQuaKiem' },
 ]
+
+// "Nơi nhận" (B8) luôn là chi nhánh HCM CỦA MÌNH nhận hàng, không phải nơi hàng được xuất đi (đã từng bị
+// nhầm ghi theo kho nguồn) — cố định theo đúng kho đang xuất biên bản, không suy đoán từ PDF/metadata.
+const NOI_NHAN_BY_WAREHOUSE = {
+  C: 'CPC1HN - Chi nhánh Hồ Chí Minh',
+  LGT: 'LGT - Chi nhánh Hồ Chí Minh',
+}
 
 function formatDateVi(iso) {
   if (!iso) return ''
   const [y, m, d] = iso.split('-')
   if (!y || !m || !d) return ''
   return `${d}/${m}/${y}`
-}
-
-// Mã số hóa đơn nội bộ: BBGN + ngày xử lý chuyến hàng (ddmmyyyy), vd chuyến ngày 04/09/2026 -> BBGN04092026.
-function formatBBGNCode(date) {
-  const d = String(date.getDate()).padStart(2, '0')
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const y = date.getFullYear()
-  return `BBGN${d}${m}${y}`
 }
 
 function parseXml(text) {
@@ -172,12 +171,11 @@ function ensureQuantityStyle(stylesDoc) {
   return String(index)
 }
 
-function fillHeaderFields(doc, sstDoc, metadata, processedAt) {
-  setCellString(doc, sstDoc, 6, 'B', `Số hóa đơn : ${formatBBGNCode(processedAt)}`)
+function fillHeaderFields(doc, sstDoc, metadata, warehouse) {
+  const noiNhan = NOI_NHAN_BY_WAREHOUSE[warehouse]
+  if (noiNhan) setCellString(doc, sstDoc, 8, 'B', `Nơi nhận : ${noiNhan}`)
   const meta = {
     soHopDong: metadata.soHopDong || '',
-    noiNhan: metadata.noiNhan || metadata.benNhanHang || '',
-    ngayGioNhan: metadata.ngayGioNhan || metadata.ngayNhap || '',
     ngayGioKiem: metadata.ngayGioKiem || '',
     ketQuaKiem: metadata.ketQuaKiem || '',
   }
@@ -272,8 +270,9 @@ function updatePrintArea(workbookDoc, footerRowNum) {
   }
 }
 
-// Điền dữ liệu 1 kho vào file mẫu, trả về Uint8Array của file .xlsx hoàn chỉnh.
-export async function fillReceiptTemplate(templateBuffer, rows, { metadata = {}, processedAt = new Date() } = {}) {
+// Điền dữ liệu 1 kho vào file mẫu, trả về Uint8Array của file .xlsx hoàn chỉnh. warehouse ('C'/'LGT')
+// quyết định "Nơi nhận" — xem NOI_NHAN_BY_WAREHOUSE.
+export async function fillReceiptTemplate(templateBuffer, rows, { metadata = {}, warehouse } = {}) {
   const zip = new PizZip(templateBuffer.slice(0))
 
   const sstDoc = parseXml(zip.file(STRINGS_PATH).asText())
@@ -289,7 +288,7 @@ export async function fillReceiptTemplate(templateBuffer, rows, { metadata = {},
     soLo: ensureUniformStyle(stylesDoc, { fontId: 3, wrapText: true }),
     hanDung: ensureUniformStyle(stylesDoc, { fontId: 2, wrapText: true }),
   }
-  fillHeaderFields(sheetDoc, sstDoc, metadata, processedAt)
+  fillHeaderFields(sheetDoc, sstDoc, metadata, warehouse)
   const footerRowNum = ensureDataRows(sheetDoc, rows.length)
   fillDataRows(sheetDoc, sstDoc, rows, styleIds)
   if (footerRowNum !== FOOTER_ROW_TEMPLATE) updatePrintArea(workbookDoc, footerRowNum)
@@ -332,12 +331,12 @@ export async function exportReceiptFromTemplate({
   const templateBuffer = await loadTemplateBuffer()
 
   if (khoC?.length) {
-    const bytes = await fillReceiptTemplate(templateBuffer, khoC, { metadata, processedAt })
+    const bytes = await fillReceiptTemplate(templateBuffer, khoC, { metadata, warehouse: 'C' })
     triggerDownload(bytes, `BienBanNhapHang_KhoC_${label}.xlsx`)
   }
 
   if (khoLgt?.length) {
-    const bytes = await fillReceiptTemplate(templateBuffer, khoLgt, { metadata, processedAt })
+    const bytes = await fillReceiptTemplate(templateBuffer, khoLgt, { metadata, warehouse: 'LGT' })
     triggerDownload(bytes, `BienBanNhapHang_KhoLGT_${label}.xlsx`)
   }
 }
