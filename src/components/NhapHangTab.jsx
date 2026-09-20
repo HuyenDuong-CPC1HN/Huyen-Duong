@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Upload, FileUp, FileSpreadsheet, X, Download, Search, PackagePlus,
   Pencil, Save, History, FileText, Plus, Trash2, RefreshCw,
@@ -600,6 +600,34 @@ export default function NhapHangTab() {
 
   const active = batches.find(batch => batch.id === activeId) || null
 
+  // Hoàn tác (Ctrl+Z / Cmd+Z) cho sửa ô / thêm dòng / xoá dòng khi đang Chỉnh sửa — mỗi lần đổi batch hoặc
+  // Lưu xong thì xoá lịch sử, không cho hoàn tác xuyên qua ranh giới đã lưu/đã đổi chuyến khác.
+  const [undoStack, setUndoStack] = useState([])
+  const [undoStackActiveId, setUndoStackActiveId] = useState(activeId)
+  if (activeId !== undoStackActiveId) {
+    setUndoStackActiveId(activeId)
+    setUndoStack([])
+  }
+
+  const pushUndo = () => {
+    if (!active) return
+    setUndoStack(stack => [...stack.slice(-49), { batchId: active.id, khoC: active.khoC, khoLgt: active.khoLgt }])
+  }
+
+  useEffect(() => {
+    if (!editing) return
+    const handleKeyDown = e => {
+      const isUndo = (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z'
+      if (!isUndo || undoStack.length === 0) return
+      e.preventDefault()
+      const last = undoStack[undoStack.length - 1]
+      setBatches(prev => prev.map(b => (b.id === last.batchId ? { ...b, khoC: last.khoC, khoLgt: last.khoLgt } : b)))
+      setUndoStack(stack => stack.slice(0, -1))
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [editing, undoStack])
+
   const monthGroups = useMemo(() => groupBatchesByMonth(batches), [batches])
 
   // Mặc định bám theo tháng của chuyến đang xem; chỉ dùng lựa chọn tay khi tháng đó vẫn còn tồn tại
@@ -733,10 +761,12 @@ export default function NhapHangTab() {
     updateBatch(active.id, { khoC: active.khoC, khoLgt: active.khoLgt })
     setBatches(readBatches())
     setEditing(false)
+    setUndoStack([])
   }
 
   const patchRows = (warehouse, index, field, value) => {
     if (!active) return
+    pushUndo()
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
     const nextRows = [...active[key]]
     nextRows[index] = { ...nextRows[index], [field]: value }
@@ -750,6 +780,7 @@ export default function NhapHangTab() {
   // các dòng "chỉ thấy trong PDF" trước đây. Chèn ngay dưới dòng vừa bấm.
   const insertRowAfter = (warehouse, index) => {
     if (!active) return
+    pushUndo()
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
     const newRow = { rowId: crypto.randomUUID(), maHang: '', tenHang: '', dvt: '', soLo: '', hanDung: null, kienNguyen: 0, kienLe: 0, slHoaDon: 0, slThucTe: null, ghiChu: '', needsManual: true }
     const currentRows = active[key] || []
@@ -760,6 +791,7 @@ export default function NhapHangTab() {
 
   const removeRow = (warehouse, index) => {
     if (!active) return
+    pushUndo()
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
     const next = { ...active, [key]: (active[key] || []).filter((_, i) => i !== index) }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
@@ -1065,7 +1097,12 @@ export default function NhapHangTab() {
         <button type="button" onClick={() => { setActiveId(null); setSelectedMonthKey(null); setBatches(readBatches()) }} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
           <Upload size={14} /> Xử lý chuyến mới
         </button>
-        <button type="button" onClick={() => setEditing(v => !v)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
+        <button
+          type="button"
+          onClick={() => setEditing(v => !v)}
+          title={editing ? 'Ctrl+Z (Cmd+Z trên Mac) để hoàn tác sửa ô / thêm dòng / xoá dòng gần nhất' : undefined}
+          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600"
+        >
           <Pencil size={14} /> {editing ? 'Đang sửa' : 'Chỉnh sửa'}
         </button>
         {editing && (
