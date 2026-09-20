@@ -268,7 +268,7 @@ function DateCell({ value, onChange, className = '' }) {
   )
 }
 
-function ReceiptTableRow({ row, index, rank, editing, onRowChange, onRemoveRow }) {
+function ReceiptTableRow({ row, index, rank, editing, onRowChange, onRemoveRow, onInsertRow }) {
   const chenh = calcChenhLech(row)
   const highlight = row.needsManual || !row.hanDung
 
@@ -325,9 +325,14 @@ function ReceiptTableRow({ row, index, rank, editing, onRowChange, onRemoveRow }
       </td>
       {editing && (
         <td className="px-2 py-1.5 text-center">
-          <button type="button" onClick={() => onRemoveRow(index)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá dòng này">
-            <Trash2 size={14} />
-          </button>
+          <div className="flex items-center justify-center gap-1">
+            <button type="button" onClick={() => onInsertRow(index)} className="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500" title="Thêm dòng mới ngay dưới dòng này">
+              <Plus size={14} />
+            </button>
+            <button type="button" onClick={() => onRemoveRow(index)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá dòng này">
+              <Trash2 size={14} />
+            </button>
+          </div>
         </td>
       )}
     </tr>
@@ -408,7 +413,7 @@ function FactoryReconciliationTable({ rows, tone }) {
   )
 }
 
-function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, sortKey, sortDir, onToggleSort }) {
+function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onInsertRow, sortKey, sortDir, onToggleSort }) {
   // Sắp xếp CHỈ áp dụng khi KHÔNG Chỉnh sửa — nếu sắp cả lúc đang gõ Mã hàng/Tên hàng, mỗi ký tự gõ vào
   // sẽ đổi thứ tự ngay, dòng đang gõ nhảy vị trí liên tục ngay dưới con trỏ, trải nghiệm rất khó chịu dù
   // key={row.rowId} vẫn giữ đúng danh tính từng dòng. originalIndex giữ nguyên vị trí thật trong mảng dữ
@@ -449,7 +454,7 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, sortKey,
                   <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">{h}</th>
                 )
               ))}
-              {editing && <th className="px-2 py-2 w-8" />}
+              {editing && <th className="px-2 py-2 w-16" />}
             </tr>
           </thead>
           <tbody>
@@ -462,6 +467,7 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, sortKey,
                 editing={editing}
                 onRowChange={onRowChange}
                 onRemoveRow={onRemoveRow}
+                onInsertRow={onInsertRow}
               />
             ))}
           </tbody>
@@ -748,6 +754,18 @@ export default function NhapHangTab() {
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
     const newRow = { rowId: crypto.randomUUID(), maHang: '', tenHang: '', dvt: '', soLo: '', hanDung: null, kienNguyen: 0, kienLe: 0, slHoaDon: 0, slThucTe: null, ghiChu: '', needsManual: true }
     const next = { ...active, [key]: [newRow, ...(active[key] || [])] }
+    setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
+  }
+
+  // Chèn ngay TẠI vị trí người dùng muốn (dấu + trên từng dòng) — khác addRow ở trên (luôn chèn lên đầu
+  // bảng qua nút thanh công cụ). Chèn ngay dưới dòng vừa bấm.
+  const insertRowAfter = (warehouse, index) => {
+    if (!active) return
+    const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
+    const newRow = { rowId: crypto.randomUUID(), maHang: '', tenHang: '', dvt: '', soLo: '', hanDung: null, kienNguyen: 0, kienLe: 0, slHoaDon: 0, slThucTe: null, ghiChu: '', needsManual: true }
+    const currentRows = active[key] || []
+    const nextRows = [...currentRows.slice(0, index + 1), newRow, ...currentRows.slice(index + 1)]
+    const next = { ...active, [key]: nextRows }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
   }
 
@@ -1188,6 +1206,7 @@ export default function NhapHangTab() {
         editing={editing}
         onRowChange={(i, f, v) => patchRows('C', i, f, v)}
         onRemoveRow={(i) => removeRow('C', i)}
+        onInsertRow={(i) => insertRowAfter('C', i)}
         sortKey={khoCSort.key}
         sortDir={khoCSort.dir}
         onToggleSort={toggleKhoCSort}
@@ -1198,6 +1217,7 @@ export default function NhapHangTab() {
         editing={editing}
         onRowChange={(i, f, v) => patchRows('LGT', i, f, v)}
         onRemoveRow={(i) => removeRow('LGT', i)}
+        onInsertRow={(i) => insertRowAfter('LGT', i)}
         sortKey={khoLgtSort.key}
         sortDir={khoLgtSort.dir}
         onToggleSort={toggleKhoLgtSort}
