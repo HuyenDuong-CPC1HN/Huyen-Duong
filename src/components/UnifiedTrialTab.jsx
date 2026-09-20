@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Package, ShoppingBag, Globe, RefreshCw, Users, AlertTriangle, Save, Pencil, Check, X } from 'lucide-react'
+import { Package, ShoppingBag, Globe, Users, AlertTriangle, Save, Pencil, Check, X } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import ExcelUpload from './ExcelUpload'
 import UnifiedTrialChannelDetail from './UnifiedTrialChannelDetail'
@@ -159,26 +159,6 @@ function MismatchWarning({ mismatchRows, otherCount }) {
           )}
         </>
       )}
-    </div>
-  )
-}
-
-function FileSlot({ meta, onReplace, uploadNode }) {
-  if (!meta) return uploadNode
-  return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl mb-4">
-      <div className="text-sm text-gray-600">
-        <span className="font-medium text-gray-800">{meta.fileName}</span>
-        <span className="text-gray-400"> — upload lúc {new Date(meta.uploadedAt).toLocaleString('vi-VN')}</span>
-      </div>
-      <button
-        type="button"
-        onClick={onReplace}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs hover:border-blue-400 hover:text-blue-600 text-gray-600"
-      >
-        <RefreshCw size={12} />
-        Upload lại
-      </button>
     </div>
   )
 }
@@ -372,7 +352,6 @@ function DonTruyenThongSnapshotView({ entry }) {
 function DonSanView({ rosterSet }) {
   const [meta, setMeta] = useState(() => readJSON(SO_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(SO_ROWS_KEY, null))
-  const [replacing, setReplacing] = useState(false)
   const [reports, setReports] = useState(() => readTrialReports('donSO'))
   const [viewingId, setViewingId] = useState(null)
 
@@ -382,7 +361,6 @@ function DonSanView({ rosterSet }) {
     localStorage.setItem(SO_META_KEY, JSON.stringify(m))
     setRows(data)
     setMeta(m)
-    setReplacing(false)
     setViewingId(null)
   }
 
@@ -425,13 +403,11 @@ function DonSanView({ rosterSet }) {
   // với rows thô cũ nữa, tự chuyển về khung upload chờ file tuần mới (khỏi phải bấm "Upload lại"
   // thêm 1 bước). NHƯNG dropdown chọn tuần đã lưu vẫn phải luôn thấy được (không ẩn theo) — đây là
   // 2 việc riêng: "màn hình làm việc" (upload/số liệu) và "điều hướng xem tuần cũ" (dropdown).
-  const showLive = Boolean(rows) && !replacing && !viewingEntry && !(alreadySaved && !viewingId)
+  const showLive = Boolean(rows) && !viewingEntry && !(alreadySaved && !viewingId)
   const hasAnyState = rows !== null || reports.length > 0
 
   return (
     <div>
-      {rows && !replacing && <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />}
-
       {hasAnyState && (
         <div className="flex items-center justify-between gap-2 mb-4">
           <SavedWeekPicker
@@ -473,7 +449,6 @@ function DonSanView({ rosterSet }) {
 function DonTruyenThongView({ rosterSet }) {
   const [meta, setMeta] = useState(() => readJSON(TT_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(TT_ROWS_KEY, null))
-  const [replacing, setReplacing] = useState(false)
   const [channel, setChannel] = useState('donC')
   const [reports, setReports] = useState(() => readTrialReports('donTruyenThong'))
   const [viewingId, setViewingId] = useState(null)
@@ -484,7 +459,6 @@ function DonTruyenThongView({ rosterSet }) {
     localStorage.setItem(TT_META_KEY, JSON.stringify(m))
     setRows(data)
     setMeta(m)
-    setReplacing(false)
     setViewingId(null)
   }
 
@@ -528,13 +502,11 @@ function DonTruyenThongView({ rosterSet }) {
   const alreadySaved = meta && reports.some(r => r.id === meta.uploadedAt)
   // Giống DonSanView: tuần đã lưu rồi thì màn hình làm việc tự chuyển về khung upload chờ file
   // tuần mới, nhưng dropdown chọn tuần đã lưu vẫn phải luôn thấy được, không ẩn theo.
-  const showLive = Boolean(rows) && !replacing && !viewingEntry && !(alreadySaved && !viewingId)
+  const showLive = Boolean(rows) && !viewingEntry && !(alreadySaved && !viewingId)
   const hasAnyState = rows !== null || reports.length > 0
 
   return (
     <div>
-      {rows && !replacing && <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />}
-
       {hasAnyState && (
         <div className="flex items-center justify-between gap-2 mb-4">
           <SavedWeekPicker
