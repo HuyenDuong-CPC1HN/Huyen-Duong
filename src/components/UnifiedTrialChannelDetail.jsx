@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react'
 import { CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, Users } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import { partnerType } from '../utils/partnerType'
-import { deliveryBucket } from '../utils/deliveryDays'
-import { getCarrierFileTotal } from './carrierUtils'
+import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
 import { CarrierPanel } from './CarrierStats'
 import { DetailTable } from './ThongKeDoiTac'
 import { StatCard, SectionCard, KpiTile } from './ReportCards'
@@ -44,18 +43,6 @@ const KH_TYPES = {
     { key: 'pk', label: 'Phòng khám', border: 'border-purple-200', text: 'text-purple-700' },
     { key: 'onl', label: 'KH ONL / Khách lẻ', border: 'border-gray-200', text: 'text-gray-600' },
   ],
-}
-
-function calcTrucTiepStats(rows) {
-  const result = { '24h': 0, '48h': 0, '72h': 0, khac: 0 }
-  for (const row of rows) {
-    const bucket = deliveryBucket(row)
-    if (bucket === '24') result['24h']++
-    else if (bucket === '48') result['48h']++
-    else if (bucket === '72') result['72h']++
-    else result.khac++
-  }
-  return result
 }
 
 function useStoredValue(storageKey, fallback) {
@@ -117,53 +104,44 @@ function ExpandableList({ rows, label }) {
 export default function UnifiedTrialChannelDetail({ data, channelKey, referenceDate = null, showChanhXe = false, showSpx = false }) {
   const validData = useMemo(() => data.filter(row => String(row['Mã kiện hàng'] ?? '').trim()), [data])
 
-  const { tructiepRows, chanhxeRows, viettelRows, spxRows } = useMemo(() => {
+  const { tructiepRows, chanhxeRows } = useMemo(() => {
     const tructiepRows = []
     const chanhxeRows = []
-    const viettelRows = []
-    const spxRows = []
     for (const row of validData) {
       const t = partnerType(row)
       if (t === 'tructiep') tructiepRows.push(row)
-      else if (t === 'viettel') viettelRows.push(row)
-      else if (t === 'spx') spxRows.push(row)
-      else chanhxeRows.push(row)
+      else if (t !== 'viettel' && t !== 'spx') chanhxeRows.push(row)
     }
-    return { tructiepRows, chanhxeRows, viettelRows, spxRows }
+    return { tructiepRows, chanhxeRows }
   }, [validData])
 
   const trackedChanhXeRows = showChanhXe ? chanhxeRows : []
-  const trackedSpxRows = showSpx ? spxRows : []
 
   const viettelKey = `unifiedTrial_${channelKey}_viettel`
   const spxKey = `unifiedTrial_${channelKey}_spx`
-  const viettelFile = getCarrierFileTotal(viettelKey, 'viettel', validData, referenceDate)
-  const viettelCount = viettelFile ? viettelFile.total : viettelRows.length
-  const spxFile = showSpx ? getCarrierFileTotal(spxKey, 'spx', validData, referenceDate) : null
-  const spxCount = showSpx ? (spxFile ? spxFile.total : trackedSpxRows.length) : 0
-  const doitacTotal = viettelCount + spxCount
 
   // Ô nhập tay: phân loại "chưa giao" theo khách hàng — tổng các ô này CHÍNH LÀ số "Chưa giao"
   const khStorageKey = `unifiedTrial_chuagiao_kh_${channelKey}`
   const [khValues, commitKhValues] = useStoredValue(khStorageKey, {})
   const onKhChange = (key, val) => commitKhValues({ ...khValues, [key]: val })
-  const khBreakdownSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
 
   // Ô nhập tay: "Số đơn chưa gửi chành" (chỉ khi có nhóm Chành xe)
   const chuaGuiKey = `unifiedTrial_chuagiao_chuagui_${channelKey}`
   const [chuaGuiChanh, commitChuaGuiChanh] = useStoredValue(chuaGuiKey, '')
-  const chuaGuiVal = chuaGuiChanh !== '' ? Number(chuaGuiChanh) : 0
 
-  const trucTiepStats = useMemo(() => calcTrucTiepStats(tructiepRows), [tructiepRows])
-  const trucTiepDelivered = trucTiepStats['24h'] + trucTiepStats['48h'] + trucTiepStats['72h']
+  // Số liệu tổng hợp — dùng chung với lúc "Lưu số liệu tuần này" để không lệch số giữa hiển thị
+  // trực tiếp và bản đóng băng (xem unifiedTrialChannelStats.js).
+  const snapshot = useMemo(
+    () => computeChannelSnapshot({ data, channelKey, khValues, chuaGuiChanh, showChanhXe, showSpx, referenceDate }),
+    [data, channelKey, khValues, chuaGuiChanh, showChanhXe, showSpx, referenceDate],
+  )
+  const {
+    total, trucTiepBadge, trucTiepStats, trucTiepDelivered, khBreakdownSum,
+    chanhXeBadge, viettelCount, spxCount, doitacTotal,
+  } = snapshot
   const trucTiepTotal = trucTiepDelivered + khBreakdownSum
-  const trucTiepBadge = tructiepRows.length + khBreakdownSum
   const trucTiepPct = trucTiepTotal > 0 ? Math.round((trucTiepDelivered / trucTiepTotal) * 100) : 0
   const trucTiepChuaGiaoPct = trucTiepTotal > 0 ? Math.round((khBreakdownSum / trucTiepTotal) * 100) : 0
-
-  const chanhXeBadge = trackedChanhXeRows.length + (showChanhXe ? chuaGuiVal : 0)
-
-  const total = trucTiepBadge + chanhXeBadge + doitacTotal
   const pct = (part) => total ? Math.round((part / total) * 100) : 0
 
   const kpiCols = 3 + (showChanhXe ? 1 : 0)
