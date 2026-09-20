@@ -224,4 +224,18 @@ describe('exportGoodsReceipt', () => {
     expect(wb).toContain(`name="_xlnm.Print_Area" localSheetId="0">'BB NHẬP HÀNG'!$A$1:$M$31<`)
     expect(wb).toContain(`name="_xlnm.Print_Titles" localSheetId="0">'BB NHẬP HÀNG'!$1:$14<`)
   })
+
+  // Mẫu trước đây set cứng tỉ lệ in 89% — không đủ để cột M (Ghi chú) nằm gọn trong khổ giấy A4 ngang khi
+  // in thật, khiến cột L/M bị tách sang 1 khối trang riêng (đánh số "Page 5" ở ví dụ người dùng gửi, tách
+  // hẳn khỏi mạch trang 1-4 của các cột A-K). Đổi sang "Fit to 1 page wide" (fitToPage trong sheetPr +
+  // fitToWidth=1/fitToHeight=0 trong pageSetup) để Excel tự co tỉ lệ in vừa đúng 1 trang ngang, không phụ
+  // thuộc 1 con số % cố định.
+  it('mẫu set "Fit to 1 page wide" thay vì tỉ lệ in cố định — cột M không còn bị tách sang khối trang riêng', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { processedAt: PROCESSED_AT })
+    const sheetXml = sheetXmlOf(bytes)
+    expect(sheetXml).toContain('<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>')
+    expect(sheetXml).toMatch(/<pageSetup[^/]*fitToWidth="1"[^/]*fitToHeight="0"[^/]*\/>/)
+    expect(sheetXml).not.toContain('scale="89"')
+  })
 })
