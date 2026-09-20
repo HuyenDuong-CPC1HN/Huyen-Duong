@@ -745,20 +745,9 @@ export default function NhapHangTab() {
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
   }
 
-  // Dòng thêm tay không đến từ Excel/PDF nào — cần điền đủ Mã hàng/Hạn dùng nên đánh dấu needsManual để
-  // được tô vàng nhắc kiểm tra, giống các dòng "chỉ thấy trong PDF" trước đây. Chèn lên ĐẦU bảng (không
-  // phải cuối) vì nút bấm nằm ở thanh công cụ trên cùng — bảng có thể dài hàng chục dòng, chèn cuối sẽ
-  // phải cuộn xuống mới thấy để điền.
-  const addRow = (warehouse) => {
-    if (!active) return
-    const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
-    const newRow = { rowId: crypto.randomUUID(), maHang: '', tenHang: '', dvt: '', soLo: '', hanDung: null, kienNguyen: 0, kienLe: 0, slHoaDon: 0, slThucTe: null, ghiChu: '', needsManual: true }
-    const next = { ...active, [key]: [newRow, ...(active[key] || [])] }
-    setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
-  }
-
-  // Chèn ngay TẠI vị trí người dùng muốn (dấu + trên từng dòng) — khác addRow ở trên (luôn chèn lên đầu
-  // bảng qua nút thanh công cụ). Chèn ngay dưới dòng vừa bấm.
+  // Chèn ngay TẠI vị trí người dùng muốn (dấu + trên từng dòng, xem ReceiptTableRow) — dòng thêm tay
+  // không đến từ Excel/PDF nào nên đánh dấu needsManual để tô vàng nhắc điền đủ Mã hàng/Hạn dùng, giống
+  // các dòng "chỉ thấy trong PDF" trước đây. Chèn ngay dưới dòng vừa bấm.
   const insertRowAfter = (warehouse, index) => {
     if (!active) return
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
@@ -1083,16 +1072,6 @@ export default function NhapHangTab() {
           <button type="button" onClick={saveEdits} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">
             <Save size={14} /> Lưu chỉnh sửa
           </button>
-        )}
-        {editing && (
-          <>
-            <button type="button" onClick={() => addRow('C')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
-              <Plus size={14} /> Thêm dòng Kho C
-            </button>
-            <button type="button" onClick={() => addRow('LGT')} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 text-gray-600">
-              <Plus size={14} /> Thêm dòng Kho LGT
-            </button>
-          </>
         )}
         <button
           type="button"
