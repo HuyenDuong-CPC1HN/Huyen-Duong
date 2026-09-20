@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Package, ShoppingBag, Globe, RefreshCw, Users, AlertTriangle } from 'lucide-react'
+import { Package, ShoppingBag, Globe, Users, AlertTriangle, Save, Pencil, Check, X } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import ExcelUpload from './ExcelUpload'
 import UnifiedTrialChannelDetail from './UnifiedTrialChannelDetail'
 import { CarrierPanel } from './CarrierStats'
+import { pickCarrierWeekIdByDate, snapshotCarrierLookup } from './carrierUtils'
 import { KpiTile, SectionCard } from './ReportCards'
 import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
+import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
+import { readTrialReports, saveTrialReport, renameTrialReport } from '../utils/unifiedTrialReports'
+
+const NGOAI_SAN_CARRIER_KEY = 'unifiedTrial_donSO_spx'
 
 // Màu nền theo shop — khớp bảng màu STORE_CLS đang dùng ở TmdtTab.jsx (không import chung,
 // tab thử nghiệm này vẫn giữ biến riêng để độc lập).
@@ -158,77 +163,115 @@ function MismatchWarning({ mismatchRows, otherCount }) {
   )
 }
 
-function FileSlot({ meta, onReplace, uploadNode }) {
-  if (!meta) return uploadNode
+// "Lưu số liệu tuần này" — đóng băng số đã tính, KHÔNG tự xoá rows thô như 3 tab sản xuất (tab này
+// chỉ giữ 1 slot rows/kênh nên không cần cơ chế dọn bớt; upload tuần mới vẫn ghi đè rows thô như cũ,
+// không ảnh hưởng các bản đã lưu). Xem chi tiết thiết kế: unifiedTrialReports.js.
+function SaveWeekButton({ onSave, alreadySaved }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl mb-4">
-      <div className="text-sm text-gray-600">
-        <span className="font-medium text-gray-800">{meta.fileName}</span>
-        <span className="text-gray-400"> — upload lúc {new Date(meta.uploadedAt).toLocaleString('vi-VN')}</span>
+    <button
+      type="button"
+      onClick={onSave}
+      className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs hover:border-green-400 hover:text-green-700 text-gray-600"
+    >
+      <Save size={12} />
+      {alreadySaved ? 'Lưu lại số liệu tuần này' : 'Lưu số liệu tuần này'}
+    </button>
+  )
+}
+
+// Đổi tên tuần đã lưu — mặc định label là "<tên file> · <ngày upload>", bấm bút chì để sửa lại
+// thành tên tuần báo cáo thật (vd "Tuần 12.09 - 18.09.2026") cho dễ nhận ra khi chọn lại sau này.
+function SavedWeekPicker({ reports, viewingId, onChange, onRename, hasLiveData }) {
+  const [editing, setEditing] = useState(false)
+  const [label, setLabel] = useState('')
+  const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
+
+  const startEdit = () => {
+    setLabel(viewingEntry?.label || '')
+    setEditing(true)
+  }
+  const confirmEdit = () => {
+    if (label.trim() && viewingId) onRename(viewingId, label.trim())
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          autoFocus
+          value={label}
+          onChange={e => setLabel(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') confirmEdit()
+            if (e.key === 'Escape') setEditing(false)
+          }}
+          placeholder="vd: Tuần 12.09 - 18.09.2026"
+          className="text-xs border border-blue-300 rounded-lg px-2 py-1.5 w-64 focus:outline-none"
+        />
+        <button type="button" onClick={confirmEdit} className="p-1.5 rounded hover:bg-green-100 text-green-600"><Check size={13} /></button>
+        <button type="button" onClick={() => setEditing(false)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400"><X size={13} /></button>
       </div>
-      <button
-        type="button"
-        onClick={onReplace}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs hover:border-blue-400 hover:text-blue-600 text-gray-600"
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <select
+        value={viewingId || ''}
+        onChange={e => onChange(e.target.value || null)}
+        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
       >
-        <RefreshCw size={12} />
-        Upload lại
-      </button>
+        <option value="">{hasLiveData ? '— Xem trực tiếp (tuần hiện tại) —' : 'Upload tuần tiếp theo'}</option>
+        {reports.map(r => (
+          <option key={r.id} value={r.id}>{r.label}</option>
+        ))}
+      </select>
+      {viewingEntry && (
+        <button type="button" onClick={startEdit} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Sửa tên tuần">
+          <Pencil size={13} />
+        </button>
+      )}
     </div>
   )
 }
 
-function DonSanView({ rosterSet }) {
-  const [meta, setMeta] = useState(() => readJSON(SO_META_KEY, null))
-  const [rows, setRows] = useState(() => readJSON(SO_ROWS_KEY, null))
-  const [replacing, setReplacing] = useState(false)
-
-  const onData = (data, fileName) => {
-    const m = { fileName, uploadedAt: new Date().toISOString() }
-    localStorage.setItem(SO_ROWS_KEY, JSON.stringify(data))
-    localStorage.setItem(SO_META_KEY, JSON.stringify(m))
-    setRows(data)
-    setMeta(m)
-    setReplacing(false)
-  }
-
-  const { hcmRows, otherRows, mismatchRows } = useMemo(
-    () => splitByWarehouseStaff(rows || [], rosterSet),
-    [rows, rosterSet],
+// Khối "đã lưu lúc..." + cảnh báo loại trừ (mismatch/other) hiện tĩnh — dùng chung cho cả 2 bản
+// snapshot (Đơn SO / Đơn truyền thống). Không có nút "Xem chi tiết" như MismatchWarning bản sống vì
+// rows thô của các đơn bị loại không được lưu lại, chỉ giữ đúng số đếm.
+function SnapshotHeader({ fileName, createdAt, otherCount, mismatchCount }) {
+  return (
+    <>
+      <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl mb-4 text-sm text-gray-600">
+        <span className="font-medium text-gray-800">{fileName}</span>
+        <span className="text-gray-400"> — đã lưu lúc {new Date(createdAt).toLocaleString('vi-VN')}</span>
+      </div>
+      {(otherCount > 0 || mismatchCount > 0) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 mb-4 text-sm text-amber-800">
+          {otherCount > 0 && `${otherCount} đơn không thuộc kho HCM đã loại khỏi thống kê. `}
+          {mismatchCount > 0 && `${mismatchCount} đơn lệch kho.`}
+        </div>
+      )}
+    </>
   )
-  const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(hcmRows), [hcmRows])
-  const total = tmdt.length + ngoaiSan.length
-  const { shops } = useMemo(() => splitTmdtByShop(tmdt), [tmdt])
+}
+
+// Phần thân "Đơn SO" (KPI + shop + đối soát ngoại sàn) — dùng CHUNG cho cả xem trực tiếp lẫn xem
+// tuần đã lưu, chỉ khác đúng 1 chỗ: carrierPanelProps (trực tiếp dùng referenceDate+internalData,
+// đã lưu thì ghim đúng weekId+frozenLookup) — nhờ vậy 2 bản LUÔN giống hệt giao diện nhau.
+function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanelKey, carrierPanelProps }) {
   const shopCol1 = shops.slice(0, 2)
   const shopCol2 = shops.slice(2, 4)
-
-  const ngoaiSanCarrierKey = 'unifiedTrial_donSO_spx'
-  useEffect(() => {
-    if (!meta || ngoaiSan.length === 0) return
-    seedNgoaiSanPackingWeek(ngoaiSanCarrierKey, ngoaiSan, meta.uploadedAt)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta?.uploadedAt, ngoaiSan])
-
-  const uploadNode = (
-    <ExcelUpload onData={onData} fileName="" onClear={() => {}} />
-  )
-
-  if (!rows || replacing) {
-    return <div>{uploadNode}</div>
-  }
-
   return (
-    <div>
-      <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />
-      <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
+    <>
       <div className="report-kpi-grid is-three-column">
         <KpiTile icon={Package} value={total} label="Tổng Đơn sàn" cls="text-[#1e3a5f]" />
-        <KpiTile icon={ShoppingBag} value={tmdt.length} label="Đơn sàn TMĐT (Shopee, TikTok)" pctOfTotal={total ? Math.round((tmdt.length / total) * 100) : 0} cls="text-blue-700" />
-        <KpiTile icon={Globe} value={ngoaiSan.length} label="Đơn ngoại sàn (Website)" pctOfTotal={total ? Math.round((ngoaiSan.length / total) * 100) : 0} cls="text-purple-700" />
+        <KpiTile icon={ShoppingBag} value={tmdtCount} label="Đơn sàn TMĐT (Shopee, TikTok)" pctOfTotal={total ? Math.round((tmdtCount / total) * 100) : 0} cls="text-blue-700" />
+        <KpiTile icon={Globe} value={ngoaiSanCount} label="Đơn ngoại sàn (Website)" pctOfTotal={total ? Math.round((ngoaiSanCount / total) * 100) : 0} cls="text-purple-700" />
       </div>
 
       <div className="space-y-4 mt-4">
-        <SectionCard title="ĐƠN SÀN TMĐT CHI TIẾT THEO SHOP" total={tmdt.length}>
+        <SectionCard title="ĐƠN SÀN TMĐT CHI TIẾT THEO SHOP" total={tmdtCount}>
           <div className="grid grid-cols-2 gap-3">
             {[shopCol1, shopCol2].map((col, i) => (
               <div key={i} className="space-y-2">
@@ -246,24 +289,159 @@ function DonSanView({ rosterSet }) {
           </div>
         </SectionCard>
 
-        <SectionCard title="ĐỐI SOÁT ĐƠN WEBSITE" total={ngoaiSan.length}>
+        <SectionCard title="ĐỐI SOÁT ĐƠN WEBSITE" total={ngoaiSanCount}>
           <p className="text-xs text-gray-400 mb-3">
             Mốc "Đóng kiện" tự động lấy từ cột "TG Đóng hàng" trong file Đơn SO vừa upload — chỉ cần
             upload thêm "Sales Order" (Mốc 1) và file SPX xuất (Mốc 3/4) ở khung bên dưới.
           </p>
-          <CarrierPanel
-            key={meta?.uploadedAt}
-            carrierKey={ngoaiSanCarrierKey}
-            label="SPX Express — Ngoại sàn"
-            carrierType="spx"
-            internalData={ngoaiSan}
-            referenceDate={meta?.uploadedAt}
-            hidePackingUpload
-            salesFileNoun="Sales Order"
-            ngoaiSanNote={NGOAI_SAN_NOTE}
-          />
+          <CarrierPanel key={carrierPanelKey} {...carrierPanelProps} />
         </SectionCard>
       </div>
+    </>
+  )
+}
+
+function DonSanSnapshotView({ entry }) {
+  return (
+    <div>
+      <SnapshotHeader fileName={entry.fileName} createdAt={entry.createdAt} otherCount={entry.otherCount} mismatchCount={entry.mismatchCount} />
+      <DonSanReportBody
+        total={entry.total} tmdtCount={entry.tmdtCount} ngoaiSanCount={entry.ngoaiSanCount} shops={entry.shops}
+        carrierPanelKey={entry.id}
+        carrierPanelProps={{
+          carrierKey: NGOAI_SAN_CARRIER_KEY,
+          label: 'SPX Express — Ngoại sàn',
+          carrierType: 'spx',
+          internalData: [],
+          weekId: entry.spxWeekId,
+          frozenLookup: entry.carrierLookup,
+          hidePackingUpload: true,
+          salesFileNoun: 'Sales Order',
+          ngoaiSanNote: NGOAI_SAN_NOTE,
+        }}
+      />
+    </div>
+  )
+}
+
+function DonTruyenThongSnapshotView({ entry }) {
+  const [channel, setChannel] = useState('donC')
+  return (
+    <div>
+      <SnapshotHeader fileName={entry.fileName} createdAt={entry.createdAt} otherCount={entry.otherCount} mismatchCount={entry.mismatchCount} />
+
+      <div className="tdr-tabswitch" style={{ marginBottom: 16 }}>
+        <button type="button" className={channel === 'donC' ? 'active' : ''} onClick={() => setChannel('donC')}>
+          Đơn C ({entry.donC.total})
+        </button>
+        <button type="button" className={channel === 'donDTP' ? 'active' : ''} onClick={() => setChannel('donDTP')}>
+          Đơn DTP ({entry.donDTP.total})
+        </button>
+      </div>
+
+      {channel === 'donC' && (
+        <UnifiedTrialChannelDetail data={[]} channelKey="donC" showChanhXe showSpx={false} readOnly frozenSnapshot={entry.donC} />
+      )}
+      {channel === 'donDTP' && (
+        <UnifiedTrialChannelDetail data={[]} channelKey="donDTP" showChanhXe={false} showSpx readOnly frozenSnapshot={entry.donDTP} />
+      )}
+    </div>
+  )
+}
+
+function DonSanView({ rosterSet }) {
+  const [meta, setMeta] = useState(() => readJSON(SO_META_KEY, null))
+  const [rows, setRows] = useState(() => readJSON(SO_ROWS_KEY, null))
+  const [reports, setReports] = useState(() => readTrialReports('donSO'))
+  const [viewingId, setViewingId] = useState(null)
+
+  const onData = (data, fileName) => {
+    const m = { fileName, uploadedAt: new Date().toISOString() }
+    localStorage.setItem(SO_ROWS_KEY, JSON.stringify(data))
+    localStorage.setItem(SO_META_KEY, JSON.stringify(m))
+    setRows(data)
+    setMeta(m)
+    setViewingId(null)
+  }
+
+  const { hcmRows, otherRows, mismatchRows } = useMemo(
+    () => splitByWarehouseStaff(rows || [], rosterSet),
+    [rows, rosterSet],
+  )
+  const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(hcmRows), [hcmRows])
+  const total = tmdt.length + ngoaiSan.length
+  const { shops } = useMemo(() => splitTmdtByShop(tmdt), [tmdt])
+
+  useEffect(() => {
+    if (!meta || ngoaiSan.length === 0) return
+    seedNgoaiSanPackingWeek(NGOAI_SAN_CARRIER_KEY, ngoaiSan, meta.uploadedAt)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta?.uploadedAt, ngoaiSan])
+
+  const handleSave = () => {
+    if (!meta) return
+    const entry = {
+      id: meta.uploadedAt,
+      fileName: meta.fileName,
+      label: `${meta.fileName} · ${new Date(meta.uploadedAt).toLocaleDateString('vi-VN')}`,
+      total, tmdtCount: tmdt.length, ngoaiSanCount: ngoaiSan.length,
+      otherCount: otherRows.length, mismatchCount: mismatchRows.length,
+      shops: shops.map(s => ({ code: s.code, label: s.label, count: s.count })),
+      spxWeekId: pickCarrierWeekIdByDate(NGOAI_SAN_CARRIER_KEY, meta.uploadedAt),
+      carrierLookup: snapshotCarrierLookup(ngoaiSan),
+    }
+    setReports(saveTrialReport('donSO', entry))
+  }
+
+  const uploadNode = (
+    <ExcelUpload onData={onData} fileName="" onClear={() => {}} />
+  )
+
+  const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
+  const alreadySaved = meta && reports.some(r => r.id === meta.uploadedAt)
+  // Tuần hiện tại đã "Lưu số liệu tuần này" rồi — coi như đã xong việc, không còn gì để tính tiếp
+  // với rows thô cũ nữa, tự chuyển về khung upload chờ file tuần mới (khỏi phải bấm "Upload lại"
+  // thêm 1 bước). NHƯNG dropdown chọn tuần đã lưu vẫn phải luôn thấy được (không ẩn theo) — đây là
+  // 2 việc riêng: "màn hình làm việc" (upload/số liệu) và "điều hướng xem tuần cũ" (dropdown).
+  const showLive = Boolean(rows) && !viewingEntry && !(alreadySaved && !viewingId)
+  const hasAnyState = rows !== null || reports.length > 0
+
+  return (
+    <div>
+      {hasAnyState && (
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <SavedWeekPicker
+            reports={reports} viewingId={viewingId} onChange={setViewingId}
+            onRename={(id, label) => setReports(renameTrialReport('donSO', id, label))}
+            hasLiveData={Boolean(rows) && !alreadySaved}
+          />
+          {showLive && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
+        </div>
+      )}
+
+      {viewingEntry ? (
+        <DonSanSnapshotView entry={viewingEntry} />
+      ) : !showLive ? (
+        <div>{uploadNode}</div>
+      ) : (
+        <>
+          <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
+          <DonSanReportBody
+            total={total} tmdtCount={tmdt.length} ngoaiSanCount={ngoaiSan.length} shops={shops}
+            carrierPanelKey={meta?.uploadedAt}
+            carrierPanelProps={{
+              carrierKey: NGOAI_SAN_CARRIER_KEY,
+              label: 'SPX Express — Ngoại sàn',
+              carrierType: 'spx',
+              internalData: ngoaiSan,
+              referenceDate: meta?.uploadedAt,
+              hidePackingUpload: true,
+              salesFileNoun: 'Sales Order',
+              ngoaiSanNote: NGOAI_SAN_NOTE,
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }
@@ -271,8 +449,9 @@ function DonSanView({ rosterSet }) {
 function DonTruyenThongView({ rosterSet }) {
   const [meta, setMeta] = useState(() => readJSON(TT_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(TT_ROWS_KEY, null))
-  const [replacing, setReplacing] = useState(false)
   const [channel, setChannel] = useState('donC')
+  const [reports, setReports] = useState(() => readTrialReports('donTruyenThong'))
+  const [viewingId, setViewingId] = useState(null)
 
   const onData = (data, fileName) => {
     const m = { fileName, uploadedAt: new Date().toISOString() }
@@ -280,7 +459,7 @@ function DonTruyenThongView({ rosterSet }) {
     localStorage.setItem(TT_META_KEY, JSON.stringify(m))
     setRows(data)
     setMeta(m)
-    setReplacing(false)
+    setViewingId(null)
   }
 
   const { hcmRows, otherRows, mismatchRows } = useMemo(
@@ -293,32 +472,77 @@ function DonTruyenThongView({ rosterSet }) {
     <ExcelUpload onData={onData} fileName="" onClear={() => {}} />
   )
 
-  if (!rows || replacing) {
-    return <div>{uploadNode}</div>
+  const referenceDate = meta?.uploadedAt || null
+
+  const handleSave = () => {
+    if (!meta) return
+    const donCSnapshot = computeChannelSnapshot({
+      data: donC, channelKey: 'donC',
+      khValues: readJSON('unifiedTrial_chuagiao_kh_donC', {}),
+      chuaGuiChanh: readJSON('unifiedTrial_chuagiao_chuagui_donC', ''),
+      showChanhXe: true, showSpx: false, referenceDate,
+    })
+    const donDTPSnapshot = computeChannelSnapshot({
+      data: donDTP, channelKey: 'donDTP',
+      khValues: readJSON('unifiedTrial_chuagiao_kh_donDTP', {}),
+      chuaGuiChanh: readJSON('unifiedTrial_chuagiao_chuagui_donDTP', ''),
+      showChanhXe: false, showSpx: true, referenceDate,
+    })
+    const entry = {
+      id: meta.uploadedAt,
+      fileName: meta.fileName,
+      label: `${meta.fileName} · ${new Date(meta.uploadedAt).toLocaleDateString('vi-VN')}`,
+      otherCount: otherRows.length, mismatchCount: mismatchRows.length,
+      donC: donCSnapshot, donDTP: donDTPSnapshot,
+    }
+    setReports(saveTrialReport('donTruyenThong', entry))
   }
 
-  const referenceDate = meta?.uploadedAt || null
+  const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
+  const alreadySaved = meta && reports.some(r => r.id === meta.uploadedAt)
+  // Giống DonSanView: tuần đã lưu rồi thì màn hình làm việc tự chuyển về khung upload chờ file
+  // tuần mới, nhưng dropdown chọn tuần đã lưu vẫn phải luôn thấy được, không ẩn theo.
+  const showLive = Boolean(rows) && !viewingEntry && !(alreadySaved && !viewingId)
+  const hasAnyState = rows !== null || reports.length > 0
 
   return (
     <div>
-      <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />
-      <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
-
-      <div className="tdr-tabswitch" style={{ marginBottom: 16 }}>
-        <button type="button" className={channel === 'donC' ? 'active' : ''} onClick={() => setChannel('donC')}>
-          Đơn C ({donC.length})
-        </button>
-        <button type="button" className={channel === 'donDTP' ? 'active' : ''} onClick={() => setChannel('donDTP')}>
-          Đơn DTP ({donDTP.length})
-        </button>
-      </div>
-
-      {channel === 'donC' && (
-        <UnifiedTrialChannelDetail data={donC} channelKey="donC" referenceDate={referenceDate} showChanhXe showSpx={false} />
+      {hasAnyState && (
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <SavedWeekPicker
+            reports={reports} viewingId={viewingId} onChange={setViewingId}
+            onRename={(id, label) => setReports(renameTrialReport('donTruyenThong', id, label))}
+            hasLiveData={Boolean(rows) && !alreadySaved}
+          />
+          {showLive && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
+        </div>
       )}
 
-      {channel === 'donDTP' && (
-        <UnifiedTrialChannelDetail data={donDTP} channelKey="donDTP" referenceDate={referenceDate} showChanhXe={false} showSpx />
+      {viewingEntry ? (
+        <DonTruyenThongSnapshotView entry={viewingEntry} />
+      ) : !showLive ? (
+        <div>{uploadNode}</div>
+      ) : (
+        <>
+          <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
+
+          <div className="tdr-tabswitch" style={{ marginBottom: 16 }}>
+            <button type="button" className={channel === 'donC' ? 'active' : ''} onClick={() => setChannel('donC')}>
+              Đơn C ({donC.length})
+            </button>
+            <button type="button" className={channel === 'donDTP' ? 'active' : ''} onClick={() => setChannel('donDTP')}>
+              Đơn DTP ({donDTP.length})
+            </button>
+          </div>
+
+          {channel === 'donC' && (
+            <UnifiedTrialChannelDetail data={donC} channelKey="donC" referenceDate={referenceDate} showChanhXe showSpx={false} />
+          )}
+
+          {channel === 'donDTP' && (
+            <UnifiedTrialChannelDetail data={donDTP} channelKey="donDTP" referenceDate={referenceDate} showChanhXe={false} showSpx />
+          )}
+        </>
       )}
     </div>
   )
@@ -339,12 +563,14 @@ export default function UnifiedTrialTab() {
       <div className="sheet-tab-shell">
         <header className="sheet-tab-context">
           <span>Gộp kênh (Thử nghiệm) — chạy song song, chưa thay thế 3 tab cũ</span>
-          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
         </header>
 
-        <div className="tdr-tabswitch" style={{ marginTop: 16 }}>
-          <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn SO</button>
-          <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
+        <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
+          <div className="tdr-tabswitch">
+            <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn SO</button>
+            <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
+          </div>
+          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
         </div>
 
         <div className="sheet-tab-report">
