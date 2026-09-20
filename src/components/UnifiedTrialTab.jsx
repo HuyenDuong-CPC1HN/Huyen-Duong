@@ -201,7 +201,7 @@ function SaveWeekButton({ onSave, alreadySaved }) {
 
 // Đổi tên tuần đã lưu — mặc định label là "<tên file> · <ngày upload>", bấm bút chì để sửa lại
 // thành tên tuần báo cáo thật (vd "Tuần 12.09 - 18.09.2026") cho dễ nhận ra khi chọn lại sau này.
-function SavedWeekPicker({ reports, viewingId, onChange, onRename }) {
+function SavedWeekPicker({ reports, viewingId, onChange, onRename, hasLiveData }) {
   const [editing, setEditing] = useState(false)
   const [label, setLabel] = useState('')
   const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
@@ -242,7 +242,7 @@ function SavedWeekPicker({ reports, viewingId, onChange, onRename }) {
         onChange={e => onChange(e.target.value || null)}
         className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
       >
-        <option value="">— Xem trực tiếp (tuần hiện tại) —</option>
+        <option value="">{hasLiveData ? '— Xem trực tiếp (tuần hiện tại) —' : 'Upload tuần tiếp theo'}</option>
         {reports.map(r => (
           <option key={r.id} value={r.id}>{r.label}</option>
         ))}
@@ -421,28 +421,32 @@ function DonSanView({ rosterSet }) {
 
   const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
   const alreadySaved = meta && reports.some(r => r.id === meta.uploadedAt)
-
   // Tuần hiện tại đã "Lưu số liệu tuần này" rồi — coi như đã xong việc, không còn gì để tính tiếp
-  // với rows thô cũ nữa. Tự về thẳng màn hình trống (y hệt bấm "Upload lại") để chờ file tuần mới,
-  // khỏi phải bấm "Upload lại" thêm 1 bước. Muốn xem lại tuần đã lưu thì chọn trong dropdown lúc
-  // đang có rows thô (trước khi lưu, hoặc sau khi đã upload tuần kế tiếp).
-  if (!rows || replacing || (alreadySaved && !viewingId)) {
-    return <div>{uploadNode}</div>
-  }
+  // với rows thô cũ nữa, tự chuyển về khung upload chờ file tuần mới (khỏi phải bấm "Upload lại"
+  // thêm 1 bước). NHƯNG dropdown chọn tuần đã lưu vẫn phải luôn thấy được (không ẩn theo) — đây là
+  // 2 việc riêng: "màn hình làm việc" (upload/số liệu) và "điều hướng xem tuần cũ" (dropdown).
+  const showLive = Boolean(rows) && !replacing && !viewingEntry && !(alreadySaved && !viewingId)
+  const hasAnyState = rows !== null || reports.length > 0
 
   return (
     <div>
-      <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <SavedWeekPicker
-          reports={reports} viewingId={viewingId} onChange={setViewingId}
-          onRename={(id, label) => setReports(renameTrialReport('donSO', id, label))}
-        />
-        {!viewingId && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
-      </div>
+      {rows && !replacing && <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />}
+
+      {hasAnyState && (
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <SavedWeekPicker
+            reports={reports} viewingId={viewingId} onChange={setViewingId}
+            onRename={(id, label) => setReports(renameTrialReport('donSO', id, label))}
+            hasLiveData={Boolean(rows) && !alreadySaved}
+          />
+          {showLive && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
+        </div>
+      )}
 
       {viewingEntry ? (
         <DonSanSnapshotView entry={viewingEntry} />
+      ) : !showLive ? (
+        <div>{uploadNode}</div>
       ) : (
         <>
           <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
@@ -522,26 +526,30 @@ function DonTruyenThongView({ rosterSet }) {
 
   const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
   const alreadySaved = meta && reports.some(r => r.id === meta.uploadedAt)
-
-  // Xem "Tuần hiện tại" — giống DonSanView: tuần đã lưu rồi thì tự về màn hình trống (như bấm
-  // "Upload lại") để chờ file tuần mới, khỏi cần bấm thêm 1 bước.
-  if (!rows || replacing || (alreadySaved && !viewingId)) {
-    return <div>{uploadNode}</div>
-  }
+  // Giống DonSanView: tuần đã lưu rồi thì màn hình làm việc tự chuyển về khung upload chờ file
+  // tuần mới, nhưng dropdown chọn tuần đã lưu vẫn phải luôn thấy được, không ẩn theo.
+  const showLive = Boolean(rows) && !replacing && !viewingEntry && !(alreadySaved && !viewingId)
+  const hasAnyState = rows !== null || reports.length > 0
 
   return (
     <div>
-      <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <SavedWeekPicker
-          reports={reports} viewingId={viewingId} onChange={setViewingId}
-          onRename={(id, label) => setReports(renameTrialReport('donTruyenThong', id, label))}
-        />
-        {!viewingId && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
-      </div>
+      {rows && !replacing && <FileSlot meta={meta} onReplace={() => setReplacing(true)} uploadNode={uploadNode} />}
+
+      {hasAnyState && (
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <SavedWeekPicker
+            reports={reports} viewingId={viewingId} onChange={setViewingId}
+            onRename={(id, label) => setReports(renameTrialReport('donTruyenThong', id, label))}
+            hasLiveData={Boolean(rows) && !alreadySaved}
+          />
+          {showLive && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
+        </div>
+      )}
 
       {viewingEntry ? (
         <DonTruyenThongSnapshotView entry={viewingEntry} />
+      ) : !showLive ? (
+        <div>{uploadNode}</div>
       ) : (
         <>
           <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
@@ -583,12 +591,14 @@ export default function UnifiedTrialTab() {
       <div className="sheet-tab-shell">
         <header className="sheet-tab-context">
           <span>Gộp kênh (Thử nghiệm) — chạy song song, chưa thay thế 3 tab cũ</span>
-          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
         </header>
 
-        <div className="tdr-tabswitch" style={{ marginTop: 16 }}>
-          <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn SO</button>
-          <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
+        <div className="flex items-center justify-between" style={{ marginTop: 16 }}>
+          <div className="tdr-tabswitch">
+            <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn SO</button>
+            <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
+          </div>
+          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
         </div>
 
         <div className="sheet-tab-report">
