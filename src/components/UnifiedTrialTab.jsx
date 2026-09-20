@@ -419,12 +419,16 @@ function DonSanView({ rosterSet }) {
     <ExcelUpload onData={onData} fileName="" onClear={() => {}} />
   )
 
-  if (!rows || replacing) {
-    return <div>{uploadNode}</div>
-  }
-
   const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
   const alreadySaved = meta && reports.some(r => r.id === meta.uploadedAt)
+
+  // Tuần hiện tại đã "Lưu số liệu tuần này" rồi — coi như đã xong việc, không còn gì để tính tiếp
+  // với rows thô cũ nữa. Tự về thẳng màn hình trống (y hệt bấm "Upload lại") để chờ file tuần mới,
+  // khỏi phải bấm "Upload lại" thêm 1 bước. Muốn xem lại tuần đã lưu thì chọn trong dropdown lúc
+  // đang có rows thô (trước khi lưu, hoặc sau khi đã upload tuần kế tiếp).
+  if (!rows || replacing || (alreadySaved && !viewingId)) {
+    return <div>{uploadNode}</div>
+  }
 
   return (
     <div>
@@ -490,10 +494,6 @@ function DonTruyenThongView({ rosterSet }) {
     <ExcelUpload onData={onData} fileName="" onClear={() => {}} />
   )
 
-  if (!rows || replacing) {
-    return <div>{uploadNode}</div>
-  }
-
   const referenceDate = meta?.uploadedAt || null
 
   const handleSave = () => {
@@ -522,6 +522,12 @@ function DonTruyenThongView({ rosterSet }) {
 
   const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
   const alreadySaved = meta && reports.some(r => r.id === meta.uploadedAt)
+
+  // Xem "Tuần hiện tại" — giống DonSanView: tuần đã lưu rồi thì tự về màn hình trống (như bấm
+  // "Upload lại") để chờ file tuần mới, khỏi cần bấm thêm 1 bước.
+  if (!rows || replacing || (alreadySaved && !viewingId)) {
+    return <div>{uploadNode}</div>
+  }
 
   return (
     <div>
