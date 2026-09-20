@@ -349,11 +349,10 @@ function DonTruyenThongSnapshotView({ entry }) {
   )
 }
 
-function DonSanView({ rosterSet }) {
+function DonSanView({ rosterSet, viewingId, setViewingId }) {
   const [meta, setMeta] = useState(() => readJSON(SO_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(SO_ROWS_KEY, null))
   const [reports, setReports] = useState(() => readTrialReports('donSO'))
-  const [viewingId, setViewingId] = useState(null)
 
   const onData = (data, fileName) => {
     const m = { fileName, uploadedAt: new Date().toISOString() }
@@ -446,12 +445,10 @@ function DonSanView({ rosterSet }) {
   )
 }
 
-function DonTruyenThongView({ rosterSet }) {
+function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setChannel }) {
   const [meta, setMeta] = useState(() => readJSON(TT_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(TT_ROWS_KEY, null))
-  const [channel, setChannel] = useState('donC')
   const [reports, setReports] = useState(() => readTrialReports('donTruyenThong'))
-  const [viewingId, setViewingId] = useState(null)
 
   const onData = (data, fileName) => {
     const m = { fileName, uploadedAt: new Date().toISOString() }
@@ -551,6 +548,11 @@ function DonTruyenThongView({ rosterSet }) {
 export default function UnifiedTrialTab() {
   const [activeTab, setActiveTab] = useState('donsan')
   const [rosterText, setRosterText] = useState(() => readJSON(STAFF_ROSTER_KEY, ''))
+  // Nâng lên đây (thay vì giữ trong DonSanView/DonTruyenThongView) để không bị reset về "Upload
+  // tuần tiếp theo" mỗi khi chuyển qua lại 2 pill — 2 view bị unmount/remount theo activeTab.
+  const [donSoViewingId, setDonSoViewingId] = useState(null)
+  const [donTTViewingId, setDonTTViewingId] = useState(null)
+  const [donTTChannel, setDonTTChannel] = useState('donC')
 
   const onRosterChange = (text) => {
     setRosterText(text)
@@ -574,8 +576,16 @@ export default function UnifiedTrialTab() {
         </div>
 
         <div className="sheet-tab-report">
-          {activeTab === 'donsan' && <DonSanView rosterSet={rosterSet} />}
-          {activeTab === 'truyenthong' && <DonTruyenThongView rosterSet={rosterSet} />}
+          {activeTab === 'donsan' && (
+            <DonSanView rosterSet={rosterSet} viewingId={donSoViewingId} setViewingId={setDonSoViewingId} />
+          )}
+          {activeTab === 'truyenthong' && (
+            <DonTruyenThongView
+              rosterSet={rosterSet}
+              viewingId={donTTViewingId} setViewingId={setDonTTViewingId}
+              channel={donTTChannel} setChannel={setDonTTChannel}
+            />
+          )}
         </div>
       </div>
     </div>
