@@ -627,6 +627,29 @@ export default function NhapHangTab() {
 
   const active = batches.find(batch => batch.id === activeId) || null
 
+  // Tự động lưu sửa ô/thêm dòng/xoá dòng sau ~1.2s ngừng thao tác — trước đây chỉ lưu khi bấm "Lưu chỉnh
+  // sửa", thoát trang giữa chừng (đóng tab, bấm nhầm nút Back...) là mất sạch. Không gate theo `editing`
+  // (chỉ theo hasUnsavedChanges) để việc tắt "Chỉnh sửa" ngay sau khi gõ không huỷ mất lượt lưu đang chờ.
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  useEffect(() => {
+    if (!hasUnsavedChanges || !active) return
+    const timer = setTimeout(() => {
+      updateBatch(active.id, { khoC: active.khoC, khoLgt: active.khoLgt })
+      setHasUnsavedChanges(false)
+    }, 1200)
+    return () => clearTimeout(timer)
+  }, [hasUnsavedChanges, active])
+
+  // Cảnh báo trình duyệt trước khi rời/đóng trang nếu còn thay đổi CHƯA kịp tự lưu (trong khoảng 1.2s chờ
+  // ở trên) — đúng tình huống "thoát nhầm trang mất dữ liệu" đã gặp.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+    const handleBeforeUnload = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
+
   // Hoàn tác (Ctrl+Z / Cmd+Z) cho sửa ô / thêm dòng / xoá dòng khi đang Chỉnh sửa — mỗi lần đổi batch hoặc
   // Lưu xong thì xoá lịch sử, không cho hoàn tác xuyên qua ranh giới đã lưu/đã đổi chuyến khác.
   const [undoStack, setUndoStack] = useState([])
@@ -789,6 +812,7 @@ export default function NhapHangTab() {
     setBatches(readBatches())
     setEditing(false)
     setUndoStack([])
+    setHasUnsavedChanges(false)
   }
 
   const patchRows = (warehouse, index, field, value) => {
@@ -800,6 +824,7 @@ export default function NhapHangTab() {
     if (field === 'hanDung' && value) nextRows[index].needsManual = false
     const next = { ...active, [key]: nextRows }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
+    setHasUnsavedChanges(true)
   }
 
   // Chèn ngay TẠI vị trí người dùng muốn (dấu + trên từng dòng, xem ReceiptTableRow) — dòng thêm tay
@@ -814,6 +839,7 @@ export default function NhapHangTab() {
     const nextRows = [...currentRows.slice(0, index + 1), newRow, ...currentRows.slice(index + 1)]
     const next = { ...active, [key]: nextRows }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
+    setHasUnsavedChanges(true)
   }
 
   const removeRow = (warehouse, index) => {
@@ -822,6 +848,7 @@ export default function NhapHangTab() {
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
     const next = { ...active, [key]: (active[key] || []).filter((_, i) => i !== index) }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
+    setHasUnsavedChanges(true)
   }
 
   // Đánh dấu "đã dò biên bản giao nhận" — lưu riêng vào checkedRowIds của batch (không đụng khoC/khoLgt)
@@ -1152,6 +1179,9 @@ export default function NhapHangTab() {
           <button type="button" onClick={saveEdits} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">
             <Save size={14} /> Lưu chỉnh sửa
           </button>
+        )}
+        {editing && hasUnsavedChanges && (
+          <span className="text-xs text-gray-400">Đang tự lưu…</span>
         )}
         <button
           type="button"
