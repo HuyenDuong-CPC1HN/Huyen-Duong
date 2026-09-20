@@ -61,7 +61,7 @@ function useStoredValue(storageKey, fallback) {
   return [value, commit]
 }
 
-function ChuaGiaoBreakdown({ channelKey, values, onChange }) {
+function ChuaGiaoBreakdown({ channelKey, values, onChange, readOnly = false }) {
   const khTypes = KH_TYPES[channelKey] || []
   return (
     <div className="mt-3 pt-3 border-t border-yellow-100">
@@ -73,14 +73,18 @@ function ChuaGiaoBreakdown({ channelKey, values, onChange }) {
         {khTypes.map(t => (
           <div key={t.key} className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg border ${t.border}`}>
             <span className={`text-xs font-medium ${t.text}`}>{t.label}</span>
-            <input
-              type="number"
-              min="0"
-              value={values[t.key] ?? ''}
-              onChange={e => onChange(t.key, e.target.value)}
-              className={`w-16 text-center text-lg font-bold bg-transparent border-b-2 ${t.border} focus:outline-none focus:border-blue-400`}
-              placeholder="0"
-            />
+            {readOnly ? (
+              <span className="w-16 text-center text-lg font-bold text-gray-800">{values[t.key] || 0}</span>
+            ) : (
+              <input
+                type="number"
+                min="0"
+                value={values[t.key] ?? ''}
+                onChange={e => onChange(t.key, e.target.value)}
+                className={`w-16 text-center text-lg font-bold bg-transparent border-b-2 ${t.border} focus:outline-none focus:border-blue-400`}
+                placeholder="0"
+              />
+            )}
           </div>
         ))}
       </div>
@@ -101,7 +105,16 @@ function ExpandableList({ rows, label }) {
   )
 }
 
-export default function UnifiedTrialChannelDetail({ data, channelKey, referenceDate = null, showChanhXe = false, showSpx = false }) {
+// readOnly=true + frozenSnapshot: hiển thị lại đúng số đã "Lưu số liệu tuần này" (xem
+// unifiedTrialChannelStats.js), GIỮ NGUYÊN y hệt giao diện lúc xem trực tiếp — chỉ khác 2 chỗ
+// bắt buộc phải khác: ô nhập tay hiện số tĩnh (không sửa được số của tuần đã lưu), và không có
+// "Xem N đơn" (rows thô không được lưu lại, chỉ đóng băng số đã tính). Panel Viettel/SPX vẫn dùng
+// đúng CarrierPanel như hàng ngày, chỉ ghim đúng tuần (weekId) + bảng đối chiếu (frozenLookup) tại
+// thời điểm lưu, nên vẫn đầy đủ StatCard/bảng chi tiết y hệt bản sống.
+export default function UnifiedTrialChannelDetail({
+  data, channelKey, referenceDate = null, showChanhXe = false, showSpx = false,
+  readOnly = false, frozenSnapshot = null,
+}) {
   const validData = useMemo(() => data.filter(row => String(row['Mã kiện hàng'] ?? '').trim()), [data])
 
   const { tructiepRows, chanhxeRows } = useMemo(() => {
@@ -115,34 +128,44 @@ export default function UnifiedTrialChannelDetail({ data, channelKey, referenceD
     return { tructiepRows, chanhxeRows }
   }, [validData])
 
-  const trackedChanhXeRows = showChanhXe ? chanhxeRows : []
-
   const viettelKey = `unifiedTrial_${channelKey}_viettel`
   const spxKey = `unifiedTrial_${channelKey}_spx`
 
   // Ô nhập tay: phân loại "chưa giao" theo khách hàng — tổng các ô này CHÍNH LÀ số "Chưa giao"
   const khStorageKey = `unifiedTrial_chuagiao_kh_${channelKey}`
-  const [khValues, commitKhValues] = useStoredValue(khStorageKey, {})
-  const onKhChange = (key, val) => commitKhValues({ ...khValues, [key]: val })
+  const [liveKhValues, commitKhValues] = useStoredValue(khStorageKey, {})
+  const onKhChange = (key, val) => commitKhValues({ ...liveKhValues, [key]: val })
 
   // Ô nhập tay: "Số đơn chưa gửi chành" (chỉ khi có nhóm Chành xe)
   const chuaGuiKey = `unifiedTrial_chuagiao_chuagui_${channelKey}`
-  const [chuaGuiChanh, commitChuaGuiChanh] = useStoredValue(chuaGuiKey, '')
+  const [liveChuaGuiChanh, commitChuaGuiChanh] = useStoredValue(chuaGuiKey, '')
 
   // Số liệu tổng hợp — dùng chung với lúc "Lưu số liệu tuần này" để không lệch số giữa hiển thị
   // trực tiếp và bản đóng băng (xem unifiedTrialChannelStats.js).
-  const snapshot = useMemo(
-    () => computeChannelSnapshot({ data, channelKey, khValues, chuaGuiChanh, showChanhXe, showSpx, referenceDate }),
-    [data, channelKey, khValues, chuaGuiChanh, showChanhXe, showSpx, referenceDate],
+  const liveSnapshot = useMemo(
+    () => computeChannelSnapshot({ data, channelKey, khValues: liveKhValues, chuaGuiChanh: liveChuaGuiChanh, showChanhXe, showSpx, referenceDate }),
+    [data, channelKey, liveKhValues, liveChuaGuiChanh, showChanhXe, showSpx, referenceDate],
   )
+
+  const snapshot = readOnly ? frozenSnapshot : liveSnapshot
+  const khValues = readOnly ? frozenSnapshot.khValues : liveKhValues
+  const chuaGuiChanh = readOnly ? frozenSnapshot.chuaGuiChanh : liveChuaGuiChanh
   const {
     total, trucTiepBadge, trucTiepStats, trucTiepDelivered, khBreakdownSum,
-    chanhXeBadge, viettelCount, spxCount, doitacTotal,
+    chanhXeBadge, chanhXeCount, viettelCount, spxCount, doitacTotal,
+    viettelWeekId, spxWeekId, carrierLookup,
   } = snapshot
   const trucTiepTotal = trucTiepDelivered + khBreakdownSum
   const trucTiepPct = trucTiepTotal > 0 ? Math.round((trucTiepDelivered / trucTiepTotal) * 100) : 0
   const trucTiepChuaGiaoPct = trucTiepTotal > 0 ? Math.round((khBreakdownSum / trucTiepTotal) * 100) : 0
   const pct = (part) => total ? Math.round((part / total) * 100) : 0
+
+  const viettelPanelProps = readOnly
+    ? { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: [], weekId: viettelWeekId, frozenLookup: carrierLookup }
+    : { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: validData, referenceDate }
+  const spxPanelProps = readOnly
+    ? { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: [], weekId: spxWeekId, frozenLookup: carrierLookup }
+    : { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: validData, referenceDate }
 
   const kpiCols = 3 + (showChanhXe ? 1 : 0)
 
@@ -172,7 +195,7 @@ export default function UnifiedTrialChannelDetail({ data, channelKey, referenceD
             <StatCard icon={AlertCircle} value={khBreakdownSum} label="Chưa giao" cls="text-yellow-600" />
           </div>
 
-          <ChuaGiaoBreakdown channelKey={channelKey} values={khValues} onChange={onKhChange} />
+          <ChuaGiaoBreakdown channelKey={channelKey} values={khValues} onChange={onKhChange} readOnly={readOnly} />
 
           {trucTiepTotal > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-100">
@@ -191,41 +214,45 @@ export default function UnifiedTrialChannelDetail({ data, channelKey, referenceD
             </div>
           )}
 
-          <ExpandableList rows={tructiepRows} label="giao hàng trực tiếp" />
+          {!readOnly && <ExpandableList rows={tructiepRows} label="giao hàng trực tiếp" />}
         </SectionCard>
 
         {showChanhXe && (
           <SectionCard title="Giao qua Chành xe" total={chanhXeBadge} icon={Truck} defaultOpen={false}>
             <div className="text-sm text-gray-500 flex items-center gap-2">
               <Package size={15} className="text-gray-400" />
-              Tổng số đơn đã gửi qua chành: <strong className="text-gray-800 ml-1">{trackedChanhXeRows.length} đơn</strong>
+              Tổng số đơn đã gửi qua chành: <strong className="text-gray-800 ml-1">{chanhXeCount} đơn</strong>
             </div>
             <div className="pt-3 flex items-center gap-2">
               <label className="text-sm text-gray-500 flex items-center gap-2">
                 <span>Số đơn chưa gửi chành:</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={chuaGuiChanh}
-                  onChange={e => commitChuaGuiChanh(e.target.value)}
-                  placeholder="0"
-                  className="w-20 text-center font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                />
+                {readOnly ? (
+                  <strong className="w-20 text-center font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1">{chuaGuiChanh}</strong>
+                ) : (
+                  <input
+                    type="number"
+                    min="0"
+                    value={chuaGuiChanh}
+                    onChange={e => commitChuaGuiChanh(e.target.value)}
+                    placeholder="0"
+                    className="w-20 text-center font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                  />
+                )}
                 <span>đơn</span>
               </label>
             </div>
-            <ExpandableList rows={trackedChanhXeRows} label="chành xe" />
+            {!readOnly && <ExpandableList rows={chanhxeRows} label="chành xe" />}
           </SectionCard>
         )}
 
         <SectionCard title="Giao qua đối tác vận chuyển" total={doitacTotal} icon={Truck}>
           <div className="space-y-3">
             <SectionCard title="Viettel Post" total={viettelCount} icon={Truck} defaultOpen={false}>
-              <CarrierPanel carrierKey={viettelKey} label="Viettel Post" carrierType="viettel" internalData={validData} referenceDate={referenceDate} />
+              <CarrierPanel {...viettelPanelProps} />
             </SectionCard>
             {showSpx && (
               <SectionCard title="SPX Express" total={spxCount} icon={Truck} defaultOpen={false}>
-                <CarrierPanel carrierKey={spxKey} label="SPX Express" carrierType="spx" internalData={validData} referenceDate={referenceDate} />
+                <CarrierPanel {...spxPanelProps} />
               </SectionCard>
             )}
           </div>

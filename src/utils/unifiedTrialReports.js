@@ -1,10 +1,15 @@
-// "Lưu số liệu tuần này" cho tab Gộp kênh (Thử nghiệm) — đóng băng ĐÚNG số đã tính ra màn hình
-// (không lưu lại rows thô, đỡ tốn chỗ), giữ thành danh sách lịch sử riêng theo từng file upload
-// (Đơn SO / Đơn truyền thống), xem lại được. Storage riêng "unified_trial_reports_*", KHÔNG đụng
-// "sheet_reports_*" của Đơn C/DTP/TMĐT — khác 3 tab sản xuất, ở đây KHÔNG tự xoá rows thô sau khi
-// lưu: upload tuần mới vẫn ghi đè rows thô như trước giờ, không ảnh hưởng bản đã lưu.
+// "Lưu số liệu tuần này" cho tab Gộp kênh (Thử nghiệm) — đóng băng ĐÚNG số không thể tính lại được
+// nữa sau khi rows thô của Đơn SO/Đơn truyền thống bị ghi đè bởi lần upload sau (tổng, breakdown
+// theo shop, breakdown kênh...), giữ thành danh sách lịch sử riêng theo từng file upload, xem lại
+// được. Storage riêng "unified_trial_reports_*", KHÔNG đụng "sheet_reports_*" của Đơn C/DTP/TMĐT.
+//
+// Panel Viettel/SPX (kể cả đối soát ngoại sàn 4 mốc) thì KHÔNG cần đóng băng số — ghim đúng weekId +
+// bảng đối chiếu (carrierLookup) tại thời điểm lưu là đủ để xem lại y hệt giao diện trực tiếp, vì dữ
+// liệu VTP/SPX tích luỹ nhiều tuần (không bị ghi đè) khác với rows Đơn SO/Đơn truyền thống.
+//
+// Khác 3 tab sản xuất: KHÔNG tự xoá rows thô sau khi lưu (tab này chỉ giữ 1 slot rows/kênh nên không
+// cần cơ chế dọn bớt) — upload tuần mới vẫn ghi đè rows thô như trước giờ, không ảnh hưởng bản đã lưu.
 import { opsStore as localStorage } from '../data/workspace'
-import { pickCarrierWeekIdByDate, getCarrierWeekRows, computeFrozenNgoaiSan } from '../components/carrierUtils'
 
 function storageKey(kind) { return `unified_trial_reports_${kind}` }
 
@@ -28,14 +33,4 @@ export function removeTrialReport(kind, id) {
   const next = readTrialReports(kind).filter(r => r.id !== id)
   localStorage.setItem(storageKey(kind), JSON.stringify(next))
   return next
-}
-
-// Đóng băng kết quả đối soát "đơn ngoại sàn" (4 mốc) tại đúng thời điểm bấm lưu — dùng lại hạ tầng
-// đã có sẵn cho Đơn C production (carrierUtils.js), không viết lại logic đối soát.
-export function computeNgoaiSanReportStats(carrierKey, referenceDate) {
-  const weekId = pickCarrierWeekIdByDate(carrierKey, referenceDate)
-  if (!weekId) return null
-  const spxRows = getCarrierWeekRows(carrierKey, weekId)
-  if (spxRows.length === 0) return null
-  return computeFrozenNgoaiSan(carrierKey, spxRows).stats
 }

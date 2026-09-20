@@ -3,7 +3,7 @@
 // đang hiển thị, không tính lệch giữa 2 chỗ).
 import { partnerType } from './partnerType'
 import { deliveryBucket } from './deliveryDays'
-import { getCarrierFileTotal } from '../components/carrierUtils'
+import { getCarrierFileTotal, pickCarrierWeekIdByDate, snapshotCarrierLookup } from '../components/carrierUtils'
 
 export function calcTrucTiepStats(rows) {
   const result = { '24h': 0, '48h': 0, '72h': 0, khac: 0 }
@@ -52,10 +52,18 @@ export function computeChannelSnapshot({ data, channelKey, khValues, chuaGuiChan
   const chanhXeBadge = trackedChanhXeRows.length + (showChanhXe ? chuaGuiVal : 0)
   const total = trucTiepBadge + chanhXeBadge + doitacTotal
 
+  // Ghim đúng tuần VTP/SPX + bảng đối chiếu nội bộ tại thời điểm này — dùng khi "Lưu số liệu tuần
+  // này" để CarrierPanel vẫn hiển thị đúng y hệt giao diện trực tiếp (StatCard, bảng chi tiết...)
+  // cho đúng tuần đã lưu, kể cả sau khi rows thô của kênh (donC/donDTP) đã bị ghi đè bởi file mới.
+  const viettelWeekId = pickCarrierWeekIdByDate(viettelKey, referenceDate)
+  const spxWeekId = showSpx ? pickCarrierWeekIdByDate(spxKey, referenceDate) : null
+  const carrierLookup = snapshotCarrierLookup(validData)
+
   return {
     total,
     trucTiepBadge, trucTiepStats, trucTiepDelivered, khBreakdownSum, khValues,
     chanhXeBadge, chanhXeCount: trackedChanhXeRows.length, chuaGuiChanh: chuaGuiVal,
     viettelCount, spxCount, doitacTotal,
+    viettelWeekId, spxWeekId, carrierLookup,
   }
 }
