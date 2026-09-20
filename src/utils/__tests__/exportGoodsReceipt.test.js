@@ -45,6 +45,11 @@ function stylesOf(bytes) {
   return zip.file('xl/styles.xml').asText()
 }
 
+function workbookXmlOf(bytes) {
+  const zip = new PizZip(bytes)
+  return zip.file('xl/workbook.xml').asText()
+}
+
 describe('exportGoodsReceipt', () => {
   it('fills template header metadata from pdf text', () => {
     const pdfText = 'Ngày 28 tháng 08 năm 2026 Họ và tên: Đặng Thanh Hải Biển số xe: 29E-785.54 SĐT liên hệ: 0979694941'
@@ -81,7 +86,7 @@ describe('exportGoodsReceipt', () => {
 
   it('điền đúng cột theo mẫu giấy — chỉ điền Hoá đơn trong nhóm Số lượng, Thực tế/Chênh lệch/Hư hỏng/Tình trạng để trống cho người kiểm hàng tự điền tay', async () => {
     const templateBuffer = loadTemplateBuffer()
-    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { metadata: { noiNhan: 'Kho C' }, processedAt: PROCESSED_AT })
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { metadata: {}, warehouse: 'C' })
     const sheetXml = sheetXmlOf(bytes)
     const sst = sharedStringsOf(bytes)
     const doc = new DOMParser().parseFromString(sheetXml, 'application/xml')
@@ -106,12 +111,41 @@ describe('exportGoodsReceipt', () => {
     expect(cell(15, 'K').querySelector('v')).toBeNull()
     expect(cell(15, 'L').querySelector('v')).toBeNull()
 
-    // Số hóa đơn tự sinh theo mã BBGNddmmyyyy từ ngày xử lý chuyến hàng, không lấy từ PDF.
-    expect(cellText(6, 'B')).toBe('Số hóa đơn : BBGN04092026')
-    expect(cellText(8, 'B')).toContain('Kho C')
+    // Số hóa đơn để trống cho người dùng tự điền tay — giữ nguyên dòng chấm chấm gốc của mẫu.
+    expect(cellText(6, 'B')).toBe('Số hóa đơn : …………………………………….')
+    // Nơi nhận cố định theo kho đang xuất, không suy đoán từ PDF/metadata.
+    expect(cellText(8, 'B')).toBe('Nơi nhận : CPC1HN - Chi nhánh Hồ Chí Minh')
 
     // Ảnh/logo (drawing) vẫn được tham chiếu — không bị SheetJS-style xoá mất.
     expect(sheetXml).toContain('<drawing r:id="rId2"/>')
+  })
+
+  it('Nơi nhận Kho LGT ghi đúng "LGT - Chi nhánh Hồ Chí Minh" (khác Kho C) — không phải nơi hàng xuất đi, mà là chi nhánh mình nhận hàng', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { metadata: {}, warehouse: 'LGT' })
+    const doc = new DOMParser().parseFromString(sheetXmlOf(bytes), 'application/xml')
+    const sstDoc = new DOMParser().parseFromString(sharedStringsOf(bytes), 'application/xml')
+    const sharedText = i => sstDoc.documentElement.getElementsByTagName('si')[i]?.textContent || ''
+    const cellText = (row, col) => {
+      const c = doc.querySelector(`c[r="${col}${row}"]`)
+      const v = c?.querySelector('v')?.textContent
+      return v === undefined ? null : (c.getAttribute('t') === 's' ? sharedText(Number(v)) : v)
+    }
+    expect(cellText(8, 'B')).toBe('Nơi nhận : LGT - Chi nhánh Hồ Chí Minh')
+  })
+
+  it('Ngày, giờ nhận luôn để trống — không tự điền theo ngày trên PDF biên bản giao nhận (từng bị điền sai)', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    // ngayNhap mô phỏng đúng field mà parsePdfMetadata() trả về — trước đây bị dùng làm fallback sai.
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], {
+      metadata: { ngayNhap: '28/08/2026', benNhanHang: 'CPC1 Hà Nội - Chi nhánh Hồ Chí Minh' },
+      warehouse: 'C',
+    })
+    const doc = new DOMParser().parseFromString(sheetXmlOf(bytes), 'application/xml')
+    const sstDoc = new DOMParser().parseFromString(sharedStringsOf(bytes), 'application/xml')
+    const cell = doc.querySelector('c[r="B9"]')
+    const idx = Number(cell.querySelector('v').textContent)
+    expect(sstDoc.documentElement.getElementsByTagName('si')[idx].textContent).toBe('Ngày, giờ nhận :………………………………….')
   })
 
   it('Kiện nguyên/Kiện lẻ bằng 0 vẫn hiện "0" (dữ liệu thật), không bị coi như trống', async () => {
@@ -169,5 +203,25 @@ describe('exportGoodsReceipt', () => {
     expect(doc.querySelector('mergeCell[ref="E30:I30"]')).toBeTruthy()
     expect(doc.querySelector('row[r="29"] c[r="A29"] v').textContent).toBe('15')
     expect(doc.querySelector('rowBreaks')).toBeNull()
+  })
+
+  // Người dùng phải tự set tay "Rows to repeat at top" = $1:$14 trong Page Setup mỗi lần in vì mẫu vốn chỉ
+  // để mặc định $13:$13 (chỉ dòng tiêu đề cột lặp lại, không có khối thông tin đầu biên bản — công ty/số
+  // hóa đơn/nơi nhận...) — đổi mặc định trong file mẫu thành $1:$14 để không phải set tay nữa.
+  it('Print Titles mặc định lặp lại cả khối đầu biên bản (dòng 1-14), không chỉ dòng tiêu đề cột', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { processedAt: PROCESSED_AT })
+    const wb = workbookXmlOf(bytes)
+    expect(wb).toContain(`name="_xlnm.Print_Titles" localSheetId="0">'BB NHẬP HÀNG'!$1:$14<`)
+  })
+
+  it('Print Area vẫn tự nới rộng đúng khi số hàng > 12 dòng, không bị Print Titles mới ảnh hưởng', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    const rows = Array.from({ length: 15 }, (_, i) => makeRow({ maHang: `A0${i}`, soLo: `LOT${i}` }))
+    const bytes = await fillReceiptTemplate(templateBuffer, rows, { processedAt: PROCESSED_AT })
+    const wb = workbookXmlOf(bytes)
+    // Chân ký tên dời xuống dòng 30 (xem test "tự thêm dòng..." ở trên) -> Print_Area nới tới $M$31.
+    expect(wb).toContain(`name="_xlnm.Print_Area" localSheetId="0">'BB NHẬP HÀNG'!$A$1:$M$31<`)
+    expect(wb).toContain(`name="_xlnm.Print_Titles" localSheetId="0">'BB NHẬP HÀNG'!$1:$14<`)
   })
 })
