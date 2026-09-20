@@ -45,6 +45,11 @@ function stylesOf(bytes) {
   return zip.file('xl/styles.xml').asText()
 }
 
+function workbookXmlOf(bytes) {
+  const zip = new PizZip(bytes)
+  return zip.file('xl/workbook.xml').asText()
+}
+
 describe('exportGoodsReceipt', () => {
   it('fills template header metadata from pdf text', () => {
     const pdfText = 'Ngày 28 tháng 08 năm 2026 Họ và tên: Đặng Thanh Hải Biển số xe: 29E-785.54 SĐT liên hệ: 0979694941'
@@ -169,5 +174,25 @@ describe('exportGoodsReceipt', () => {
     expect(doc.querySelector('mergeCell[ref="E30:I30"]')).toBeTruthy()
     expect(doc.querySelector('row[r="29"] c[r="A29"] v').textContent).toBe('15')
     expect(doc.querySelector('rowBreaks')).toBeNull()
+  })
+
+  // Người dùng phải tự set tay "Rows to repeat at top" = $1:$14 trong Page Setup mỗi lần in vì mẫu vốn chỉ
+  // để mặc định $13:$13 (chỉ dòng tiêu đề cột lặp lại, không có khối thông tin đầu biên bản — công ty/số
+  // hóa đơn/nơi nhận...) — đổi mặc định trong file mẫu thành $1:$14 để không phải set tay nữa.
+  it('Print Titles mặc định lặp lại cả khối đầu biên bản (dòng 1-14), không chỉ dòng tiêu đề cột', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    const bytes = await fillReceiptTemplate(templateBuffer, [makeRow()], { processedAt: PROCESSED_AT })
+    const wb = workbookXmlOf(bytes)
+    expect(wb).toContain(`name="_xlnm.Print_Titles" localSheetId="0">'BB NHẬP HÀNG'!$1:$14<`)
+  })
+
+  it('Print Area vẫn tự nới rộng đúng khi số hàng > 12 dòng, không bị Print Titles mới ảnh hưởng', async () => {
+    const templateBuffer = loadTemplateBuffer()
+    const rows = Array.from({ length: 15 }, (_, i) => makeRow({ maHang: `A0${i}`, soLo: `LOT${i}` }))
+    const bytes = await fillReceiptTemplate(templateBuffer, rows, { processedAt: PROCESSED_AT })
+    const wb = workbookXmlOf(bytes)
+    // Chân ký tên dời xuống dòng 30 (xem test "tự thêm dòng..." ở trên) -> Print_Area nới tới $M$31.
+    expect(wb).toContain(`name="_xlnm.Print_Area" localSheetId="0">'BB NHẬP HÀNG'!$A$1:$M$31<`)
+    expect(wb).toContain(`name="_xlnm.Print_Titles" localSheetId="0">'BB NHẬP HÀNG'!$1:$14<`)
   })
 })
