@@ -114,6 +114,18 @@ describe('parseGoodsReceipt', () => {
     })
   })
 
+  it('header có CẢ "Lượng cần" lẫn "Đã lấy" (file thực tế mã A01338): ưu tiên "Lượng cần" làm SL HĐ, không để cột đứng sau ("Đã lấy" — số thực lấy tại kho nguồn, có thể lệch khi lấy thiếu/dư) đè mất', () => {
+    const buffer = makeWorkbook([
+      {
+        TT: 1, Mã: 'A01338', Tên: 'Afenemi', 'Số lô đề nghị': '28826G01', 'Hạn dùng': '2029-06-30',
+        'Lượng cần': 25200, ĐVT: 'ONG', 'Quy cách kiện': 126, 'Quy cách hộp': 20,
+        'Số kiện cần': 10, 'Số hộp cần': 0, 'Đã lấy': 27720,
+      },
+    ])
+    const rows = readWarehouseExportRows(buffer)
+    expect(rows[0]).toMatchObject({ slHoaDon: 25200, kienNguyen: 10 })
+  })
+
   it('"Số hộp cần" là số hộp lẻ, không phải số kiện — dù bao nhiêu hộp cũng chỉ tính thành 1 kiện lẻ', () => {
     const buffer = makeWorkbook([
       { Mã: 'G00898', Tên: 'Guacanyl', 'Số lô đề nghị': 'LOT1', 'Lượng cần': 3200, 'Số kiện cần': 2, 'Số hộp cần': 18, ĐVT: 'HOP' },

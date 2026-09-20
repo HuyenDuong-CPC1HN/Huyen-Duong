@@ -30,6 +30,28 @@ function resolveField(header) {
   return null
 }
 
+// Vài file xuất kho có CẢ "Lượng cần" (số theo phiếu/đơn hàng) LẪN "Đã lấy" (số thực lấy tại kho nguồn,
+// có thể lệch khi lấy thiếu/lấy dư) cùng lúc trong 1 header — cả 2 đều là alias hợp lệ của slHoaDon (để
+// còn đọc được file chỉ có 1 trong 2 cột). Trước đây gán theo đúng thứ tự cột trái→phải nên cột nào đứng
+// SAU trong sheet (thường là "Đã lấy") âm thầm đè mất cột đứng trước, không theo đúng độ ưu tiên đã khai
+// báo trong COLUMN_ALIASES (vd mã A01338: "Lượng cần" 25.200 khớp Số kiện cần × quy cách, nhưng "Đã lấy"
+// 27.720 bị lấy nhầm làm SL HĐ vì đứng sau). Chọn cột theo thứ tự alias khai báo (index nhỏ hơn = ưu tiên
+// hơn) thay vì theo vị trí cột, để 1 field chỉ đọc từ ĐÚNG 1 cột ưu tiên cao nhất khi có nhiều cột trùng.
+function pickFieldColumns(headerRow) {
+  const bestByField = {}
+  headerRow.forEach((cell, colIndex) => {
+    const field = resolveField(cell)
+    if (!field) return
+    const key = normalizeHeader(cell).toLowerCase()
+    const aliasRank = COLUMN_ALIASES[field].findIndex(alias => alias.toLowerCase() === key)
+    const current = bestByField[field]
+    if (!current || aliasRank < current.aliasRank) bestByField[field] = { colIndex, aliasRank }
+  })
+  const fieldByCol = headerRow.map(() => null)
+  Object.entries(bestByField).forEach(([field, { colIndex }]) => { fieldByCol[colIndex] = field })
+  return fieldByCol
+}
+
 function toOptionalNumber(value) {
   if (value === null || value === undefined || value === '') return 0
   const n = Number(String(value).replaceAll(',', ''))
@@ -112,7 +134,7 @@ export function readWarehouseExportRows(arrayBuffer) {
     throw new Error('Không tìm thấy cột "Mã" hoặc "Mã hàng" trong file Excel xuất kho.')
   }
 
-  const fieldByCol = grid[headerRowIndex].map(cell => resolveField(cell))
+  const fieldByCol = pickFieldColumns(grid[headerRowIndex])
   const soLoColIndex = fieldByCol.indexOf('soLo')
   const rows = []
   for (let i = headerRowIndex + 1; i < grid.length; i += 1) {
