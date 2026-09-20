@@ -45,6 +45,7 @@ export function createGoodsReceiptBatchesRepository(client) {
       warnings = [],
       khoC = [],
       khoLgt = [],
+      checkedRowIds = [],
     }) {
       // Tách file lưu trữ ra làm 2 theo kho — duyệt trong Supabase Storage theo Kho C/Kho LGT > Năm >
       // Tháng > các chuyến trong tháng, thay vì gộp chung 1 file cho cả 2 kho. Các trường chung (không
@@ -64,6 +65,7 @@ export function createGoodsReceiptBatchesRepository(client) {
         usedSharedExcel,
         pdfMetadata,
         warnings,
+        checkedRowIds,
       }
       const storagePathC = `goods-receipt/Kho C/${month}/${id}.json`
       const storagePathLgt = `goods-receipt/Kho LGT/${month}/${id}.json`
