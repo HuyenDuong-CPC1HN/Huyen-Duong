@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Upload, FileUp, FileSpreadsheet, X, Download, Search, PackagePlus,
   Pencil, Save, History, FileText, Plus, Trash2, RefreshCw,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, Check,
 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import {
@@ -268,15 +268,40 @@ function DateCell({ value, onChange, className = '' }) {
   )
 }
 
-function ReceiptTableRow({ row, index, rank, editing, onRowChange, onRemoveRow, onInsertRow }) {
+// Đánh dấu "đã dò biên bản giao nhận" — thuần công cụ theo dõi riêng trên màn hình (lưu vào
+// batch.checkedRowIds để giữ được qua lần tải lại trang, nhưng KHÔNG đụng vào khoC/khoLgt nên không kéo
+// theo việc lưu nhầm các sửa nội dung khác chưa bấm "Lưu chỉnh sửa"), không xuất ra file Excel. Bấm vào ô
+// bất kỳ trong dòng (để sửa hay chỉ để xem) sẽ đánh dấu; bấm lại vào đúng số STT của dòng đã đánh dấu để
+// bỏ đánh dấu — tách riêng khỏi các ô còn lại để không bị bỏ đánh dấu ngoài ý muốn khi đang sửa nhiều ô
+// liên tiếp trong cùng 1 dòng đã đánh dấu.
+function ReceiptTableRow({ row, index, rank, editing, onRowChange, onRemoveRow, onInsertRow, checked, onToggleChecked }) {
   const chenh = calcChenhLech(row)
   const highlight = row.needsManual || !row.hanDung
+  const rowClass = [
+    highlight ? 'bg-amber-50/70' : 'border-t border-gray-50',
+    checked ? 'border-l-4 border-l-emerald-500' : '',
+  ].filter(Boolean).join(' ')
+
+  const handleRowClick = (e) => {
+    if (e.target.closest('button')) return
+    if (!checked) onToggleChecked()
+  }
 
   return (
-    <tr className={highlight ? 'bg-amber-50/70' : 'border-t border-gray-50'}>
+    <tr className={rowClass} onClick={handleRowClick}>
       {/* STT hiển thị theo thứ tự đang XEM (rank) — khác với index (vị trí thật trong mảng dữ liệu,
-          dùng để gọi onRowChange/onRemoveRow đúng dòng) vì bảng có thể đang sắp xếp alphabet. */}
-      <td className="px-2 py-1.5 text-gray-500">{(rank ?? index) + 1}</td>
+          dùng để gọi onRowChange/onRemoveRow đúng dòng) vì bảng có thể đang sắp xếp alphabet. Đồng thời
+          là nút bật/tắt đánh dấu "đã dò" (xem ghi chú trên hàm). */}
+      <td className="px-2 py-1.5">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleChecked() }}
+          title={checked ? 'Bấm để bỏ đánh dấu "đã dò biên bản"' : 'Bấm để đánh dấu "đã dò biên bản"'}
+          className={`flex items-center justify-center gap-0.5 min-w-6 h-5 px-1 rounded text-[11px] ${checked ? 'bg-emerald-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+        >
+          {checked && <Check size={11} />}{(rank ?? index) + 1}
+        </button>
+      </td>
       <td className="px-2 py-1.5 font-medium">
         {editing ? <EditableCell value={row.maHang} onChange={(v) => onRowChange(index, 'maHang', v)} /> : row.maHang}
       </td>
@@ -413,7 +438,7 @@ function FactoryReconciliationTable({ rows, tone }) {
   )
 }
 
-function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onInsertRow, sortKey, sortDir, onToggleSort }) {
+function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onInsertRow, sortKey, sortDir, onToggleSort, checkedRowIds, onToggleChecked }) {
   // Sắp xếp CHỈ áp dụng khi KHÔNG Chỉnh sửa — nếu sắp cả lúc đang gõ Mã hàng/Tên hàng, mỗi ký tự gõ vào
   // sẽ đổi thứ tự ngay, dòng đang gõ nhảy vị trí liên tục ngay dưới con trỏ, trải nghiệm rất khó chịu dù
   // key={row.rowId} vẫn giữ đúng danh tính từng dòng. originalIndex giữ nguyên vị trí thật trong mảng dữ
@@ -468,6 +493,8 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onInsert
                 onRowChange={onRowChange}
                 onRemoveRow={onRemoveRow}
                 onInsertRow={onInsertRow}
+                checked={checkedRowIds.has(row.rowId)}
+                onToggleChecked={() => onToggleChecked(row.rowId)}
               />
             ))}
           </tbody>
@@ -795,6 +822,22 @@ export default function NhapHangTab() {
     const key = warehouse === 'C' ? 'khoC' : 'khoLgt'
     const next = { ...active, [key]: (active[key] || []).filter((_, i) => i !== index) }
     setBatches(batches.map(batch => (batch.id === active.id ? next : batch)))
+  }
+
+  // Đánh dấu "đã dò biên bản giao nhận" — lưu riêng vào checkedRowIds của batch (không đụng khoC/khoLgt)
+  // nên ghi thẳng ngay mỗi lần bấm, không cần đợi "Lưu chỉnh sửa", cũng không kéo theo lưu nhầm các sửa
+  // nội dung khác đang dở dang chưa lưu. Không đưa vào lịch sử Ctrl+Z (pushUndo) vì đây chỉ là công cụ
+  // theo dõi cá nhân, không phải nội dung nhập hàng.
+  const checkedRowIds = useMemo(() => new Set(active?.checkedRowIds || []), [active])
+
+  const toggleChecked = (rowId) => {
+    if (!active) return
+    const current = new Set(active.checkedRowIds || [])
+    if (current.has(rowId)) current.delete(rowId)
+    else current.add(rowId)
+    const nextIds = [...current]
+    setBatches(batches.map(batch => (batch.id === active.id ? { ...batch, checkedRowIds: nextIds } : batch)))
+    updateBatch(active.id, { checkedRowIds: nextIds })
   }
 
   const removeActive = () => {
@@ -1226,6 +1269,8 @@ export default function NhapHangTab() {
         sortKey={khoCSort.key}
         sortDir={khoCSort.dir}
         onToggleSort={toggleKhoCSort}
+        checkedRowIds={checkedRowIds}
+        onToggleChecked={toggleChecked}
       />
       <ReceiptTable
         title="Kho LGT"
@@ -1237,6 +1282,8 @@ export default function NhapHangTab() {
         sortKey={khoLgtSort.key}
         sortDir={khoLgtSort.dir}
         onToggleSort={toggleKhoLgtSort}
+        checkedRowIds={checkedRowIds}
+        onToggleChecked={toggleChecked}
       />
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">

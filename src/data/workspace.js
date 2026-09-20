@@ -162,6 +162,7 @@ async function loadGoodsReceipt(client) {
       warnings: payload.warnings || [],
       khoC: payload.khoC || [],
       khoLgt: payload.khoLgt || [],
+      checkedRowIds: payload.checkedRowIds || [],
     }
   }))
   put('goods_receipt_batches', encode(batches))
@@ -381,6 +382,7 @@ async function syncGoodsReceiptBatches(key) {
       warnings: batch.warnings || [],
       khoC: batch.khoC || [],
       khoLgt: batch.khoLgt || [],
+      checkedRowIds: batch.checkedRowIds || [],
     })
   }
   await Promise.all([...changes.deletes].map(id => currentById.get(id)).filter(Boolean).map(batch => repo.remove(batch)))
