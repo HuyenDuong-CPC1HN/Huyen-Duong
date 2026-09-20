@@ -126,6 +126,24 @@ describe('parseGoodsReceipt', () => {
     expect(rows[0]).toMatchObject({ slHoaDon: 25200, kienNguyen: 10 })
   })
 
+  it('header có cả "Lượng cần" lẫn "Đã lấy": dòng CHƯA thực xuất (Đã lấy=0, Số kiện/hộp cần=0) vẫn bị lọc bỏ dù "Lượng cần" > 0 — ưu tiên "Lượng cần" làm SL HĐ không được kéo theo việc hiện lại các dòng chưa xuất được (lô ghi "Chưa đc xuất"/"KL"/để trống) mà trước đây đã bị lọc đúng vì Đã lấy=0', () => {
+    const buffer = makeWorkbook([
+      {
+        TT: 1, Mã: 'A01497', Tên: 'Thuốc chưa xuất', 'Số lô đề nghị': 'Chưa đc xuất', 'Hạn dùng': '',
+        'Lượng cần': 30, ĐVT: 'HOP', 'Quy cách kiện': 0, 'Quy cách hộp': 0,
+        'Số kiện cần': 0, 'Số hộp cần': 0, 'Đã lấy': 0,
+      },
+      {
+        TT: 2, Mã: 'N00845', Tên: 'Thuốc đã xuất đủ kiện nhưng Đã lấy ghi 0', 'Số lô đề nghị': '18726H01', 'Hạn dùng': '2027-01-01',
+        'Lượng cần': 5000, ĐVT: 'HOP', 'Quy cách kiện': 24, 'Quy cách hộp': 50,
+        'Số kiện cần': 4, 'Số hộp cần': 4, 'Đã lấy': 0,
+      },
+    ])
+    const rows = readWarehouseExportRows(buffer)
+    expect(rows.find(r => r.maHang === 'A01497')).toBeUndefined()
+    expect(rows.find(r => r.maHang === 'N00845')).toMatchObject({ slHoaDon: 5000, kienNguyen: 4, kienLe: 1 })
+  })
+
   it('"Số hộp cần" là số hộp lẻ, không phải số kiện — dù bao nhiêu hộp cũng chỉ tính thành 1 kiện lẻ', () => {
     const buffer = makeWorkbook([
       { Mã: 'G00898', Tên: 'Guacanyl', 'Số lô đề nghị': 'LOT1', 'Lượng cần': 3200, 'Số kiện cần': 2, 'Số hộp cần': 18, ĐVT: 'HOP' },

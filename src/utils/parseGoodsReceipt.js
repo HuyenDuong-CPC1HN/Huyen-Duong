@@ -136,6 +136,14 @@ export function readWarehouseExportRows(arrayBuffer) {
 
   const fieldByCol = pickFieldColumns(grid[headerRowIndex])
   const soLoColIndex = fieldByCol.indexOf('soLo')
+  // Cột "Đã lấy" (số THỰC lấy tại kho nguồn) không còn được dùng làm giá trị slHoaDon hiển thị khi file có
+  // sẵn "Lượng cần" (xem pickFieldColumns), nhưng vẫn là tín hiệu ĐÚNG NHẤT để biết dòng này có thực sự
+  // xuất được gì không — dòng "chưa xuất" (lô ghi "Chưa đc xuất"/"KL"/để trống, không rơi vào đúng chuỗi
+  // NOT_FULFILLED_LOT ở trên) luôn có Đã lấy=0 dù "Lượng cần" (số YÊU CẦU ban đầu) vẫn > 0 — nếu dùng
+  // slHoaDon (đã ưu tiên Lượng cần) để lọc thì các dòng này lọt qua bộ lọc bên dưới, hiện SL HĐ ảo trong
+  // khi Kiện nguyên/Kiện lẻ đều là 0. Đọc riêng cột "Đã lấy" (nếu có) chỉ để quyết định lọc, không đụng gì
+  // đến giá trị slHoaDon sẽ hiển thị.
+  const daLayColIndex = grid[headerRowIndex].findIndex(cell => normalizeHeader(cell).toLowerCase() === 'đã lấy')
   const rows = []
   for (let i = headerRowIndex + 1; i < grid.length; i += 1) {
     const line = grid[i]
@@ -161,7 +169,8 @@ export function readWarehouseExportRows(arrayBuffer) {
       else row[field] = raw === null || raw === undefined ? '' : String(raw).trim()
     })
     if (!row.maHang || !PRODUCT_CODE.test(row.maHang)) continue
-    if ((row.slHoaDon ?? 0) <= 0 && (row.kienNguyen ?? 0) <= 0 && (row.kienLe ?? 0) <= 0) continue
+    const daThucXuat = daLayColIndex !== -1 ? toOptionalNumber(line[daLayColIndex]) : (row.slHoaDon ?? 0)
+    if (daThucXuat <= 0 && (row.kienNguyen ?? 0) <= 0 && (row.kienLe ?? 0) <= 0) continue
     rows.push(row)
   }
   return rows
