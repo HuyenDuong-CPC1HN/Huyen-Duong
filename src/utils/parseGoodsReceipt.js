@@ -862,7 +862,9 @@ export function reconcileActualVsInvoice(invoiceRows, actualRows) {
       trangThai = 'quetLa'
     }
     return {
-      maHang: inv?.maHang || act?.maHang,
+      // maHang: guard "" như tenHang/soLo — dòng nhập tay/dữ liệu batch cũ có thể thiếu maHang (undefined),
+      // .localeCompare() ở sort bên dưới sẽ crash "Cannot read properties of undefined" nếu không có "".
+      maHang: inv?.maHang || act?.maHang || '',
       tenHang: inv?.tenHang || act?.tenHang || '',
       soLo: inv?.soLo || act?.soLo || '',
       slHoaDon,
