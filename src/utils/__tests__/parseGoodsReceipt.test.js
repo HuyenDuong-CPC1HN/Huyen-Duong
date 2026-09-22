@@ -524,6 +524,17 @@ describe('parseGoodsReceipt', () => {
     expect(results.find(r => r.maHang === 'X09999')).toMatchObject({ trangThai: 'quetLa', slHoaDon: null })
   })
 
+  it('reconcileActualVsInvoice: dòng hoá đơn thiếu Mã hàng (undefined, dữ liệu batch cũ/dòng nhập tay chưa điền) không làm crash lúc sort', () => {
+    const invoiceRows = [
+      { maHang: 'G01006', tenHang: 'Golistin Soda', soLo: '04526F01', slHoaDon: 1920 },
+      { tenHang: 'Dòng thiếu Mã hàng', soLo: '99999', slHoaDon: 10 }, // maHang: undefined
+    ]
+    const actualRows = [{ maHang: 'G01006', tenHang: 'Golistin Soda', soLo: '04526F01', soLuong: 1920 }]
+    expect(() => reconcileActualVsInvoice(invoiceRows, actualRows)).not.toThrow()
+    const results = reconcileActualVsInvoice(invoiceRows, actualRows)
+    expect(results.find(r => r.soLo === '99999')).toMatchObject({ maHang: '', trangThai: 'chuaQuet' })
+  })
+
   it('reconcileActualVsInvoice: nối số lô bị tách rời ở 1 bên vẫn khớp đúng với bên kia', () => {
     const invoiceRows = [{ maHang: 'L01021', tenHang: 'Liproin', soLo: '114', slHoaDon: 167 }]
     const actualRows = [{ maHang: 'L01021', tenHang: 'Liproin', soLo: '1 14', soLuong: 167 }]
