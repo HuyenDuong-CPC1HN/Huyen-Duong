@@ -55,7 +55,7 @@ function DateTextField({ value, onChange, disabled, label, className }) {
   )
 }
 
-// Ô chữ dài (Lý do) tự xuống dòng và cao theo nội dung để nhìn hết khi nhập; Enter không tạo dòng mới vì
+// Ô chữ dài (Tên hàng, Lý do) tự xuống dòng và cao theo nội dung để nhìn hết khi nhập; Enter không tạo dòng mới vì
 // nội dung được ghi vào 1 ô của biên bản.
 function WrapTextField({ value, onChange, label, className }) {
   const ref = useRef(null)
@@ -83,7 +83,7 @@ const inputCls = 'px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm focus:
 
 const COLUMNS = [
   { key: 'maHang', label: 'Mã hàng', width: 90 },
-  { key: 'tenHang', label: 'Tên hàng', width: 200 },
+  { key: 'tenHang', label: 'Tên hàng', width: 220, wrap: true },
   { key: 'loLoi', label: 'Số lô hàng lỗi', width: 100 },
   { key: 'loDoi', label: 'Số lô hàng đổi', width: 100 },
   { key: 'status', label: 'Lô' },
