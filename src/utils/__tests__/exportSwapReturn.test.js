@@ -121,6 +121,16 @@ describe('exportSwapReturn — bộ xuất huỷ cuối tuần', () => {
   })
 
   it.each([
+    'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx',
+    'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx',
+  ])('%s: mọi ô của dòng hàng đều có đường kẻ dưới (dòng cuối bảng không bị hở đáy)', (template) => {
+    const xml = new PizZip(loadBuffer(template)).file('word/document.xml').asText()
+    const loopAt = xml.indexOf('{#items}')
+    const row = xml.slice(xml.lastIndexOf('<w:tr ', loopAt), xml.indexOf('</w:tr>', loopAt))
+    expect(row).not.toContain('<w:bottom w:val="nil"/>')
+  })
+
+  it.each([
     ['donC', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx', '020101'],
     ['donDTP', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx', '020105'],
   ])('%s: cột Kho mặc định %s, Tình trạng lấy theo Lý do đã nhập', async (entity, template, kho) => {
