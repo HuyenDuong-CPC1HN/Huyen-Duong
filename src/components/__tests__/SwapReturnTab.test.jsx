@@ -118,6 +118,18 @@ describe('SwapReturnTab', () => {
     expect(hdDoi).toHaveValue('02/01/2030')
   })
 
+  it('ô Lý do tự xuống dòng nhưng giữ nội dung 1 dòng (dán có xuống dòng thành dấu cách, Enter không tạo dòng mới)', () => {
+    render(<SwapReturnTab type="donC" />)
+    fireEvent.click(screen.getByRole('button', { name: /Thêm đợt đổi trả/ }))
+    const lyDo = within(screen.getByRole('dialog')).getByLabelText('Lý do dòng 1')
+    expect(lyDo.tagName).toBe('TEXTAREA')
+    fireEvent.change(lyDo, { target: { value: 'Phương (XU262/323881)\nđổi lô mới' } })
+    expect(lyDo).toHaveValue('Phương (XU262/323881) đổi lô mới')
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    lyDo.dispatchEvent(enter)
+    expect(enter.defaultPrevented).toBe(true)
+  })
+
   it('không cho lưu khi hạn dùng sai ngày', () => {
     render(<SwapReturnTab type="donC" />)
     fireEvent.click(screen.getByRole('button', { name: /Thêm đợt đổi trả/ }))

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { CalendarDays, Plus, Trash2, X } from 'lucide-react'
 import { SWAP_RETURN_ACCOUNTANTS, formatDmy, isoWeekNumber, isValidDateText, lotStatus, mondayOf, addDays, normalizeDateText } from '../utils/swapReturnWeek'
 import LotBadge from './SwapReturnLotBadge'
@@ -55,6 +55,29 @@ function DateTextField({ value, onChange, disabled, label, className }) {
   )
 }
 
+// Ô chữ dài (Lý do) tự xuống dòng và cao theo nội dung để nhìn hết khi nhập; Enter không tạo dòng mới vì
+// nội dung được ghi vào 1 ô của biên bản.
+function WrapTextField({ value, onChange, label, className }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + 2}px`
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value ?? ''}
+      onChange={e => onChange(e.target.value.replace(/\s*\n\s*/g, ' '))}
+      onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+      aria-label={label}
+      className={`${className} resize-none overflow-hidden leading-snug block`}
+    />
+  )
+}
+
 const cellCls = 'w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:border-blue-400 focus:outline-none bg-white disabled:opacity-50 disabled:cursor-not-allowed'
 const inputCls = 'px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400'
 
@@ -69,7 +92,7 @@ const COLUMNS = [
   { key: 'dvt', label: 'ĐVT', width: 60 },
   { key: 'soLuong', label: 'SL', width: 60 },
   { key: 'quyCach', label: 'Quy cách', width: 100 },
-  { key: 'lyDo', label: 'Lý do', width: 160 },
+  { key: 'lyDo', label: 'Lý do', width: 220, wrap: true },
 ]
 
 export default function SwapReturnRecordForm({ entity, defaultDate, record, onSave, onCancel }) {
@@ -155,22 +178,26 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, onSa
                   return (
                     <tr key={i} className="border-b border-gray-50">
                       {COLUMNS.map(c => (
-                        <td key={c.key} className="px-1.5 py-1.5" style={c.width ? { minWidth: c.width } : undefined}>
-                          {c.key === 'status' && <LotBadge status={status} />}
+                        <td key={c.key} className="px-1.5 py-1.5 align-top" style={c.width ? { minWidth: c.width } : undefined}>
+                          {c.key === 'status' && <div className="pt-1"><LotBadge status={status} /></div>}
                           {c.date && (
                             <DateTextField value={it[c.key]} onChange={v => updateItem(i, c.key, v)}
                               label={`${c.label} dòng ${i + 1}`}
                               disabled={c.key === 'hanDungDoi' && status === 'same'}
                               className={cellCls} />
                           )}
-                          {c.key !== 'status' && !c.date && (
+                          {c.wrap && (
+                            <WrapTextField value={it[c.key]} onChange={v => updateItem(i, c.key, v)}
+                              label={`${c.label} dòng ${i + 1}`} className={cellCls} />
+                          )}
+                          {c.key !== 'status' && !c.date && !c.wrap && (
                             <input value={it[c.key] ?? ''} onChange={e => updateItem(i, c.key, e.target.value)}
                               aria-label={`${c.label} dòng ${i + 1}`}
                               inputMode={c.key === 'soLuong' ? 'numeric' : undefined} className={cellCls} />
                           )}
                         </td>
                       ))}
-                      <td className="px-1.5 py-1.5">
+                      <td className="px-1.5 py-1.5 align-top">
                         <button type="button" onClick={() => removeItem(i)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá dòng" aria-label="Xoá dòng">
                           <Trash2 size={13} />
                         </button>
