@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import PizZip from 'pizzip'
 import { describe, expect, it } from 'vitest'
 import { buildNhapLai, buildWeeklyXuatKho, buildWeeklyXuLy } from '../exportSwapReturn'
-import { isoWeekNumber, lotStatus, mondayOf, nhapLaiItems, normalizeDateText, weeklyItems } from '../swapReturnWeek'
+import { isoWeekNumber, lotStatus, mondayOf, nhapLaiItems, normalizeDateText, tinhTrangFromLyDo, weeklyItems } from '../swapReturnWeek'
 
 const TPL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../public/templates')
 function loadBuffer(name) {
@@ -81,6 +81,18 @@ describe('swapReturnWeek', () => {
     expect(normalizeDateText(input)).toBe(expected)
   })
 
+  it.each([
+    ['Hàng rách, móp vỏ đổi cho DP PLT (DU262/050203)', 'Hàng rách, móp vỏ'],
+    ['Lọ chảy dịch, đổi cho Nhà thuốc Phương (XU262/323881)', 'Lọ chảy dịch'],
+    ['Gãy ống - Đổi cho KH Tân Thịnh', 'Gãy ống'],
+    ['Lỗi vòi xịt', 'Lỗi vòi xịt'],
+    ['Khách đổi mẫu mới', 'Khách đổi mẫu mới'],
+    ['Đổi cho KH A', ''],
+    ['', ''],
+  ])('Tình trạng lấy phần Lý do trước "đổi cho": "%s" -> "%s"', (lyDo, expected) => {
+    expect(tinhTrangFromLyDo(lyDo)).toBe(expected)
+  })
+
   it('BB nhập lại kho chỉ lấy dòng khác lô', () => {
     expect(nhapLaiItems({ items: [SAME, DIFF] })).toEqual([DIFF])
   })
@@ -145,7 +157,7 @@ describe('exportSwapReturn — BB xác minh nhập lại kho', () => {
     ['donC', 'BIEN_BAN_XAC_MINH_CPC1HN.docx', 'CPC1 HÀ NỘI'],
     ['donDTP', 'BIEN_BAN_XAC_MINH_UPHARMA.docx', 'UPHARMA'],
   ])('%s: đúng mẫu pháp nhân, chỉ dòng khác lô, địa điểm "Tại CN. Hồ Chí Minh"', async (entity, template, company) => {
-    const record = { entity, date: '2026-09-23', customerName: 'Nhà thuốc An Phúc', accountantNhapLai: 'Lưu Thị Thuỳ', items: [SAME, DIFF] }
+    const record = { entity, date: '2026-09-23', customerName: 'Nhà thuốc An Phúc', accountantNhapLai: 'Lưu Thị Thuỳ', items: [SAME, item({ lyDo: 'Lọ chảy dịch đổi cho Nhà thuốc An Phúc (XU262/1)' })] }
     const text = await docText(buildNhapLai(loadBuffer(template), record))
     expect(text).toContain(company)
     expect(text).toContain('Hàng trả về của Nhà thuốc An Phúc')
@@ -154,6 +166,7 @@ describe('exportSwapReturn — BB xác minh nhập lại kho', () => {
     expect(text).not.toContain('Tại Tại')
     expect(text).toContain('Ý kiến: Nhập lại vào kho')
     expect(text).toContain('1 | Golistin - soda Sol 45ml | 010526 | 26/05/2029 | LỌ | 2 | Hộp 1 lọ | Lọ chảy dịch |')
+    expect(text).not.toContain('XU262/1')
     expect(text).not.toContain('Progermila')
     expect(text).not.toContain('undefined')
     expect(text).not.toContain('Hàng nguyên vẹn')

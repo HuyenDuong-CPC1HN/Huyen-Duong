@@ -71,6 +71,15 @@ export function isValidDateText(text) {
   return Boolean(m) && isRealDate(Number(m[1]), Number(m[2]), Number(m[3]))
 }
 
+// Tình trạng hàng = phần Lý do đứng trước "đổi cho ..." (phần sau chỉ ghi khách/đơn được đổi).
+// VD: "Hàng rách, móp vỏ đổi cho DP PLT (DU262/050203)" -> "Hàng rách, móp vỏ".
+export function tinhTrangFromLyDo(lyDo) {
+  const text = String(lyDo || '').normalize('NFC').trim()
+  const cut = text.search(/(^|[\s,;.:–-])đổi\s+cho(\s|$)/iu)
+  if (cut < 0) return text
+  return text.slice(0, cut).replace(/[\s,;.:–-]+$/u, '').trim()
+}
+
 export function recordsOfWeek(records, weekStart) {
   return records
     .filter(r => isInWeek(r.date, weekStart))

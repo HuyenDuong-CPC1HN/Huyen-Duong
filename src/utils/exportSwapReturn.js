@@ -1,7 +1,7 @@
 import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
 import { fillBienBanXuLy, todayParts } from './exportDamagedGoods'
-import { formatDmy, isoWeekNumber, nhapLaiItems } from './swapReturnWeek'
+import { formatDmy, isoWeekNumber, nhapLaiItems, tinhTrangFromLyDo } from './swapReturnWeek'
 
 // Tab "Đổi trả hàng" không có mẫu riêng — dùng lại đúng mẫu của 2 tab đang chạy, tách theo pháp nhân:
 // Đơn C = CPC1HN (Kho C), Đơn DTP = UPHARMA (Kho LGT).
@@ -131,7 +131,7 @@ export function buildNhapLai(templateBuffer, record) {
       donViTinh: it.dvt || '',
       soLuongXM: it.soLuong ?? '',
       quyCach: it.quyCach || '',
-      tinhTrang: it.lyDo || '',
+      tinhTrang: tinhTrangFromLyDo(it.lyDo),
     })),
   })
 }
