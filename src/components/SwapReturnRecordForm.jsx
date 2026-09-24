@@ -1,19 +1,58 @@
-import { useState } from 'react'
-import { Plus, Trash2, X } from 'lucide-react'
-import { SWAP_RETURN_ACCOUNTANTS, formatDmy, isoWeekNumber, lotStatus, mondayOf, addDays } from '../utils/swapReturnWeek'
+import { useRef, useState } from 'react'
+import { CalendarDays, Plus, Trash2, X } from 'lucide-react'
+import { SWAP_RETURN_ACCOUNTANTS, formatDmy, isoWeekNumber, isValidDateText, lotStatus, mondayOf, addDays, normalizeDateText } from '../utils/swapReturnWeek'
 import LotBadge from './SwapReturnLotBadge'
 
 const EMPTY_ITEM = { maHang: '', tenHang: '', loLoi: '', loDoi: '', hanDungLoi: '', hanDungDoi: '', dvt: '', soLuong: '', quyCach: '', lyDo: '' }
 
-// Hạn dùng lưu dạng dd/mm/yyyy (đúng chuẩn cả app, ghi thẳng vào biên bản) — chỉ đổi qua yyyy-mm-dd để
-// hiển thị khung chọn ngày của trình duyệt.
 function dmyToIso(value) {
-  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(value || '').trim())
-  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : ''
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(value || ''))
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : ''
 }
-function isoToDmy(value) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '')
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+
+// Ô <input type="date"> của trình duyệt không cho dán chữ, nên hạn dùng là ô chữ dd/mm/yyyy (gõ hoặc dán
+// từ Excel/PDF, tự chuẩn hoá) kèm nút lịch mở bộ chọn ngày gốc của trình duyệt.
+function DateTextField({ value, onChange, disabled, label, className }) {
+  const pickerRef = useRef(null)
+  const invalid = Boolean(value) && !isValidDateText(value)
+  const openPicker = () => {
+    const picker = pickerRef.current
+    if (!picker) return
+    try { picker.showPicker() } catch { picker.focus(); picker.click() }
+  }
+  return (
+    <div className="relative flex items-center gap-1">
+      <input
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        onBlur={e => onChange(normalizeDateText(e.target.value))}
+        onPaste={e => {
+          e.preventDefault()
+          onChange(normalizeDateText(e.clipboardData.getData('text')))
+        }}
+        placeholder="dd/mm/yyyy"
+        inputMode="numeric"
+        disabled={disabled}
+        aria-label={label}
+        aria-invalid={invalid || undefined}
+        title={invalid ? 'Chưa đúng ngày dd/mm/yyyy' : undefined}
+        className={`${className} ${invalid ? 'border-red-400 bg-red-50' : ''}`}
+      />
+      <button type="button" onClick={openPicker} disabled={disabled} aria-label={`Chọn ngày ${label}`}
+        className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed">
+        <CalendarDays size={14} />
+      </button>
+      <input
+        ref={pickerRef}
+        type="date"
+        tabIndex={-1}
+        aria-hidden="true"
+        value={dmyToIso(value)}
+        onChange={e => { const [y, m, d] = e.target.value.split('-'); if (d) onChange(`${d}/${m}/${y}`) }}
+        className="absolute left-0 bottom-0 w-px h-px opacity-0 pointer-events-none"
+      />
+    </div>
+  )
 }
 
 const cellCls = 'w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:border-blue-400 focus:outline-none bg-white disabled:opacity-50 disabled:cursor-not-allowed'
@@ -25,8 +64,8 @@ const COLUMNS = [
   { key: 'loLoi', label: 'Số lô hàng lỗi', width: 100 },
   { key: 'loDoi', label: 'Số lô hàng đổi', width: 100 },
   { key: 'status', label: 'Lô' },
-  { key: 'hanDungLoi', label: 'HD lô lỗi', width: 130, date: true },
-  { key: 'hanDungDoi', label: 'HD lô đổi', width: 130, date: true },
+  { key: 'hanDungLoi', label: 'HD lô lỗi', width: 140, date: true },
+  { key: 'hanDungDoi', label: 'HD lô đổi', width: 140, date: true },
   { key: 'dvt', label: 'ĐVT', width: 60 },
   { key: 'soLuong', label: 'SL', width: 60 },
   { key: 'quyCach', label: 'Quy cách', width: 100 },
@@ -61,6 +100,8 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, onSa
     if (!date) return setError('Chưa chọn ngày đổi trả.')
     if (!customerName.trim()) return setError('Chưa nhập tên khách hàng.')
     if (filled.length === 0) return setError('Chưa có mặt hàng nào — nhập ít nhất Mã hàng.')
+    const badDate = filled.findIndex(it => [it.hanDungLoi, it.hanDungDoi].some(v => v && !isValidDateText(v)))
+    if (badDate >= 0) return setError(`Hạn dùng của mặt hàng ${filled[badDate].maHang} chưa đúng dạng dd/mm/yyyy.`)
     if (diffCount > 0 && !accountantNhapLai) return setError('Có hàng khác lô — chọn kế toán cho BB xác minh nhập lại kho.')
     onSave({
       id: record?.id || `swap_${entity}_${Date.now()}`,
@@ -117,10 +158,9 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, onSa
                         <td key={c.key} className="px-1.5 py-1.5" style={c.width ? { minWidth: c.width } : undefined}>
                           {c.key === 'status' && <LotBadge status={status} />}
                           {c.date && (
-                            <input type="date" value={dmyToIso(it[c.key])} onChange={e => updateItem(i, c.key, isoToDmy(e.target.value))}
-                              aria-label={`${c.label} dòng ${i + 1}`}
+                            <DateTextField value={it[c.key]} onChange={v => updateItem(i, c.key, v)}
+                              label={`${c.label} dòng ${i + 1}`}
                               disabled={c.key === 'hanDungDoi' && status === 'same'}
-                              title={c.key === 'hanDungDoi' && status === 'same' ? 'Cùng lô nên hạn dùng giống lô lỗi' : undefined}
                               className={cellCls} />
                           )}
                           {c.key !== 'status' && !c.date && (

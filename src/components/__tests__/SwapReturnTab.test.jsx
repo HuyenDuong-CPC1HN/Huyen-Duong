@@ -88,16 +88,45 @@ describe('SwapReturnTab', () => {
     expect(JSON.parse(store.values.get('swap_return_records')).find(r => r.id === added.id).nhapLaiExportedAt).toBeTruthy()
   })
 
-  it('HD lô đổi bị khoá khi cùng lô', () => {
+  it('HD lô đổi bị khoá và đi theo HD lô lỗi khi cùng lô', () => {
     render(<SwapReturnTab type="donC" />)
     fireEvent.click(screen.getByRole('button', { name: /Thêm đợt đổi trả/ }))
     const dialog = screen.getByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Số lô hàng lỗi dòng 1'), { target: { value: 'A1' } })
     fireEvent.change(within(dialog).getByLabelText('Số lô hàng đổi dòng 1'), { target: { value: 'A1' } })
-    fireEvent.change(within(dialog).getByLabelText('HD lô lỗi dòng 1'), { target: { value: '2029-06-11' } })
+    fireEvent.change(within(dialog).getByLabelText('HD lô lỗi dòng 1'), { target: { value: '11/06/2029' } })
     const hdDoi = within(dialog).getByLabelText('HD lô đổi dòng 1')
     expect(hdDoi).toBeDisabled()
-    expect(hdDoi).toHaveValue('2029-06-11')
+    expect(hdDoi).toHaveValue('11/06/2029')
+  })
+
+  it('hạn dùng: dán chữ tự chuẩn hoá, gõ tay chuẩn hoá khi rời ô, chọn từ lịch cũng được', () => {
+    render(<SwapReturnTab type="donC" />)
+    fireEvent.click(screen.getByRole('button', { name: /Thêm đợt đổi trả/ }))
+    const dialog = screen.getByRole('dialog')
+    const hdLoi = within(dialog).getByLabelText('HD lô lỗi dòng 1')
+    fireEvent.paste(hdLoi, { clipboardData: { getData: () => '2029-05-26\n' } })
+    expect(hdLoi).toHaveValue('26/05/2029')
+
+    const hdDoi = within(dialog).getByLabelText('HD lô đổi dòng 1')
+    fireEvent.change(hdDoi, { target: { value: '15-8-2029' } })
+    fireEvent.blur(hdDoi)
+    expect(hdDoi).toHaveValue('15/08/2029')
+
+    const picker = hdDoi.parentElement.querySelector('input[type="date"]')
+    fireEvent.change(picker, { target: { value: '2030-01-02' } })
+    expect(hdDoi).toHaveValue('02/01/2030')
+  })
+
+  it('không cho lưu khi hạn dùng sai ngày', () => {
+    render(<SwapReturnTab type="donC" />)
+    fireEvent.click(screen.getByRole('button', { name: /Thêm đợt đổi trả/ }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Tên khách hàng *'), { target: { value: 'KH' } })
+    fireEvent.change(within(dialog).getByLabelText('Mã hàng dòng 1'), { target: { value: 'TH1' } })
+    fireEvent.change(within(dialog).getByLabelText('HD lô lỗi dòng 1'), { target: { value: '31/02/2029' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Lưu đợt đổi trả' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Hạn dùng của mặt hàng TH1 chưa đúng')
   })
 
   it('"Xuất cả bộ" xuất 2 file cả tuần với kế toán đã chọn và đánh dấu đã xuất', async () => {

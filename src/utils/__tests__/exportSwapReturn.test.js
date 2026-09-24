@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import PizZip from 'pizzip'
 import { describe, expect, it } from 'vitest'
 import { buildNhapLai, buildWeeklyXuatKho, buildWeeklyXuLy } from '../exportSwapReturn'
-import { isoWeekNumber, lotStatus, mondayOf, nhapLaiItems, weeklyItems } from '../swapReturnWeek'
+import { isoWeekNumber, lotStatus, mondayOf, nhapLaiItems, normalizeDateText, weeklyItems } from '../swapReturnWeek'
 
 const TPL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../public/templates')
 function loadBuffer(name) {
@@ -52,6 +52,22 @@ describe('swapReturnWeek', () => {
     ]
     const items = weeklyItems(records, '2026-09-21')
     expect(items.map(i => i.customerName)).toEqual(['KH A', 'KH B', 'KH B'])
+  })
+
+  it.each([
+    ['26/05/2029', '26/05/2029'],
+    ['26-5-2029', '26/05/2029'],
+    ['26.05.29', '26/05/2029'],
+    ['2029-05-26', '26/05/2029'],
+    ['26052029', '26/05/2029'],
+    ['26/05/2029 00:00:00', '26/05/2029'],
+    ['5/26/2029', '26/05/2029'],
+    ['  11/6/2029\t', '11/06/2029'],
+    ['31/02/2029', '31/02/2029'],
+    ['abc', 'abc'],
+    ['', ''],
+  ])('chuẩn hoá hạn dùng dán/gõ: "%s" -> "%s"', (input, expected) => {
+    expect(normalizeDateText(input)).toBe(expected)
   })
 
   it('BB nhập lại kho chỉ lấy dòng khác lô', () => {
