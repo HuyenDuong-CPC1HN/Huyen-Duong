@@ -24,12 +24,9 @@ const TEMPLATES = {
 // Mẫu CPC1HN in sẵn "3. Địa điểm: Tại {diaDiem}", mẫu UPHARMA chỉ có "3. Địa điểm: {diaDiem}" — cả 2
 // phải ra cùng 1 dòng "Tại CN. Hồ Chí Minh".
 const NHAP_LAI_DIA_DIEM = { donC: 'CN. Hồ Chí Minh', donDTP: 'Tại CN. Hồ Chí Minh' }
-// BB xác minh xuất kho của Đơn DTP: cột "Kho" cố định 020105, "Tình trạng" lấy theo Lý do đã nhập.
-// Đơn C để trống cả 2 cột cho điền tay.
-const XUAT_KHO_COLUMNS = {
-  donC: { kho: '', tinhTrangFromLyDo: false },
-  donDTP: { kho: '020105', tinhTrangFromLyDo: true },
-}
+// Mã kho mặc định cho cột "Kho" của BB Xử lý và BB xác minh xuất kho — hàng ở kho khác thì người dùng sửa
+// tay trên file sau khi xuất.
+const DEFAULT_KHO = { donC: '020101', donDTP: '020105' }
 const XU_LY_LOCATION = 'Kho CN Hồ Chí Minh'
 
 // Tên kế toán trong mẫu hàng huỷ là chữ gõ cứng, không phải ô điền — thay đúng đoạn chữ đó trên bản sao
@@ -74,17 +71,23 @@ export function withAccountantInXuLyTemplate(templateBuffer, accountant) {
   return zip.generate({ type: 'arraybuffer' })
 }
 
-export async function buildWeeklyXuLy(templateBuffer, items, accountant) {
+function defaultKhoOf(entity) {
+  const kho = DEFAULT_KHO[entity]
+  if (!kho) throw new Error('Không xác định được mẫu biên bản (kho không hợp lệ).')
+  return kho
+}
+
+export async function buildWeeklyXuLy(templateBuffer, items, accountant, { entity }) {
+  const kho = defaultKhoOf(entity)
   const rows = items.map(it => ({
     maHang: it.maHang, tenHang: it.tenHang, soLo: it.loLoi, hanDung: it.hanDungLoi || '',
-    kho: '', dvt: it.dvt, soLuong: it.soLuong, quyCach: it.quyCach || '', ghiChu: it.lyDo || '',
+    kho, dvt: it.dvt, soLuong: it.soLuong, quyCach: it.quyCach || '', ghiChu: it.lyDo || '',
   }))
   return fillBienBanXuLy(withAccountantInXuLyTemplate(templateBuffer, accountant), rows, { location: XU_LY_LOCATION })
 }
 
 export function buildWeeklyXuatKho(templateBuffer, items, accountant, { entity, date = new Date() }) {
-  const columns = XUAT_KHO_COLUMNS[entity]
-  if (!columns) throw new Error('Không xác định được mẫu biên bản (kho không hợp lệ).')
+  const kho = defaultKhoOf(entity)
   const zip = new PizZip(templateBuffer.slice(0))
   const xml = zip.file('word/document.xml').asText()
   if (!xml.includes(DOCX_ACCOUNTANT_RUN)) throw new Error('Mẫu Biên bản xác minh xuất kho không còn dòng tên kế toán để thay.')
@@ -99,11 +102,11 @@ export function buildWeeklyXuatKho(templateBuffer, items, accountant, { entity, 
       tenHang: it.tenHang || '',
       soLo: it.loLoi || '',
       hanDung: it.hanDungLoi || '',
-      kho: columns.kho,
+      kho,
       dvt: it.dvt || '',
       soLuong: it.soLuong ?? '',
       quyCach: it.quyCach || '',
-      tinhTrang: columns.tinhTrangFromLyDo ? it.lyDo || '' : '',
+      tinhTrang: it.lyDo || '',
     })),
   })
 }
@@ -152,7 +155,7 @@ function downloadBlob(blob, filename) {
 
 export async function exportSwapWeeklyXuLy({ entity, weekStart, items, accountant }) {
   if (!items.length) throw new Error('Tuần này chưa có mặt hàng nào.')
-  const bytes = await buildWeeklyXuLy(await fetchTemplate(templatesOf(entity).xuLy), items, accountant)
+  const bytes = await buildWeeklyXuLy(await fetchTemplate(templatesOf(entity).xuLy), items, accountant, { entity })
   downloadBlob(new Blob([bytes], { type: XLSX_MIME }), `BBXL_DoiTra_${entityLabel(entity)}_${weekLabel(weekStart)}.xlsx`)
 }
 

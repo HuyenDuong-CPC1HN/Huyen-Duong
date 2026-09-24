@@ -18,6 +18,17 @@ async function docText(blob) {
 function sharedStrings(bytes) {
   return new PizZip(bytes).file('xl/sharedStrings.xml').asText()
 }
+function readCell(bytes) {
+  const zip = new PizZip(bytes)
+  const sheet = new DOMParser().parseFromString(zip.file('xl/worksheets/sheet1.xml').asText(), 'application/xml')
+  const sst = new DOMParser().parseFromString(zip.file('xl/sharedStrings.xml').asText(), 'application/xml')
+  return (row, col) => {
+    const c = sheet.querySelector(`c[r="${col}${row}"]`)
+    const v = c?.querySelector('v')?.textContent
+    if (v === undefined) return null
+    return c.getAttribute('t') === 's' ? sst.documentElement.getElementsByTagName('si')[Number(v)].textContent : v
+  }
+}
 
 function item(overrides = {}) {
   return {
@@ -77,16 +88,21 @@ describe('swapReturnWeek', () => {
 
 describe('exportSwapReturn — bộ xuất huỷ cuối tuần', () => {
   it.each([
-    ['Đơn C', 'BIEN_BAN_XU_LY_HANG_LOI_KHO_C.xlsx'],
-    ['Đơn DTP', 'BIEN_BAN_XU_LY_HANG_LOI_KHO_LGT.xlsx'],
-  ])('%s: BB Xử lý thay tên kế toán gõ cứng bằng kế toán đã chọn, lấy lô hàng lỗi', async (_label, template) => {
-    const bytes = await buildWeeklyXuLy(loadBuffer(template), [SAME, DIFF], 'Võ Thị Ly')
+    ['donC', 'BIEN_BAN_XU_LY_HANG_LOI_KHO_C.xlsx', '020101'],
+    ['donDTP', 'BIEN_BAN_XU_LY_HANG_LOI_KHO_LGT.xlsx', '020105'],
+  ])('%s: BB Xử lý thay tên kế toán gõ cứng, lấy lô hàng lỗi, cột Kho đúng theo đơn', async (entity, template, expectedKho) => {
+    const bytes = await buildWeeklyXuLy(loadBuffer(template), [SAME, DIFF], 'Võ Thị Ly', { entity })
     const sst = sharedStrings(bytes)
     expect(sst).toContain('Võ Thị Ly')
     expect(sst).not.toContain('Lưu Thị Thùy')
     expect(sst).toContain('010526')
     expect(sst).not.toContain('020626')
     expect(sst).toContain('Lọ chảy dịch')
+    const cell = readCell(bytes)
+    expect(cell(18, 'D')).toBe('011225')
+    expect(cell(19, 'D')).toBe('010526')
+    expect(cell(18, 'F')).toBe(expectedKho)
+    expect(cell(19, 'F')).toBe(expectedKho)
   })
 
   it.each([
@@ -104,16 +120,13 @@ describe('exportSwapReturn — bộ xuất huỷ cuối tuần', () => {
     expect(text).not.toContain('undefined')
   })
 
-  it('Đơn C: cột Kho và Tình trạng để trống cho điền tay', async () => {
-    const text = await docText(buildWeeklyXuatKho(loadBuffer('BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx'), [SAME], 'Võ Thị Ly', { entity: 'donC' }))
-    expect(text).toContain('1 | TH00893 | Progermila Sol 5ml | 011225 | 12/05/2028 | | LỌ | 2 | Hộp 1 lọ | |')
-    expect(text).not.toContain('020105')
-  })
-
-  it('Đơn DTP: cột Kho mặc định 020105, Tình trạng lấy theo Lý do đã nhập', async () => {
-    const text = await docText(buildWeeklyXuatKho(loadBuffer('BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx'), [SAME, item({ lyDo: 'Gãy ống do vận chuyển' })], 'Võ Thị Ly', { entity: 'donDTP' }))
-    expect(text).toContain('1 | TH00893 | Progermila Sol 5ml | 011225 | 12/05/2028 | 020105 | LỌ | 2 | Hộp 1 lọ | Lọ chảy dịch |')
-    expect(text).toContain('2 | TH03426 | Golistin - soda Sol 45ml | 010526 | 26/05/2029 | 020105 | LỌ | 2 | Hộp 1 lọ | Gãy ống do vận chuyển |')
+  it.each([
+    ['donC', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx', '020101'],
+    ['donDTP', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx', '020105'],
+  ])('%s: cột Kho mặc định %s, Tình trạng lấy theo Lý do đã nhập', async (entity, template, kho) => {
+    const text = await docText(buildWeeklyXuatKho(loadBuffer(template), [SAME, item({ lyDo: 'Gãy ống do vận chuyển' })], 'Võ Thị Ly', { entity }))
+    expect(text).toContain(`1 | TH00893 | Progermila Sol 5ml | 011225 | 12/05/2028 | ${kho} | LỌ | 2 | Hộp 1 lọ | Lọ chảy dịch |`)
+    expect(text).toContain(`2 | TH03426 | Golistin - soda Sol 45ml | 010526 | 26/05/2029 | ${kho} | LỌ | 2 | Hộp 1 lọ | Gãy ống do vận chuyển |`)
   })
 })
 
