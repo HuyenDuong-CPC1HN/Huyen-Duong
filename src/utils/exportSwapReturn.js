@@ -24,6 +24,12 @@ const TEMPLATES = {
 // Mẫu CPC1HN in sẵn "3. Địa điểm: Tại {diaDiem}", mẫu UPHARMA chỉ có "3. Địa điểm: {diaDiem}" — cả 2
 // phải ra cùng 1 dòng "Tại CN. Hồ Chí Minh".
 const NHAP_LAI_DIA_DIEM = { donC: 'CN. Hồ Chí Minh', donDTP: 'Tại CN. Hồ Chí Minh' }
+// BB xác minh xuất kho của Đơn DTP: cột "Kho" cố định 020105, "Tình trạng" lấy theo Lý do đã nhập.
+// Đơn C để trống cả 2 cột cho điền tay.
+const XUAT_KHO_COLUMNS = {
+  donC: { kho: '', tinhTrangFromLyDo: false },
+  donDTP: { kho: '020105', tinhTrangFromLyDo: true },
+}
 const XU_LY_LOCATION = 'Kho CN Hồ Chí Minh'
 
 // Tên kế toán trong mẫu hàng huỷ là chữ gõ cứng, không phải ô điền — thay đúng đoạn chữ đó trên bản sao
@@ -76,7 +82,9 @@ export async function buildWeeklyXuLy(templateBuffer, items, accountant) {
   return fillBienBanXuLy(withAccountantInXuLyTemplate(templateBuffer, accountant), rows, { location: XU_LY_LOCATION })
 }
 
-export function buildWeeklyXuatKho(templateBuffer, items, accountant, date = new Date()) {
+export function buildWeeklyXuatKho(templateBuffer, items, accountant, { entity, date = new Date() }) {
+  const columns = XUAT_KHO_COLUMNS[entity]
+  if (!columns) throw new Error('Không xác định được mẫu biên bản (kho không hợp lệ).')
   const zip = new PizZip(templateBuffer.slice(0))
   const xml = zip.file('word/document.xml').asText()
   if (!xml.includes(DOCX_ACCOUNTANT_RUN)) throw new Error('Mẫu Biên bản xác minh xuất kho không còn dòng tên kế toán để thay.')
@@ -91,11 +99,11 @@ export function buildWeeklyXuatKho(templateBuffer, items, accountant, date = new
       tenHang: it.tenHang || '',
       soLo: it.loLoi || '',
       hanDung: it.hanDungLoi || '',
-      kho: '',
+      kho: columns.kho,
       dvt: it.dvt || '',
       soLuong: it.soLuong ?? '',
       quyCach: it.quyCach || '',
-      tinhTrang: '',
+      tinhTrang: columns.tinhTrangFromLyDo ? it.lyDo || '' : '',
     })),
   })
 }
@@ -150,7 +158,7 @@ export async function exportSwapWeeklyXuLy({ entity, weekStart, items, accountan
 
 export async function exportSwapWeeklyXuatKho({ entity, weekStart, items, accountant }) {
   if (!items.length) throw new Error('Tuần này chưa có mặt hàng nào.')
-  const blob = buildWeeklyXuatKho(await fetchTemplate(templatesOf(entity).xuatKho), items, accountant)
+  const blob = buildWeeklyXuatKho(await fetchTemplate(templatesOf(entity).xuatKho), items, accountant, { entity })
   downloadBlob(blob, `XacMinh_XuatKho_DoiTra_${entityLabel(entity)}_${weekLabel(weekStart)}.docx`)
 }
 

@@ -90,10 +90,10 @@ describe('exportSwapReturn — bộ xuất huỷ cuối tuần', () => {
   })
 
   it.each([
-    ['Đơn C', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx', 'CPC1 HÀ NỘI'],
-    ['Đơn DTP', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx', 'UPHARMA'],
-  ])('%s: BB xác minh xuất kho có đủ dòng, STT, kế toán đã chọn, Tình trạng để trống', async (_label, template, company) => {
-    const text = await docText(buildWeeklyXuatKho(loadBuffer(template), [SAME, DIFF], 'Trần Thị Ái Lâm', new Date(2026, 8, 27)))
+    ['donC', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx', 'CPC1 HÀ NỘI'],
+    ['donDTP', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx', 'UPHARMA'],
+  ])('%s: BB xác minh xuất kho có đủ dòng, STT, kế toán đã chọn', async (entity, template, company) => {
+    const text = await docText(buildWeeklyXuatKho(loadBuffer(template), [SAME, DIFF], 'Trần Thị Ái Lâm', { entity, date: new Date(2026, 8, 27) }))
     expect(text).toContain(company)
     expect(text).toContain('Trần Thị Ái Lâm')
     expect(text).not.toContain('Lưu Thị Thuỳ')
@@ -102,6 +102,18 @@ describe('exportSwapReturn — bộ xuất huỷ cuối tuần', () => {
     expect(text).toMatch(/1 \| TH00893 \| Progermila Sol 5ml \| 011225 \| 12\/05\/2028/)
     expect(text).toMatch(/2 \| TH03426 \| Golistin - soda Sol 45ml \| 010526 \| 26\/05\/2029/)
     expect(text).not.toContain('undefined')
+  })
+
+  it('Đơn C: cột Kho và Tình trạng để trống cho điền tay', async () => {
+    const text = await docText(buildWeeklyXuatKho(loadBuffer('BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx'), [SAME], 'Võ Thị Ly', { entity: 'donC' }))
+    expect(text).toContain('1 | TH00893 | Progermila Sol 5ml | 011225 | 12/05/2028 | | LỌ | 2 | Hộp 1 lọ | |')
+    expect(text).not.toContain('020105')
+  })
+
+  it('Đơn DTP: cột Kho mặc định 020105, Tình trạng lấy theo Lý do đã nhập', async () => {
+    const text = await docText(buildWeeklyXuatKho(loadBuffer('BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx'), [SAME, item({ lyDo: 'Gãy ống do vận chuyển' })], 'Võ Thị Ly', { entity: 'donDTP' }))
+    expect(text).toContain('1 | TH00893 | Progermila Sol 5ml | 011225 | 12/05/2028 | 020105 | LỌ | 2 | Hộp 1 lọ | Lọ chảy dịch |')
+    expect(text).toContain('2 | TH03426 | Golistin - soda Sol 45ml | 010526 | 26/05/2029 | 020105 | LỌ | 2 | Hộp 1 lọ | Gãy ống do vận chuyển |')
   })
 })
 
