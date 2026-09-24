@@ -131,7 +131,7 @@ export function buildNhapLai(templateBuffer, record) {
       donViTinh: it.dvt || '',
       soLuongXM: it.soLuong ?? '',
       quyCach: it.quyCach || '',
-      tinhTrang: '',
+      tinhTrang: it.lyDo || '',
     })),
   })
 }

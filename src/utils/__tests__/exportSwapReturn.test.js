@@ -153,7 +153,7 @@ describe('exportSwapReturn — BB xác minh nhập lại kho', () => {
     expect(text).toContain('3. Địa điểm: Tại CN. Hồ Chí Minh')
     expect(text).not.toContain('Tại Tại')
     expect(text).toContain('Ý kiến: Nhập lại vào kho')
-    expect(text).toMatch(/1 \| Golistin - soda Sol 45ml \| 010526 \| 26\/05\/2029/)
+    expect(text).toContain('1 | Golistin - soda Sol 45ml | 010526 | 26/05/2029 | LỌ | 2 | Hộp 1 lọ | Lọ chảy dịch |')
     expect(text).not.toContain('Progermila')
     expect(text).not.toContain('undefined')
     expect(text).not.toContain('Hàng nguyên vẹn')
