@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Package, ShoppingBag, Globe, Users, AlertTriangle, Save, Pencil, Check, X } from 'lucide-react'
+import { Package, ShoppingBag, Globe, Users, AlertTriangle, Save, Pencil, Check, X, Trash2 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import ExcelUpload from './ExcelUpload'
 import UnifiedTrialChannelDetail from './UnifiedTrialChannelDetail'
@@ -9,7 +9,7 @@ import { KpiTile, SectionCard } from './ReportCards'
 import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
-import { readTrialReports, saveTrialReport, renameTrialReport } from '../utils/unifiedTrialReports'
+import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport } from '../utils/unifiedTrialReports'
 
 const NGOAI_SAN_CARRIER_KEY = 'unifiedTrial_donSO_spx'
 
@@ -181,7 +181,7 @@ function SaveWeekButton({ onSave, alreadySaved }) {
 
 // Đổi tên tuần đã lưu — mặc định label là "<tên file> · <ngày upload>", bấm bút chì để sửa lại
 // thành tên tuần báo cáo thật (vd "Tuần 12.09 - 18.09.2026") cho dễ nhận ra khi chọn lại sau này.
-function SavedWeekPicker({ reports, viewingId, onChange, onRename, hasLiveData }) {
+function SavedWeekPicker({ reports, viewingId, onChange, onRename, onRemove, hasLiveData }) {
   const [editing, setEditing] = useState(false)
   const [label, setLabel] = useState('')
   const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
@@ -193,6 +193,12 @@ function SavedWeekPicker({ reports, viewingId, onChange, onRename, hasLiveData }
   const confirmEdit = () => {
     if (label.trim() && viewingId) onRename(viewingId, label.trim())
     setEditing(false)
+  }
+  const handleRemove = () => {
+    if (!viewingEntry) return
+    if (!window.confirm(`Xoá hẳn báo cáo "${viewingEntry.label}"? Không thể hoàn tác.`)) return
+    onRemove(viewingEntry.id)
+    onChange(null)
   }
 
   if (editing) {
@@ -230,6 +236,11 @@ function SavedWeekPicker({ reports, viewingId, onChange, onRename, hasLiveData }
       {viewingEntry && (
         <button type="button" onClick={startEdit} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Sửa tên tuần">
           <Pencil size={13} />
+        </button>
+      )}
+      {viewingEntry && (
+        <button type="button" onClick={handleRemove} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600" title="Xoá báo cáo tuần này">
+          <Trash2 size={13} />
         </button>
       )}
     </div>
@@ -315,6 +326,7 @@ function DonSanSnapshotView({ entry }) {
           internalData: [],
           weekId: entry.spxWeekId,
           frozenLookup: entry.carrierLookup,
+          strictWeekId: true,
           hidePackingUpload: true,
           salesFileNoun: 'Sales Order',
           ngoaiSanNote: NGOAI_SAN_NOTE,
@@ -412,6 +424,7 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
           <SavedWeekPicker
             reports={reports} viewingId={viewingId} onChange={setViewingId}
             onRename={(id, label) => setReports(renameTrialReport('donSO', id, label))}
+            onRemove={(id) => setReports(removeTrialReport('donSO', id))}
             hasLiveData={Boolean(rows) && !alreadySaved}
           />
           {showLive && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
@@ -434,6 +447,7 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
               carrierType: 'spx',
               internalData: ngoaiSan,
               referenceDate: meta?.uploadedAt,
+              liveSessionKey: meta?.uploadedAt ?? null,
               hidePackingUpload: true,
               salesFileNoun: 'Sales Order',
               ngoaiSanNote: NGOAI_SAN_NOTE,
@@ -509,6 +523,7 @@ function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setCh
           <SavedWeekPicker
             reports={reports} viewingId={viewingId} onChange={setViewingId}
             onRename={(id, label) => setReports(renameTrialReport('donTruyenThong', id, label))}
+            onRemove={(id) => setReports(removeTrialReport('donTruyenThong', id))}
             hasLiveData={Boolean(rows) && !alreadySaved}
           />
           {showLive && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}

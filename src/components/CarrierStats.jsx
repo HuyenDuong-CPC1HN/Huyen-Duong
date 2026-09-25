@@ -790,8 +790,13 @@ function buildHoldLookupSet(holdWeeks) {
   return set
 }
 
-function selectActiveWeek(weeks, weekId, referenceDate) {
+// strictWeekId: dùng khi xem 1 báo cáo ĐÃ LƯU (weekId lẽ ra phải có, đã ghim sẵn lúc lưu) — nếu weekId lại
+// rỗng (lúc lưu chưa có file đối soát nào, hoặc file đó sau này bị xoá), KHÔNG được tự "khớp theo ngày gần
+// nhất" nữa (sẽ vô tình hiện nhầm file của tuần KHÁC, y hệt bug liveSessionKey ở trên) — trả về trống, để
+// đúng là "chưa có dữ liệu đối soát cho tuần này" thay vì hiện nhầm số của tuần khác.
+function selectActiveWeek(weeks, weekId, referenceDate, strictWeekId = false) {
   if (weekId) return weeks.find(w => w.id === weekId) || null
+  if (strictWeekId) return null
   return closestByDate(weeks, referenceDate)
 }
 
@@ -835,7 +840,7 @@ function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, 
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => carrierLookupMap(frozenLookup, internalData),
@@ -872,9 +877,27 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   }
 
   const [weeks, setWeeks] = useState(() => readCarrierWeeks(carrierKey))
+
+  // liveSessionKey: dùng cho màn hình ĐANG LÀM VIỆC (chưa lưu báo cáo) ở tab "Gộp kênh" — carrierKey ở
+  // đó là kho DÙNG CHUNG cho mọi tuần (không tách riêng theo tuần), nên nếu vẫn "khớp theo ngày gần nhất"
+  // như trước, màn hình tuần MỚI (chưa upload file đối soát nào) sẽ tự hiện nhầm file của tuần TRƯỚC (file
+  // duy nhất có sẵn) — người dùng tưởng đã có file tuần này, dễ bấm xoá nhầm tưởng "dọn file cũ". Khi có
+  // liveSessionKey: chỉ hiện file nếu ĐÃ upload file mới trong đúng phiên làm việc này (key đổi = phiên mới,
+  // vd người dùng vừa upload file Đơn SO/Đơn truyền thống mới) — không tự fallback theo ngày gần nhất nữa.
+  // weekId (xem báo cáo đã lưu) và các nơi gọi cũ không truyền liveSessionKey thì hành vi giữ nguyên y hệt.
+  const [sessionAnchor, setSessionAnchor] = useState(() => ({ key: liveSessionKey, weekId: null }))
+  if (liveSessionKey !== null && liveSessionKey !== sessionAnchor.key) {
+    setSessionAnchor({ key: liveSessionKey, weekId: null })
+  }
+  const anchoredWeekId = (liveSessionKey !== null && liveSessionKey === sessionAnchor.key) ? sessionAnchor.weekId : null
+  const isLiveSession = liveSessionKey !== null && !weekId
   // Tuần đang xem: nếu có weekId cụ thể (vd đang xem 1 báo cáo Đơn C/DTP đã lưu) thì lấy đúng file đó;
-  // không thì lấy file có ngày upload gần nhất với referenceDate (ngày upload tuần Excel Đơn C/DTP đang chọn)
-  const state = selectActiveWeek(weeks, weekId, referenceDate)
+  // đang trong phiên làm việc (liveSessionKey) thì chỉ lấy đúng file đã upload trong phiên này, không thì
+  // trống — còn lại (nơi gọi cũ, không dùng liveSessionKey) lấy file có ngày upload gần nhất với referenceDate
+  const state = isLiveSession
+    ? (anchoredWeekId ? weeks.find(w => w.id === anchoredWeekId) || null : null)
+    : selectActiveWeek(weeks, weekId, referenceDate, strictWeekId)
+  const missingFrozenWeek = strictWeekId && !weekId && !state
 
   const [colFilters, setColFilters] = useState({})
   const [pageSize, setPageSize] = useState('50')
@@ -932,8 +955,9 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
         setError('Không tìm thấy dữ liệu đơn hàng trong file.')
         return
       }
-      const { droppedCount } = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+      const { entry, droppedCount } = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
       setWeeks(readCarrierWeeks(carrierKey))
+      if (isLiveSession) setSessionAnchor({ key: liveSessionKey, weekId: entry.id })
       if (droppedCount > 0) {
         setError(`Bộ nhớ trình duyệt gần đầy — đã tự động bỏ ${droppedCount} tuần cũ nhất để lưu được tuần này.`)
       }
@@ -954,6 +978,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     if (!window.confirm(`Xoá dữ liệu tuần "${state.fileName}"? Các tuần khác vẫn được giữ nguyên.`)) return
     removeCarrierWeek(carrierKey, state.id)
     setWeeks(readCarrierWeeks(carrierKey))
+    if (isLiveSession && anchoredWeekId === state.id) setSessionAnchor({ key: liveSessionKey, weekId: null })
   }
 
   // Loại trừ theo TỪNG ĐƠN (bấm vào ô "Tên hàng" của đúng đơn đó) khỏi thống kê — chỉ loại đúng đơn bấm,
@@ -999,6 +1024,18 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     [baseRows, activeFilters, search]
   )
 
+  // Báo cáo đã lưu nhưng không ghim được file đối soát nào lúc lưu (chưa upload, hoặc file đó sau này bị
+  // xoá) — không cho upload bù vào đây (sẽ không sửa được số liệu tuần đã đóng băng), chỉ báo rõ để khỏi
+  // hiểu nhầm là mất số liệu: số "Tổng đơn ngoại sàn/Đối tác VC" ở khung trên vẫn đúng, không phụ thuộc chỗ này.
+  if (missingFrozenWeek) {
+    return (
+      <div className="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+        Chưa có dữ liệu đối soát {label} chi tiết cho tuần này (lúc lưu báo cáo chưa upload file, hoặc file đó sau này đã bị xoá).
+        <br />Số tổng ở khung phía trên vẫn đúng, không bị ảnh hưởng.
+      </div>
+    )
+  }
+
   if (!state) {
     return (
       <CarrierEmptyDropZone
@@ -1021,7 +1058,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     <div>
       {weeks.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5 mb-3 text-xs text-gray-400">
-          <span>{weekId ? 'Tuần dữ liệu (cố định theo báo cáo đã lưu):' : 'Tuần dữ liệu (khớp theo ngày tuần Đơn C/DTP đang chọn ở trên):'}</span>
+          <span>{weekId ? 'Tuần dữ liệu (cố định theo báo cáo đã lưu):' : isLiveSession ? 'Tuần dữ liệu đã upload cho lần làm việc này:' : 'Tuần dữ liệu (khớp theo ngày tuần Đơn C/DTP đang chọn ở trên):'}</span>
           <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 font-medium" title={state.fileName}>
             {state.fileName} · {new Date(state.uploadedAt).toLocaleDateString('vi-VN')}
           </span>

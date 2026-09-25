@@ -165,11 +165,11 @@ export default function UnifiedTrialChannelDetail({
   // showLogisticsHold theo đúng channelKey (từng khiến upload "Chờ giao Logistics" biến mất ở tab Gộp kênh).
   const showLogisticsHold = channelKey === 'donDTP'
   const viettelPanelProps = readOnly
-    ? { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: [], weekId: viettelWeekId, frozenLookup: carrierLookup, showLogisticsHold }
-    : { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: validData, referenceDate, showLogisticsHold }
+    ? { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: [], weekId: viettelWeekId, frozenLookup: carrierLookup, strictWeekId: true, showLogisticsHold }
+    : { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: validData, referenceDate, liveSessionKey: referenceDate, showLogisticsHold }
   const spxPanelProps = readOnly
-    ? { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: [], weekId: spxWeekId, frozenLookup: carrierLookup }
-    : { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: validData, referenceDate }
+    ? { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: [], weekId: spxWeekId, frozenLookup: carrierLookup, strictWeekId: true }
+    : { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: validData, referenceDate, liveSessionKey: referenceDate }
 
   const kpiCols = 3 + (showChanhXe ? 1 : 0)
 
