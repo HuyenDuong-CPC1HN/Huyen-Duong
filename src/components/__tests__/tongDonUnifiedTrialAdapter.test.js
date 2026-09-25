@@ -88,6 +88,39 @@ describe('computeWeekReportFromUnifiedTrial', () => {
     expect(result.spxC).toBeNull()
     expect(result.totalNgoaiSan).toBe(582)
   })
+
+  // Bug thật (giống hệt bug totalNgoaiSan ở PR #53): tuần đã lưu báo cáo Đơn truyền thống nhưng viettelWeekId
+  // không ghim được lúc lưu (chưa upload file VTP, hoặc file đó sau này bị xoá) -> codC/viettelC?.total rơi về
+  // 0 sai, dù viettelCount đã đóng băng sẵn trong channelSnapshot lúc lưu (luôn có, không phụ thuộc gì thêm).
+  it('viettelWeekId rỗng (chưa ghim được lúc lưu) -> viettelC/codC vẫn lấy đúng từ viettelCount đã lưu, không về 0', () => {
+    carrierMocks.getCarrierFileStats.mockReturnValue(null)
+    const result = computeWeekReportFromUnifiedTrial({
+      donSOEntry: null,
+      donTTEntry: makeDonTTEntry({ donC: makeChannelSnapshot({ viettelCount: 340, viettelWeekId: null }), donDTP: null }),
+    })
+    expect(result.viettelC).toEqual({ total: 340, stats: null })
+    expect(result.codC).toBe(340)
+    expect(carrierMocks.getCarrierFileStats).not.toHaveBeenCalled()
+  })
+
+  it('viettelWeekId có giá trị nhưng không resolve được (vd file VTP đã bị xoá) -> vẫn fallback đúng về viettelCount đã lưu', () => {
+    carrierMocks.getCarrierFileStats.mockReturnValue(null)
+    const result = computeWeekReportFromUnifiedTrial({
+      donSOEntry: null,
+      donTTEntry: makeDonTTEntry({ donC: makeChannelSnapshot({ viettelCount: 210, viettelWeekId: 'vtp-week-da-bi-xoa' }), donDTP: null }),
+    })
+    expect(result.viettelC).toEqual({ total: 210, stats: null })
+    expect(result.codC).toBe(210)
+  })
+
+  it('SPX KHÔNG áp dụng fallback này — spxWeekId rỗng thì spxC vẫn null (tổng ngoại sàn đã có totalNgoaiSan riêng lo)', () => {
+    const result = computeWeekReportFromUnifiedTrial({
+      donSOEntry: makeDonSOEntry({ ngoaiSanCount: 300, spxWeekId: null }),
+      donTTEntry: null,
+    })
+    expect(result.spxC).toBeNull()
+    expect(result.totalNgoaiSan).toBe(300)
+  })
 })
 
 describe('ngoaiSanForWeekIdUnifiedTrial', () => {
