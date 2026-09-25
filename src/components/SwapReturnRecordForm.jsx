@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { CalendarDays, Plus, Trash2, X } from 'lucide-react'
-import { SWAP_RETURN_ACCOUNTANTS, formatDmy, isoWeekNumber, isValidDateText, lotStatus, mondayOf, addDays, normalizeDateText } from '../utils/swapReturnWeek'
+import { SWAP_RETURN_ACCOUNTANTS, isValidDateText, lotStatus, normalizeDateText } from '../utils/swapReturnBatch'
 import LotBadge from './SwapReturnLotBadge'
 
 const EMPTY_ITEM = { maHang: '', tenHang: '', loLoi: '', loDoi: '', hanDungLoi: '', hanDungDoi: '', dvt: '', soLuong: '', quyCach: '', lyDo: '' }
@@ -95,7 +95,7 @@ const COLUMNS = [
   { key: 'lyDo', label: 'Lý do', width: 220, wrap: true },
 ]
 
-export default function SwapReturnRecordForm({ entity, defaultDate, record, onSave, onCancel }) {
+export default function SwapReturnRecordForm({ entity, defaultDate, record, batchName, batchExported, onSave, onCancel }) {
   const [date, setDate] = useState(record?.date || defaultDate)
   const [customerName, setCustomerName] = useState(record?.customerName || '')
   const [accountantNhapLai, setAccountantNhapLai] = useState(record?.accountantNhapLai || '')
@@ -104,7 +104,6 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, onSa
 
   const filled = items.filter(it => String(it.maHang || '').trim())
   const diffCount = filled.filter(it => lotStatus(it) === 'diff').length
-  const weekStart = date ? mondayOf(date) : null
 
   // Cùng lô = cùng 1 lô vật lý -> hạn dùng bắt buộc giống nhau: HD lô đổi đi theo HD lô lỗi và bị khoá.
   const updateItem = (index, key, value) => {
@@ -227,12 +226,14 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, onSa
           <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600 flex flex-col gap-1.5">
             <div className="font-semibold text-gray-800">Sau khi lưu:</div>
             <div>
-              • {filled.length || 'Các'} mặt hàng tự vào <b>Bộ xuất huỷ cuối tuần {weekStart ? isoWeekNumber(weekStart) : ''}</b>
-              {weekStart && <> ({formatDmy(weekStart)} – {formatDmy(addDays(weekStart, 6))})</>} — không xuất file gì ngay.
+              • {filled.length || 'Các'} mặt hàng nằm trong <b>{batchName}</b> (bộ xuất huỷ đang gom) — không xuất file gì ngay.
             </div>
+            {batchExported && (
+              <div className="text-amber-700">• {batchName} đã xuất file trước đó → sau khi lưu cần <b>xuất lại</b> trước khi trình ký.</div>
+            )}
             <div>
               • {diffCount > 0
-                ? <>Có <b>{diffCount} dòng khác lô</b> → cần 1 <b>BB xác minh nhập lại kho</b> cho khách này (xuất ở danh sách đợt).</>
+                ? <>Có <b>{diffCount} dòng khác lô</b> → cần 1 <b>BB xác minh nhập lại kho</b> cho khách này (xuất ở khung "BB xác minh nhập lại kho").</>
                 : <>Không có dòng khác lô → <b>không cần</b> BB xác minh nhập lại kho.</>}
             </div>
           </div>

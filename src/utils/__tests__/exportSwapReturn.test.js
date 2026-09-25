@@ -3,8 +3,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import PizZip from 'pizzip'
 import { describe, expect, it } from 'vitest'
-import { buildNhapLai, buildWeeklyXuatKho, buildWeeklyXuLy } from '../exportSwapReturn'
-import { isoWeekNumber, lotStatus, mondayOf, nhapLaiItems, normalizeDateText, tinhTrangFromLyDo, weeklyItems } from '../swapReturnWeek'
+import { buildNhapLai, buildBatchXuatKho, buildBatchXuLy } from '../exportSwapReturn'
+import { batchItems, exportState, itemsSignature, lotStatus, nhapLaiItems, normalizeDateText, resolveBatches, tinhTrangFromLyDo } from '../swapReturnBatch'
 
 const TPL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../public/templates')
 function loadBuffer(name) {
@@ -40,29 +40,49 @@ function item(overrides = {}) {
 const SAME = item({ maHang: 'TH00893', tenHang: 'Progermila Sol 5ml', loLoi: '011225', loDoi: '011225', hanDungLoi: '12/05/2028', hanDungDoi: '12/05/2028' })
 const DIFF = item()
 
-describe('swapReturnWeek', () => {
+describe('swapReturnBatch', () => {
   it('nhận cùng lô / khác lô / chưa đủ lô theo 2 số lô', () => {
     expect(lotStatus(SAME)).toBe('same')
     expect(lotStatus(DIFF)).toBe('diff')
     expect(lotStatus(item({ loDoi: ' ' }))).toBe('empty')
   })
 
-  it('tuần tính từ Thứ 2 đến Chủ nhật, số tuần theo ISO', () => {
-    expect(mondayOf('2026-09-24')).toBe('2026-09-21')
-    expect(mondayOf('2026-09-27')).toBe('2026-09-21')
-    expect(mondayOf('2026-09-28')).toBe('2026-09-28')
-    expect(isoWeekNumber('2026-09-21')).toBe(39)
-    expect(isoWeekNumber('2026-01-01')).toBe(1)
+  it('chưa có bộ nào: bộ đang gom là Bộ 01, đợt cũ chưa có batchNo thuộc bộ đang gom', () => {
+    const records = [
+      { id: 'a', entity: 'donC', date: '2026-09-24', customerName: 'KH A', items: [SAME] },
+      { id: 'x', entity: 'donDTP', date: '2026-09-24', customerName: 'KH DTP', items: [SAME] },
+    ]
+    const { openBatch, signedBatches, recordsOf } = resolveBatches('donC', [], records)
+    expect(openBatch).toMatchObject({ entity: 'donC', no: 1, signedAt: null })
+    expect(signedBatches).toEqual([])
+    expect(recordsOf(1).map(r => r.id)).toEqual(['a'])
   })
 
-  it('bộ cuối tuần gom mọi mặt hàng trong tuần (cả cùng lô lẫn khác lô), bỏ đợt ngoài tuần', () => {
-    const records = [
-      { id: 'a', date: '2026-09-22', customerName: 'KH A', items: [SAME] },
-      { id: 'b', date: '2026-09-27', customerName: 'KH B', items: [DIFF, item({ loDoi: '' })] },
-      { id: 'c', date: '2026-09-28', customerName: 'KH C', items: [SAME] },
+  it('bộ đã ký giữ đúng đợt của nó; đợt mới vào bộ kế tiếp; kế toán bộ mới theo bộ ký gần nhất', () => {
+    const batches = [
+      { id: 'donC_1', entity: 'donC', no: 1, accountant: 'Võ Thị Ly', exported: {}, signedAt: '2026-09-20T02:00:00Z' },
+      { id: 'donC_2', entity: 'donC', no: 2, accountant: 'Trần Thị Ái Lâm', exported: {}, signedAt: '2026-09-23T02:00:00Z' },
     ]
-    const items = weeklyItems(records, '2026-09-21')
-    expect(items.map(i => i.customerName)).toEqual(['KH A', 'KH B', 'KH B'])
+    const records = [
+      { id: 'a', entity: 'donC', batchNo: 1, date: '2026-09-18', customerName: 'KH A', items: [SAME] },
+      { id: 'b', entity: 'donC', batchNo: 2, date: '2026-09-22', customerName: 'KH B', items: [DIFF] },
+      { id: 'c', entity: 'donC', batchNo: 3, date: '2026-09-25', customerName: 'KH C', items: [SAME] },
+    ]
+    const { openBatch, signedBatches, recordsOf } = resolveBatches('donC', batches, records)
+    expect(openBatch).toMatchObject({ no: 3, accountant: 'Trần Thị Ái Lâm', signedAt: null })
+    expect(signedBatches.map(b => b.no)).toEqual([2, 1])
+    expect(recordsOf(1).map(r => r.id)).toEqual(['a'])
+    expect(recordsOf(3).map(r => r.id)).toEqual(['c'])
+    expect(batchItems(recordsOf(2))).toEqual([{ ...DIFF, customerName: 'KH B', date: '2026-09-22' }])
+  })
+
+  it('xuất xong mà bộ thay đổi (thêm/sửa mặt hàng) thì báo cần xuất lại', () => {
+    const items = batchItems([{ customerName: 'KH', date: '2026-09-25', items: [SAME] }])
+    const batch = { exported: { xuLy: { at: 'x', signature: itemsSignature(items) } } }
+    expect(exportState(batch, 'xuLy', items)).toBe('ok')
+    expect(exportState(batch, 'xuatKho', items)).toBe('none')
+    expect(exportState(batch, 'xuLy', [...items, DIFF])).toBe('stale')
+    expect(exportState(batch, 'xuLy', [{ ...items[0], soLuong: '3' }])).toBe('stale')
   })
 
   it.each([
@@ -98,12 +118,13 @@ describe('swapReturnWeek', () => {
   })
 })
 
-describe('exportSwapReturn — bộ xuất huỷ cuối tuần', () => {
+describe('exportSwapReturn — bộ xuất huỷ', () => {
   it.each([
     ['donC', 'BIEN_BAN_XU_LY_HANG_LOI_KHO_C.xlsx', '020101'],
     ['donDTP', 'BIEN_BAN_XU_LY_HANG_LOI_KHO_LGT.xlsx', '020105'],
-  ])('%s: BB Xử lý thay tên kế toán gõ cứng, lấy lô hàng lỗi, cột Kho đúng theo đơn', async (entity, template, expectedKho) => {
-    const bytes = await buildWeeklyXuLy(loadBuffer(template), [SAME, DIFF], 'Võ Thị Ly', { entity })
+  ])('%s: BB Xử lý thay tên kế toán gõ cứng, lấy lô hàng lỗi, cột Kho đúng theo đơn, ghi đúng ngày truyền vào', async (entity, template, expectedKho) => {
+    const bytes = await buildBatchXuLy(loadBuffer(template), [SAME, DIFF], 'Võ Thị Ly', { entity, date: new Date(2026, 8, 23) })
+    expect(readCell(bytes)(5, 'I')).toBe('TP.Hồ Chí Minh, Ngày 23 tháng 09 năm 2026')
     const sst = sharedStrings(bytes)
     expect(sst).toContain('Võ Thị Ly')
     expect(sst).not.toContain('Lưu Thị Thùy')
@@ -121,7 +142,7 @@ describe('exportSwapReturn — bộ xuất huỷ cuối tuần', () => {
     ['donC', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx', 'CPC1 HÀ NỘI'],
     ['donDTP', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx', 'UPHARMA'],
   ])('%s: BB xác minh xuất kho có đủ dòng, STT, kế toán đã chọn', async (entity, template, company) => {
-    const text = await docText(buildWeeklyXuatKho(loadBuffer(template), [SAME, DIFF], 'Trần Thị Ái Lâm', { entity, date: new Date(2026, 8, 27) }))
+    const text = await docText(buildBatchXuatKho(loadBuffer(template), [SAME, DIFF], 'Trần Thị Ái Lâm', { entity, date: new Date(2026, 8, 27) }))
     expect(text).toContain(company)
     expect(text).toContain('Trần Thị Ái Lâm')
     expect(text).not.toContain('Lưu Thị Thuỳ')
@@ -146,7 +167,7 @@ describe('exportSwapReturn — bộ xuất huỷ cuối tuần', () => {
     ['donC', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_C.docx', '020101'],
     ['donDTP', 'BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx', '020105'],
   ])('%s: cột Kho mặc định %s, Tình trạng lấy theo Lý do đã nhập', async (entity, template, kho) => {
-    const text = await docText(buildWeeklyXuatKho(loadBuffer(template), [SAME, item({ lyDo: 'Gãy ống do vận chuyển' })], 'Võ Thị Ly', { entity }))
+    const text = await docText(buildBatchXuatKho(loadBuffer(template), [SAME, item({ lyDo: 'Gãy ống do vận chuyển' })], 'Võ Thị Ly', { entity }))
     expect(text).toContain(`1 | TH00893 | Progermila Sol 5ml | 011225 | 12/05/2028 | ${kho} | LỌ | 2 | Hộp 1 lọ | Lọ chảy dịch |`)
     expect(text).toContain(`2 | TH03426 | Golistin - soda Sol 45ml | 010526 | 26/05/2029 | ${kho} | LỌ | 2 | Hộp 1 lọ | Gãy ống do vận chuyển |`)
   })

@@ -1,11 +1,11 @@
 import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
 import { fillBienBanXuLy, todayParts } from './exportDamagedGoods'
-import { formatDmy, isoWeekNumber, nhapLaiItems, tinhTrangFromLyDo } from './swapReturnWeek'
+import { formatDmy, nhapLaiItems, tinhTrangFromLyDo } from './swapReturnBatch'
 
 // Tab "Đổi trả hàng" không có mẫu riêng — dùng lại đúng mẫu của 2 tab đang chạy, tách theo pháp nhân:
 // Đơn C = CPC1HN (Kho C), Đơn DTP = UPHARMA (Kho LGT).
-//  - BB Xử lý + BB xác minh xuất kho (gộp cả tuần): mẫu của "Theo dõi hàng huỷ".
+//  - BB Xử lý + BB xác minh xuất kho (gộp cả bộ xuất huỷ): mẫu của "Theo dõi hàng huỷ".
 //  - BB xác minh nhập lại kho (mỗi khách có hàng khác lô): mẫu của "Theo dõi nhập trả lại",
 //    vốn đã in sẵn "Ý kiến: Nhập lại vào kho".
 const TEMPLATES = {
@@ -53,15 +53,13 @@ function renderDocx(zip, data) {
   return doc.getZip().generate({ type: 'blob', mimeType: DOCX_MIME })
 }
 
-function weekLabel(weekStart) {
-  return `Tuan${isoWeekNumber(weekStart)}-${weekStart.slice(0, 4)}`
-}
+function batchFileLabel(batchNo) { return `Bo${String(batchNo).padStart(2, '0')}` }
 function entityLabel(entity) { return entity === 'donC' ? 'DonC' : 'DonDTP' }
 function slugifyName(name) {
   return String(name || 'KhachHang').trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').slice(0, 60)
 }
 
-// ---------- Bộ huỷ cuối tuần ----------
+// ---------- Bộ xuất huỷ ----------
 
 export function withAccountantInXuLyTemplate(templateBuffer, accountant) {
   const zip = new PizZip(templateBuffer.slice(0))
@@ -77,16 +75,16 @@ function defaultKhoOf(entity) {
   return kho
 }
 
-export async function buildWeeklyXuLy(templateBuffer, items, accountant, { entity }) {
+export async function buildBatchXuLy(templateBuffer, items, accountant, { entity, date = new Date() }) {
   const kho = defaultKhoOf(entity)
   const rows = items.map(it => ({
     maHang: it.maHang, tenHang: it.tenHang, soLo: it.loLoi, hanDung: it.hanDungLoi || '',
     kho, dvt: it.dvt, soLuong: it.soLuong, quyCach: it.quyCach || '', ghiChu: it.lyDo || '',
   }))
-  return fillBienBanXuLy(withAccountantInXuLyTemplate(templateBuffer, accountant), rows, { location: XU_LY_LOCATION })
+  return fillBienBanXuLy(withAccountantInXuLyTemplate(templateBuffer, accountant), rows, { location: XU_LY_LOCATION, date })
 }
 
-export function buildWeeklyXuatKho(templateBuffer, items, accountant, { entity, date = new Date() }) {
+export function buildBatchXuatKho(templateBuffer, items, accountant, { entity, date = new Date() }) {
   const kho = defaultKhoOf(entity)
   const zip = new PizZip(templateBuffer.slice(0))
   const xml = zip.file('word/document.xml').asText()
@@ -153,16 +151,17 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url)
 }
 
-export async function exportSwapWeeklyXuLy({ entity, weekStart, items, accountant }) {
-  if (!items.length) throw new Error('Tuần này chưa có mặt hàng nào.')
-  const bytes = await buildWeeklyXuLy(await fetchTemplate(templatesOf(entity).xuLy), items, accountant, { entity })
-  downloadBlob(new Blob([bytes], { type: XLSX_MIME }), `BBXL_DoiTra_${entityLabel(entity)}_${weekLabel(weekStart)}.xlsx`)
+// date: ngày ghi trên biên bản — bộ đã trình ký tải lại thì truyền đúng ngày xuất lần đầu.
+export async function exportSwapBatchXuLy({ entity, batchNo, items, accountant, date = new Date() }) {
+  if (!items.length) throw new Error('Bộ này chưa có mặt hàng nào.')
+  const bytes = await buildBatchXuLy(await fetchTemplate(templatesOf(entity).xuLy), items, accountant, { entity, date })
+  downloadBlob(new Blob([bytes], { type: XLSX_MIME }), `BBXL_DoiTra_${entityLabel(entity)}_${batchFileLabel(batchNo)}.xlsx`)
 }
 
-export async function exportSwapWeeklyXuatKho({ entity, weekStart, items, accountant }) {
-  if (!items.length) throw new Error('Tuần này chưa có mặt hàng nào.')
-  const blob = buildWeeklyXuatKho(await fetchTemplate(templatesOf(entity).xuatKho), items, accountant, { entity })
-  downloadBlob(blob, `XacMinh_XuatKho_DoiTra_${entityLabel(entity)}_${weekLabel(weekStart)}.docx`)
+export async function exportSwapBatchXuatKho({ entity, batchNo, items, accountant, date = new Date() }) {
+  if (!items.length) throw new Error('Bộ này chưa có mặt hàng nào.')
+  const blob = buildBatchXuatKho(await fetchTemplate(templatesOf(entity).xuatKho), items, accountant, { entity, date })
+  downloadBlob(blob, `XacMinh_XuatKho_DoiTra_${entityLabel(entity)}_${batchFileLabel(batchNo)}.docx`)
 }
 
 export async function exportSwapNhapLai(record) {

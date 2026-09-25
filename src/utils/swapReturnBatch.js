@@ -1,8 +1,8 @@
 // Logic thuần (không đụng DOM/Storage) cho tab "Đổi trả hàng": nhận diện cùng/khác lô và gom đợt đổi trả
-// theo tuần (Thứ 2 → Chủ nhật) để xuất bộ huỷ cuối tuần.
+// vào "bộ xuất huỷ". Luôn có đúng 1 bộ đang gom; trình ký xong thì bộ khoá lại, đợt mới vào bộ kế tiếp.
 
 export const SWAP_RETURN_ACCOUNTANTS = ['Phạm Thị Tuyết Trinh', 'Trần Thị Ái Lâm', 'Lưu Thị Thuỳ', 'Võ Thị Ly', 'Nguyễn Thị Tú Anh', 'Đỗ Thị Bông']
-export const DEFAULT_WEEKLY_ACCOUNTANT = 'Lưu Thị Thuỳ'
+export const DEFAULT_ACCOUNTANT = 'Lưu Thị Thuỳ'
 
 export function lotStatus(item) {
   const loi = String(item?.loLoi || '').trim()
@@ -11,31 +11,8 @@ export function lotStatus(item) {
   return loi === doi ? 'same' : 'diff'
 }
 
-function parseIso(iso) {
-  const [y, m, d] = String(iso).split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
 export function toIsoDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-export function addDays(iso, days) {
-  const d = parseIso(iso)
-  d.setDate(d.getDate() + days)
-  return toIsoDate(d)
-}
-export function mondayOf(iso) {
-  const d = parseIso(iso)
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
-  return toIsoDate(d)
-}
-export function isoWeekNumber(iso) {
-  const d = parseIso(iso)
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
-  const week1 = new Date(d.getFullYear(), 0, 4)
-  return 1 + Math.round(((d - week1) / 864e5 - 3 + ((week1.getDay() + 6) % 7)) / 7)
-}
-export function isInWeek(iso, weekStart) {
-  return Boolean(iso) && iso >= weekStart && iso <= addDays(weekStart, 6)
 }
 export function formatDmy(iso) {
   if (!iso) return ''
@@ -80,21 +57,50 @@ export function tinhTrangFromLyDo(lyDo) {
   return text.slice(0, cut).replace(/[\s,;.:–-]+$/u, '').trim()
 }
 
-export function recordsOfWeek(records, weekStart) {
-  return records
-    .filter(r => isInWeek(r.date, weekStart))
-    .slice()
-    .sort((a, b) => a.date.localeCompare(b.date) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')))
-}
-
-// Bộ huỷ cuối tuần gồm MỌI mặt hàng lỗi trong tuần, cả cùng lô lẫn khác lô.
-export function weeklyItems(records, weekStart) {
-  return recordsOfWeek(records, weekStart).flatMap(r =>
-    (r.items || []).map(item => ({ ...item, customerName: r.customerName, date: r.date })),
-  )
-}
-
 // BB xác minh nhập lại kho chỉ cần cho các dòng khác lô, mỗi khách hàng 1 biên bản.
 export function nhapLaiItems(record) {
   return (record?.items || []).filter(item => lotStatus(item) === 'diff')
+}
+
+// ---------- Bộ xuất huỷ ----------
+
+export function batchLabel(no) { return `Bộ ${String(no).padStart(2, '0')}` }
+export function batchId(entity, no) { return `${entity}_${no}` }
+
+function byDate(a, b) {
+  return String(a.date).localeCompare(String(b.date)) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))
+}
+
+// Tách bộ của 1 kho: các bộ đã trình ký + đúng 1 bộ đang gom. Bộ đang gom chưa lưu thì dựng tạm (số kế tiếp,
+// kế toán theo bộ ký gần nhất). Đợt không có batchNo (tạo trước khi có tính năng bộ) thuộc bộ đang gom.
+export function resolveBatches(entity, batches, records) {
+  const own = batches.filter(b => b.entity === entity)
+  const signed = own.filter(b => b.signedAt).sort((a, b) => b.no - a.no)
+  const nextNo = Math.max(0, ...signed.map(b => b.no)) + 1
+  const openBatch = own.find(b => !b.signedAt && b.no === nextNo)
+    || { id: batchId(entity, nextNo), entity, no: nextNo, accountant: signed[0]?.accountant || DEFAULT_ACCOUNTANT, exported: {}, signedAt: null }
+  const ownRecords = records.filter(r => r.entity === entity)
+  const recordsOf = no => ownRecords
+    .filter(r => (r.batchNo ?? openBatch.no) === no)
+    .sort(byDate)
+  return { openBatch, signedBatches: signed, recordsOf }
+}
+
+export function batchItems(records) {
+  return records.flatMap(r => (r.items || []).map(item => ({ ...item, customerName: r.customerName, date: r.date })))
+}
+
+// Dấu vân tay nội dung bộ lúc xuất file — thêm/xoá/sửa mặt hàng sau đó thì khác đi, báo "cần xuất lại".
+export function itemsSignature(items) {
+  const text = JSON.stringify(items.map(it => [it.maHang, it.tenHang, it.loLoi, it.hanDungLoi, it.dvt, it.soLuong, it.quyCach, it.lyDo]))
+  let hash = 5381
+  for (let i = 0; i < text.length; i += 1) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0
+  return `${items.length}:${hash.toString(36)}`
+}
+
+// 'none' = chưa xuất, 'ok' = đã xuất đúng nội dung hiện tại, 'stale' = đã xuất nhưng bộ đổi sau đó.
+export function exportState(batch, key, items) {
+  const exported = batch?.exported?.[key]
+  if (!exported) return 'none'
+  return exported.signature === itemsSignature(items) ? 'ok' : 'stale'
 }

@@ -1,23 +1,23 @@
 import { useMemo, useState } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
-import { ChevronLeft, ChevronRight, Plus, Trash2, FileDown, Pencil, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, FileDown, Pencil } from 'lucide-react'
 import SwapReturnRecordForm from './SwapReturnRecordForm'
 import LotBadge from './SwapReturnLotBadge'
 import {
-  SWAP_RETURN_ACCOUNTANTS, DEFAULT_WEEKLY_ACCOUNTANT,
-  addDays, formatDmy, isoWeekNumber, lotStatus, mondayOf, nhapLaiItems, recordsOfWeek, toIsoDate, weeklyItems,
-} from '../utils/swapReturnWeek'
-import { exportSwapNhapLai, exportSwapWeeklyXuLy, exportSwapWeeklyXuatKho } from '../utils/exportSwapReturn'
+  SWAP_RETURN_ACCOUNTANTS, batchItems, batchLabel, exportState, formatDmy, itemsSignature, lotStatus, nhapLaiItems,
+  resolveBatches, toIsoDate,
+} from '../utils/swapReturnBatch'
+import { exportSwapBatchXuatKho, exportSwapBatchXuLy, exportSwapNhapLai } from '../utils/exportSwapReturn'
 
 const RECORDS_KEY = 'swap_return_records'
-const WEEKLY_KEY = 'swap_return_weekly' // { "donC|2026-09-21": { accountant, exportedAt } }
+const BATCHES_KEY = 'swap_return_batches'
 
-function readJson(key, fallback) {
+function readArray(key) {
   try {
-    const value = JSON.parse(localStorage.getItem(key) || 'null')
-    return value ?? fallback
+    const value = JSON.parse(localStorage.getItem(key) || '[]')
+    return Array.isArray(value) ? value : []
   } catch {
-    return fallback
+    return []
   }
 }
 
@@ -26,49 +26,63 @@ function formatStamp(iso) {
   const d = new Date(iso)
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
+const formatDay = iso => formatStamp(iso).slice(0, 5)
+
+function rangeOf(records) {
+  if (!records.length) return ''
+  const first = formatDmy(records[0].date).slice(0, 5)
+  const last = formatDmy(records.at(-1).date).slice(0, 5)
+  return first === last ? first : `${first} – ${last}`
+}
+
+const FILES = [
+  { key: 'xuLy', ext: 'XLSX', title: 'BB Xử lý', cls: 'bg-green-50 text-green-700', run: exportSwapBatchXuLy },
+  { key: 'xuatKho', ext: 'DOCX', title: 'BB xác minh xuất kho', cls: 'bg-blue-50 text-blue-700', run: exportSwapBatchXuatKho },
+]
 
 const thCls = 'px-2 py-2 text-left text-gray-500 font-semibold whitespace-nowrap'
-const tdCls = 'px-2 py-2 whitespace-nowrap'
+const checkCls = 'w-5 h-5 accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 shrink-0'
+const smallBtnStyle = { minHeight: 28, padding: '0 10px', fontSize: 12 }
 
 export default function SwapReturnTab({ type }) {
-  const [allRecords, setAllRecords] = useState(() => {
-    const records = readJson(RECORDS_KEY, [])
-    return Array.isArray(records) ? records : []
-  })
-  const [weeklyMeta, setWeeklyMeta] = useState(() => readJson(WEEKLY_KEY, {}))
-  const [today] = useState(() => toIsoDate(new Date()))
-  const [weekStart, setWeekStart] = useState(() => mondayOf(toIsoDate(new Date())))
+  const [allRecords, setAllRecords] = useState(() => readArray(RECORDS_KEY))
+  const [allBatches, setAllBatches] = useState(() => readArray(BATCHES_KEY))
   const [formState, setFormState] = useState(null) // null | 'new' | record đang sửa
   const [busy, setBusy] = useState(null)
 
-  const entityRecords = useMemo(() => allRecords.filter(r => r.entity === type), [allRecords, type])
-  const weekRecords = useMemo(() => recordsOfWeek(entityRecords, weekStart), [entityRecords, weekStart])
-  const items = useMemo(() => weeklyItems(entityRecords, weekStart), [entityRecords, weekStart])
-  const counts = useMemo(() => {
-    const c = { same: 0, diff: 0, empty: 0 }
-    for (const it of items) c[lotStatus(it)] += 1
-    return c
-  }, [items])
-
-  const metaKey = `${type}|${weekStart}`
-  const meta = weeklyMeta[metaKey] || {}
-  const weeklyAccountant = meta.accountant || DEFAULT_WEEKLY_ACCOUNTANT
-  const isCurrentWeek = weekStart === mondayOf(today)
+  const { openBatch, signedBatches, recordsOf } = useMemo(() => resolveBatches(type, allBatches, allRecords), [type, allBatches, allRecords])
+  const openRecords = recordsOf(openBatch.no)
+  const openItems = batchItems(openRecords)
   const kindLabel = type === 'donC' ? 'Đơn C' : 'Đơn DTP'
+  const openName = batchLabel(openBatch.no)
+  const states = Object.fromEntries(FILES.map(f => [f.key, exportState(openBatch, f.key, openItems)]))
+  const canSign = openItems.length > 0 && FILES.every(f => states[f.key] === 'ok')
+  const anyExported = FILES.some(f => states[f.key] !== 'none')
+
+  const nhapLaiRecords = allRecords
+    .filter(r => r.entity === type && nhapLaiItems(r).length > 0)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  const nhapLaiPending = nhapLaiRecords.filter(r => !r.nhapLaiSignedAt)
+  const nhapLaiDone = nhapLaiRecords.filter(r => r.nhapLaiSignedAt)
 
   const persistRecords = (records) => {
     localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
     setAllRecords(records)
   }
-  const persistMeta = (patch) => {
-    const next = { ...weeklyMeta, [metaKey]: { ...meta, accountant: weeklyAccountant, ...patch } }
-    localStorage.setItem(WEEKLY_KEY, JSON.stringify(next))
-    setWeeklyMeta(next)
+  const persistBatches = (batches) => {
+    localStorage.setItem(BATCHES_KEY, JSON.stringify(batches))
+    setAllBatches(batches)
   }
+  const upsertBatch = (batch, batches = allBatches) => [...batches.filter(b => b.id !== batch.id), batch]
 
-  const handleSave = (record) => {
+  const handleSave = (saved) => {
+    const existing = allRecords.find(r => r.id === saved.id)
+    const record = {
+      ...saved,
+      batchNo: existing ? existing.batchNo : openBatch.no,
+      nhapLaiSignedAt: existing?.nhapLaiSignedAt || null,
+    }
     persistRecords([...allRecords.filter(r => r.id !== record.id), record])
-    setWeekStart(mondayOf(record.date))
     setFormState(null)
   }
   const handleRemove = (record) => {
@@ -89,22 +103,88 @@ export default function SwapReturnTab({ type }) {
     }
   }
 
-  const exportWeekly = async (which) => {
-    const args = { entity: type, weekStart, items, accountant: weeklyAccountant }
-    const ok = await run(`weekly_${which}`, async () => {
-      if (which !== 'xuatKho') await exportSwapWeeklyXuLy(args)
-      if (which !== 'xuLy') await exportSwapWeeklyXuatKho(args)
-    })
-    if (ok && which === 'all') persistMeta({ exportedAt: new Date().toISOString() })
+  const exportOpenFile = async (file) => {
+    const at = new Date()
+    const ok = await run(`open_${file.key}`, () => file.run({ entity: type, batchNo: openBatch.no, items: openItems, accountant: openBatch.accountant, date: at }))
+    if (!ok) return
+    const exported = { ...openBatch.exported, [file.key]: { at: at.toISOString(), signature: itemsSignature(openItems) } }
+    persistBatches(upsertBatch({ ...openBatch, exported }))
+  }
+
+  const exportSignedFile = (batch, file) => {
+    const items = batchItems(recordsOf(batch.no))
+    const at = batch.exported?.[file.key]?.at
+    run(`signed_${batch.no}_${file.key}`, () => file.run({ entity: type, batchNo: batch.no, items, accountant: batch.accountant, date: at ? new Date(at) : new Date() }))
+  }
+
+  const setOpenAccountant = (accountant) => persistBatches(upsertBatch({ ...openBatch, accountant }))
+
+  const signOpen = (e) => {
+    e.target.checked = false
+    if (!window.confirm(`Đánh dấu ${openName} đã trình ký?\n\n${openName} sẽ khoá lại, không thêm/sửa/xoá được. Đợt đổi trả mới sẽ vào ${batchLabel(openBatch.no + 1)}.`)) return
+    // Đợt tạo trước khi có tính năng bộ chưa có batchNo — ghi rõ số bộ lúc khoá để không trôi sang bộ mới.
+    const openIds = new Set(openRecords.map(r => r.id))
+    persistRecords(allRecords.map(r => (openIds.has(r.id) ? { ...r, batchNo: openBatch.no } : r)))
+    persistBatches(upsertBatch({ ...openBatch, signedAt: new Date().toISOString() }))
+  }
+
+  const unsign = (batch) => {
+    if (!window.confirm(`Bỏ đánh dấu trình ký ${batchLabel(batch.no)}? Bộ sẽ mở lại để thêm/sửa, và đợt mới sẽ vào lại ${batchLabel(batch.no)}.`)) return
+    const rest = allBatches.filter(b => !(b.entity === type && b.no === batch.no + 1))
+    persistBatches(upsertBatch({ ...batch, signedAt: null }, rest))
   }
 
   const exportNhapLai = async (record) => {
     const ok = await run(`nhapLai_${record.id}`, () => exportSwapNhapLai(record))
     if (ok) persistRecords(allRecords.map(r => (r.id === record.id ? { ...r, nhapLaiExportedAt: new Date().toISOString() } : r)))
   }
+  const toggleNhapLaiSigned = (record, checked) => {
+    persistRecords(allRecords.map(r => (r.id === record.id ? { ...r, nhapLaiSignedAt: checked ? new Date().toISOString() : null } : r)))
+  }
 
-  const weekEnd = addDays(weekStart, 6)
-  const hasItems = items.length > 0
+  const latestSigned = signedBatches[0]
+  const canUnsign = openRecords.length === 0
+
+  const nhapLaiTable = (records) => (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50 border-b border-gray-100">
+            <th className={thCls}>Ngày</th><th className={thCls}>Khách hàng / hàng khác lô</th><th className={thCls}>Kế toán</th>
+            <th className={thCls}>File</th><th className={thCls}>Trình ký</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map(r => (
+            <tr key={r.id} className="border-b border-gray-50">
+              <td className="px-2 py-2 whitespace-nowrap">{formatDmy(r.date).slice(0, 5)}</td>
+              <td className="px-2 py-2" style={{ minWidth: 200 }}>
+                <div className="font-semibold text-gray-800">{r.customerName}</div>
+                <div className="text-gray-400">{nhapLaiItems(r).map(it => it.tenHang || it.maHang).join(', ')}</div>
+              </td>
+              <td className="px-2 py-2 whitespace-nowrap text-gray-500">{r.accountantNhapLai}</td>
+              <td className="px-2 py-2 whitespace-nowrap">
+                <div className="flex items-center gap-2">
+                  {r.nhapLaiExportedAt && <span className="text-gray-400">Đã xuất {formatDay(r.nhapLaiExportedAt)}</span>}
+                  <button type="button" onClick={() => exportNhapLai(r)} disabled={busy === `nhapLai_${r.id}`}
+                    className={`sheet-tab-action ${r.nhapLaiExportedAt ? '' : 'is-primary'}`} style={smallBtnStyle}>
+                    <FileDown size={12} /> {r.nhapLaiExportedAt ? 'Xuất lại' : 'Xuất'}
+                  </button>
+                </div>
+              </td>
+              <td className="px-2 py-2 whitespace-nowrap">
+                <label className="flex items-center gap-2 font-medium text-gray-700" title={r.nhapLaiExportedAt ? undefined : 'Xuất file trước rồi mới tick'}>
+                  <input type="checkbox" className={checkCls} checked={Boolean(r.nhapLaiSignedAt)} disabled={!r.nhapLaiExportedAt}
+                    onChange={e => toggleNhapLaiSigned(r, e.target.checked)} aria-label={`Đã trình ký BB nhập lại kho ${r.customerName}`} />
+                  {r.nhapLaiSignedAt ? `Đã trình ký ${formatDay(r.nhapLaiSignedAt)}` : 'Đã trình ký'}
+                </label>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 
   return (
     <div className="sheet-tab">
@@ -118,175 +198,178 @@ export default function SwapReturnTab({ type }) {
           </div>
         </header>
 
-        <div className="flex items-center gap-2 flex-wrap" style={{ padding: '12px 0' }}>
-          <button type="button" onClick={() => setWeekStart(addDays(weekStart, -7))} className="sheet-tab-action" style={{ padding: '0 8px' }} aria-label="Tuần trước">
-            <ChevronLeft size={14} />
-          </button>
-          <button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))} disabled={isCurrentWeek} className="sheet-tab-action" style={{ padding: '0 8px' }} aria-label="Tuần sau">
-            <ChevronRight size={14} />
-          </button>
-          <span className="text-base font-bold text-gray-900">Tuần {isoWeekNumber(weekStart)}</span>
-          <span className="text-sm text-gray-500">{formatDmy(weekStart)} – {formatDmy(weekEnd)}</span>
-          {isCurrentWeek
-            ? <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700">Tuần này</span>
-            : <button type="button" onClick={() => setWeekStart(mondayOf(today))} className="text-xs text-blue-600 hover:underline">Về tuần này</button>}
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {/* Bộ xuất huỷ cuối tuần */}
+        <div className="flex flex-col gap-3" style={{ paddingTop: 12 }}>
+          {/* 1. Bộ xuất huỷ đang gom */}
           <div className="report-section">
             <div className="report-section-trigger" style={{ cursor: 'default', flexWrap: 'wrap', gap: 8 }}>
-              <span className="report-section-title">Bộ xuất huỷ cuối tuần</span>
-              {meta.exportedAt && <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">Đã xuất {formatStamp(meta.exportedAt)}</span>}
-              <button type="button" onClick={() => exportWeekly('all')} disabled={!hasItems || busy === 'weekly_all'} className="sheet-tab-action is-primary ml-auto">
-                <FileDown size={13} /> {busy === 'weekly_all' ? 'Đang xuất…' : 'Xuất cả bộ (2 file)'}
-              </button>
+              <span className="report-section-title">{openName} — bộ xuất huỷ đang gom</span>
+              <span className="report-section-count">{openItems.length} mặt hàng{openRecords.length ? ` · ${rangeOf(openRecords)}` : ''}</span>
             </div>
             <div className="report-section-content flex flex-col gap-3">
-              <p className="text-xs text-gray-500">Gộp tất cả hàng lỗi khách trả trong tuần — cả cùng lô lẫn khác lô — vào 1 bộ. Cuối tuần xuất 1 lần.</p>
-
               <div className="flex items-end justify-between gap-4 flex-wrap">
-                <div className="flex gap-6 flex-wrap">
-                  {[[items.length, 'mặt hàng'], [weekRecords.length, 'đợt đổi trả'], [counts.same, 'cùng lô'], [counts.diff, 'khác lô']].map(([n, label]) => (
-                    <div key={label}>
-                      <div className="text-xl font-bold text-gray-900 tabular-nums">{n}</div>
-                      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-gray-400">{label}</div>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-xs text-gray-500">Đợt đổi trả mới nào cũng tự vào bộ này, cho tới khi tick "Đã trình ký".</p>
                 <label className="flex flex-col gap-1 text-sm" style={{ minWidth: 240 }}>
-                  <span className="text-xs font-medium text-gray-500">Kế toán ký bộ cuối tuần</span>
-                  <select value={weeklyAccountant} onChange={e => persistMeta({ accountant: e.target.value })}
+                  <span className="text-xs font-medium text-gray-500">Kế toán ký bộ này</span>
+                  <select value={openBatch.accountant} onChange={e => setOpenAccountant(e.target.value)}
                     className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400">
                     {SWAP_RETURN_ACCOUNTANTS.map(name => <option key={name} value={name}>{name}</option>)}
                   </select>
                 </label>
               </div>
 
-              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-                {[
-                  { key: 'xuLy', ext: 'XLSX', title: 'BB Xử lý (xuất huỷ)', sub: `${items.length} dòng · Excel`, cls: 'bg-green-50 text-green-700' },
-                  { key: 'xuatKho', ext: 'DOCX', title: 'BB xác minh xuất kho', sub: `${items.length} dòng · Ý kiến "Xuất xử lý"`, cls: 'bg-blue-50 text-blue-700' },
-                ].map(f => (
-                  <div key={f.key} className="flex items-center gap-3 border border-gray-100 rounded-lg px-3 py-2.5">
-                    <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-bold ${f.cls}`}>{f.ext}</span>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-gray-800">{f.title}</div>
-                      <div className="text-xs text-gray-500">{f.sub} · Kế toán: {weeklyAccountant}</div>
-                    </div>
-                    <button type="button" onClick={() => exportWeekly(f.key)} disabled={!hasItems || busy === `weekly_${f.key}`}
-                      className="sheet-tab-action ml-auto" style={{ minHeight: 28, padding: '0 10px', fontSize: 12 }}>
-                      <FileDown size={12} /> Xuất
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {counts.empty > 0 && (
-                <div className="flex gap-2 items-start text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
-                  <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                  <span>{counts.empty} mặt hàng chưa nhập đủ 2 số lô nên chưa biết cùng lô hay khác lô — vẫn nằm trong bộ xuất huỷ, nhưng nếu là khác lô thì khách đó còn thiếu BB nhập lại kho.</span>
-                </div>
-              )}
-
               <div style={{ overflowX: 'auto' }}>
-                {hasItems ? (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100">
-                        <th className={thCls}>Mã hàng</th><th className={thCls}>Tên hàng</th><th className={thCls}>Số lô (hàng lỗi)</th>
-                        <th className={thCls}>Hạn dùng</th><th className={thCls}>ĐVT</th><th className={`${thCls} text-right`}>SL</th>
-                        <th className={thCls}>Quy cách</th><th className={thCls}>Lô</th><th className={thCls}>Từ đợt</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((it, i) => (
-                        <tr key={i} className="border-b border-gray-50">
-                          <td className={tdCls}>{it.maHang}</td>
-                          <td className="px-2 py-2 font-medium text-gray-800" style={{ minWidth: 180 }}>{it.tenHang}</td>
-                          <td className={tdCls}>{it.loLoi}</td>
-                          <td className={tdCls}>{it.hanDungLoi}</td>
-                          <td className={tdCls}>{it.dvt}</td>
-                          <td className={`${tdCls} text-right tabular-nums`}>{it.soLuong}</td>
-                          <td className={tdCls}>{it.quyCach}</td>
-                          <td className={tdCls}><LotBadge status={lotStatus(it)} /></td>
-                          <td className={tdCls}>{it.customerName} <span className="text-gray-400">· {formatDmy(it.date).slice(0, 5)}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="text-center py-8 text-gray-400 text-sm">Tuần này chưa có đợt đổi trả nào.</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Các đợt đổi trả trong tuần */}
-          <div className="report-section">
-            <div className="report-section-trigger" style={{ cursor: 'default' }}>
-              <span className="report-section-title">Đợt đổi trả trong tuần</span>
-              <span className="report-section-count">{weekRecords.length} đợt</span>
-            </div>
-            <div className="report-section-content flex flex-col gap-2">
-              <p className="text-xs text-gray-500">Khách có hàng <b>khác lô</b> cần 1 BB xác minh nhập lại kho riêng — xuất ngay tại dòng của khách đó. Hàng cùng lô không cần.</p>
-              <div style={{ overflowX: 'auto' }}>
-                {weekRecords.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400 text-sm">Chưa có đợt nào trong tuần này — bấm "Thêm đợt đổi trả".</div>
+                {openRecords.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 text-sm">{openName} chưa có mặt hàng nào — bấm "Thêm đợt đổi trả".</div>
                 ) : (
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100">
                         <th className={thCls}>Ngày</th><th className={thCls}>Khách hàng</th><th className={thCls}>Mặt hàng</th>
-                        <th className={thCls}>Lô</th><th className={thCls}>BB xác minh nhập lại kho</th><th className={thCls} />
+                        <th className={thCls}>Lô</th><th className={thCls} />
                       </tr>
                     </thead>
                     <tbody>
-                      {weekRecords.map(r => {
-                        const diffCount = nhapLaiItems(r).length
-                        const statuses = [...new Set((r.items || []).map(lotStatus))]
-                        return (
-                          <tr key={r.id} className="border-b border-gray-50 hover:bg-blue-50/30">
-                            <td className={tdCls}>{formatDmy(r.date).slice(0, 5)}</td>
-                            <td className="px-2 py-2 font-medium text-gray-800" style={{ minWidth: 160 }}>{r.customerName}</td>
-                            <td className="px-2 py-2" style={{ minWidth: 200 }}>
-                              {(r.items || []).map((it, i) => (
-                                <div key={i}>{it.tenHang || it.maHang} <span className="text-gray-400">× {it.soLuong} {it.dvt}</span></div>
-                              ))}
-                            </td>
-                            <td className="px-2 py-2"><div className="flex gap-1 flex-wrap">{statuses.map(s => <LotBadge key={s} status={s} />)}</div></td>
-                            <td className={tdCls}>
-                              {diffCount > 0 ? (
-                                <div className="flex items-center gap-2">
-                                  <button type="button" onClick={() => exportNhapLai(r)} disabled={busy === `nhapLai_${r.id}`}
-                                    className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }}>
-                                    <FileDown size={12} /> Xuất ({diffCount} dòng)
-                                  </button>
-                                  {r.nhapLaiExportedAt
-                                    ? <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">Đã xuất {formatStamp(r.nhapLaiExportedAt).slice(0, 5)}</span>
-                                    : <span className="text-gray-500">Kế toán: {r.accountantNhapLai}</span>}
-                                </div>
-                              ) : (
-                                <span className="text-gray-400">Không cần — cùng lô</span>
-                              )}
-                            </td>
-                            <td className={`${tdCls} text-right`}>
-                              <button type="button" onClick={() => setFormState(r)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700" title="Sửa" aria-label="Sửa">
-                                <Pencil size={13} />
-                              </button>
-                              <button type="button" onClick={() => handleRemove(r)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá" aria-label="Xoá">
-                                <Trash2 size={13} />
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
+                      {openRecords.map(r => (
+                        <tr key={r.id} className="border-b border-gray-50 hover:bg-blue-50/30">
+                          <td className="px-2 py-2 whitespace-nowrap">{formatDmy(r.date).slice(0, 5)}</td>
+                          <td className="px-2 py-2 font-semibold text-gray-800" style={{ minWidth: 160 }}>{r.customerName}</td>
+                          <td className="px-2 py-2" style={{ minWidth: 220 }}>
+                            {(r.items || []).map((it, i) => (
+                              <div key={i}>{it.tenHang || it.maHang} <span className="text-gray-400">× {it.soLuong} {it.dvt}</span></div>
+                            ))}
+                          </td>
+                          <td className="px-2 py-2"><div className="flex gap-1 flex-wrap">{[...new Set((r.items || []).map(lotStatus))].map(s => <LotBadge key={s} status={s} />)}</div></td>
+                          <td className="px-2 py-2 whitespace-nowrap text-right">
+                            <button type="button" onClick={() => setFormState(r)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700" title="Sửa" aria-label={`Sửa đợt ${r.customerName}`}>
+                              <Pencil size={13} />
+                            </button>
+                            <button type="button" onClick={() => handleRemove(r)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá" aria-label={`Xoá đợt ${r.customerName}`}>
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 )}
               </div>
+
+              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+                {FILES.map(f => {
+                  const st = states[f.key]
+                  const at = openBatch.exported?.[f.key]?.at
+                  return (
+                    <div key={f.key} className="flex items-center gap-3 border border-gray-100 rounded-lg px-3 py-2.5">
+                      <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${f.cls}`}>{f.ext}</span>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-gray-800">{f.title}</div>
+                        {st === 'ok' && <div className="text-xs font-medium text-green-700">✓ Đã xuất {formatStamp(at)}</div>}
+                        {st === 'stale' && <div className="text-xs font-medium text-amber-700">Bộ đã thay đổi sau lần xuất {formatStamp(at)} — cần xuất lại</div>}
+                        {st === 'none' && <div className="text-xs text-gray-500">Chưa xuất</div>}
+                      </div>
+                      <button type="button" onClick={() => exportOpenFile(f)} disabled={!openItems.length || busy === `open_${f.key}`}
+                        className={`sheet-tab-action ml-auto ${st === 'ok' ? '' : 'is-primary'}`} style={smallBtnStyle}>
+                        <FileDown size={12} /> {busy === `open_${f.key}` ? 'Đang xuất…' : st === 'none' ? 'Xuất' : 'Xuất lại'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <label className={`flex items-center gap-3 rounded-lg px-4 py-3 border-2 ${canSign ? 'border-green-500 bg-green-50 cursor-pointer' : 'border-dashed border-gray-200 bg-gray-50'}`}>
+                <input type="checkbox" className={checkCls} checked={false} disabled={!canSign} onChange={signOpen} aria-label={`Đã trình ký ${openName}`} />
+                <span>
+                  <span className="block text-sm font-bold text-gray-900">Đã trình ký {openName}</span>
+                  <span className="block text-xs text-gray-500">
+                    {!openItems.length ? 'Chưa có mặt hàng nào.'
+                      : !canSign ? 'Xuất đủ 2 file ở trên (bản mới nhất) thì mới tick được.'
+                        : `Tick khi đã ký xong. ${openName} sẽ khoá lại, đợt đổi trả mới vào ${batchLabel(openBatch.no + 1)}.`}
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
+
+          {/* 2. BB xác minh nhập lại kho */}
+          <div className="report-section">
+            <div className="report-section-trigger" style={{ cursor: 'default', flexWrap: 'wrap', gap: 8 }}>
+              <span className="report-section-title">BB xác minh nhập lại kho</span>
+              {nhapLaiPending.length > 0
+                ? <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700">{nhapLaiPending.length} chưa ký</span>
+                : <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">Đã ký hết</span>}
+            </div>
+            <div className="report-section-content flex flex-col gap-3">
+              <p className="text-xs text-gray-500">Mỗi khách có hàng khác lô 1 biên bản. Xuất file, ký xong thì tick.</p>
+              {nhapLaiPending.length > 0
+                ? nhapLaiTable(nhapLaiPending)
+                : <div className="text-center py-6 text-gray-400 text-sm">Không còn biên bản nào chờ ký.</div>}
+              {nhapLaiDone.length > 0 && (
+                <details>
+                  <summary className="cursor-pointer text-sm font-semibold text-gray-700 py-1">Đã trình ký ({nhapLaiDone.length})</summary>
+                  <div className="pt-2">{nhapLaiTable(nhapLaiDone)}</div>
+                </details>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Bộ đã trình ký */}
+          <details className="report-section">
+            <summary className="report-section-trigger" style={{ cursor: 'pointer' }}>
+              <span className="report-section-title">Bộ đã trình ký</span>
+              <span className="report-section-count">{signedBatches.length} bộ</span>
+            </summary>
+            <div className="report-section-content flex flex-col gap-2">
+              {signedBatches.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 text-sm">Chưa có bộ nào trình ký.</div>
+              ) : (
+                <>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          <th className={thCls}>Bộ</th><th className={thCls}>Mặt hàng</th><th className={thCls}>Kế toán</th>
+                          <th className={thCls}>Tải lại file</th><th className={thCls}>Trình ký</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {signedBatches.map(b => {
+                          const records = recordsOf(b.no)
+                          const undoable = b === latestSigned && canUnsign
+                          const title = b !== latestSigned ? 'Chỉ bỏ tick được bộ ký gần nhất'
+                            : !canUnsign ? `${openName} đã có hàng nên không bỏ tick được` : 'Bỏ tick để mở lại bộ này'
+                          return (
+                            <tr key={b.id} className="border-b border-gray-50">
+                              <td className="px-2 py-2 whitespace-nowrap font-semibold text-gray-800">{batchLabel(b.no)}</td>
+                              <td className="px-2 py-2 whitespace-nowrap">{batchItems(records).length} mặt hàng <span className="text-gray-400">· {rangeOf(records)}</span></td>
+                              <td className="px-2 py-2 whitespace-nowrap text-gray-500">{b.accountant}</td>
+                              <td className="px-2 py-2 whitespace-nowrap">
+                                <div className="flex gap-1">
+                                  {FILES.map(f => (
+                                    <button key={f.key} type="button" onClick={() => exportSignedFile(b, f)} disabled={busy === `signed_${b.no}_${f.key}`}
+                                      className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }}>
+                                      <FileDown size={12} /> {f.title}
+                                    </button>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap">
+                                <label className="flex items-center gap-2 font-medium text-gray-700" title={title}>
+                                  <input type="checkbox" className={checkCls} checked disabled={!undoable} onChange={() => unsign(b)}
+                                    aria-label={`Bỏ đánh dấu trình ký ${batchLabel(b.no)}`} />
+                                  Đã ký {formatDay(b.signedAt)}
+                                </label>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-gray-500">Bộ đã ký bị khoá: không thêm, sửa, xoá đợt được. Chỉ bỏ tick được bộ ký gần nhất, khi bộ đang gom chưa có hàng.</p>
+                </>
+              )}
+            </div>
+          </details>
         </div>
       </div>
 
@@ -294,8 +377,10 @@ export default function SwapReturnTab({ type }) {
         <SwapReturnRecordForm
           key={formState === 'new' ? 'new' : formState.id}
           entity={type}
-          defaultDate={isCurrentWeek ? today : weekStart}
+          defaultDate={toIsoDate(new Date())}
           record={formState === 'new' ? null : formState}
+          batchName={openName}
+          batchExported={anyExported}
           onSave={handleSave}
           onCancel={() => setFormState(null)}
         />
