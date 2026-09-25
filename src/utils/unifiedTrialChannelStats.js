@@ -36,9 +36,13 @@ export function computeChannelSnapshot({ data, channelKey, khValues, chuaGuiChan
 
   const viettelKey = `unifiedTrial_${channelKey}_viettel`
   const spxKey = `unifiedTrial_${channelKey}_spx`
-  const viettelFile = getCarrierFileTotal(viettelKey, 'viettel', validData, referenceDate)
+  // requireSessionKey: đúng cơ chế liveSessionKey đã dùng ở CarrierPanel — chỉ lấy file VTP/SPX đã upload
+  // trong đúng phiên làm việc hiện tại (referenceDate = meta.uploadedAt của file Đơn truyền thống đang xem),
+  // không tự "khớp theo ngày gần nhất" (sẽ hiện nhầm số của kênh/tuần khác). Không có thì rơi về đếm theo
+  // dòng trong chính file Đơn truyền thống (viettelRows.length) — vẫn có số hợp lý, không về 0.
+  const viettelFile = getCarrierFileTotal(viettelKey, 'viettel', validData, referenceDate, true)
   const viettelCount = viettelFile ? viettelFile.total : viettelRows.length
-  const spxFile = showSpx ? getCarrierFileTotal(spxKey, 'spx', validData, referenceDate) : null
+  const spxFile = showSpx ? getCarrierFileTotal(spxKey, 'spx', validData, referenceDate, true) : null
   const spxCount = showSpx ? (spxFile ? spxFile.total : trackedSpxRows.length) : 0
   const doitacTotal = viettelCount + spxCount
 
