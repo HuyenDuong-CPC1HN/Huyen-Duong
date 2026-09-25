@@ -209,13 +209,13 @@ function fillDataRows(doc, sstDoc, items) {
 }
 
 // Điền dữ liệu vào file mẫu Biên bản Xử lý của ĐÚNG kho, trả về Uint8Array file .xlsx hoàn chỉnh.
-export async function fillBienBanXuLy(templateBuffer, items, { location = '', ngayGio = '' } = {}) {
+export async function fillBienBanXuLy(templateBuffer, items, { location = '', ngayGio = '', date = new Date() } = {}) {
   const zip = new PizZip(templateBuffer.slice(0))
   const sstDoc = parseXml(zip.file(STRINGS_PATH).asText())
   const sheetDoc = parseXml(zip.file(SHEET_PATH).asText())
   const workbookDoc = parseXml(zip.file(WORKBOOK_PATH).asText())
 
-  const { ngay, thang, nam } = todayParts()
+  const { ngay, thang, nam } = todayParts(date)
   setCellStringForce(sheetDoc, sstDoc, 5, 'I', `TP.Hồ Chí Minh, Ngày ${ngay} tháng ${thang} năm ${nam}`)
   appendAfterLabel(sheetDoc, sstDoc, 13, 'A', ngayGio || `Vào lúc 08h30’, ngày ${ngay} tháng ${thang} năm ${nam}`)
   appendAfterLabel(sheetDoc, sstDoc, 14, 'A', location)

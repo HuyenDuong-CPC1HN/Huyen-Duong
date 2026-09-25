@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass, FlaskConical } from 'lucide-react'
+import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass, FlaskConical, ArrowLeftRight } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -10,6 +10,7 @@ import NhapHangTab from './components/NhapHangTab'
 import DoiSoatThucTeTab from './components/DoiSoatThucTeTab'
 import ReturnTrackingTab from './components/ReturnTrackingTab'
 import DamagedGoodsTrackingTab from './components/DamagedGoodsTrackingTab'
+import SwapReturnTab from './components/SwapReturnTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
@@ -63,6 +64,15 @@ const NAV = [
       { id: 'hangHuyA', label: 'Kho A', icon: PackageX },
     ],
   },
+  {
+    id: 'doiTra',
+    label: 'Đổi trả hàng',
+    icon: ArrowLeftRight,
+    children: [
+      { id: 'doiTraC', label: 'Đơn C', icon: Truck },
+      { id: 'doiTraDTP', label: 'Đơn DTP', icon: Package },
+    ],
+  },
   { id: 'guilen8n', label: 'Gửi lên n8n', icon: Send },
 ]
 
@@ -82,6 +92,8 @@ const BREADCRUMB = {
   hangHuyC:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho C'],
   hangHuyDTP: ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho DTP'],
   hangHuyA:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho A'],
+  doiTraC:    ['Trang chủ', 'Đổi trả hàng', 'Đơn C'],
+  doiTraDTP:  ['Trang chủ', 'Đổi trả hàng', 'Đơn DTP'],
   guilen8n: ['Trang chủ', 'Gửi lên n8n'],
 }
 
@@ -452,6 +464,8 @@ function AppContent({ user }) {
           {active === 'hangHuyC'   && <DamagedGoodsTrackingTab type="khoC" />}
           {active === 'hangHuyDTP' && <DamagedGoodsTrackingTab type="khoDTP" />}
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab type="khoA" />}
+          {active === 'doiTraC'    && <SwapReturnTab key="donC" type="donC" />}
+          {active === 'doiTraDTP'  && <SwapReturnTab key="donDTP" type="donDTP" />}
           {active === 'guilen8n' && <N8nWebhookForm />}
         </main>
       </div>

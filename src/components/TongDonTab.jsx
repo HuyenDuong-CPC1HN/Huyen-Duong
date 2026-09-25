@@ -10,9 +10,12 @@ import { useWeeklyData } from '../useWeeklyData'
 import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
 import { readSheetReports } from '../utils/sheetReports'
+import { readTrialReports } from '../utils/unifiedTrialReports'
+import { parseStaffRoster } from '../utils/warehouseStaffFilter'
 import {
   getCarrierFileStats, pickCarrierWeekIdByDate, carrierWeekHasRows, computeFrozenNgoaiSan, getCarrierWeekRows,
 } from './carrierUtils'
+import { computeWeekReportFromUnifiedTrial, ngoaiSanForWeekIdUnifiedTrial } from './tongDonUnifiedTrialAdapter'
 import { pct, buildDonSanNarrative, buildDonTruyenThongNarrative } from './tongDonNarrative'
 import TongDonReportDonSan from './TongDonReportDonSan'
 import TongDonReportDonTruyenThong from './TongDonReportDonTruyenThong'
@@ -332,6 +335,63 @@ function DataSourcePicker({ open, onToggle, donCPick, donDTPPick, tmdtPick }) {
   )
 }
 
+// Công tắc chọn nguồn dữ liệu cho cả tab: "Gộp kênh" (mới, gộp sẵn Đơn C/DTP/TMĐT/Ngoại sàn từ 2 file +
+// lọc theo Nhân sự kho HCM) hoặc "Nguồn cũ" (chọn riêng từng nguồn như hiện tại). Cả 2 cùng tồn tại song
+// song cho đến khi Gộp kênh chạy ổn định — xem tongDonUnifiedTrialAdapter.js.
+function SourceToggle({ value, onChange }) {
+  const options = [
+    { key: 'unifiedTrial', title: 'Gộp kênh', pill: 'Mới', desc: '1 lịch sử duy nhất, đã gồm cả Đơn C/DTP/TMĐT/Ngoại sàn và lọc theo nhân sự kho HCM.' },
+    { key: 'legacy', title: 'Nguồn cũ', pill: 'Đang dùng', desc: 'Chọn riêng từng nguồn Đơn C, Đơn DTP, TMĐT như tab Tổng Đơn hiện tại.' },
+  ]
+  return (
+    <div className="tdr-source-toggle">
+      {options.map(opt => (
+        <button
+          key={opt.key} type="button"
+          className={`tdr-source-opt ${value === opt.key ? 'active' : ''}`}
+          onClick={() => onChange(opt.key)}
+        >
+          <span className="tdr-source-opt-top">
+            <span className="tdr-source-radio" />
+            <span className="tdr-source-opt-title">{opt.title}</span>
+            <span className={`tdr-source-pill ${opt.key === 'legacy' ? 'is-muted' : ''}`}>{opt.pill}</span>
+          </span>
+          <span className="tdr-source-opt-desc">{opt.desc}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Picker cho nguồn "Gộp kênh": chỉ 2 cặp Tuần này/Tuần trước (Đơn SO, Đơn truyền thống), lấy thẳng từ
+// lịch sử "Lưu số liệu tuần này" đã có sẵn ở tab Gộp kênh — Viettel Post/SPX tự khớp theo weekId đã ghim
+// sẵn trong từng entry, không cần chọn thêm.
+function UnifiedTrialSourcePicker({ open, onToggle, donSOPick, donTTPick, staffCount }) {
+  return (
+    <div className="tdr-source-picker rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))' }}>
+      <button type="button" onClick={onToggle} className="w-full flex items-center justify-between text-left">
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary, #1a1d23)' }}>Chọn tuần so sánh — Gộp kênh</span>
+        {open ? <ChevronUp size={15} className="text-gray-400 shrink-0" /> : <ChevronDown size={15} className="text-gray-400 shrink-0" />}
+      </button>
+      {open && (
+        <div className="mt-3">
+          <div className="grid grid-cols-[110px_1fr_1fr] gap-2 mb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">
+            <span />
+            <span>Tuần này</span>
+            <span>Tuần trước</span>
+          </div>
+          <SourceRow label="Đơn SO" pick={donSOPick} />
+          <SourceRow label="Đơn truyền thống" pick={donTTPick} />
+          <div className="tdr-source-badges">
+            <span className="tdr-source-badge ok">✓ Đã lọc theo Nhân sự kho HCM ({staffCount} người)</span>
+            <span className="tdr-source-badge ok">✓ Đối soát Ngoại sàn Mốc 1–4: tự kế thừa, không cần chọn thêm</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LoadingState() {
   return (
     <div className="text-center py-24 text-gray-400">
@@ -413,6 +473,11 @@ function TongDonToolbar({
 
 
 export default function TongDonTab({ onNavigate }) {
+  // Nguồn dữ liệu cho cả tab — "unifiedTrial" (Gộp kênh, mới) hoặc "legacy" (chọn riêng Đơn C/DTP/TMĐT như
+  // hiện tại). Lưu lựa chọn để lần sau mở lại giữ nguyên. Xem tongDonUnifiedTrialAdapter.js.
+  const [dataSource, setDataSourceState] = useState(() => localStorage.getItem('tongdon_data_source') || 'legacy')
+  const setDataSource = (next) => { setDataSourceState(next); localStorage.setItem('tongdon_data_source', next) }
+
   const donC = useTypeData('donC')
   const donDTP = useTypeData('donDTP')
 
@@ -451,8 +516,34 @@ export default function TongDonTab({ onNavigate }) {
   const viettelDTPWeekIdCurrent = resolveCarrierWeekId(donDTPCurrentEntry, 'donDTP_viettel', 'viettelWeekId')
   const viettelDTPWeekIdPrevious = resolveCarrierWeekId(donDTPPreviousEntry, 'donDTP_viettel', 'viettelWeekId')
 
-  // Khóa "tuần" dùng để lưu các trường nhập tay (chưa giao, hàng gửi, nhân sự, kết luận, giải pháp...)
-  const weekKey = `${donCCurrentEntry?.id || 'x'}_${donDTPCurrentEntry?.id || 'x'}`
+  // ---- Nguồn "Gộp kênh": chỉ 2 cặp Tuần này/Tuần trước (Đơn SO, Đơn truyền thống), lấy thẳng từ lịch sử
+  // "Lưu số liệu tuần này" đã có sẵn ở tab Gộp kênh (readTrialReports) — không cần xây lịch sử mới. ----
+  const donSOReports = useMemo(() => readTrialReports('donSO'), [])
+  const donTTReports = useMemo(() => readTrialReports('donTruyenThong'), [])
+  const donSOOptions = donSOReports.map(r => ({ id: r.id, label: r.label }))
+  const donSOPick = usePickedPair('unifiedDonSO', donSOOptions, donSOOptions[0]?.id, donSOOptions[1]?.id)
+  const donSOEntryCurrent = donSOReports.find(r => r.id === donSOPick.currentId) || null
+  const donSOEntryPrevious = donSOReports.find(r => r.id === donSOPick.previousId) || null
+  const donTTOptions = donTTReports.map(r => ({ id: r.id, label: r.label }))
+  const donTTPick = usePickedPair('unifiedDonTT', donTTOptions, donTTOptions[0]?.id, donTTOptions[1]?.id)
+  const donTTEntryCurrent = donTTReports.find(r => r.id === donTTPick.currentId) || null
+  const donTTEntryPrevious = donTTReports.find(r => r.id === donTTPick.previousId) || null
+  const staffCount = useMemo(() => parseStaffRoster(localStorage.getItem('unified_trial_hcm_staff_roster') || '').size, [])
+
+  const unifiedLiveCurrent = useMemo(() => computeWeekReportFromUnifiedTrial({
+    donSOEntry: donSOEntryCurrent, donTTEntry: donTTEntryCurrent,
+  }), [donSOEntryCurrent, donTTEntryCurrent])
+  const unifiedLivePrevious = useMemo(() => computeWeekReportFromUnifiedTrial({
+    donSOEntry: donSOEntryPrevious, donTTEntry: donTTEntryPrevious,
+  }), [donSOEntryPrevious, donTTEntryPrevious])
+  const unifiedNgoaiSanCurrent = useMemo(() => ngoaiSanForWeekIdUnifiedTrial(donSOEntryCurrent?.spxWeekId), [donSOEntryCurrent])
+
+  // Khóa "tuần" dùng để lưu các trường nhập tay (chưa giao, hàng gửi, nhân sự, kết luận, giải pháp...) —
+  // tiền tố "ut_" cho nguồn Gộp kênh để tách hẳn khỏi nguồn cũ (tránh lẫn chữ nhận định đã sửa tay giữa 2
+  // nguồn cho "cùng 1 tuần" nhưng khác bản chất số liệu — xem lưu ý ở đầu kế hoạch).
+  const weekKey = dataSource === 'unifiedTrial'
+    ? `ut_${donSOEntryCurrent?.id || 'x'}_${donTTEntryCurrent?.id || 'x'}`
+    : `${donCCurrentEntry?.id || 'x'}_${donDTPCurrentEntry?.id || 'x'}`
 
   const viettelC_current = useMemo(() => ({ weekId: viettelCWeekIdCurrent, stats: statsForCarrierWeekId('donC_viettel', 'viettel', viettelCWeekIdCurrent, donCCurrentEntry) }), [viettelCWeekIdCurrent, donCCurrentEntry])
   const viettelC_previous = useMemo(() => ({ weekId: viettelCWeekIdPrevious, stats: statsForCarrierWeekId('donC_viettel', 'viettel', viettelCWeekIdPrevious, donCPreviousEntry) }), [viettelCWeekIdPrevious, donCPreviousEntry])
@@ -461,17 +552,21 @@ export default function TongDonTab({ onNavigate }) {
   const viettelDTP_current = useMemo(() => ({ weekId: viettelDTPWeekIdCurrent, stats: statsForCarrierWeekId('donDTP_viettel', 'viettel', viettelDTPWeekIdCurrent, donDTPCurrentEntry) }), [viettelDTPWeekIdCurrent, donDTPCurrentEntry])
   const viettelDTP_previous = useMemo(() => ({ weekId: viettelDTPWeekIdPrevious, stats: statsForCarrierWeekId('donDTP_viettel', 'viettel', viettelDTPWeekIdPrevious, donDTPPreviousEntry) }), [viettelDTPWeekIdPrevious, donDTPPreviousEntry])
 
-  const ngoaiSanCurrent = useMemo(() => ngoaiSanForWeekId(spxCWeekIdCurrent), [spxCWeekIdCurrent])
+  const legacyNgoaiSanCurrent = useMemo(() => ngoaiSanForWeekId(spxCWeekIdCurrent), [spxCWeekIdCurrent])
 
-  const liveCurrent = useMemo(() => computeWeekReport({
+  const legacyLiveCurrent = useMemo(() => computeWeekReport({
     entryC: donCCurrentEntry, entryDTP: donDTPCurrentEntry, tmdtTotal: tmdtCurrent,
     viettelCompareC: viettelC_current.stats, spxCompareC: spxC_current.stats, viettelCompareDTP: viettelDTP_current.stats,
   }), [donCCurrentEntry, donDTPCurrentEntry, tmdtCurrent, viettelC_current.stats, spxC_current.stats, viettelDTP_current.stats])
 
-  const livePrevious = useMemo(() => computeWeekReport({
+  const legacyLivePrevious = useMemo(() => computeWeekReport({
     entryC: donCPreviousEntry, entryDTP: donDTPPreviousEntry, tmdtTotal: tmdtPrev,
     viettelCompareC: viettelC_previous.stats, spxCompareC: spxC_previous.stats, viettelCompareDTP: viettelDTP_previous.stats,
   }), [donCPreviousEntry, donDTPPreviousEntry, tmdtPrev, viettelC_previous.stats, spxC_previous.stats, viettelDTP_previous.stats])
+
+  const liveCurrent = dataSource === 'unifiedTrial' ? unifiedLiveCurrent : legacyLiveCurrent
+  const livePrevious = dataSource === 'unifiedTrial' ? unifiedLivePrevious : legacyLivePrevious
+  const ngoaiSanCurrent = dataSource === 'unifiedTrial' ? unifiedNgoaiSanCurrent : legacyNgoaiSanCurrent
 
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('donsan')
@@ -640,8 +735,12 @@ export default function TongDonTab({ onNavigate }) {
   if (loading) return <LoadingState />
 
   const fmtDate = (at) => (at && !Number.isNaN(new Date(at).getTime()) ? new Date(at).toLocaleDateString('vi-VN') : null)
-  const currentPeriodLabel = !isReadOnly ? fmtDate(donCCurrentEntry?.at) : null
-  const previousPeriodLabel = !isReadOnly ? fmtDate(donCPreviousEntry?.at) : null
+  const currentPeriodLabel = !isReadOnly
+    ? fmtDate(dataSource === 'unifiedTrial' ? (donTTEntryCurrent?.id || donSOEntryCurrent?.id) : donCCurrentEntry?.at)
+    : null
+  const previousPeriodLabel = !isReadOnly
+    ? fmtDate(dataSource === 'unifiedTrial' ? (donTTEntryPrevious?.id || donSOEntryPrevious?.id) : donCPreviousEntry?.at)
+    : null
   const savedAtLabel = isReadOnly ? new Date(snapshot.createdAt).toLocaleString('vi-VN') : null
   const publishBtnText = publishButtonText(isPublished, publishing)
   const publishTitle = publishButtonTitle(isPublished, completion)
@@ -653,7 +752,16 @@ export default function TongDonTab({ onNavigate }) {
           <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn sàn</button>
           <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
         </div>
-        {!isReadOnly && (
+        {!isReadOnly && <SourceToggle value={dataSource} onChange={setDataSource} />}
+        {!isReadOnly && (dataSource === 'unifiedTrial' ? (
+          <UnifiedTrialSourcePicker
+            open={sourcePickerOpen}
+            onToggle={() => setSourcePickerOpen(o => !o)}
+            donSOPick={donSOPick}
+            donTTPick={donTTPick}
+            staffCount={staffCount}
+          />
+        ) : (
           <DataSourcePicker
             open={sourcePickerOpen}
             onToggle={() => setSourcePickerOpen(o => !o)}
@@ -661,7 +769,7 @@ export default function TongDonTab({ onNavigate }) {
             donDTPPick={donDTPPick}
             tmdtPick={tmdtPick}
           />
-        )}
+        ))}
         <TongDonToolbar
           isReadOnly={isReadOnly}
           completion={completion}
@@ -671,7 +779,7 @@ export default function TongDonTab({ onNavigate }) {
           publishBtnText={publishBtnText}
           onPublish={publishForAnalytics}
           onDelete={deleteReport}
-          onNavigate={onNavigate}
+          onNavigate={onNavigate ? (() => onNavigate(dataSource === 'unifiedTrial' ? 'gopKenh' : 'donC')) : undefined}
           onSave={() => { void saveReport() }}
           savingReport={savingReport}
           onExport={handleExportImage}
