@@ -309,14 +309,17 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
   const [packingWeeks, setPackingWeeks] = useState(() => readPackingWeeks(carrierKey))
   const [expanded, setExpanded] = useState(false)
   const [onlyProblem, setOnlyProblem] = useState(false)
+  const [onlyKhongKhop, setOnlyKhongKhop] = useState(false)
   const [statusFilter, setStatusFilter] = useState(null)
   const [excluded, setExcludedEntry] = useNgoaiSanExcluded(carrierKey)
 
   // Bấm thẻ để lọc theo đúng trạng thái đó, mở luôn "Chi tiết đối soát"; bấm lại đúng thẻ đang chọn để bỏ
-  // lọc. Không kết hợp với "Chỉ hiện đơn trễ/quá hạn" — chọn cái này thì tắt cái kia, tránh 2 bộ lọc chồng nhau.
+  // lọc. Không kết hợp với "Chỉ hiện đơn trễ/quá hạn"/"chưa tìm thấy Mã đơn tương ứng" — chọn cái này thì
+  // tắt các cái kia, tránh nhiều bộ lọc chồng nhau.
   const selectStatus = (key) => {
     setStatusFilter(current => (current === key ? null : key))
     setOnlyProblem(false)
+    setOnlyKhongKhop(false)
     setExpanded(true)
   }
 
@@ -379,14 +382,16 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
     problemStatuses.has(r.tinhTrangDongKien) || problemStatuses.has(r.tinhTrangGiao) ||
     r.nhomLay === '>72h' || r.nhomLay === 'Chưa lấy hàng'
   )
+  const khongKhopRows = rows.filter(r => r.tinhTrangDongKien === 'Không khớp Mã đơn')
   let visibleRows = rows
   if (statusFilter) {
     visibleRows = rows.filter(row => NGOAI_SAN_MATCHERS[statusFilter](row))
   } else if (onlyProblem) {
     visibleRows = rows.filter(row => isProblemRow(row))
+  } else if (onlyKhongKhop) {
+    visibleRows = khongKhopRows
   }
   const problemCount = rows.filter(isProblemRow).length
-  const khongKhopRows = rows.filter(r => r.tinhTrangDongKien === 'Không khớp Mã đơn')
 
   return (
     <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4">
@@ -503,7 +508,7 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {problemCount > 0 ? (
                   <button
-                    onClick={() => { setOnlyProblem(v => !v); setStatusFilter(null) }}
+                    onClick={() => { setOnlyProblem(v => !v); setOnlyKhongKhop(false); setStatusFilter(null) }}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${
                       onlyProblem ? 'bg-red-100 border-red-300 text-red-700' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
                     }`}
@@ -518,9 +523,17 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
                   </span>
                 )}
                 {khongKhopRows.length > 0 && (
-                  <span className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-                    {khongKhopRows.length} đơn SPX chưa tìm thấy Mã đơn tương ứng
-                  </span>
+                  <button
+                    onClick={() => { setOnlyKhongKhop(v => !v); setOnlyProblem(false); setStatusFilter(null) }}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${
+                      onlyKhongKhop ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                    }`}
+                  >
+                    <AlertTriangle size={14} />
+                    {onlyKhongKhop
+                      ? 'Đang chỉ hiện đơn chưa tìm thấy Mã đơn tương ứng — bấm để bỏ lọc'
+                      : `${khongKhopRows.length} đơn SPX chưa tìm thấy Mã đơn tương ứng`}
+                  </button>
                 )}
                 {statusFilter && (
                   <span className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
