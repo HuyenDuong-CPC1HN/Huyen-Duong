@@ -434,6 +434,7 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
               carrierType: 'spx',
               internalData: ngoaiSan,
               referenceDate: meta?.uploadedAt,
+              liveSessionKey: meta?.uploadedAt ?? null,
               hidePackingUpload: true,
               salesFileNoun: 'Sales Order',
               ngoaiSanNote: NGOAI_SAN_NOTE,
