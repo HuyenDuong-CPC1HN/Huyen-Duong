@@ -121,6 +121,78 @@ describe('CarrierStats — liveSessionKey: màn hình tuần mới (chưa lưu) 
   })
 })
 
+function buildSpxFile(fileName, maVanDon) {
+  const aoa = [
+    ['Mã vận đơn', 'Thời gian tạo đơn', 'Thời gian lấy hàng/gửi hàng', 'Thời gian giao hàng', 'Trạng thái hiện tại', 'Mã khách hàng'],
+    [maVanDon, '', '', '', 'Đang vận chuyển', 'DH020'],
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+  return new File([buf], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+}
+
+function buildSalesOrderFile(fileName) {
+  const aoa = [['Mã đơn'], ['DH020']]
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+  return new File([buf], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+}
+
+describe('CarrierStats — NgoaiSanPanel: Sales Order (Mốc 1) ở tuần mới không được tự hiện file của tuần trước', () => {
+  // Xác nhận với người dùng: Sales Order được upload MỚI MỖI TUẦN (không phải danh sách dồn dần) — nên
+  // cùng bug/cùng cơ chế fix như panel SPX chính: tuần mới (chưa upload Sales Order trong đúng phiên làm
+  // việc) phải trống, không được tự hiện file Sales Order còn sót của tuần TRƯỚC (kho carrier_salesorderweeks
+  // dùng chung, không tách theo tuần).
+  it('chưa upload Sales Order nào trong phiên -> trống, KHÔNG hiện file Sales Order tuần trước', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_salestest1'
+    store.opsStore.setItem(`carrier_salesorderweeks_${carrierKey}`, JSON.stringify([
+      { id: 'sales-old', fileName: 'sales-tuan-truoc.xlsx', uploadedAt: '2026-09-14T08:00:00.000Z', rows: [{ 'Mã đơn': 'DH020' }] },
+    ]))
+    const newRefDate = '2026-09-21T08:00:00.000Z'
+    render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" referenceDate={newRefDate} liveSessionKey={newRefDate} hidePackingUpload />)
+    await screen.findByText(/kéo & thả file xuất spx express/i)
+
+    const spxInput = document.querySelector('input[type="file"][accept=".xlsx,.xls"]')
+    fireEvent.change(spxInput, { target: { files: [buildSpxFile('spx-tuan-moi.xlsx', 'SPXC001')] } })
+    await waitFor(() => expect(screen.getByText('spx-tuan-moi.xlsx')).toBeInTheDocument())
+
+    await screen.findByText(/chưa có file danh sách thống kê/i)
+    expect(screen.queryByText('sales-tuan-truoc.xlsx')).not.toBeInTheDocument()
+  })
+
+  it('KHÔNG truyền liveSessionKey (nơi gọi cũ) -> Sales Order vẫn dồn tuần như cũ (tái hiện đúng hành vi gốc)', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_salestest2'
+    seedSpxWeek(carrierKey)
+    store.opsStore.setItem(`carrier_salesorderweeks_${carrierKey}`, JSON.stringify([
+      { id: 'sales-old', fileName: 'sales-tuan-truoc.xlsx', uploadedAt: '2026-09-14T08:00:00.000Z', rows: [{ 'Mã đơn': 'DH020' }] },
+    ]))
+    render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" hidePackingUpload />)
+    await screen.findByText('sales-tuan-truoc.xlsx')
+  })
+
+  it('đã upload Sales Order mới trong phiên -> hiện đúng file mới, không còn trống nữa', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_salestest3'
+    const newRefDate = '2026-09-21T08:00:00.000Z'
+    render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" referenceDate={newRefDate} liveSessionKey={newRefDate} hidePackingUpload />)
+    await screen.findByText(/kéo & thả file xuất spx express/i)
+
+    const spxInput = document.querySelector('input[type="file"][accept=".xlsx,.xls"]')
+    fireEvent.change(spxInput, { target: { files: [buildSpxFile('spx-tuan-moi.xlsx', 'SPXC002')] } })
+    await waitFor(() => expect(screen.getByText('spx-tuan-moi.xlsx')).toBeInTheDocument())
+    await screen.findByText(/chưa có file danh sách thống kê/i)
+
+    const inputs = document.querySelectorAll('input[type="file"][accept=".xlsx,.xls"]')
+    const salesInput = inputs[1]
+    fireEvent.change(salesInput, { target: { files: [buildSalesOrderFile('sales-tuan-moi.xlsx')] } })
+
+    await waitFor(() => expect(screen.getByText('sales-tuan-moi.xlsx')).toBeInTheDocument())
+  })
+})
+
 describe('CarrierStats — strictWeekId: xem báo cáo Đơn SO đã lưu không được tự hiện nhầm file đối soát của tuần khác', () => {
   // Bug thật: báo cáo tuần A được lưu lúc CHƯA có file SPX nào (hoặc file đó sau này bị xoá) -> entry.spxWeekId
   // = null. Xem lại báo cáo tuần A, CarrierPanel nhận weekId=null (không phải "không tìm thấy", mà đúng là
