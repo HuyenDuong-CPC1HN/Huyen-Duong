@@ -193,6 +193,68 @@ describe('CarrierStats — NgoaiSanPanel: Sales Order (Mốc 1) ở tuần mới
   })
 })
 
+function buildViettelFile(fileName, maVanDon) {
+  const aoa = [
+    ['Mã Vận Đơn', 'Mã đơn hàng', 'Trạng Thái', 'Ngày tạo', 'Ngày chuyển trạng thái', 'Tên hàng', 'Đơn chuyển hoàn'],
+    [maVanDon, 'DH030', 'Đang vận chuyển', '', '', '', ''],
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+  return new File([buf], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+}
+
+describe('CarrierStats — "Chờ giao Logistics" ở tuần mới không được tự hiện file của tuần trước', () => {
+  // Xác nhận với người dùng: file "Chờ giao Logistics" CŨNG được upload MỚI MỖI TUẦN (không phải danh sách
+  // dồn dần) — cùng bug/cùng cơ chế fix như panel SPX/Viettel chính và Sales Order: kho carrier_holdweeks_<key>
+  // dùng chung cho mọi tuần, tuần mới (chưa upload trong đúng phiên làm việc) vẫn tự hiện file tuần trước.
+  it('chưa upload Chờ giao Logistics nào trong phiên -> trống, KHÔNG hiện file tuần trước', async () => {
+    const carrierKey = 'unifiedTrial_donDTP_viettel_holdtest1'
+    store.opsStore.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify([
+      { id: 'hold-old', fileName: 'hold-tuan-truoc.xlsx', uploadedAt: '2026-09-14T08:00:00.000Z', rows: [{ 'Mã vận đơn VT': 'VTP999' }] },
+    ]))
+    const newRefDate = '2026-09-21T08:00:00.000Z'
+    render(<CarrierPanel carrierKey={carrierKey} label="Viettel Post" carrierType="viettel" referenceDate={newRefDate} liveSessionKey={newRefDate} showLogisticsHold />)
+    await screen.findByText(/kéo & thả file xuất viettel post/i)
+
+    const vtpInput = document.querySelector('input[type="file"][accept=".xlsx,.xls"]')
+    fireEvent.change(vtpInput, { target: { files: [buildViettelFile('vtp-tuan-moi.xlsx', 'VTP100')] } })
+    await waitFor(() => expect(screen.getByText('vtp-tuan-moi.xlsx')).toBeInTheDocument())
+
+    await screen.findByText(/Chưa có file "Chờ giao Logistics"/i)
+    expect(screen.queryByText('hold-tuan-truoc.xlsx')).not.toBeInTheDocument()
+  })
+
+  it('KHÔNG truyền liveSessionKey (nơi gọi cũ) -> Chờ giao Logistics vẫn dồn tuần như cũ (tái hiện đúng hành vi gốc)', async () => {
+    const carrierKey = 'unifiedTrial_donDTP_viettel_holdtest2'
+    seedViettelWeek(carrierKey)
+    store.opsStore.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify([
+      { id: 'hold-old', fileName: 'hold-tuan-truoc.xlsx', uploadedAt: '2026-09-14T08:00:00.000Z', rows: [{ 'Mã vận đơn VT': 'VTP999' }] },
+    ]))
+    render(<CarrierPanel carrierKey={carrierKey} label="Viettel Post" carrierType="viettel" showLogisticsHold />)
+    await screen.findByText('hold-tuan-truoc.xlsx')
+  })
+
+  it('đã upload Chờ giao Logistics mới trong phiên -> hiện đúng file mới, không còn trống nữa', async () => {
+    const carrierKey = 'unifiedTrial_donDTP_viettel_holdtest3'
+    const newRefDate = '2026-09-21T08:00:00.000Z'
+    render(<CarrierPanel carrierKey={carrierKey} label="Viettel Post" carrierType="viettel" referenceDate={newRefDate} liveSessionKey={newRefDate} showLogisticsHold />)
+    await screen.findByText(/kéo & thả file xuất viettel post/i)
+
+    const vtpInput = document.querySelector('input[type="file"][accept=".xlsx,.xls"]')
+    fireEvent.change(vtpInput, { target: { files: [buildViettelFile('vtp-tuan-moi.xlsx', 'VTP101')] } })
+    await waitFor(() => expect(screen.getByText('vtp-tuan-moi.xlsx')).toBeInTheDocument())
+    await screen.findByText(/Chưa có file "Chờ giao Logistics"/i)
+
+    const inputs = document.querySelectorAll('input[type="file"][accept=".xlsx,.xls"]')
+    const holdInput = inputs[1]
+    fireEvent.change(holdInput, { target: { files: [buildViettelFile('hold-tuan-moi.xlsx', 'VTP101')] } })
+
+    await waitFor(() => expect(screen.getByText('hold-tuan-moi.xlsx')).toBeInTheDocument())
+  })
+})
+
 describe('CarrierStats — strictWeekId: xem báo cáo Đơn SO đã lưu không được tự hiện nhầm file đối soát của tuần khác', () => {
   // Bug thật: báo cáo tuần A được lưu lúc CHƯA có file SPX nào (hoặc file đó sau này bị xoá) -> entry.spxWeekId
   // = null. Xem lại báo cáo tuần A, CarrierPanel nhận weekId=null (không phải "không tìm thấy", mà đúng là
