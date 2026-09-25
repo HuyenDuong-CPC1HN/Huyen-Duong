@@ -790,8 +790,13 @@ function buildHoldLookupSet(holdWeeks) {
   return set
 }
 
-function selectActiveWeek(weeks, weekId, referenceDate) {
+// strictWeekId: dùng khi xem 1 báo cáo ĐÃ LƯU (weekId lẽ ra phải có, đã ghim sẵn lúc lưu) — nếu weekId lại
+// rỗng (lúc lưu chưa có file đối soát nào, hoặc file đó sau này bị xoá), KHÔNG được tự "khớp theo ngày gần
+// nhất" nữa (sẽ vô tình hiện nhầm file của tuần KHÁC, y hệt bug liveSessionKey ở trên) — trả về trống, để
+// đúng là "chưa có dữ liệu đối soát cho tuần này" thay vì hiện nhầm số của tuần khác.
+function selectActiveWeek(weeks, weekId, referenceDate, strictWeekId = false) {
   if (weekId) return weeks.find(w => w.id === weekId) || null
+  if (strictWeekId) return null
   return closestByDate(weeks, referenceDate)
 }
 
@@ -835,7 +840,7 @@ function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, 
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => carrierLookupMap(frozenLookup, internalData),
@@ -891,7 +896,8 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   // trống — còn lại (nơi gọi cũ, không dùng liveSessionKey) lấy file có ngày upload gần nhất với referenceDate
   const state = isLiveSession
     ? (anchoredWeekId ? weeks.find(w => w.id === anchoredWeekId) || null : null)
-    : selectActiveWeek(weeks, weekId, referenceDate)
+    : selectActiveWeek(weeks, weekId, referenceDate, strictWeekId)
+  const missingFrozenWeek = strictWeekId && !weekId && !state
 
   const [colFilters, setColFilters] = useState({})
   const [pageSize, setPageSize] = useState('50')
@@ -1017,6 +1023,18 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     excludeKey => filterCarrierRows(baseRows, activeFilters, search, excludeKey),
     [baseRows, activeFilters, search]
   )
+
+  // Báo cáo đã lưu nhưng không ghim được file đối soát nào lúc lưu (chưa upload, hoặc file đó sau này bị
+  // xoá) — không cho upload bù vào đây (sẽ không sửa được số liệu tuần đã đóng băng), chỉ báo rõ để khỏi
+  // hiểu nhầm là mất số liệu: số "Tổng đơn ngoại sàn/Đối tác VC" ở khung trên vẫn đúng, không phụ thuộc chỗ này.
+  if (missingFrozenWeek) {
+    return (
+      <div className="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+        Chưa có dữ liệu đối soát {label} chi tiết cho tuần này (lúc lưu báo cáo chưa upload file, hoặc file đó sau này đã bị xoá).
+        <br />Số tổng ở khung phía trên vẫn đúng, không bị ảnh hưởng.
+      </div>
+    )
+  }
 
   if (!state) {
     return (

@@ -121,6 +121,43 @@ describe('CarrierStats — liveSessionKey: màn hình tuần mới (chưa lưu) 
   })
 })
 
+describe('CarrierStats — strictWeekId: xem báo cáo Đơn SO đã lưu không được tự hiện nhầm file đối soát của tuần khác', () => {
+  // Bug thật: báo cáo tuần A được lưu lúc CHƯA có file SPX nào (hoặc file đó sau này bị xoá) -> entry.spxWeekId
+  // = null. Xem lại báo cáo tuần A, CarrierPanel nhận weekId=null (không phải "không tìm thấy", mà đúng là
+  // không có gì để ghim) -> nếu vẫn rơi về closestByDate như đường live, sẽ tự hiện nhầm bất kỳ file SPX nào
+  // đang có sẵn (vd file mới nhất vừa upload cho tuần KHÁC) -> 2 báo cáo tuần khác nhau hiện y hệt cùng 1 file.
+  it('weekId null (chưa ghim được lúc lưu) + strictWeekId -> hiện thông báo "chưa có dữ liệu", KHÔNG tự hiện file của tuần khác', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_stricttest1'
+    store.opsStore.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify([
+      { id: 'spx-khac-tuan', fileName: 'spx-tuan-khac.xlsx', uploadedAt: new Date().toISOString(), rows: [] },
+    ]))
+    render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" internalData={[]} weekId={null} frozenLookup={{}} strictWeekId />)
+
+    await screen.findByText(/chưa có dữ liệu đối soát/i)
+    expect(screen.queryByText('spx-tuan-khac.xlsx')).not.toBeInTheDocument()
+  })
+
+  it('KHÔNG truyền strictWeekId (nơi gọi cũ) -> weekId null vẫn khớp theo ngày gần nhất như trước (tái hiện đúng bug gốc)', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_stricttest2'
+    store.opsStore.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify([
+      { id: 'spx-khac-tuan', fileName: 'spx-tuan-khac.xlsx', uploadedAt: new Date().toISOString(), rows: [] },
+    ]))
+    render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" internalData={[]} weekId={null} frozenLookup={{}} />)
+    await screen.findByText('spx-tuan-khac.xlsx')
+  })
+
+  it('weekId có giá trị hợp lệ + strictWeekId -> vẫn hiện đúng file đã ghim như bình thường', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_stricttest3'
+    store.opsStore.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify([
+      { id: 'spx-dung-tuan', fileName: 'spx-dung-tuan.xlsx', uploadedAt: new Date().toISOString(), rows: [] },
+      { id: 'spx-khac-tuan', fileName: 'spx-tuan-khac.xlsx', uploadedAt: new Date().toISOString(), rows: [] },
+    ]))
+    render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" internalData={[]} weekId="spx-dung-tuan" frozenLookup={{}} strictWeekId />)
+    await screen.findByText('spx-dung-tuan.xlsx')
+    expect(screen.queryByText('spx-tuan-khac.xlsx')).not.toBeInTheDocument()
+  })
+})
+
 describe('CarrierStats — upload "Chờ giao Logistics" cho Viettel Post Đơn DTP', () => {
   // carrierKey ở tab "Gộp kênh" có tiền tố "unifiedTrial_" (khác "donDTP_viettel" ở ThongKeGiaoHang/
   // SheetReportPanel) nên không tự suy đoán được là kênh Đơn DTP từ carrierKey — nếu không truyền

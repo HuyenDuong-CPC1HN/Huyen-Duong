@@ -315,6 +315,7 @@ function DonSanSnapshotView({ entry }) {
           internalData: [],
           weekId: entry.spxWeekId,
           frozenLookup: entry.carrierLookup,
+          strictWeekId: true,
           hidePackingUpload: true,
           salesFileNoun: 'Sales Order',
           ngoaiSanNote: NGOAI_SAN_NOTE,
