@@ -48,6 +48,11 @@ export function computeWeekReportFromUnifiedTrial({ donSOEntry, donTTEntry }) {
 
   return {
     grandTotal: totalC + totalDTP + totalTMDT, totalC, totalDTP, totalTMDT,
+    // Tổng "Đơn ngoại sàn" lấy từ ngoaiSanCount đã lưu CHẮC CHẮN trong entry Đơn SO (luôn có, không phụ
+    // thuộc gì thêm) — KHÔNG lấy từ spxC.total (chỉ có khi tuần đó còn ghép đúng file đối soát chi tiết
+    // SPX qua spxWeekId, dễ mất nếu spxWeekId không resolve được). spxC vẫn giữ để tính chi tiết Mốc/dvcPct
+    // (buildDonSanNarrative) — chỗ đó ĐÚNG là có thể chưa có dữ liệu, khác với tổng đơn (luôn có sẵn).
+    totalNgoaiSan: donSOEntry?.ngoaiSanCount || 0,
     tructiepTotalC: donC?.trucTiepBadge || 0, tructiepTotalDTP: donDTP?.trucTiepBadge || 0,
     // Gộp kênh chỉ có ô "chưa gửi chành" (đã gộp vào chanhXeBadge), chưa có ô "chưa giao chành" riêng như
     // nguồn cũ — không có gì để map, để 0 (không ảnh hưởng gì khác, field này không được 2 báo cáo đọc).
