@@ -187,9 +187,17 @@ export function snapshotCarrierLookup(internalData) {
 }
 
 // Lấy tổng đơn theo file VTP/SPX có ngày upload gần nhất với referenceDate
-export function getCarrierFileTotal(carrierKey, carrierType, internalData, referenceDate = null) {
+// requireSessionKey: dùng cho tab "Gộp kênh" (kho carrier_weeks_<key> dùng chung, không tách theo tuần) —
+// chỉ lấy đúng file đã upload trong đúng phiên làm việc hiện tại (sessionKey khớp referenceDate, xem
+// CarrierPanel/parseFile), KHÔNG tự "khớp theo ngày gần nhất" nữa. Thiếu cờ này thì tuần mới chưa upload
+// vẫn có thể tự hiện nhầm số của tuần khác (y hệt bug đã sửa ở CarrierPanel, nhưng ở đây tính riêng cho
+// KPI "Tổng đơn"/"Đối tác VC" qua computeChannelSnapshot, không đi qua CarrierPanel). Mặc định false để
+// không đổi hành vi 2 tab sản xuất cũ (ThongKeGiaoHang/ThongKeDoiTac) — nơi đó không có khái niệm phiên.
+export function getCarrierFileTotal(carrierKey, carrierType, internalData, referenceDate = null, requireSessionKey = false) {
   const weeks = readCarrierWeeks(carrierKey)
-  const entry = closestByDate(weeks, referenceDate)
+  const entry = requireSessionKey
+    ? weeks.find(w => w.sessionKey === referenceDate) || null
+    : closestByDate(weeks, referenceDate)
   return entry ? buildStatsForWeek(entry, carrierKey, carrierType, internalData) : null
 }
 
