@@ -10,9 +10,18 @@ export const NGOAI_SAN_CARRIER_KEY_UNIFIED = 'unifiedTrial_donSO_spx'
 // carrierLookup đã đóng băng thay), đúng cách statsForCarrierWeekId trong TongDonTab.jsx làm cho nguồn cũ.
 function carrierStatsFromChannel(channelSnapshot, channelKey, carrierType) {
   const weekId = carrierType === 'viettel' ? channelSnapshot?.viettelWeekId : channelSnapshot?.spxWeekId
-  if (!weekId) return null
   const key = `unifiedTrial_${channelKey}_${carrierType}`
-  return getCarrierFileStats(key, carrierType, [], weekId, channelSnapshot?.carrierLookup || null)
+  const resolved = weekId ? getCarrierFileStats(key, carrierType, [], weekId, channelSnapshot?.carrierLookup || null) : null
+  if (resolved) return resolved
+  // Viettel Post: viettelCount đã đóng băng sẵn trong channelSnapshot lúc lưu (luôn có, không phụ thuộc
+  // gì thêm) — dùng làm fallback khi không resolve được đúng tuần VTP (weekId rỗng hoặc file đã bị thay/xoá),
+  // tránh hiện sai "0 đơn" như bug totalNgoaiSan (PR #53) dù dữ liệu KHÔNG hề mất. Không áp dụng cho SPX:
+  // SPX đã có totalNgoaiSan riêng làm tổng đáng tin cậy, giữ spxC null khi thiếu để buildDonSanNarrative biết
+  // đúng là "chưa có dữ liệu đối soát chi tiết" (khác với Viettel Post ở đây không có tổng nào khác thay thế).
+  if (carrierType === 'viettel' && channelSnapshot?.viettelCount != null) {
+    return { total: channelSnapshot.viettelCount, stats: null }
+  }
+  return null
 }
 
 function bucketsOf(trucTiepStats) {
