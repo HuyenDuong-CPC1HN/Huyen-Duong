@@ -58,3 +58,41 @@ describe('CarrierStats — NgoaiSanPanel (SPX): bấm badge "chưa tìm thấy M
     await waitFor(() => expect(screen.queryByRole('button', { name: /đang chỉ hiện đơn chưa tìm thấy/i })).not.toBeInTheDocument())
   })
 })
+
+function seedViettelWeek(carrierKey) {
+  const rows = [
+    { 'Mã Vận Đơn': 'VTP001', 'Mã đơn hàng': 'DH001', 'Trạng Thái': 'Đang vận chuyển', 'Ngày tạo': '', 'Ngày chuyển trạng thái': '', 'Tên hàng': '', 'Đơn chuyển hoàn': '' },
+  ]
+  store.opsStore.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify([
+    { id: 'w1', fileName: 'vtp.xlsx', uploadedAt: new Date().toISOString(), rows },
+  ]))
+}
+
+describe('CarrierStats — upload "Chờ giao Logistics" cho Viettel Post Đơn DTP', () => {
+  // carrierKey ở tab "Gộp kênh" có tiền tố "unifiedTrial_" (khác "donDTP_viettel" ở ThongKeGiaoHang/
+  // SheetReportPanel) nên không tự suy đoán được là kênh Đơn DTP từ carrierKey — nếu không truyền
+  // showLogisticsHold, mục upload "Chờ giao Logistics" biến mất dù đúng là kênh Đơn DTP.
+  it('carrierKey không có tiền tố "donDTP" + không truyền showLogisticsHold -> ẩn mất mục "Chờ giao Logistics" (tái hiện bug)', async () => {
+    const carrierKey = 'unifiedTrial_donDTP_viettel'
+    seedViettelWeek(carrierKey)
+    render(<CarrierPanel carrierKey={carrierKey} label="Viettel Post" carrierType="viettel" />)
+    await screen.findByText('vtp.xlsx')
+    expect(screen.queryByText(/Chờ giao Logistics/i)).not.toBeInTheDocument()
+  })
+
+  it('truyền showLogisticsHold=true -> luôn hiện mục "Chờ giao Logistics" dù carrierKey không có tiền tố "donDTP"', async () => {
+    const carrierKey = 'unifiedTrial_donDTP_viettel'
+    seedViettelWeek(carrierKey)
+    render(<CarrierPanel carrierKey={carrierKey} label="Viettel Post" carrierType="viettel" showLogisticsHold />)
+    await screen.findByText('vtp.xlsx')
+    expect(screen.getByText(/Chưa có file "Chờ giao Logistics"/i)).toBeInTheDocument()
+  })
+
+  it('carrierKey đúng tiền tố "donDTP" vẫn hiện mục "Chờ giao Logistics" như cũ khi không truyền showLogisticsHold', async () => {
+    const carrierKey = 'donDTP_viettel'
+    seedViettelWeek(carrierKey)
+    render(<CarrierPanel carrierKey={carrierKey} label="Viettel Post" carrierType="viettel" />)
+    await screen.findByText('vtp.xlsx')
+    expect(screen.getByText(/Chưa có file "Chờ giao Logistics"/i)).toBeInTheDocument()
+  })
+})

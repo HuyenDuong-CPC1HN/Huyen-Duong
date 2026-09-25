@@ -160,9 +160,13 @@ export default function UnifiedTrialChannelDetail({
   const trucTiepChuaGiaoPct = trucTiepTotal > 0 ? Math.round((khBreakdownSum / trucTiepTotal) * 100) : 0
   const pct = (part) => total ? Math.round((part / total) * 100) : 0
 
+  // carrierKey ở đây có tiền tố "unifiedTrial_" (khác "donDTP_viettel" của ThongKeGiaoHang/SheetReportPanel)
+  // nên CarrierPanel không tự suy đoán được có phải kênh Đơn DTP không từ carrierKey — truyền thẳng
+  // showLogisticsHold theo đúng channelKey (từng khiến upload "Chờ giao Logistics" biến mất ở tab Gộp kênh).
+  const showLogisticsHold = channelKey === 'donDTP'
   const viettelPanelProps = readOnly
-    ? { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: [], weekId: viettelWeekId, frozenLookup: carrierLookup }
-    : { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: validData, referenceDate }
+    ? { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: [], weekId: viettelWeekId, frozenLookup: carrierLookup, showLogisticsHold }
+    : { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: validData, referenceDate, showLogisticsHold }
   const spxPanelProps = readOnly
     ? { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: [], weekId: spxWeekId, frozenLookup: carrierLookup }
     : { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: validData, referenceDate }

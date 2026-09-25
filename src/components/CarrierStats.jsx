@@ -835,7 +835,7 @@ function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, 
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => carrierLookupMap(frozenLookup, internalData),
@@ -883,8 +883,13 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   const minTableWidthRef = useRef(0)
 
   const NOTE_COL_WIDTH = 220
-  // Đối chiếu "Chờ giao Logistics" chỉ áp dụng cho Đơn DTP — Đơn C không cần kiểm tra mục này
-  const showNoteCol = carrierType === 'viettel' && carrierKey.startsWith('donDTP')
+  // Đối chiếu "Chờ giao Logistics" chỉ áp dụng cho Đơn DTP — Đơn C không cần kiểm tra mục này. Suy đoán
+  // theo tiền tố carrierKey khi không có showLogisticsHold truyền vào (tương thích ngược cho các nơi gọi
+  // cũ như ThongKeGiaoHang/SheetReportPanel, carrierKey luôn dạng "donDTP_viettel") — nơi nào đặt tên
+  // carrierKey khác (vd "unifiedTrial_donDTP_viettel" ở tab Gộp kênh) PHẢI truyền showLogisticsHold rõ
+  // ràng, không suy đoán được từ tiền tố nữa (từng bị mất hẳn upload "Chờ giao Logistics" ở tab Gộp kênh
+  // vì carrierKey không khớp tiền tố "donDTP" dù đúng là kênh Đơn DTP).
+  const showNoteCol = showLogisticsHold ?? (carrierType === 'viettel' && carrierKey.startsWith('donDTP'))
   const totalTableWidth = Object.values(colWidths).reduce((a, b) => a + b, 0) + (showNoteCol ? NOTE_COL_WIDTH : 0)
   minTableWidthRef.current = Math.max(minTableWidthRef.current, totalTableWidth)
   const stableWidth = minTableWidthRef.current
