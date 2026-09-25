@@ -873,29 +873,6 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   const [search, setSearch] = useState('')
   const [holdNotes, setHoldNote] = useHoldNotes(carrierKey)
 
-  // File đối chiếu "Chờ giao Logistics" — xác nhận đơn "Đang lấy hàng" có đang thực sự xử lý không.
-  // Mỗi lần upload là 1 tuần độc lập, không ghi đè — mã tracking được gộp từ TẤT CẢ các tuần đã upload để đối chiếu.
-  const [holdWeeks, setHoldWeeks] = useState(() => readHoldWeeks(carrierKey))
-  const holdLookupSet = useMemo(() => buildHoldLookupSet(holdWeeks), [holdWeeks])
-
-  const parseHoldFile = async (file) => {
-    if (!file) return
-    try {
-      const wb = await readWorkbook(file)
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
-      addHoldWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
-      setHoldWeeks(readHoldWeeks(carrierKey))
-    } catch {
-      setError('Không đọc được file Chờ giao Logistics. Vui lòng kiểm tra lại.')
-    }
-  }
-
-  const removeHoldWeekEntry = (weekId) => {
-    removeHoldWeek(carrierKey, weekId)
-    setHoldWeeks(readHoldWeeks(carrierKey))
-  }
-
   const [weeks, setWeeks] = useState(() => readCarrierWeeks(carrierKey))
 
   // liveSessionKey: dùng cho màn hình ĐANG LÀM VIỆC (chưa lưu báo cáo) ở tab "Gộp kênh" — carrierKey ở
@@ -918,6 +895,46 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     ? (anchoredWeekId ? weeks.find(w => w.id === anchoredWeekId) || null : null)
     : selectActiveWeek(weeks, weekId, referenceDate, strictWeekId)
   const missingFrozenWeek = strictWeekId && !weekId && !state
+
+  // File đối chiếu "Chờ giao Logistics" — xác nhận đơn "Đang lấy hàng" có đang thực sự xử lý không. Đã xác
+  // nhận với người dùng: file này CŨNG được upload MỚI MỖI TUẦN (không phải danh sách dồn dần) — áp dụng
+  // đúng cơ chế liveSessionKey như panel SPX/Viettel chính và Sales Order: tuần mới (chưa upload trong đúng
+  // phiên làm việc) phải trống, không được tự hiện file Chờ giao Logistics còn sót của tuần TRƯỚC (kho
+  // carrier_holdweeks_<key> dùng chung, không tách theo tuần).
+  const [holdWeeks, setHoldWeeks] = useState(() => readHoldWeeks(carrierKey))
+  const [holdSessionAnchor, setHoldSessionAnchor] = useState(() => ({ key: liveSessionKey, ids: new Set() }))
+  if (isLiveSession && liveSessionKey !== holdSessionAnchor.key) {
+    setHoldSessionAnchor({ key: liveSessionKey, ids: new Set() })
+  }
+  const holdSessionIds = (isLiveSession && liveSessionKey === holdSessionAnchor.key) ? holdSessionAnchor.ids : null
+  const effectiveHoldWeeks = isLiveSession ? holdWeeks.filter(w => holdSessionIds?.has(w.id)) : holdWeeks
+  const holdLookupSet = useMemo(() => buildHoldLookupSet(effectiveHoldWeeks), [effectiveHoldWeeks])
+
+  const parseHoldFile = async (file) => {
+    if (!file) return
+    try {
+      const wb = await readWorkbook(file)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+      const entry = addHoldWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+      setHoldWeeks(readHoldWeeks(carrierKey))
+      if (isLiveSession) setHoldSessionAnchor(a => ({ key: liveSessionKey, ids: new Set([...a.ids, entry.id]) }))
+    } catch {
+      setError('Không đọc được file Chờ giao Logistics. Vui lòng kiểm tra lại.')
+    }
+  }
+
+  const removeHoldWeekEntry = (weekId) => {
+    removeHoldWeek(carrierKey, weekId)
+    setHoldWeeks(readHoldWeeks(carrierKey))
+    if (isLiveSession) {
+      setHoldSessionAnchor(a => {
+        const next = new Set(a.ids)
+        next.delete(weekId)
+        return { key: liveSessionKey, ids: next }
+      })
+    }
+  }
 
   const [colFilters, setColFilters] = useState({})
   const [pageSize, setPageSize] = useState('50')
@@ -1127,7 +1144,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       {showNoteCol && (
         <div className="mb-5">
           <div className="flex items-center gap-2 flex-wrap">
-            {holdWeeks.length === 0 && (
+            {effectiveHoldWeeks.length === 0 && (
               <span className="text-xs text-gray-400">Chưa có file "Chờ giao Logistics" để đối chiếu đơn "Đang lấy hàng"</span>
             )}
             <button
@@ -1138,10 +1155,10 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
               Upload tuần Chờ giao Logistics
             </button>
             <input ref={holdInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseHoldFile(e.target.files[0])} />
-            {holdWeeks.length > 0 && (
-              <span className="text-xs text-gray-400">Tổng {holdLookupSet.size} mã đối chiếu từ {holdWeeks.length} tuần đã upload</span>
+            {effectiveHoldWeeks.length > 0 && (
+              <span className="text-xs text-gray-400">Tổng {holdLookupSet.size} mã đối chiếu từ {effectiveHoldWeeks.length} tuần đã upload</span>
             )}
-            {holdWeeks.length > 0 && (
+            {effectiveHoldWeeks.length > 0 && (
               unmatchedRows.length > 0 ? (
                 <button
                   onClick={() => { setOnlyUnmatched(true); setTableExpanded(true) }}
@@ -1158,9 +1175,9 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
               )
             )}
           </div>
-          {holdWeeks.length > 0 && (
+          {effectiveHoldWeeks.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {holdWeeks.map(w => (
+              {effectiveHoldWeeks.map(w => (
                 <span key={w.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
                   <FileSpreadsheet size={12} />
                   <span className="max-w-48 truncate" title={w.fileName}>{w.fileName}</span>
