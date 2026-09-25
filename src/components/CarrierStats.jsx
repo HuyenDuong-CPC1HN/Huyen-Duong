@@ -301,12 +301,24 @@ const DEFAULT_NGOAI_SAN_NOTE = (
   </>
 )
 
-function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE }) {
+function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE, liveSessionKey = null }) {
   const salesInputRef = useRef()
   const packingInputRef = useRef()
   const [error, setError] = useState('')
   const [salesWeeks, setSalesWeeks] = useState(() => readSalesOrderWeeks(carrierKey))
   const [packingWeeks, setPackingWeeks] = useState(() => readPackingWeeks(carrierKey))
+
+  // liveSessionKey: giống hệt cơ chế ở CarrierPanel (panel SPX chính) — Sales Order ở đây được xác nhận là
+  // upload MỚI MỖI TUẦN (không phải danh sách dồn dần), nên màn hình tuần MỚI (chưa upload Sales Order nào
+  // trong đúng phiên làm việc này) phải trống hẳn, không được tự hiện file Sales Order còn sót lại của tuần
+  // TRƯỚC (kho carrier_salesorderweeks_<key> vốn dùng chung, không tách theo tuần).
+  const isLiveSession = liveSessionKey !== null
+  const [salesSessionAnchor, setSalesSessionAnchor] = useState(() => ({ key: liveSessionKey, ids: new Set() }))
+  if (isLiveSession && liveSessionKey !== salesSessionAnchor.key) {
+    setSalesSessionAnchor({ key: liveSessionKey, ids: new Set() })
+  }
+  const salesSessionIds = (isLiveSession && liveSessionKey === salesSessionAnchor.key) ? salesSessionAnchor.ids : null
+  const effectiveSalesWeeks = isLiveSession ? salesWeeks.filter(w => salesSessionIds?.has(w.id)) : salesWeeks
   const [expanded, setExpanded] = useState(false)
   const [onlyProblem, setOnlyProblem] = useState(false)
   const [onlyKhongKhop, setOnlyKhongKhop] = useState(false)
@@ -323,7 +335,7 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
     setExpanded(true)
   }
 
-  const salesLookup = useMemo(() => buildSalesOrderLookup(salesWeeks), [salesWeeks])
+  const salesLookup = useMemo(() => buildSalesOrderLookup(effectiveSalesWeeks), [effectiveSalesWeeks])
   const packingLookup = useMemo(() => buildPackingLookup(packingWeeks), [packingWeeks])
   const excludedSet = useMemo(() => new Set(excluded), [excluded])
   const { rows, stats } = useMemo(
@@ -342,8 +354,9 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
         setError('Không tìm thấy cột "Mã đơn" trong file. Vui lòng kiểm tra lại.')
         return
       }
-      addSalesOrderWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })
+      const entry = addSalesOrderWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })
       setSalesWeeks(readSalesOrderWeeks(carrierKey))
+      if (isLiveSession) setSalesSessionAnchor(a => ({ key: liveSessionKey, ids: new Set([...a.ids, entry.id]) }))
     } catch {
       setError('Không đọc được file Danh sách thống kê. Vui lòng kiểm tra lại.')
     }
@@ -371,6 +384,13 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
   const removeSalesWeekEntry = (weekId) => {
     removeSalesOrderWeek(carrierKey, weekId)
     setSalesWeeks(readSalesOrderWeeks(carrierKey))
+    if (isLiveSession) {
+      setSalesSessionAnchor(a => {
+        const next = new Set(a.ids)
+        next.delete(weekId)
+        return { key: liveSessionKey, ids: next }
+      })
+    }
   }
   const removePackingWeekEntry = (weekId) => {
     removePackingWeek(carrierKey, weekId)
@@ -423,19 +443,19 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
           </>
         )}
       </div>
-      {(salesWeeks.length === 0 || (!hidePackingUpload && packingWeeks.length === 0)) && (
+      {(effectiveSalesWeeks.length === 0 || (!hidePackingUpload && packingWeeks.length === 0)) && (
         <p className="mb-3 text-xs text-gray-400">
-          {salesWeeks.length === 0 && `Chưa có file ${salesFileNoun}. `}
+          {effectiveSalesWeeks.length === 0 && `Chưa có file ${salesFileNoun}. `}
           {!hidePackingUpload && packingWeeks.length === 0 && 'Chưa có file bốc đóng (sẽ không tính được mốc Đóng kiện/SPX lấy hàng).'}
         </p>
       )}
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
 
-      {(salesWeeks.length > 0 || packingWeeks.length > 0) && (
+      {(effectiveSalesWeeks.length > 0 || packingWeeks.length > 0) && (
         <>
-          {salesWeeks.length > 0 && (
+          {effectiveSalesWeeks.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
-              {salesWeeks.map(w => (
+              {effectiveSalesWeeks.map(w => (
                 <span key={w.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
                   <FileSpreadsheet size={12} />
                   <span className="max-w-48 truncate" title={w.fileName}>{w.fileName}</span>
@@ -1101,7 +1121,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       {carrierType === 'spx' && (
         frozenNgoaiSan
           ? <FrozenNgoaiSanPanel frozen={frozenNgoaiSan} />
-          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} salesFileNoun={salesFileNoun} note={ngoaiSanNote} />
+          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} salesFileNoun={salesFileNoun} note={ngoaiSanNote} liveSessionKey={liveSessionKey} />
       )}
 
       {showNoteCol && (
