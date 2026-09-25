@@ -311,14 +311,12 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
   // liveSessionKey: giống hệt cơ chế ở CarrierPanel (panel SPX chính) — Sales Order ở đây được xác nhận là
   // upload MỚI MỖI TUẦN (không phải danh sách dồn dần), nên màn hình tuần MỚI (chưa upload Sales Order nào
   // trong đúng phiên làm việc này) phải trống hẳn, không được tự hiện file Sales Order còn sót lại của tuần
-  // TRƯỚC (kho carrier_salesorderweeks_<key> vốn dùng chung, không tách theo tuần).
+  // TRƯỚC (kho carrier_salesorderweeks_<key> vốn dùng chung, không tách theo tuần). Đánh dấu sessionKey
+  // thẳng vào entry lúc upload (thay vì giữ tạm trong 1 state riêng) để BỀN qua remount — khung "SPX Express"
+  // bọc ngoài là SectionCard thu gọn được, thu gọn lại là unmount hẳn NgoaiSanPanel, state tạm sẽ mất dù
+  // dữ liệu vẫn còn trong storage.
   const isLiveSession = liveSessionKey !== null
-  const [salesSessionAnchor, setSalesSessionAnchor] = useState(() => ({ key: liveSessionKey, ids: new Set() }))
-  if (isLiveSession && liveSessionKey !== salesSessionAnchor.key) {
-    setSalesSessionAnchor({ key: liveSessionKey, ids: new Set() })
-  }
-  const salesSessionIds = (isLiveSession && liveSessionKey === salesSessionAnchor.key) ? salesSessionAnchor.ids : null
-  const effectiveSalesWeeks = isLiveSession ? salesWeeks.filter(w => salesSessionIds?.has(w.id)) : salesWeeks
+  const effectiveSalesWeeks = isLiveSession ? salesWeeks.filter(w => w.sessionKey === liveSessionKey) : salesWeeks
   const [expanded, setExpanded] = useState(false)
   const [onlyProblem, setOnlyProblem] = useState(false)
   const [onlyKhongKhop, setOnlyKhongKhop] = useState(false)
@@ -354,9 +352,10 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
         setError('Không tìm thấy cột "Mã đơn" trong file. Vui lòng kiểm tra lại.')
         return
       }
-      const entry = addSalesOrderWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows })
+      const newEntry = { fileName: file.name, uploadedAt: new Date().toISOString(), rows: fileRows }
+      if (isLiveSession) newEntry.sessionKey = liveSessionKey
+      addSalesOrderWeek(carrierKey, newEntry)
       setSalesWeeks(readSalesOrderWeeks(carrierKey))
-      if (isLiveSession) setSalesSessionAnchor(a => ({ key: liveSessionKey, ids: new Set([...a.ids, entry.id]) }))
     } catch {
       setError('Không đọc được file Danh sách thống kê. Vui lòng kiểm tra lại.')
     }
@@ -384,13 +383,6 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
   const removeSalesWeekEntry = (weekId) => {
     removeSalesOrderWeek(carrierKey, weekId)
     setSalesWeeks(readSalesOrderWeeks(carrierKey))
-    if (isLiveSession) {
-      setSalesSessionAnchor(a => {
-        const next = new Set(a.ids)
-        next.delete(weekId)
-        return { key: liveSessionKey, ids: next }
-      })
-    }
   }
   const removePackingWeekEntry = (weekId) => {
     removePackingWeek(carrierKey, weekId)
@@ -879,20 +871,17 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   // đó là kho DÙNG CHUNG cho mọi tuần (không tách riêng theo tuần), nên nếu vẫn "khớp theo ngày gần nhất"
   // như trước, màn hình tuần MỚI (chưa upload file đối soát nào) sẽ tự hiện nhầm file của tuần TRƯỚC (file
   // duy nhất có sẵn) — người dùng tưởng đã có file tuần này, dễ bấm xoá nhầm tưởng "dọn file cũ". Khi có
-  // liveSessionKey: chỉ hiện file nếu ĐÃ upload file mới trong đúng phiên làm việc này (key đổi = phiên mới,
-  // vd người dùng vừa upload file Đơn SO/Đơn truyền thống mới) — không tự fallback theo ngày gần nhất nữa.
+  // liveSessionKey: chỉ hiện file có sessionKey khớp đúng phiên làm việc này (đánh dấu thẳng vào entry lúc
+  // upload, xem parseFile) — không tự fallback theo ngày gần nhất nữa. Đánh dấu thẳng vào entry (thay vì giữ
+  // tạm trong 1 state riêng) để BỀN qua remount — khung "Giao qua đối tác vận chuyển"/"Viettel Post" là
+  // SectionCard thu gọn được, thu gọn lại là unmount hẳn CarrierPanel, state tạm sẽ mất dù dữ liệu vẫn còn.
   // weekId (xem báo cáo đã lưu) và các nơi gọi cũ không truyền liveSessionKey thì hành vi giữ nguyên y hệt.
-  const [sessionAnchor, setSessionAnchor] = useState(() => ({ key: liveSessionKey, weekId: null }))
-  if (liveSessionKey !== null && liveSessionKey !== sessionAnchor.key) {
-    setSessionAnchor({ key: liveSessionKey, weekId: null })
-  }
-  const anchoredWeekId = (liveSessionKey !== null && liveSessionKey === sessionAnchor.key) ? sessionAnchor.weekId : null
   const isLiveSession = liveSessionKey !== null && !weekId
   // Tuần đang xem: nếu có weekId cụ thể (vd đang xem 1 báo cáo Đơn C/DTP đã lưu) thì lấy đúng file đó;
   // đang trong phiên làm việc (liveSessionKey) thì chỉ lấy đúng file đã upload trong phiên này, không thì
   // trống — còn lại (nơi gọi cũ, không dùng liveSessionKey) lấy file có ngày upload gần nhất với referenceDate
   const state = isLiveSession
-    ? (anchoredWeekId ? weeks.find(w => w.id === anchoredWeekId) || null : null)
+    ? (weeks.find(w => w.sessionKey === liveSessionKey) || null)
     : selectActiveWeek(weeks, weekId, referenceDate, strictWeekId)
   const missingFrozenWeek = strictWeekId && !weekId && !state
 
@@ -900,14 +889,10 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   // nhận với người dùng: file này CŨNG được upload MỚI MỖI TUẦN (không phải danh sách dồn dần) — áp dụng
   // đúng cơ chế liveSessionKey như panel SPX/Viettel chính và Sales Order: tuần mới (chưa upload trong đúng
   // phiên làm việc) phải trống, không được tự hiện file Chờ giao Logistics còn sót của tuần TRƯỚC (kho
-  // carrier_holdweeks_<key> dùng chung, không tách theo tuần).
+  // carrier_holdweeks_<key> dùng chung, không tách theo tuần). Đánh dấu sessionKey thẳng vào entry (xem
+  // comment ở "weeks" phía trên) để bền qua remount khi thu gọn/mở rộng khung.
   const [holdWeeks, setHoldWeeks] = useState(() => readHoldWeeks(carrierKey))
-  const [holdSessionAnchor, setHoldSessionAnchor] = useState(() => ({ key: liveSessionKey, ids: new Set() }))
-  if (isLiveSession && liveSessionKey !== holdSessionAnchor.key) {
-    setHoldSessionAnchor({ key: liveSessionKey, ids: new Set() })
-  }
-  const holdSessionIds = (isLiveSession && liveSessionKey === holdSessionAnchor.key) ? holdSessionAnchor.ids : null
-  const effectiveHoldWeeks = isLiveSession ? holdWeeks.filter(w => holdSessionIds?.has(w.id)) : holdWeeks
+  const effectiveHoldWeeks = isLiveSession ? holdWeeks.filter(w => w.sessionKey === liveSessionKey) : holdWeeks
   const holdLookupSet = useMemo(() => buildHoldLookupSet(effectiveHoldWeeks), [effectiveHoldWeeks])
 
   const parseHoldFile = async (file) => {
@@ -916,9 +901,10 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       const wb = await readWorkbook(file)
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
-      const entry = addHoldWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+      const newEntry = { fileName: file.name, uploadedAt: new Date().toISOString(), rows }
+      if (isLiveSession) newEntry.sessionKey = liveSessionKey
+      addHoldWeek(carrierKey, newEntry)
       setHoldWeeks(readHoldWeeks(carrierKey))
-      if (isLiveSession) setHoldSessionAnchor(a => ({ key: liveSessionKey, ids: new Set([...a.ids, entry.id]) }))
     } catch {
       setError('Không đọc được file Chờ giao Logistics. Vui lòng kiểm tra lại.')
     }
@@ -927,13 +913,6 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   const removeHoldWeekEntry = (weekId) => {
     removeHoldWeek(carrierKey, weekId)
     setHoldWeeks(readHoldWeeks(carrierKey))
-    if (isLiveSession) {
-      setHoldSessionAnchor(a => {
-        const next = new Set(a.ids)
-        next.delete(weekId)
-        return { key: liveSessionKey, ids: next }
-      })
-    }
   }
 
   const [colFilters, setColFilters] = useState({})
@@ -992,9 +971,10 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
         setError('Không tìm thấy dữ liệu đơn hàng trong file.')
         return
       }
-      const { entry, droppedCount } = addCarrierWeek(carrierKey, { fileName: file.name, uploadedAt: new Date().toISOString(), rows })
+      const newEntry = { fileName: file.name, uploadedAt: new Date().toISOString(), rows }
+      if (isLiveSession) newEntry.sessionKey = liveSessionKey
+      const { droppedCount } = addCarrierWeek(carrierKey, newEntry)
       setWeeks(readCarrierWeeks(carrierKey))
-      if (isLiveSession) setSessionAnchor({ key: liveSessionKey, weekId: entry.id })
       if (droppedCount > 0) {
         setError(`Bộ nhớ trình duyệt gần đầy — đã tự động bỏ ${droppedCount} tuần cũ nhất để lưu được tuần này.`)
       }
@@ -1015,7 +995,6 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     if (!window.confirm(`Xoá dữ liệu tuần "${state.fileName}"? Các tuần khác vẫn được giữ nguyên.`)) return
     removeCarrierWeek(carrierKey, state.id)
     setWeeks(readCarrierWeeks(carrierKey))
-    if (isLiveSession && anchoredWeekId === state.id) setSessionAnchor({ key: liveSessionKey, weekId: null })
   }
 
   // Loại trừ theo TỪNG ĐƠN (bấm vào ô "Tên hàng" của đúng đơn đó) khỏi thống kê — chỉ loại đúng đơn bấm,

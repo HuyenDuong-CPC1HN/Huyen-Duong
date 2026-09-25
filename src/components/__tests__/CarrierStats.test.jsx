@@ -119,6 +119,37 @@ describe('CarrierStats — liveSessionKey: màn hình tuần mới (chưa lưu) 
 
     await waitFor(() => expect(screen.getByText('spx-tuan-moi.xlsx')).toBeInTheDocument())
   })
+
+  // Bug thật (regression từ chính fix liveSessionKey ở trên): khung "SPX Express"/"Viettel Post" bọc ngoài
+  // là SectionCard thu gọn được ({open && <div>children</div>}) — thu gọn lại là UNMOUNT hẳn CarrierPanel,
+  // mở lại là component MỚI. Nếu "phiên làm việc đã upload gì" chỉ giữ trong React state (useState riêng),
+  // unmount là mất trắng, dù file vẫn còn nguyên trong storage — người dùng thấy "vừa upload xong, thu gọn
+  // xong mở lại là mất file" y hệt bug gốc dù đã upload thật.
+  it('unmount rồi mount lại (y hệt thu gọn/mở rộng khung) trong đúng phiên -> vẫn hiện đúng file đã upload, không mất', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_livetest4'
+    const newRefDate = '2026-09-21T08:00:00.000Z'
+    const { unmount } = render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" referenceDate={newRefDate} liveSessionKey={newRefDate} />)
+    await screen.findByText(/kéo & thả file xuất spx express/i)
+
+    const aoa = [
+      ['Mã vận đơn', 'Thời gian tạo đơn', 'Thời gian lấy hàng/gửi hàng', 'Thời gian giao hàng', 'Trạng thái hiện tại', 'Mã khách hàng'],
+      ['SPXC001', '', '', '', 'Đang vận chuyển', 'DH011'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    const file = new File([buf], 'spx-vua-upload.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+
+    const input = document.querySelector('input[type="file"][accept=".xlsx,.xls"]')
+    fireEvent.change(input, { target: { files: [file] } })
+    await waitFor(() => expect(screen.getByText('spx-vua-upload.xlsx')).toBeInTheDocument())
+
+    unmount() // mô phỏng bấm thu gọn khung (SectionCard {open && ...})
+    render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" referenceDate={newRefDate} liveSessionKey={newRefDate} />) // mở lại
+
+    await waitFor(() => expect(screen.getByText('spx-vua-upload.xlsx')).toBeInTheDocument())
+  })
 })
 
 function buildSpxFile(fileName, maVanDon) {
