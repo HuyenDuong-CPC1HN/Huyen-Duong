@@ -11,7 +11,6 @@ import { partnerType } from '../utils/partnerType'
 import { deliveryBucket } from '../utils/deliveryDays'
 import { readSheetReports } from '../utils/sheetReports'
 import { readTrialReports } from '../utils/unifiedTrialReports'
-import { parseStaffRoster } from '../utils/warehouseStaffFilter'
 import {
   getCarrierFileStats, pickCarrierWeekIdByDate, carrierWeekHasRows, computeFrozenNgoaiSan, getCarrierWeekRows,
 } from './carrierUtils'
@@ -366,7 +365,7 @@ function SourceToggle({ value, onChange }) {
 // Picker cho nguồn "Gộp kênh": chỉ 2 cặp Tuần này/Tuần trước (Đơn SO, Đơn truyền thống), lấy thẳng từ
 // lịch sử "Lưu số liệu tuần này" đã có sẵn ở tab Gộp kênh — Viettel Post/SPX tự khớp theo weekId đã ghim
 // sẵn trong từng entry, không cần chọn thêm.
-function UnifiedTrialSourcePicker({ open, onToggle, donSOPick, donTTPick, staffCount }) {
+function UnifiedTrialSourcePicker({ open, onToggle, donSOPick, donTTPick }) {
   return (
     <div className="tdr-source-picker rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))' }}>
       <button type="button" onClick={onToggle} className="w-full flex items-center justify-between text-left">
@@ -382,10 +381,6 @@ function UnifiedTrialSourcePicker({ open, onToggle, donSOPick, donTTPick, staffC
           </div>
           <SourceRow label="Đơn SO" pick={donSOPick} />
           <SourceRow label="Đơn truyền thống" pick={donTTPick} />
-          <div className="tdr-source-badges">
-            <span className="tdr-source-badge ok">✓ Đã lọc theo Nhân sự kho HCM ({staffCount} người)</span>
-            <span className="tdr-source-badge ok">✓ Đối soát Ngoại sàn Mốc 1–4: tự kế thừa, không cần chọn thêm</span>
-          </div>
         </div>
       )}
     </div>
@@ -528,8 +523,6 @@ export default function TongDonTab({ onNavigate }) {
   const donTTPick = usePickedPair('unifiedDonTT', donTTOptions, donTTOptions[0]?.id, donTTOptions[1]?.id)
   const donTTEntryCurrent = donTTReports.find(r => r.id === donTTPick.currentId) || null
   const donTTEntryPrevious = donTTReports.find(r => r.id === donTTPick.previousId) || null
-  const staffCount = useMemo(() => parseStaffRoster(localStorage.getItem('unified_trial_hcm_staff_roster') || '').size, [])
-
   const unifiedLiveCurrent = useMemo(() => computeWeekReportFromUnifiedTrial({
     donSOEntry: donSOEntryCurrent, donTTEntry: donTTEntryCurrent,
   }), [donSOEntryCurrent, donTTEntryCurrent])
@@ -759,7 +752,6 @@ export default function TongDonTab({ onNavigate }) {
             onToggle={() => setSourcePickerOpen(o => !o)}
             donSOPick={donSOPick}
             donTTPick={donTTPick}
-            staffCount={staffCount}
           />
         ) : (
           <DataSourcePicker
