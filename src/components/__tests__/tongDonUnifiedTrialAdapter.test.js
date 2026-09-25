@@ -64,6 +64,7 @@ describe('computeWeekReportFromUnifiedTrial', () => {
 
     expect(carrierMocks.getCarrierFileStats).toHaveBeenCalledWith('unifiedTrial_donSO_spx', 'spx', [], 'spx-week-1', { X001: {} })
     expect(carrierMocks.getCarrierFileStats).toHaveBeenCalledWith('unifiedTrial_donC_viettel', 'viettel', [], 'vtp-week-1', { Y001: {} })
+    expect(result.totalNgoaiSan).toBe(664)
   })
 
   it('donSOEntry/donTTEntry null (chưa lưu tuần nào) -> mọi số về 0, không crash', () => {
@@ -72,6 +73,20 @@ describe('computeWeekReportFromUnifiedTrial', () => {
     expect(result.totalC).toBe(0)
     expect(result.viettelC).toBeNull()
     expect(result.spxC).toBeNull()
+    expect(result.totalNgoaiSan).toBe(0)
+  })
+
+  // Bug thật: tuần đã lưu báo cáo Đơn SO (ngoaiSanCount luôn có, lưu chắc chắn cùng lúc lưu báo cáo) nhưng
+  // spxWeekId ghim sẵn không còn resolve được (vd file SPX đối soát chi tiết của tuần đó đã bị xoá/thay) ->
+  // spxC null, NHƯNG totalNgoaiSan vẫn phải lấy đúng từ ngoaiSanCount, không được ăn theo spxC mà về 0.
+  it('spxWeekId không resolve được (spxC null) -> totalNgoaiSan vẫn lấy đúng từ ngoaiSanCount đã lưu, không về 0', () => {
+    carrierMocks.getCarrierFileStats.mockReturnValue(null)
+    const result = computeWeekReportFromUnifiedTrial({
+      donSOEntry: makeDonSOEntry({ ngoaiSanCount: 582, spxWeekId: 'spx-week-da-bi-xoa' }),
+      donTTEntry: null,
+    })
+    expect(result.spxC).toBeNull()
+    expect(result.totalNgoaiSan).toBe(582)
   })
 })
 

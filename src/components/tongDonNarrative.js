@@ -171,9 +171,13 @@ function dtpSol3(dtpSlaUp, slaCur, slaPrev) {
 }
 
 function spxVolume(week) {
-  const total = week.spxC?.total || 0
+  // totalNgoaiSan (nếu có — nguồn Gộp kênh) là tổng đơn ngoại sàn đã lưu CHẮC CHẮN cùng báo cáo tuần đó,
+  // không phụ thuộc việc có ghép đúng file đối soát chi tiết SPX (spxC, qua spxWeekId) hay không — dùng
+  // ưu tiên cho tổng hiển thị, tránh hiện "0" sai khi spxC bị thiếu dù tuần đó thực sự có đơn ngoại sàn.
+  // dvcPct (tỷ lệ "đang vận chuyển") vẫn phải lấy từ spxC vì cần đúng dữ liệu chi tiết, không có nguồn thay thế.
+  const total = week.totalNgoaiSan ?? (week.spxC?.total || 0)
   const dvc = week.spxC?.stats?.dangVanChuyen || 0
-  return { total, dvcPct: pct(dvc, total) }
+  return { total, dvcPct: pct(dvc, week.spxC?.total || 0) }
 }
 
 function viettelVolume(week) {
