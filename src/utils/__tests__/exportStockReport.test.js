@@ -36,20 +36,22 @@ const dateRange = { tuNgay: '2026-03-01', denNgay: '2026-05-31', soNgay: 91 }
 describe('fillStockReport — điền đúng file mẫu Báo cáo hàng cận date_CLC', () => {
   const canDateRows = [makeRow(), makeRow({ maVatTu: 'J00643', tenVatTu: 'Leve-SB 1500', maLo: '010224', hanDung: '2026-08-15', tonCuoi: 16 })]
   const clcRows = [makeRow({ tenLo: 'LO-TEN' }), makeRow({ maVatTu: 'C02019', hanDung: null, tuoiThuoc: null, tonDau: 500, tonCuoi: 500 })]
-  const bytes = fillStockReport(loadTemplateBuffer(), { canDateRows, clcRows, dateRange })
-  const wb = XLSX.read(bytes, { type: 'array', cellDates: true })
+  const canDateBytes = fillStockReport(loadTemplateBuffer(), { kind: 'canDate', rows: canDateRows, dateRange })
+  const clcBytes = fillStockReport(loadTemplateBuffer(), { kind: 'clc', rows: clcRows, dateRange })
+  const canDateWb = XLSX.read(canDateBytes, { type: 'array', cellDates: true })
+  const clcWb = XLSX.read(clcBytes, { type: 'array', cellDates: true })
 
-  it('giữ đúng 2 sheet, tiêu đề và dòng kỳ báo cáo như mẫu', () => {
-    expect(wb.SheetNames).toEqual(['Cận date', 'CLC'])
-    for (const name of wb.SheetNames) {
-      const ws = wb.Sheets[name]
+  it('mỗi file chỉ gồm đúng sheet của mình, giữ tiêu đề và dòng kỳ báo cáo như mẫu', () => {
+    expect(canDateWb.SheetNames).toEqual(['Cận date'])
+    expect(clcWb.SheetNames).toEqual(['CLC'])
+    for (const ws of [canDateWb.Sheets['Cận date'], clcWb.Sheets.CLC]) {
       expect(ws.A1.v).toBe('Báo cáo tổng hợp nhập xuất tồn theo kho')
       expect(ws.A2.v).toBe('Từ ngày 01/03/2026 đến ngày 31/05/2026...')
     }
   })
 
   it('sheet Cận date: 9 cột như mẫu, dữ liệu từ dòng 5, hạn dùng là ngày thật, tuổi thuốc là công thức', () => {
-    const ws = wb.Sheets['Cận date']
+    const ws = canDateWb.Sheets['Cận date']
     const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
     expect(grid[3]).toEqual(['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tuổi thuốc\r\n(Tháng)', 'Tồn cuối'])
     expect(grid[4].slice(0, 6)).toEqual([1, 'B01767', 'Bupi-BFS heavy - Hộp 10 lọ 2ml', '020101', 'LO', '010924'])
@@ -64,7 +66,7 @@ describe('fillStockReport — điền đúng file mẫu Báo cáo hàng cận da
   })
 
   it('sheet CLC: 13 cột, "Tên lô" lấy theo Mã lô khi file gốc không có, hàng không rõ hạn thì để trống ngày và tuổi thuốc', () => {
-    const ws = wb.Sheets.CLC
+    const ws = clcWb.Sheets.CLC
     const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
     expect(grid[3]).toHaveLength(13)
     expect(grid[4].slice(5, 7)).toEqual(['010924', 'LO-TEN'])
@@ -75,25 +77,38 @@ describe('fillStockReport — điền đúng file mẫu Báo cáo hàng cận da
     expect(ws.I5.f).toContain('DATEDIF(TODAY(),H5,"m")')
   })
 
-  it('cập nhật vùng lọc, không còn calcChain gây lỗi khi mở bằng Excel', () => {
-    const zip = new PizZip(bytes)
+  it('gỡ sạch sheet còn lại: workbook, quan hệ, content types, vùng lọc, docProps; không còn calcChain', () => {
+    const zip = new PizZip(canDateBytes)
     expect(zip.file('xl/calcChain.xml')).toBeNull()
+    expect(zip.file('xl/worksheets/sheet2.xml')).toBeNull()
     const workbookXml = zip.file('xl/workbook.xml').asText()
     expect(workbookXml).toContain("'Cận date'!$A$4:$I$6")
-    expect(workbookXml).toContain('CLC!$A$4:$M$6')
+    expect(workbookXml).not.toContain('CLC')
+    expect(workbookXml).toContain('activeTab="0"')
+    expect(zip.file('xl/_rels/workbook.xml.rels').asText()).not.toContain('sheet2.xml')
+    expect(zip.file('[Content_Types].xml').asText()).not.toContain('sheet2.xml')
+    expect(zip.file('docProps/app.xml').asText()).toContain('<vt:vector size="1" baseType="lpstr"><vt:lpstr>Cận date</vt:lpstr></vt:vector>')
     expect(zip.file('xl/worksheets/sheet1.xml').asText()).toContain('<autoFilter ref="A4:I6"')
+
+    const clcZip = new PizZip(clcBytes)
+    expect(clcZip.file('xl/worksheets/sheet1.xml')).toBeNull()
+    const clcWorkbookXml = clcZip.file('xl/workbook.xml').asText()
+    expect(clcWorkbookXml).toContain('localSheetId="0"')
+    expect(clcWorkbookXml).toContain('CLC!$A$4:$M$6')
+    expect(clcWorkbookXml).not.toContain('Cận date')
   })
 
   it('không có dòng nào thì vẫn xuất được file chỉ có tiêu đề', () => {
-    const empty = XLSX.read(fillStockReport(loadTemplateBuffer(), { canDateRows: [], clcRows: [], dateRange: null }), { type: 'array' })
+    const empty = XLSX.read(fillStockReport(loadTemplateBuffer(), { kind: 'canDate', rows: [], dateRange: null }), { type: 'array' })
     const grid = XLSX.utils.sheet_to_json(empty.Sheets['Cận date'], { header: 1, raw: true, defval: null })
     expect(grid).toHaveLength(4)
   })
 })
 
 describe('tên file và dòng kỳ báo cáo', () => {
-  it('đặt tên theo tháng xuất báo cáo như mẫu CNHCM-T06.26', () => {
-    expect(stockReportFileName(new Date(2026, 5, 10))).toBe('CNHCM-T06.26_Báo cáo hàng cận date_CLC.xlsx')
+  it('đặt tên theo tháng xuất báo cáo như mẫu CNHCM-T06.26, tách theo từng báo cáo', () => {
+    expect(stockReportFileName('canDate', new Date(2026, 5, 10))).toBe('CNHCM-T06.26_Báo cáo hàng cận date.xlsx')
+    expect(stockReportFileName('clc', new Date(2026, 5, 10))).toBe('CNHCM-T06.26_Báo cáo hàng CLC.xlsx')
   })
   it('không có kỳ báo cáo thì để trống', () => {
     expect(formatReportDateRange(null)).toBe('')

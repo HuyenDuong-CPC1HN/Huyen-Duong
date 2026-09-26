@@ -1,11 +1,15 @@
 import PizZip from 'pizzip'
 
-// Xuất "Báo cáo hàng cận date_CLC" (2 sheet: "Cận date" + "CLC") — điền thẳng vào file mẫu thật của công ty
-// (public/templates/BAO_CAO_CAN_DATE_CLC.xlsx), giữ nguyên tiêu đề, độ rộng cột, font, viền và tô màu cột
-// "Tuổi thuốc" của mẫu. Mẫu chỉ còn dòng tiêu đề + 1 dòng 5 trống làm khuôn style cho mỗi cột; dòng dữ liệu
+// Xuất báo cáo hàng cận date / hàng chậm luân chuyển (CLC) — điền thẳng vào file mẫu thật của công ty
+// (public/templates/BAO_CAO_CAN_DATE_CLC.xlsx, 2 sheet "Cận date" + "CLC"), giữ nguyên tiêu đề, độ rộng cột,
+// font, viền và tô màu cột "Tuổi thuốc" của mẫu. Mỗi tab con xuất 1 file chỉ gồm sheet của mình: sheet còn
+// lại bị gỡ khỏi file. Mẫu chỉ còn dòng tiêu đề + 1 dòng 5 trống làm khuôn style cho mỗi cột; dòng dữ liệu
 // được dựng lại hoàn toàn từ khuôn đó (cùng kỹ thuật mở mẫu như 1 file zip của exportExpiryDisposal.js).
 const TEMPLATE_URL = '/templates/BAO_CAO_CAN_DATE_CLC.xlsx'
 const WORKBOOK_PATH = 'xl/workbook.xml'
+const WORKBOOK_RELS_PATH = 'xl/_rels/workbook.xml.rels'
+const CONTENT_TYPES_PATH = '[Content_Types].xml'
+const APP_PROPS_PATH = 'docProps/app.xml'
 const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 const HEADER_ROW = 4
 const FIRST_DATA_ROW = 5
@@ -13,6 +17,7 @@ const FIRST_DATA_ROW = 5
 // type: text | number | date | age (công thức "Tuổi thuốc" tính từ cột Hạn dùng `dateCol`)
 const SHEETS = [
   {
+    kind: 'canDate',
     path: 'xl/worksheets/sheet1.xml',
     sheetName: 'Cận date',
     lastCol: 'I',
@@ -29,6 +34,7 @@ const SHEETS = [
     ],
   },
   {
+    kind: 'clc',
     path: 'xl/worksheets/sheet2.xml',
     sheetName: 'CLC',
     lastCol: 'M',
@@ -144,14 +150,49 @@ function fillSheet(doc, spec, rows, dateRangeText) {
   return lastRow
 }
 
-function updateFilterNames(workbookDoc, lastRows) {
-  for (const def of workbookDoc.getElementsByTagName('definedName')) {
+// Giữ lại đúng 1 sheet của mẫu: gỡ sheet kia khỏi workbook, quan hệ, content types, vùng lọc và docProps.
+function keepOnlySheet(zip, keepIndex, lastRow) {
+  const keep = SHEETS[keepIndex]
+  const workbookDoc = parseXml(zip.file(WORKBOOK_PATH).asText())
+  const relsDoc = parseXml(zip.file(WORKBOOK_RELS_PATH).asText())
+  const typesDoc = parseXml(zip.file(CONTENT_TYPES_PATH).asText())
+
+  const sheetEls = [...workbookDoc.getElementsByTagName('sheet')]
+  sheetEls.forEach((sheetEl, i) => {
+    if (i === keepIndex) return
+    const relId = sheetEl.getAttribute('r:id')
+    const rel = [...relsDoc.getElementsByTagName('Relationship')].find(r => r.getAttribute('Id') === relId)
+    const target = rel ? `xl/${rel.getAttribute('Target')}` : SHEETS[i].path
+    rel?.remove()
+    for (const o of [...typesDoc.getElementsByTagName('Override')]) {
+      if (o.getAttribute('PartName') === `/${target}`) o.remove()
+    }
+    zip.remove(target)
+    sheetEl.remove()
+  })
+
+  for (const def of [...workbookDoc.getElementsByTagName('definedName')]) {
     if (def.getAttribute('name') !== '_xlnm._FilterDatabase') continue
-    const sheetIndex = Number(def.getAttribute('localSheetId'))
-    const spec = SHEETS[sheetIndex]
-    if (!spec) continue
-    const quoted = /[^A-Za-z0-9_]/.test(spec.sheetName) ? `'${spec.sheetName}'` : spec.sheetName
-    def.textContent = `${quoted}!$A$${HEADER_ROW}:$${spec.lastCol}$${lastRows[sheetIndex]}`
+    if (Number(def.getAttribute('localSheetId')) !== keepIndex) { def.remove(); continue }
+    const quoted = /[^A-Za-z0-9_]/.test(keep.sheetName) ? `'${keep.sheetName}'` : keep.sheetName
+    def.setAttribute('localSheetId', '0')
+    def.textContent = `${quoted}!$A$${HEADER_ROW}:$${keep.lastCol}$${lastRow}`
+  }
+  const definedNames = workbookDoc.getElementsByTagName('definedNames')[0]
+  if (definedNames && definedNames.getElementsByTagName('definedName').length === 0) definedNames.remove()
+  workbookDoc.getElementsByTagName('workbookView')[0]?.setAttribute('activeTab', '0')
+
+  zip.file(WORKBOOK_PATH, serializeXml(workbookDoc))
+  zip.file(WORKBOOK_RELS_PATH, serializeXml(relsDoc))
+  zip.file(CONTENT_TYPES_PATH, serializeXml(typesDoc))
+
+  const appFile = zip.file(APP_PROPS_PATH)
+  if (appFile) {
+    // Danh sách tên sheet trong docProps phải khớp số sheet thật của file.
+    const appText = appFile.asText()
+      .replace(/<vt:i4>\d+<\/vt:i4>/, '<vt:i4>1</vt:i4>')
+      .replace(/<TitlesOfParts>[\s\S]*<\/TitlesOfParts>/, `<TitlesOfParts><vt:vector size="1" baseType="lpstr"><vt:lpstr>${keep.sheetName}</vt:lpstr></vt:vector></TitlesOfParts>`)
+    zip.file(APP_PROPS_PATH, appText)
   }
 }
 
@@ -160,27 +201,30 @@ export function formatReportDateRange(dateRange) {
   return `Từ ngày ${formatDateVi(dateRange.tuNgay)} đến ngày ${formatDateVi(dateRange.denNgay)}...`
 }
 
-// canDateRows / clcRows: dòng đã lọc + sắp xếp sẵn ở nơi gọi, mỗi dòng có thêm `tuoiThuoc` (số tháng).
-export function fillStockReport(templateBuffer, { canDateRows, clcRows, dateRange }) {
+// kind: 'canDate' (sheet "Cận date") | 'clc' (sheet "CLC"). rows: dòng đã lọc + sắp xếp sẵn ở nơi gọi,
+// mỗi dòng có thêm `tuoiThuoc` (số tháng).
+export function fillStockReport(templateBuffer, { kind, rows, dateRange }) {
+  const keepIndex = SHEETS.findIndex(sheet => sheet.kind === kind)
+  if (keepIndex === -1) throw new Error(`Loại báo cáo không hợp lệ: ${kind}`)
+  const spec = SHEETS[keepIndex]
   const zip = new PizZip(templateBuffer.slice(0))
-  const dateRangeText = formatReportDateRange(dateRange)
-  const lastRows = SHEETS.map((spec, i) => {
-    const doc = parseXml(zip.file(spec.path).asText())
-    const lastRow = fillSheet(doc, spec, i === 0 ? canDateRows : clcRows, dateRangeText)
-    zip.file(spec.path, serializeXml(doc))
-    return lastRow
-  })
-  const workbookDoc = parseXml(zip.file(WORKBOOK_PATH).asText())
-  updateFilterNames(workbookDoc, lastRows)
-  zip.file(WORKBOOK_PATH, serializeXml(workbookDoc))
+  const doc = parseXml(zip.file(spec.path).asText())
+  const lastRow = fillSheet(doc, spec, rows, formatReportDateRange(dateRange))
+  const sheetView = doc.getElementsByTagName('sheetView')[0]
+  if (sheetView) sheetView.setAttribute('tabSelected', '1')
+  zip.file(spec.path, serializeXml(doc))
+  keepOnlySheet(zip, keepIndex, lastRow)
   return zip.generate({ type: 'uint8array' })
 }
 
-// Tên file theo mẫu: "CNHCM-T06.26_Báo cáo hàng cận date_CLC.xlsx" — tháng/năm lấy theo ngày xuất báo cáo.
-export function stockReportFileName(date = new Date()) {
+const REPORT_TITLE = { canDate: 'Báo cáo hàng cận date', clc: 'Báo cáo hàng CLC' }
+
+// Tên file theo mẫu "CNHCM-T06.26_Báo cáo hàng cận date_CLC.xlsx", tách theo từng báo cáo — tháng/năm lấy
+// theo ngày xuất báo cáo.
+export function stockReportFileName(kind, date = new Date()) {
   const mm = String(date.getMonth() + 1).padStart(2, '0')
   const yy = String(date.getFullYear()).slice(-2)
-  return `CNHCM-T${mm}.${yy}_Báo cáo hàng cận date_CLC.xlsx`
+  return `CNHCM-T${mm}.${yy}_${REPORT_TITLE[kind]}.xlsx`
 }
 
 let cachedTemplate = null
@@ -192,13 +236,13 @@ async function loadTemplate() {
   return cachedTemplate
 }
 
-export async function exportStockReport({ canDateRows, clcRows, dateRange }) {
-  const bytes = fillStockReport(await loadTemplate(), { canDateRows, clcRows, dateRange })
+export async function exportStockReport({ kind, rows, dateRange }) {
+  const bytes = fillStockReport(await loadTemplate(), { kind, rows, dateRange })
   const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = stockReportFileName()
+  a.download = stockReportFileName(kind)
   a.click()
   URL.revokeObjectURL(url)
 }

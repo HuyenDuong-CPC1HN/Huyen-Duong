@@ -7,9 +7,11 @@ import { parseExpiryStockWorkbook, parseReportDateRange, isSlowMoving, classifyE
 import { exportExpiryDisposal } from '../utils/exportExpiryDisposal'
 import { exportStockReport } from '../utils/exportStockReport'
 
-// Tab gộp "Tồn kho cận date & chậm luân chuyển": 1 file "Báo cáo tổng hợp nhập xuất tồn theo kho" mỗi tháng,
-// xem được cả hàng cận date lẫn hàng chậm luân chuyển (CLC), và xuất 1 file báo cáo 2 sheet đúng mẫu
-// "CNHCM-T..._Báo cáo hàng cận date_CLC.xlsx".
+// Menu "Quản lý tồn kho" có 2 tab con dùng chung component này và chung dữ liệu (1 file "Báo cáo tổng hợp
+// nhập xuất tồn theo kho" mỗi tháng, tải ở tab nào cũng được):
+//  - mode="canDate": "Hàng cận date" — hết hạn / dưới 3 tháng / dưới 6 tháng + nhóm cận hạn 6–18 tháng.
+//  - mode="clc": "Hàng chậm luân chuyển" — còn tồn, không nhập không xuất trong kỳ báo cáo.
+// Mỗi tab xuất file báo cáo riêng chỉ gồm sheet tương ứng của mẫu (sheet "Cận date" hoặc "CLC").
 
 // Ngưỡng "hàng còn hạn dùng dưới 1 tháng" dùng riêng cho Biên bản Xử lý/Xác minh — hẹp hơn bucket
 // "near3" (dưới 3 tháng) đã có, và không gồm hàng đã hết hạn (daysLeft âm, thuộc bucket "expired" riêng,
@@ -53,18 +55,16 @@ function removeMonthEntry(id) {
   return months
 }
 
-const CARDS = [
+const CAN_DATE_CARDS = [
   { key: 'expired', label: 'Hết hạn', icon: CircleAlert, cls: 'text-red-600', bg: 'bg-red-50 border-red-200', bgActive: 'bg-red-100 border-red-400' },
   { key: 'near3', label: 'Cận dưới 3 tháng', icon: AlertTriangle, cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', bgActive: 'bg-orange-100 border-orange-400' },
   { key: 'near6', label: 'Cận dưới 6 tháng', icon: Clock, cls: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', bgActive: 'bg-amber-100 border-amber-400' },
   { key: 'near18', label: 'Cận hạn 6–18 tháng (cảnh báo luân chuyển)', icon: CalendarRange, cls: 'text-sky-700', bg: 'bg-sky-50 border-sky-200', bgActive: 'bg-sky-100 border-sky-400' },
-  { key: 'clc', label: 'Chậm luân chuyển (CLC)', icon: Hourglass, cls: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200', bgActive: 'bg-indigo-100 border-indigo-400' },
 ]
 
-const VIEWS = [
+const CAN_DATE_VIEWS = [
   { key: 'canDate', label: 'Cận date' },
   { key: 'near18', label: 'Cận hạn 6–18 tháng' },
-  { key: 'clc', label: 'Chậm luân chuyển (CLC)' },
   { key: 'all', label: 'Tất cả tồn kho' },
 ]
 
@@ -176,7 +176,8 @@ function exportRowsToExcel(rows, active, view) {
   XLSX.writeFile(wb, `TonKhoCanDate_${VIEW_FILE_LABEL[view] || 'CanDate'}_${monthLabel}.xlsx`)
 }
 
-export default function ExpiryStockTab() {
+export default function ExpiryStockTab({ mode = 'canDate' }) {
+  const isClc = mode === 'clc'
   const inputRef = useRef()
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
@@ -187,7 +188,7 @@ export default function ExpiryStockTab() {
     if (all.some(m => m.id === saved)) return saved
     return all[0]?.id || null
   })
-  const [view, setView] = useState('canDate') // canDate | expired | near3 | near6 | near18 | clc | all
+  const [view, setView] = useState(isClc ? 'clc' : 'canDate') // canDate | expired | near3 | near6 | near18 | all (tab Hàng cận date); clc (tab Hàng chậm luân chuyển)
   const [search, setSearch] = useState('')
   const [khoFilter, setKhoFilter] = useState('all')
   const [exportingDisposal, setExportingDisposal] = useState(false)
@@ -251,11 +252,11 @@ export default function ExpiryStockTab() {
     clc: inStock.filter(r => r.slow).length,
   }), [inStock])
 
-  // Dữ liệu 2 sheet của báo cáo — luôn lấy toàn bộ tháng đang chọn, không phụ thuộc tìm kiếm/lọc kho.
-  const reportRows = useMemo(() => ({
-    canDateRows: inStock.filter(r => CAN_DATE_BUCKETS.includes(r.bucket)).sort(byExpiry),
-    clcRows: inStock.filter(r => r.slow).sort(byExpiry),
-  }), [inStock])
+  // Dữ liệu báo cáo của tab này — luôn lấy toàn bộ tháng đang chọn, không phụ thuộc tìm kiếm/lọc kho.
+  const reportRows = useMemo(
+    () => inStock.filter(r => (isClc ? r.slow : CAN_DATE_BUCKETS.includes(r.bucket))).sort(byExpiry),
+    [inStock, isClc],
+  )
 
   const khoOptions = useMemo(() => [...new Set(inStock.map(r => r.maKho).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [inStock])
 
@@ -308,9 +309,9 @@ export default function ExpiryStockTab() {
     setExportingReport(true)
     setError('')
     try {
-      await exportStockReport({ ...reportRows, dateRange: active?.dateRange || null })
+      await exportStockReport({ kind: isClc ? 'clc' : 'canDate', rows: reportRows, dateRange: active?.dateRange || null })
     } catch (err) {
-      setError(err.message || 'Không xuất được báo cáo hàng cận date_CLC.')
+      setError(err.message || 'Không xuất được báo cáo.')
     } finally {
       setExportingReport(false)
     }
@@ -331,7 +332,7 @@ export default function ExpiryStockTab() {
           </div>
           <div className="text-center">
             <p className="text-gray-700 font-semibold text-sm">Kéo & thả file "Báo cáo tổng hợp nhập xuất tồn theo kho" vào đây</p>
-            <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx</span> — mỗi lần upload là 1 tháng dữ liệu; nên xuất báo cáo với khoảng thời gian từ {MIN_SLOW_DAYS} ngày trở lên để lọc đúng hàng chậm luân chuyển</p>
+            <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx</span> — mỗi lần upload là 1 tháng dữ liệu, dùng chung cho cả Hàng cận date và Hàng chậm luân chuyển; nên xuất báo cáo với khoảng thời gian từ {MIN_SLOW_DAYS} ngày trở lên để lọc đúng hàng chậm luân chuyển</p>
           </div>
           <input ref={inputRef} type="file" accept=".xlsx,.xls" className="sr-only" onChange={e => void parseFile(e.target.files[0])} />
         </label>
@@ -385,18 +386,20 @@ export default function ExpiryStockTab() {
         </span>
         <button
           onClick={() => void handleExportReport()}
-          disabled={exportingReport || (reportRows.canDateRows.length === 0 && reportRows.clcRows.length === 0)}
-          title="Xuất file báo cáo đúng mẫu: sheet Cận date (hết hạn, cận dưới 3 tháng, cận dưới 6 tháng) và sheet CLC (chậm luân chuyển)"
+          disabled={exportingReport || reportRows.length === 0}
+          title={isClc
+            ? 'Xuất file báo cáo đúng mẫu sheet CLC: hàng còn tồn, không nhập không xuất trong kỳ'
+            : 'Xuất file báo cáo đúng mẫu sheet Cận date: hàng hết hạn, cận dưới 3 tháng, cận dưới 6 tháng'}
           className="flex items-center gap-1.5 px-3 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#2a4d7a] transition-colors ml-auto disabled:opacity-40 disabled:pointer-events-none"
         >
           <FileDown size={15} />
-          {exportingReport ? 'Đang tạo báo cáo...' : 'Xuất báo cáo Cận date & CLC'}
+          {exportingReport ? 'Đang tạo báo cáo...' : isClc ? 'Xuất báo cáo hàng CLC' : 'Xuất báo cáo hàng cận date'}
         </button>
       </div>
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
-        {CARDS.map(b => {
+      {!isClc && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        {CAN_DATE_CARDS.map(b => {
           const Icon = b.icon
           const isActive = view === b.key
           return (
@@ -413,13 +416,14 @@ export default function ExpiryStockTab() {
             </button>
           )
         })}
-      </div>
+      </div>}
 
-      {view === 'clc' && (
+      {isClc && (
         <div className={`flex items-start gap-2.5 mb-4 px-3.5 py-3 rounded-xl border text-sm ${!dateRange || rangeTooShort ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-indigo-50 border-indigo-200 text-indigo-800'}`}>
           {!dateRange || rangeTooShort ? <TriangleAlert size={17} className="shrink-0 mt-0.5" /> : <Hourglass size={17} className="shrink-0 mt-0.5" />}
           {dateRange ? (
             <p>
+              <span className="font-semibold">{counts.clc.toLocaleString('vi-VN')} mặt hàng chậm luân chuyển.</span>{' '}
               File báo cáo khoảng <span className="font-semibold">{formatDateVi(dateRange.tuNgay)} → {formatDateVi(dateRange.denNgay)}</span> ({dateRange.soNgay} ngày)
               {rangeTooShort ? (
                 <> — <span className="font-semibold">chưa đủ {MIN_SLOW_DAYS} ngày</span>, danh sách bên dưới có thể chưa phản ánh đúng "chậm luân chuyển". Nên xuất lại báo cáo với khoảng thời gian dài hơn.</>
@@ -428,14 +432,14 @@ export default function ExpiryStockTab() {
               )}
             </p>
           ) : (
-            <p>Không có khoảng thời gian báo cáo (dòng "Từ ngày ... đến ngày ...") cho tháng này — file tải lên trước đây chưa lưu thông tin này. Tải lại file để có kỳ báo cáo cho phần CLC và dòng 2 của báo cáo xuất ra.</p>
+            <p><span className="font-semibold">{counts.clc.toLocaleString('vi-VN')} mặt hàng chậm luân chuyển.</span> Không có khoảng thời gian báo cáo (dòng "Từ ngày ... đến ngày ...") cho tháng này — file tải lên trước đây chưa lưu thông tin này. Tải lại file để có kỳ báo cáo cho phần CLC và dòng 2 của báo cáo xuất ra.</p>
           )}
         </div>
       )}
 
       <div className="flex flex-wrap gap-2 mb-3 items-center">
-        <div className="flex gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1">
-          {VIEWS.map(v => (
+        {!isClc && <div className="flex gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1">
+          {CAN_DATE_VIEWS.map(v => (
             <button
               key={v.key}
               onClick={() => setView(v.key)}
@@ -444,7 +448,7 @@ export default function ExpiryStockTab() {
               {v.label}
             </button>
           ))}
-        </div>
+        </div>}
         <div className="relative flex-1 min-w-48 max-w-sm">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -481,7 +485,7 @@ export default function ExpiryStockTab() {
           <Download size={14} />
           Xuất Excel
         </button>
-        <button
+        {!isClc && <button
           onClick={() => void handleExportDisposal()}
           disabled={disposalRows.length === 0 || exportingDisposal}
           title="Xuất Biên bản Xử lý (Excel) + Biên bản Xác minh (Word) cho hàng còn hạn dùng dưới 1 tháng"
@@ -489,7 +493,7 @@ export default function ExpiryStockTab() {
         >
           <FileWarning size={14} />
           {exportingDisposal ? 'Đang tạo biên bản...' : `Xuất biên bản hàng cận date (${disposalRows.length})`}
-        </button>
+        </button>}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight } from 'lucide-react'
+import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -28,7 +28,15 @@ const NAV = [
       { id: 'gopKenh', label: 'Chi tiết giao hàng theo kênh', icon: Layers },
     ],
   },
-  { id: 'tonkhocandate', label: 'Tồn kho cận date & chậm luân chuyển', icon: CalendarClock },
+  {
+    id: 'quanlytonkho',
+    label: 'Quản lý tồn kho',
+    icon: Warehouse,
+    children: [
+      { id: 'tonkhocandate', label: 'Hàng cận date', icon: CalendarClock },
+      { id: 'hangchamluanchuyen', label: 'Hàng chậm luân chuyển', icon: Hourglass },
+    ],
+  },
   {
     id: 'nhaphang',
     label: 'Nhập hàng',
@@ -73,7 +81,8 @@ const BREADCRUMB = {
   home:     ['Trang chủ'],
   tongdon:  ['Trang chủ', 'Báo cáo giao hàng', 'Phân tích giao hàng'],
   gopKenh:  ['Trang chủ', 'Báo cáo giao hàng', 'Chi tiết giao hàng theo kênh'],
-  tonkhocandate: ['Trang chủ', 'Tồn kho cận date & chậm luân chuyển'],
+  tonkhocandate: ['Trang chủ', 'Quản lý tồn kho', 'Hàng cận date'],
+  hangchamluanchuyen: ['Trang chủ', 'Quản lý tồn kho', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
   traHangC:   ['Trang chủ', 'Theo dõi nhập trả lại', 'Đơn C'],
@@ -438,7 +447,8 @@ function AppContent({ user }) {
           )}
           {active === 'tongdon' && <Suspense fallback={tabLoadingState}><TongDonTab onNavigate={setActive} /></Suspense>}
           {active === 'gopKenh' && <Suspense fallback={tabLoadingState}><UnifiedTrialTab /></Suspense>}
-          {active === 'tonkhocandate' && <ExpiryStockTab />}
+          {active === 'tonkhocandate' && <ExpiryStockTab key="canDate" mode="canDate" />}
+          {active === 'hangchamluanchuyen' && <ExpiryStockTab key="clc" mode="clc" />}
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
           {active === 'traHangC'   && <ReturnTrackingTab type="donC" />}

@@ -79,20 +79,29 @@ describe('ExpiryStockTab', () => {
     expect(screen.queryByText('Hàng còn an toàn')).not.toBeInTheDocument()
     expect(screen.queryByText('Hàng cận 6 tháng')).not.toBeInTheDocument()
 
-    // CLC: còn tồn, không nhập không xuất; bảng có đủ 13 cột như sheet "CLC"
-    fireEvent.click(screen.getByText('Chậm luân chuyển (CLC)', { selector: 'button' }))
+    // Bấm "Tất cả tồn kho" phải thấy thêm hàng an toàn + không rõ hạn, vẫn không thấy hàng tồn = 0
+    fireEvent.click(screen.getByText('Tất cả tồn kho'))
+    expect(screen.getByText('Hàng còn an toàn')).toBeInTheDocument()
+    expect(screen.getByText('Hàng không rõ hạn')).toBeInTheDocument()
+    expect(screen.queryByText('Hàng đã hết tồn kho')).not.toBeInTheDocument()
+
+    // Tab "Hàng cận date" không có phần CLC
+    expect(screen.queryByText('Chậm luân chuyển (CLC)')).not.toBeInTheDocument()
+  })
+
+  it('tab Hàng chậm luân chuyển dùng chung file đã tải ở tab Hàng cận date, chỉ hiện hàng CLC với 13 cột như sheet "CLC"', async () => {
+    // Dữ liệu đã tải ở lần render trước (test phía trên) vẫn nằm trong kho dùng chung
+    render(<ExpiryStockTab mode="clc" />)
+    expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument()
     expect(screen.getByText('Hàng còn an toàn')).toBeInTheDocument()
     expect(screen.queryByText('Hàng có xuất')).not.toBeInTheDocument()
     expect([...document.querySelectorAll('th')].map(th => th.textContent)).toEqual([
       'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)',
       'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối',
     ])
+    expect(screen.getByText('Xuất báo cáo hàng CLC')).toBeInTheDocument()
+    expect(screen.queryByText(/Xuất biên bản hàng cận date/)).not.toBeInTheDocument()
 
-    // Bấm "Tất cả tồn kho" phải thấy thêm hàng an toàn + không rõ hạn, vẫn không thấy hàng tồn = 0
-    fireEvent.click(screen.getByText('Tất cả tồn kho'))
-    expect(screen.getByText('Hàng còn an toàn')).toBeInTheDocument()
-    expect(screen.getByText('Hàng không rõ hạn')).toBeInTheDocument()
-    expect(screen.queryByText('Hàng đã hết tồn kho')).not.toBeInTheDocument()
   })
 
   it('xuất Excel đúng 12 cột yêu cầu, "Tên lô" trùng "Mã lô", "Tuổi thuốc" âm khi đã hết hạn', async () => {

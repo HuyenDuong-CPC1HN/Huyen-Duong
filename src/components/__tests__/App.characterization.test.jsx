@@ -185,8 +185,9 @@ describe('authenticated application shell', () => {
 
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Tồn kho cận date & chậm luân chuyển' }))
-    expect(screen.getByRole('heading', { level: 1, name: 'Tồn kho cận date & chậm luân chuyển' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Quản lý tồn kho' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Hàng chậm luân chuyển' }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Hàng chậm luân chuyển' })).toBeInTheDocument()
 
     // Giữ loadWorkspace pending để trạng thái 'syncing' commit thật (giống mạng chậm ngoài thực tế)
     let releaseWorkspace
@@ -197,7 +198,7 @@ describe('authenticated application shell', () => {
     await act(async () => { releaseWorkspace?.() })
 
     expect(screen.queryByText('Đang tải không gian làm việc trên đám mây...')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1, name: 'Tồn kho cận date & chậm luân chuyển' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Hàng chậm luân chuyển' })).toBeInTheDocument()
   })
 
   it('returns to the login screen when the session signs out', async () => {
