@@ -44,7 +44,32 @@ function addMonth(entry) {
   localStorage.setItem(ACTIVE_KEY, withId.id)
   return withId
 }
+// Check list "đưa vào báo cáo" — lưu theo từng tháng và từng tab con (ops_settings, dùng chung mọi máy).
+// Mặc định chưa tích hàng nào; chỉ hàng đủ tiêu chí của báo cáo mới tích được.
+function checkedKey(mode, monthId) { return `expiry_report_checked_${mode}_${monthId}` }
+function readChecked(mode, monthId) {
+  if (!monthId) return []
+  try {
+    const list = JSON.parse(localStorage.getItem(checkedKey(mode, monthId)) || '[]')
+    return Array.isArray(list) ? list : []
+  } catch { return [] }
+}
+
+// Khoá ổn định cho 1 dòng trong tháng: mã + lô + kho + hạn dùng, thêm số thứ tự nếu file có dòng trùng.
+function withRowKeys(rows) {
+  const seen = new Map()
+  return rows.map(r => {
+    const base = [r.maVatTu, r.maLo, r.maKho, r.hanDung || ''].join('|')
+    const n = seen.get(base) || 0
+    seen.set(base, n + 1)
+    return { ...r, rowKey: n ? `${base}#${n}` : base }
+  })
+}
+
 function removeMonthEntry(id) {
+  for (const mode of ['canDate', 'clc']) {
+    if (localStorage.getItem(checkedKey(mode, id)) !== null) localStorage.removeItem(checkedKey(mode, id))
+  }
   const months = readMonths().filter(m => m.id !== id)
   writeMonths(months)
   const activeId = localStorage.getItem(ACTIVE_KEY)
@@ -77,6 +102,7 @@ const DEFAULT_COL_WIDTH = {
   'Hạn dùng': 100, 'Tuổi thuốc (Tháng)': 120, 'Tồn đầu': 90, 'Sl nhập': 84, 'Sl xuất': 84, 'Tồn cuối': 90,
 }
 const COLWIDTHS_KEY = 'expiry_stock_colwidths'
+const CHECK_COL_WIDTH = 44
 
 // Độ rộng cột do người dùng tự kéo chỉnh (kéo mép phải mỗi cột) — lưu lại để lần sau mở vẫn giữ nguyên.
 function useColWidths() {
@@ -196,6 +222,17 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
   const [colWidths, setColWidth, resetColWidths] = useColWidths()
 
   const active = months.find(m => m.id === activeId) || null
+  const [checkedState, setCheckedState] = useState(() => ({ monthId: activeId, keys: readChecked(mode, activeId) }))
+  // Đổi tháng thì nạp lại dấu tích đã lưu của tháng đó.
+  const checkedKeys = useMemo(
+    () => new Set(checkedState.monthId === activeId ? checkedState.keys : readChecked(mode, activeId)),
+    [checkedState, activeId, mode],
+  )
+  const saveChecked = (nextSet) => {
+    const keys = [...nextSet]
+    setCheckedState({ monthId: activeId, keys })
+    if (activeId) localStorage.setItem(checkedKey(mode, activeId), JSON.stringify(keys))
+  }
 
   const parseFile = async (file) => {
     setError('')
@@ -233,7 +270,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
   const inStock = useMemo(() => {
     if (!active) return []
     const today = new Date()
-    return (active.rows || [])
+    return withRowKeys(active.rows || [])
       .filter(r => r.tonCuoi > 0)
       .map(r => ({
         ...r,
@@ -252,11 +289,21 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
     clc: inStock.filter(r => r.slow).length,
   }), [inStock])
 
-  // Dữ liệu báo cáo của tab này — luôn lấy toàn bộ tháng đang chọn, không phụ thuộc tìm kiếm/lọc kho.
-  const reportRows = useMemo(
+  // Hàng đủ tiêu chí báo cáo của tab này (mới được tích); báo cáo chỉ lấy hàng đủ tiêu chí ĐÃ tích —
+  // trong toàn bộ tháng đang chọn, không phụ thuộc tìm kiếm/lọc kho đang xem.
+  const isEligible = (r) => (isClc ? r.slow : CAN_DATE_BUCKETS.includes(r.bucket))
+  const eligibleRows = useMemo(
     () => inStock.filter(r => (isClc ? r.slow : CAN_DATE_BUCKETS.includes(r.bucket))).sort(byExpiry),
     [inStock, isClc],
   )
+  const reportRows = useMemo(() => eligibleRows.filter(r => checkedKeys.has(r.rowKey)), [eligibleRows, checkedKeys])
+
+  const toggleRow = (rowKey) => {
+    const next = new Set(checkedKeys)
+    if (next.has(rowKey)) next.delete(rowKey)
+    else next.add(rowKey)
+    saveChecked(next)
+  }
 
   const khoOptions = useMemo(() => [...new Set(inStock.map(r => r.maKho).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [inStock])
 
@@ -274,6 +321,18 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
   }, [inStock, view, khoFilter, search])
 
   const columns = view === 'clc' ? CLC_COLUMNS : CAN_DATE_COLUMNS
+  // Ô tích ở tiêu đề: tích/bỏ tích toàn bộ hàng đủ tiêu chí đang hiện trên bảng (theo tìm kiếm, lọc kho).
+  const visibleEligible = filteredRows.filter(isEligible)
+  const allVisibleChecked = visibleEligible.length > 0 && visibleEligible.every(r => checkedKeys.has(r.rowKey))
+  const someVisibleChecked = visibleEligible.some(r => checkedKeys.has(r.rowKey))
+  const toggleAllVisible = () => {
+    const next = new Set(checkedKeys)
+    for (const r of visibleEligible) {
+      if (allVisibleChecked) next.delete(r.rowKey)
+      else next.add(r.rowKey)
+    }
+    saveChecked(next)
+  }
   const activeView = ['expired', 'near3', 'near6'].includes(view) ? 'canDate' : view
 
   // Hàng còn hạn dùng dưới 1 tháng (chưa hết hạn) — nguồn cho Biên bản Xử lý + Xác minh, tính từ toàn bộ
@@ -387,13 +446,15 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
         <button
           onClick={() => void handleExportReport()}
           disabled={exportingReport || reportRows.length === 0}
-          title={isClc
-            ? 'Xuất file báo cáo đúng mẫu sheet CLC: hàng còn tồn, không nhập không xuất trong kỳ'
-            : 'Xuất file báo cáo đúng mẫu sheet Cận date: hàng hết hạn, cận dưới 3 tháng, cận dưới 6 tháng'}
+          title={reportRows.length === 0
+            ? 'Tích chọn ở cột đầu bảng những hàng cần đưa vào báo cáo'
+            : isClc
+              ? 'Xuất file báo cáo đúng mẫu sheet CLC, gồm các hàng đã tích'
+              : 'Xuất file báo cáo đúng mẫu sheet Cận date, gồm các hàng đã tích'}
           className="flex items-center gap-1.5 px-3 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#2a4d7a] transition-colors ml-auto disabled:opacity-40 disabled:pointer-events-none"
         >
           <FileDown size={15} />
-          {exportingReport ? 'Đang tạo báo cáo...' : isClc ? 'Xuất báo cáo hàng CLC' : 'Xuất báo cáo hàng cận date'}
+          {exportingReport ? 'Đang tạo báo cáo...' : `${isClc ? 'Xuất báo cáo hàng CLC' : 'Xuất báo cáo hàng cận date'} (${reportRows.length}/${eligibleRows.length})`}
         </button>
       </div>
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
@@ -469,6 +530,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
           </select>
         )}
         <span className="text-xs text-gray-400 whitespace-nowrap">{filteredRows.length} dòng</span>
+        <span className="text-xs font-medium text-[#1e3a5f] whitespace-nowrap">Đã tích {reportRows.length}/{eligibleRows.length} hàng đưa vào báo cáo</span>
         <button
           onClick={resetColWidths}
           className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors ml-auto"
@@ -497,9 +559,21 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: columns.reduce((sum, c) => sum + colWidths[c], 0), minWidth: '100%' }}>
+        <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: CHECK_COL_WIDTH + columns.reduce((sum, c) => sum + colWidths[c], 0), minWidth: '100%' }}>
           <thead>
             <tr className="bg-[#1e3a5f] text-white text-xs">
+              <th className="px-2 py-2.5 text-center" style={{ width: CHECK_COL_WIDTH }}>
+                <input
+                  type="checkbox"
+                  aria-label="Tích tất cả hàng đang hiện để đưa vào báo cáo"
+                  title="Tích / bỏ tích tất cả hàng đủ tiêu chí đang hiện trên bảng"
+                  className="w-4 h-4 cursor-pointer accent-emerald-500 align-middle"
+                  checked={allVisibleChecked}
+                  ref={el => { if (el) el.indeterminate = !allVisibleChecked && someVisibleChecked }}
+                  disabled={visibleEligible.length === 0}
+                  onChange={toggleAllVisible}
+                />
+              </th>
               {columns.map(c => (
                 <th
                   key={c}
@@ -515,7 +589,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="text-center py-10 text-gray-400">
+                <td colSpan={columns.length + 1} className="text-center py-10 text-gray-400">
                   <div className="flex flex-col items-center gap-2">
                     <PackageSearch size={24} className="text-gray-300" />
                     Không có dữ liệu phù hợp
@@ -523,7 +597,18 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                 </td>
               </tr>
             ) : filteredRows.map((r, i) => (
-              <tr key={`${r.maVatTu}_${r.maLo}_${i}`} className="border-b border-gray-100 text-[12px] hover:bg-blue-50/40">
+              <tr key={r.rowKey} className={`border-b border-gray-100 text-[12px] hover:bg-blue-50/40 ${checkedKeys.has(r.rowKey) && isEligible(r) ? 'bg-emerald-50/60' : ''}`}>
+                <td className="px-2 py-2 text-center">
+                  {isEligible(r) && (
+                    <input
+                      type="checkbox"
+                      aria-label={`Đưa ${r.maVatTu} lô ${r.maLo || '—'} vào báo cáo`}
+                      className="w-4 h-4 cursor-pointer accent-emerald-500 align-middle"
+                      checked={checkedKeys.has(r.rowKey)}
+                      onChange={() => toggleRow(r.rowKey)}
+                    />
+                  )}
+                </td>
                 {columns.map(c => {
                   const isAge = c === 'Tuổi thuốc (Tháng)'
                   const align = NUMERIC_COLUMNS.has(c) || c === 'Đvt' ? 'text-center' : ''
