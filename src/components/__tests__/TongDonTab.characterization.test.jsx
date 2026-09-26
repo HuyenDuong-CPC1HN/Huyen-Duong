@@ -19,29 +19,13 @@ const workspaceMocks = vi.hoisted(() => {
 
 vi.mock('../../data/workspace', () => ({
   opsStore: workspaceMocks.opsStore,
-  refreshReportingCycles: vi.fn().mockResolvedValue([]),
-}))
-vi.mock('../../supabase', () => ({ supabase: {} }))
-vi.mock('../../data/analyticsPackages', () => ({
-  createAnalyticsPackagesRepository: vi.fn(),
-}))
-vi.mock('../../useWeeklyData', () => ({
-  useWeeklyData: () => ({ weeks: [], pruneToIds: vi.fn() }),
-}))
-vi.mock('../../utils/sheetReports', () => ({ readSheetReports: () => [] }))
-vi.mock('../CarrierStats', () => ({
-  getCarrierFileStats: vi.fn(),
-  pickCarrierWeekIdByDate: vi.fn(),
-  carrierWeekHasRows: vi.fn(() => false),
-  computeFrozenNgoaiSan: vi.fn(() => ({ rows: [], stats: {} })),
-  getCarrierWeekRows: vi.fn(() => []),
 }))
 
 // Snapshot đã lưu, đúng shape mới: current/previous giữ nguyên (computeWeekReport gốc, không đổi) +
 // 2 khối donSan/truyenThong chứa riêng chữ nhận định của từng báo cáo.
 const report = {
   id: 'tongdon-1',
-  weekKey: 'x_x',
+  weekKey: 'ut_x_x',
   createdAt: '2026-08-10T08:00:00.000Z',
   label: 'Báo cáo giao hàng - CN HCM · 10/08/2026 08:00',
   title: 'Báo cáo giao hàng - CN HCM',
@@ -79,11 +63,13 @@ describe('TongDonTab saved-report composition', () => {
   it('keeps report actions and lets người dùng switch between 2 báo cáo Đơn sàn / Đơn truyền thống', () => {
     workspaceMocks.opsStore.setItem('tongdon_reports', JSON.stringify([report]))
 
-    render(<TongDonTab onNavigate={vi.fn()} />)
+    const onNavigate = vi.fn()
+    render(<TongDonTab onNavigate={onNavigate} />)
 
-    expect(screen.getByRole('button', { name: /Công bố cho phân tích/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Công bố cho phân tích/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Chọn lại & làm lại/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Upload tuần mới/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Upload tuần mới/i }))
+    expect(onNavigate).toHaveBeenCalledWith('gopKenh')
     expect(screen.getByRole('button', { name: /Xuất ảnh PNG/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /In \/ Xuất PDF/i })).toBeInTheDocument()
 
@@ -111,6 +97,16 @@ describe('TongDonTab saved-report composition', () => {
 
     expect(within(document.querySelector('.tdr.is-active')).getByText(/Báo cáo đã lưu ·/)).toBeInTheDocument()
     expect(document.querySelector('.tdr-source-picker')).not.toBeInTheDocument()
+  })
+
+  it('chưa lưu báo cáo: chỉ còn bộ chọn tuần của Gộp kênh, không còn công tắc Nguồn cũ', () => {
+    workspaceMocks.opsStore.setItem('unified_trial_reports_donSO', JSON.stringify([{ id: '2026-09-21T00:00:00.000Z', label: 'Đơn SO tuần 39' }]))
+
+    render(<TongDonTab onNavigate={vi.fn()} />)
+
+    expect(screen.getByText('Chọn tuần so sánh — Gộp kênh')).toBeInTheDocument()
+    expect(screen.queryByText('Nguồn cũ')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Lưu báo cáo tuần này/i })).toBeInTheDocument()
   })
 
   it('bật tạm class "tdr-export-cream" (nền/viền/chữ + khổ 1180px khớp mẫu) đúng lúc chụp ảnh, tắt lại ngay sau đó', async () => {

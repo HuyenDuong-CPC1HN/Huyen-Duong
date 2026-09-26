@@ -1,10 +1,3 @@
-export const TMDT_STORES = [
-  'Zentokid Vietnam Shopee',
-  'Zentokid Vietnam',
-  'Dược Phẩm CPC1HN',
-  'DTP Sức Khỏe',
-]
-
 // Trạng thái màu sắc
 export const STATUS_COLORS = {
   'Đang chuyển': 'bg-blue-100 text-blue-700',

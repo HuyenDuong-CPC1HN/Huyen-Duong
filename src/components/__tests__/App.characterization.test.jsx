@@ -63,85 +63,55 @@ describe('authenticated application shell', () => {
   })
 
   it('opens on a calm operations brief with status, exceptions, then actions', async () => {
-    workspaceMocks.opsStore.setItem('weeks_donC', '{malformed')
+    workspaceMocks.opsStore.setItem('tongdon_reports', '{malformed')
     render(<App />)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual([
-      'Bổ sung dữ liệu Đơn C',
+      'Bổ sung dữ liệu Tổng đơn',
       'Tình trạng tuần hiện tại',
       'Ngoại lệ cần xử lý',
       'Hành động tiếp theo',
     ])
 
-    const hero = screen.getByRole('region', { name: 'Bổ sung dữ liệu Đơn C' })
+    const hero = screen.getByRole('region', { name: 'Bổ sung dữ liệu Tổng đơn' })
     expect(within(hero).getByText('Dữ liệu tuần cần bổ sung')).toBeInTheDocument()
-    expect(within(hero).getByRole('button', { name: 'Bổ sung dữ liệu Đơn C' })).toBeInTheDocument()
-
-    for (const channel of ['Tổng đơn', 'Đơn C', 'Đơn DTP', 'TMĐT']) {
-      expect(screen.getByRole('button', { name: `Mở ${channel}: Chưa có dữ liệu tuần` })).toBeInTheDocument()
-    }
+    expect(screen.getByRole('button', { name: 'Mở Tổng đơn: Chưa có dữ liệu tuần' })).toBeInTheDocument()
     expect(screen.queryByText(/^0 đơn$/)).not.toBeInTheDocument()
-    expect(screen.getAllByText('Chưa có dữ liệu tuần')).toHaveLength(4)
-    expect(screen.getAllByRole('button', { name: 'Bổ sung dữ liệu Đơn C' })).toHaveLength(2)
+    expect(screen.getAllByText('Chưa có dữ liệu tuần')).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Bổ sung dữ liệu Tổng đơn' })).toHaveLength(2)
   })
 
-  it('shows only saved values and flags an active week that has not been saved', async () => {
-    workspaceMocks.opsStore.setItem(
-      'weeks_donC',
-      JSON.stringify([{ id: 'c-1', label: 'Tuần 32 · Đơn C', data: [{ id: 1 }] }]),
-    )
-    workspaceMocks.opsStore.setItem('activeWeek_donC', 'c-1')
-    workspaceMocks.opsStore.setItem(
-      'sheet_reports_donC',
-      JSON.stringify([{ id: 'c-1', label: 'Tuần 32 · Đơn C', b24: 316 }]),
-    )
-    workspaceMocks.opsStore.setItem(
-      'weeks_donDTP',
-      JSON.stringify([{ id: 'd-1', label: 'Tuần 32 · Đơn DTP', data: [{ id: 2 }] }]),
-    )
-    workspaceMocks.opsStore.setItem('activeWeek_donDTP', 'd-1')
-    workspaceMocks.opsStore.setItem(
-      'tmdt_reports',
-      JSON.stringify([{ id: 't-1', label: '04/08 – 10/08', total: 92 }]),
-    )
-    workspaceMocks.opsStore.setItem(
-      'tongdon_reports',
-      JSON.stringify([
-        { id: 'all-1', label: 'Tuần 32', current: { grandTotal: 1450 } },
-      ]),
-    )
+  it('chỉ còn thẻ Tổng đơn: không còn thẻ Đơn C, Đơn DTP, TMĐT và không còn dòng chu kỳ phân tích', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })
+
+    for (const channel of ['Đơn C', 'Đơn DTP', 'TMĐT']) {
+      expect(screen.queryByRole('heading', { level: 3, name: channel })).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText(/Chu kỳ hiện tại/)).not.toBeInTheDocument()
+  })
+
+  it('Gộp kênh đã lưu số liệu tuần nhưng Tổng đơn chưa lưu thì nhắc lưu Tổng đơn', async () => {
+    workspaceMocks.opsStore.setItem('unified_trial_reports_donSO', JSON.stringify([{ id: '2026-09-21T00:00:00.000Z', label: 'Đơn SO tuần 39' }]))
 
     render(<App />)
 
-    expect(await screen.findByText('316 đơn')).toBeInTheDocument()
-    expect(screen.getByText('92 đơn')).toBeInTheDocument()
-    expect(screen.getByText('1.450 đơn')).toBeInTheDocument()
-    expect(screen.getByText('Chưa lưu số liệu tuần')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 3, name: 'Đơn DTP' })).toBeInTheDocument()
-    const exceptions = screen.getByRole('region', { name: 'Ngoại lệ cần xử lý' })
-    expect(within(exceptions).getAllByRole('listitem')).toHaveLength(1)
-    const hero = screen.getByRole('region', { name: 'Lưu số liệu Đơn DTP' })
+    expect(await screen.findByText('Chưa lưu số liệu tuần')).toBeInTheDocument()
+    const hero = screen.getByRole('region', { name: 'Lưu số liệu Tổng đơn' })
     expect(within(hero).getByText('Báo cáo tuần cần lưu')).toBeInTheDocument()
-    expect(within(hero).getByRole('button', { name: 'Lưu số liệu Đơn DTP' })).toBeInTheDocument()
-
   })
 
-
-  it('shows a clear week and offers n8n only when every channel has saved data', async () => {
-    workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 316 }]))
-    workspaceMocks.opsStore.setItem('sheet_reports_donDTP', JSON.stringify([{ id: 'd-1', b24: 144 }]))
-    workspaceMocks.opsStore.setItem('tmdt_reports', JSON.stringify([{ id: 't-1', total: 92 }]))
+  it('shows a clear week and offers n8n once Tổng đơn has a saved report', async () => {
     workspaceMocks.opsStore.setItem(
       'tongdon_reports',
-      JSON.stringify([{ id: 'all-1', current: { grandTotal: 1450 } }]),
+      JSON.stringify([{ id: 'all-1', label: 'Tuần 32', current: { grandTotal: 1450 } }]),
     )
 
     render(<App />)
 
-    expect(
-      await screen.findByText('Không có ngoại lệ từ trạng thái dữ liệu hiện có.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('1.450 đơn')).toBeInTheDocument()
+    expect(screen.getByText('Không có ngoại lệ từ trạng thái dữ liệu hiện có.')).toBeInTheDocument()
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo lên n8n' }))
@@ -151,66 +121,63 @@ describe('authenticated application shell', () => {
   it('uses the existing next-action destination from the hero CTA', async () => {
     render(<App />)
 
-    const hero = await screen.findByRole('region', { name: 'Bổ sung dữ liệu Đơn C' })
-    fireEvent.click(within(hero).getByRole('button', { name: 'Bổ sung dữ liệu Đơn C' }))
+    const hero = await screen.findByRole('region', { name: 'Bổ sung dữ liệu Tổng đơn' })
+    fireEvent.click(within(hero).getByRole('button', { name: 'Bổ sung dữ liệu Tổng đơn' }))
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Giao hàng Đơn C' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Tổng đơn' })).toBeInTheDocument()
   })
 
-  it('keeps a valid zero metric and omits invalid metrics from the ready hero', async () => {
-    workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 0 }]))
-    workspaceMocks.opsStore.setItem('sheet_reports_donDTP', JSON.stringify([{ id: 'd-1', b24: 'invalid' }]))
-    workspaceMocks.opsStore.setItem('tmdt_reports', JSON.stringify([{ id: 't-1', total: 'invalid' }]))
-    workspaceMocks.opsStore.setItem(
-      'tongdon_reports',
-      JSON.stringify([{ id: 'all-1', current: { grandTotal: 'invalid' } }]),
-    )
+  it('keeps a valid zero metric in the ready hero', async () => {
+    workspaceMocks.opsStore.setItem('tongdon_reports', JSON.stringify([{ id: 'all-1', current: { grandTotal: 0 } }]))
     render(<App />)
 
     const hero = await screen.findByRole('region', { name: 'Dữ liệu tuần đã sẵn sàng' })
     expect(
-      within(hero).getByText('Giao ≤24h đã lưu: 0 đơn. Không có ngoại lệ từ trạng thái dữ liệu hiện có.'),
+      within(hero).getByText('Tổng đơn đã lưu: 0 đơn. Không có ngoại lệ từ trạng thái dữ liệu hiện có.'),
     ).toBeInTheDocument()
   })
 
-  it('shows analytics readiness only for an explicitly published current cycle', async () => {
-    workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([{ id: 'c-1', b24: 316 }]))
-    workspaceMocks.opsStore.setItem('sheet_reports_donDTP', JSON.stringify([{ id: 'd-1', b24: 144 }]))
-    workspaceMocks.opsStore.setItem(
-      'tongdon_reports',
-      JSON.stringify([{ id: 'all-1', weekKey: 'c-1_d-1', current: { grandTotal: 1450 } }]),
-    )
-    workspaceMocks.opsStore.setItem(
-      'reporting_cycles',
-      JSON.stringify([{ cycle_key: 'c-1_d-1', status: 'ready_for_analytics' }]),
-    )
-
+  it('omits an invalid metric from the ready hero', async () => {
+    workspaceMocks.opsStore.setItem('tongdon_reports', JSON.stringify([{ id: 'all-1', current: { grandTotal: 'invalid' } }]))
     render(<App />)
 
-    expect(await screen.findByText('Chu kỳ hiện tại: sẵn sàng phân tích')).toBeInTheDocument()
+    const hero = await screen.findByRole('region', { name: 'Dữ liệu tuần đã sẵn sàng' })
+    expect(within(hero).getByText('Không có ngoại lệ từ trạng thái dữ liệu hiện có.')).toBeInTheDocument()
   })
 
   it('treats invalid storage entries as missing instead of crashing the brief', async () => {
-    workspaceMocks.opsStore.setItem('weeks_donC', JSON.stringify([null]))
-    workspaceMocks.opsStore.setItem('sheet_reports_donC', JSON.stringify([null]))
+    workspaceMocks.opsStore.setItem('tongdon_reports', JSON.stringify([null]))
 
     render(<App />)
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })).toBeInTheDocument()
-    expect(screen.getAllByText('Chưa có dữ liệu tuần')).toHaveLength(4)
+    expect(screen.getAllByText('Chưa có dữ liệu tuần')).toHaveLength(1)
   })
 
-  it.each([
-    ['Tổng đơn', 'Tổng đơn'],
-    ['Đơn C', 'Giao hàng Đơn C'],
-    ['Đơn DTP', 'Giao hàng Đơn DTP'],
-    ['TMĐT', 'Đơn hàng Sàn TMĐT'],
-  ])('opens the existing %s tab from its status card', async (channel, pageTitle) => {
+  it('opens the Tổng đơn tab from its status card', async () => {
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: `Mở ${channel}: Chưa có dữ liệu tuần` }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở Tổng đơn: Chưa có dữ liệu tuần' }))
 
-    expect(screen.getByRole('heading', { level: 1, name: pageTitle })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Tổng đơn' })).toBeInTheDocument()
+  })
+
+  it('menu không còn 3 tab Giao hàng Đơn C/DTP, Sàn TMĐT; Gộp kênh bỏ chữ (Thử nghiệm)', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })
+
+    for (const label of ['Giao hàng Đơn C', 'Giao hàng Đơn DTP', 'Đơn hàng Sàn TMĐT', 'Gộp kênh (Thử nghiệm)']) {
+      expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'Gộp kênh' })).toBeInTheDocument()
+  })
+
+  it('tab đã nhớ là tab đã gỡ (Giao hàng Đơn C) thì mở Trang chủ thay vì màn hình trống', async () => {
+    sessionStorageMock.setItem('appActiveTab', 'donC')
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })).toBeInTheDocument()
   })
 
   it('keeps the current tab when Supabase refreshes the token on tab focus', async () => {
@@ -218,8 +185,8 @@ describe('authenticated application shell', () => {
 
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Đơn hàng Sàn TMĐT' }))
-    expect(screen.getByRole('heading', { level: 1, name: 'Đơn hàng Sàn TMĐT' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Hàng chậm luân chuyển' }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Hàng chậm luân chuyển' })).toBeInTheDocument()
 
     // Giữ loadWorkspace pending để trạng thái 'syncing' commit thật (giống mạng chậm ngoài thực tế)
     let releaseWorkspace
@@ -230,7 +197,7 @@ describe('authenticated application shell', () => {
     await act(async () => { releaseWorkspace?.() })
 
     expect(screen.queryByText('Đang tải không gian làm việc trên đám mây...')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1, name: 'Đơn hàng Sàn TMĐT' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Hàng chậm luân chuyển' })).toBeInTheDocument()
   })
 
   it('returns to the login screen when the session signs out', async () => {

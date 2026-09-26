@@ -1,9 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, ShoppingBag, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass, FlaskConical, ArrowLeftRight } from 'lucide-react'
+import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass, FlaskConical, ArrowLeftRight } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
-import TmdtTab from './components/TmdtTab'
 import ExpiryStockTab from './components/ExpiryStockTab'
 import SlowMovingStockTab from './components/SlowMovingStockTab'
 import NhapHangTab from './components/NhapHangTab'
@@ -16,7 +15,6 @@ import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
 import cpcLogo from './assets/cpc1hn_logo.png'
 
-const SheetTab = lazy(() => import('./components/SheetTab'))
 const TongDonTab = lazy(() => import('./components/TongDonTab'))
 const UnifiedTrialTab = lazy(() => import('./components/UnifiedTrialTab'))
 
@@ -28,10 +26,7 @@ const NAV = [
     icon: FileBarChart2,
     children: [
       { id: 'tongdon', label: 'Tổng đơn',           icon: LayoutGrid },
-      { id: 'donC',    label: 'Giao hàng Đơn C',    icon: Truck },
-      { id: 'donDTP',  label: 'Giao hàng Đơn DTP',  icon: Package },
-      { id: 'tmdt',    label: 'Đơn hàng Sàn TMĐT',  icon: ShoppingBag },
-      { id: 'gopKenh', label: 'Gộp kênh (Thử nghiệm)', icon: FlaskConical },
+      { id: 'gopKenh', label: 'Gộp kênh', icon: FlaskConical },
     ],
   },
   { id: 'tonkhocandate', label: 'Tồn kho cận date', icon: CalendarClock },
@@ -79,10 +74,7 @@ const NAV = [
 const BREADCRUMB = {
   home:     ['Trang chủ'],
   tongdon:  ['Trang chủ', 'Báo cáo giao hàng', 'Tổng đơn'],
-  donC:     ['Trang chủ', 'Báo cáo giao hàng', 'Giao hàng Đơn C'],
-  donDTP:   ['Trang chủ', 'Báo cáo giao hàng', 'Giao hàng Đơn DTP'],
-  tmdt:     ['Trang chủ', 'Báo cáo giao hàng', 'Đơn hàng Sàn TMĐT'],
-  gopKenh:  ['Trang chủ', 'Báo cáo giao hàng', 'Gộp kênh (Thử nghiệm)'],
+  gopKenh:  ['Trang chủ', 'Báo cáo giao hàng', 'Gộp kênh'],
   tonkhocandate: ['Trang chủ', 'Tồn kho cận date'],
   hangchamluanchuyen: ['Trang chủ', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
@@ -269,7 +261,11 @@ export default function App() {
 }
 
 function AppContent({ user }) {
-  const [active, setActive] = useState(() => getCachedActiveTab('home'))
+  // Tab đã nhớ có thể là tab đã bị gỡ (vd Giao hàng Đơn C) — khi đó về Trang chủ thay vì màn hình trống.
+  const [active, setActive] = useState(() => {
+    const cached = getCachedActiveTab('home')
+    return BREADCRUMB[cached] ? cached : 'home'
+  })
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth >= 900,
   )
@@ -444,16 +440,13 @@ function AppContent({ user }) {
             <HomeBrief
               onNavigate={(id) => {
                 setActive(id)
-                if (['tongdon', 'donC', 'donDTP', 'tmdt'].includes(id)) {
+                if (id === 'tongdon') {
                   setExpanded((current) => ({ ...current, baocao: true }))
                 }
               }}
             />
           )}
           {active === 'tongdon' && <Suspense fallback={tabLoadingState}><TongDonTab onNavigate={setActive} /></Suspense>}
-          {active === 'donC' && <Suspense fallback={tabLoadingState}><SheetTab type="donC" /></Suspense>}
-          {active === 'donDTP' && <Suspense fallback={tabLoadingState}><SheetTab type="donDTP" /></Suspense>}
-          {active === 'tmdt'    && <TmdtTab />}
           {active === 'gopKenh' && <Suspense fallback={tabLoadingState}><UnifiedTrialTab /></Suspense>}
           {active === 'tonkhocandate' && <ExpiryStockTab />}
           {active === 'hangchamluanchuyen' && <SlowMovingStockTab />}

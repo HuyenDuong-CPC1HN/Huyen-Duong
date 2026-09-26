@@ -1,6 +1,6 @@
 /**
- * DeliveryReportPresentation tests — verify ThongKeDoiTac and ThongKeGiaoHang
- * render without crashing and that their section structure is preserved.
+ * DeliveryReportPresentation tests — verify ThongKeDoiTac (dùng trong tab Gộp kênh)
+ * renders without crashing and that their section structure is preserved.
  *
  * These are "presentation invariant" tests: they ensure the counting logic
  * hasn't drifted after the redesign. Components are presentation-only changes
@@ -9,7 +9,6 @@
 import { render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ThongKeDoiTac from '../ThongKeDoiTac'
-import ThongKeGiaoHang from '../ThongKeGiaoHang'
 import { donCFixture } from './fixtures/sheetTabDonCFixture'
 import { donDTPFixture } from './fixtures/sheetTabDonDTPFixture'
 
@@ -39,9 +38,6 @@ vi.mock('../CarrierStats', () => ({
     scheduleClear: vi.fn(),
     cancelClear: vi.fn(),
   })),
-  // Referenced by ThongKeGiaoHang's carrier GroupCard branch — passed as SectionCard
-  // children, so the JSX element is created (and this identifier read) even when the
-  // section is collapsed by default and never actually mounted.
   CarrierPanel: vi.fn(() => null),
 }))
 
@@ -126,85 +122,5 @@ describe('ThongKeDoiTac — renders without crashing', () => {
     const sections = container.querySelectorAll('[class*="section"]')
     const hasChanhSection = Array.from(sections).some(s => s.textContent.includes('Giao qua Chành xe'))
     expect(hasChanhSection).toBe(false)
-  })
-})
-
-describe('ThongKeGiaoHang — renders without crashing', () => {
-  beforeEach(() => { store.clear() })
-
-  it('renders donC data without error', () => {
-    const { container } = render(
-      <ThongKeGiaoHang
-        data={donCFixture.rows}
-        type="donC"
-        weekKey="test"
-        referenceDate={null}
-      />,
-    )
-    expect(container.firstChild).toBeTruthy()
-  })
-
-  it('renders donDTP data without error', () => {
-    const { container } = render(
-      <ThongKeGiaoHang
-        data={donDTPFixture.rows}
-        type="donDTP"
-        weekKey="test"
-        referenceDate={null}
-      />,
-    )
-    expect(container.firstChild).toBeTruthy()
-  })
-
-  it.each([
-    ['Viettel Post'],
-    ['SPX Express'],
-    ['Giao qua Chành xe'],
-  ])('shows %s group for donC', (label) => {
-    const { container } = render(
-      <ThongKeGiaoHang
-        data={donCFixture.rows}
-        type="donC"
-        weekKey="test"
-        referenceDate={null}
-      />,
-    )
-    expect(container.textContent.includes(label)).toBeTruthy()
-  })
-
-  it('shows Viettel Post group for donDTP', () => {
-    const { container } = render(
-      <ThongKeGiaoHang
-        data={donDTPFixture.rows}
-        type="donDTP"
-        weekKey="test"
-        referenceDate={null}
-      />,
-    )
-    expect(container.textContent.includes('Viettel Post')).toBeTruthy()
-  })
-
-  it('does NOT show SPX Express for donDTP', () => {
-    const { container } = render(
-      <ThongKeGiaoHang
-        data={donDTPFixture.rows}
-        type="donDTP"
-        weekKey="test"
-        referenceDate={null}
-      />,
-    )
-    expect(container.textContent.includes('SPX Express')).toBeFalsy()
-  })
-
-  it('does NOT show Chành xe section for donDTP', () => {
-    const { container } = render(
-      <ThongKeGiaoHang
-        data={donDTPFixture.rows}
-        type="donDTP"
-        weekKey="test"
-        referenceDate={null}
-      />,
-    )
-    expect(container.textContent.includes('Giao qua Chành xe')).toBeFalsy()
   })
 })

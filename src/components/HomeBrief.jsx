@@ -4,12 +4,10 @@ import {
   CircleCheck,
   ClipboardList,
   LayoutGrid,
-  Package,
   Send,
-  ShoppingBag,
-  Truck,
 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
+import { readTrialReports } from '../utils/unifiedTrialReports'
 
 const STATUS = {
   ready: {
@@ -31,9 +29,6 @@ const STATUS = {
 
 const CHANNEL_META = {
   tongdon: { label: 'Tổng đơn', icon: LayoutGrid, headlineLabel: 'Tổng đơn đã lưu' },
-  donC: { label: 'Đơn C', icon: Truck, headlineLabel: 'Giao ≤24h đã lưu' },
-  donDTP: { label: 'Đơn DTP', icon: Package, headlineLabel: 'Giao ≤24h đã lưu' },
-  tmdt: { label: 'TMĐT', icon: ShoppingBag, headlineLabel: 'Tổng đơn đã lưu' },
 }
 
 function readList(key) {
@@ -51,46 +46,10 @@ function formatOrders(value) {
   return Number.isFinite(value) ? `${value.toLocaleString('vi-VN')} đơn` : null
 }
 
-function deriveSheetChannel(type) {
-  const weeks = readList(`weeks_${type}`)
-  const reports = readList(`sheet_reports_${type}`)
-  const activeId = localStorage.getItem(`activeWeek_${type}`)
-  const activeWeek = weeks.find((week) => week.id === activeId) || weeks.at(-1)
-  const activeReport = reports.find((report) => report.id === (activeWeek?.id || activeId))
-    || (!activeWeek ? reports[0] : null)
-
-  if (activeReport) {
-    return {
-      state: 'ready',
-      context: activeReport.label || activeWeek?.label || 'Báo cáo đã lưu',
-      headline: formatOrders(activeReport.b24),
-    }
-  }
-
-  if (activeWeek && Array.isArray(activeWeek.data) && activeWeek.data.length > 0) {
-    return { state: 'needsSave', context: activeWeek.label || 'Tuần đang hoạt động' }
-  }
-
-  return { state: 'missing', context: activeWeek?.label || 'Chưa chọn tuần dữ liệu' }
-}
-
 function deriveChannels() {
-  const donC = deriveSheetChannel('donC')
-  const donDTP = deriveSheetChannel('donDTP')
-  const tmdtReports = readList('tmdt_reports')
-  const tongdonReports = readList('tongdon_reports')
-  const tmdtReport = tmdtReports[0]
-  const tongdonReport = tongdonReports[0]
-  const analyticsReady = Boolean(tongdonReport?.weekKey) && readList('reporting_cycles').some((cycle) => (
-    cycle.cycle_key === tongdonReport.weekKey && cycle.status === 'ready_for_analytics'
-  ))
-  const hasSourceData = [
-    donC.state !== 'missing',
-    donDTP.state !== 'missing',
-    tmdtReports.length > 0,
-    readList('sheet_reports_donC').length > 0,
-    readList('sheet_reports_donDTP').length > 0,
-  ].some(Boolean)
+  const tongdonReport = readList('tongdon_reports')[0]
+  // Dữ liệu nguồn của Tổng đơn = số liệu tuần đã lưu ở tab Gộp kênh (chỉ đọc).
+  const hasSourceData = readTrialReports('donSO').length > 0 || readTrialReports('donTruyenThong').length > 0
 
   return [
     {
@@ -100,24 +59,11 @@ function deriveChannels() {
             state: 'ready',
             context: tongdonReport.label || tongdonReport.title || 'Báo cáo đã lưu',
             headline: formatOrders(tongdonReport.current?.grandTotal),
-            analyticsReady,
           }
         : {
             state: hasSourceData ? 'needsSave' : 'missing',
             context: hasSourceData ? 'Chưa có bản tổng hợp đã lưu' : 'Chưa có dữ liệu nguồn',
           }),
-    },
-    { id: 'donC', ...donC },
-    { id: 'donDTP', ...donDTP },
-    {
-      id: 'tmdt',
-      ...(tmdtReport
-        ? {
-            state: 'ready',
-            context: tmdtReport.label || 'Báo cáo đã lưu',
-            headline: formatOrders(tmdtReport.total),
-          }
-        : { state: 'missing', context: 'Chưa có báo cáo TMĐT đã lưu' }),
     },
   ].map((channel) => ({ ...CHANNEL_META[channel.id], ...STATUS[channel.state], ...channel }))
 }
@@ -172,9 +118,6 @@ export default function HomeBrief({ onNavigate }) {
         <p className="home-brief-eyebrow">{hero.eyebrow}</p>
         <h2 id="home-hero-title">{hero.title}</h2>
         <p className="home-hero-copy">{hero.description}</p>
-        <p className="home-brief-analytics-status">
-          {channels[0].analyticsReady ? 'Chu kỳ hiện tại: sẵn sàng phân tích' : 'Chu kỳ hiện tại: chưa công bố cho phân tích'}
-        </p>
         <button type="button" className="home-action-primary home-hero-action" onClick={() => onNavigate(hero.target)}>
           <HeroIcon size={18} aria-hidden="true" />
           {hero.actionLabel}
