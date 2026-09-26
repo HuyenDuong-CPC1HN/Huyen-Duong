@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass, FlaskConical, ArrowLeftRight } from 'lucide-react'
+import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Hourglass, Layers, ArrowLeftRight } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -26,7 +26,7 @@ const NAV = [
     icon: FileBarChart2,
     children: [
       { id: 'tongdon', label: 'Phân tích giao hàng',           icon: LayoutGrid },
-      { id: 'gopKenh', label: 'Chi tiết giao hàng theo kênh', icon: FlaskConical },
+      { id: 'gopKenh', label: 'Chi tiết giao hàng theo kênh', icon: Layers },
     ],
   },
   { id: 'tonkhocandate', label: 'Tồn kho cận date', icon: CalendarClock },
