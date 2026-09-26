@@ -228,13 +228,6 @@ export default function App() {
           {' '}<code>supabase/migrations/20260905_carrier_packing_weeks.sql</code>, rồi tải lại trang.
         </span>
       )
-    } else if (/reporting_cycles|schema cache/i.test(blockingError || '')) {
-      remediationHint = (
-        <span>
-          Chưa chạy migration analytics trên Supabase. Mở SQL Editor, chạy toàn bộ file
-          {' '}<code>supabase/migrations/20260809_analytics_foundation.sql</code>, rồi tải lại trang.
-        </span>
-      )
     }
 
     return (

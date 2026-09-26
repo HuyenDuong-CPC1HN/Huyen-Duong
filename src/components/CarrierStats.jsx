@@ -39,22 +39,6 @@ function filterCarrierRows(rows, activeFilters, search, excludeKey = null) {
 
 const MAX_CARRIER_WEEKS = 8 // tối đa số tuần giữ lại — mỗi tuần lưu toàn bộ dòng dữ liệu, cần chặn để tránh đầy localStorage
 
-// localStorage đầy không chỉ do riêng carrier — các tuần Excel Đơn C/DTP (weeks_donC/weeks_donDTP) thường
-// chiếm nhiều chỗ nhất vì lưu toàn bộ dòng qua nhiều lần upload. Dữ liệu đã có trên Firebase nên có thể
-// bớt bớt bản cục bộ an toàn khi cần giải phóng chỗ ghi dữ liệu mới.
-function freeUpLocalStorageSpace() {
-  for (const type of ['donC', 'donDTP']) {
-    try {
-      const raw = localStorage.getItem(`weeks_${type}`)
-      if (!raw) continue
-      const weeks = JSON.parse(raw)
-      if (Array.isArray(weeks) && weeks.length > 2) {
-        localStorage.setItem(`weeks_${type}`, JSON.stringify(weeks.slice(-2)))
-      }
-    } catch { /* ignore */ }
-  }
-}
-
 // Thêm 1 tuần upload mới — KHÔNG ghi đè các tuần cũ. Giới hạn tối đa MAX_CARRIER_WEEKS tuần,
 // và tự động bớt tuần cũ nhất nếu localStorage đầy (báo cho người dùng biết nếu có tuần bị bớt).
 function addCarrierWeek(carrierKey, entry) {
@@ -95,13 +79,11 @@ function addHoldWeek(carrierKey, entry) {
   const weeks = readHoldWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
   let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
-  let triedFreeing = false
   while (list.length > 0) {
     try {
       localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(list))
       return withId
     } catch (err) {
-      if (!triedFreeing) { triedFreeing = true; freeUpLocalStorageSpace(); continue }
       if (list.length <= 1) throw err
       list = list.slice(0, -1)
     }
@@ -127,13 +109,11 @@ function addSalesOrderWeek(carrierKey, entry) {
   const weeks = readSalesOrderWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
   let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
-  let triedFreeing = false
   while (list.length > 0) {
     try {
       localStorage.setItem(`carrier_salesorderweeks_${carrierKey}`, JSON.stringify(list))
       return withId
     } catch (err) {
-      if (!triedFreeing) { triedFreeing = true; freeUpLocalStorageSpace(); continue }
       if (list.length <= 1) throw err
       list = list.slice(0, -1)
     }
@@ -159,13 +139,11 @@ function addPackingWeek(carrierKey, entry) {
   const weeks = readPackingWeeks(carrierKey)
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
   let list = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
-  let triedFreeing = false
   while (list.length > 0) {
     try {
       localStorage.setItem(`carrier_packingweeks_${carrierKey}`, JSON.stringify(list))
       return withId
     } catch (err) {
-      if (!triedFreeing) { triedFreeing = true; freeUpLocalStorageSpace(); continue }
       if (list.length <= 1) throw err
       list = list.slice(0, -1)
     }

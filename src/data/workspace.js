@@ -3,12 +3,8 @@ import { createCarrierWeeksRepository } from './carrierWeeks'
 import { createExpiryStockMonthsRepository } from './expiryStockMonths'
 import { createGoodsReceiptBatchesRepository } from './goodsReceiptBatches'
 import { createOpsSettingsRepository } from './opsSettings'
-import { createReportWeeksRepository } from './reportWeeks'
-import { createSheetReportsRepository } from './sheetReports'
-import { createTmdtReportsRepository } from './tmdtReports'
 import { createTongdonReportsRepository } from './tongdonReports'
 import { createStorageFilesRepository } from './storageFiles'
-import { createReportingCyclesRepository } from './reportingCycles'
 import { createReturnRecordsRepository } from './returnRecords'
 
 const values = new Map()
@@ -51,20 +47,6 @@ async function loadOptional(pattern, loadFn, fallback) {
     if (fallback) fallback()
     return undefined
   }
-}
-
-async function loadWeeks(client, channel) {
-  const repo = createReportWeeksRepository(client)
-  const records = await repo.list(channel)
-  const weeks = await Promise.all(records.map(async record => ({
-    id: record.id,
-    label: record.label,
-    fileName: record.file_name,
-    uploadedAt: record.uploaded_at,
-    data: await repo.loadRows(record),
-  })))
-  put(`weeks_${channel}`, encode(weeks))
-  put(`activeWeek_${channel}`, records.find(record => record.is_active)?.id || weeks.at(-1)?.id || '')
 }
 
 async function loadCarriers(client) {
@@ -172,7 +154,7 @@ async function loadGoodsReceipt(client) {
 export async function loadWorkspace(client = supabase) {
   if (!client) throw new Error('Thiếu cấu hình Supabase.')
   values.clear()
-  await Promise.all([loadWeeks(client, 'donC'), loadWeeks(client, 'donDTP'), loadCarriers(client)])
+  await loadCarriers(client)
   await loadOptional('carrier_sales_order_weeks', () => loadSalesOrderWeeks(client))
   await loadOptional('carrier_packing_weeks', () => loadPackingWeeks(client))
   await loadOptional('expiry_stock_months', () => loadExpiryStock(client), () => {
@@ -186,58 +168,13 @@ export async function loadWorkspace(client = supabase) {
   await loadOptional('return_records|return_record_invoices|return_record_products', () => loadReturnRecords(client), () => {
     put('return_records', encode([]))
   })
-  const [donCReports, donDtpReports, tongdon, tmdt, settingsResult] = await Promise.all([
-    createSheetReportsRepository(client).list('donC'),
-    createSheetReportsRepository(client).list('donDTP'),
+  const [tongdon, settingsResult] = await Promise.all([
     createTongdonReportsRepository(client).list(),
-    createTmdtReportsRepository(client).list(),
     client.from('ops_settings').select('key,value'),
   ])
   if (settingsResult.error) throw new Error(settingsResult.error.message)
-  const reportingCycles = await loadOptional('reporting_cycles', () => createReportingCyclesRepository(client).list()) || []
-  put('sheet_reports_donC', encode(donCReports))
-  put('sheet_reports_donDTP', encode(donDtpReports))
   put('tongdon_reports', encode(tongdon))
-  put('tmdt_reports', encode(tmdt))
-  put('reporting_cycles', encode(reportingCycles))
   for (const setting of settingsResult.data || []) put(setting.key, encode(setting.value))
-}
-
-export async function refreshReportingCycles(client = supabase) {
-  const reportingCycles = await createReportingCyclesRepository(client).list()
-  put('reporting_cycles', encode(reportingCycles))
-  return reportingCycles
-}
-
-async function syncWeeks(key) {
-  const channel = key.replace('weeks_', '')
-  const repo = createReportWeeksRepository(supabase)
-  const weeks = decode(values.get(key) || '[]')
-  const changes = consumeChanges(key)
-  if (!changes.upserts.size && !changes.deletes.size) return
-  const current = await repo.list(channel)
-  const currentById = new Map(current.map(week => [String(week.id), week]))
-  for (const week of weeks.filter(item => changes.upserts.has(String(item.id)))) {
-    await repo.save({
-      id: week.id,
-      channel,
-      label: week.label,
-      fileName: week.fileName,
-      uploadedAt: week.uploadedAt,
-      rows: week.data || [],
-      isActive: values.get(`activeWeek_${channel}`) === week.id,
-    })
-  }
-  await Promise.all([...changes.deletes].map(id => currentById.get(id)).filter(Boolean).map(week => repo.remove(week)))
-}
-
-async function syncSheetReports(key) {
-  const channel = key.replace('sheet_reports_', '')
-  const repo = createSheetReportsRepository(supabase)
-  const reports = decode(values.get(key) || '[]')
-  const changes = consumeChanges(key)
-  for (const report of reports.filter(item => changes.upserts.has(String(item.id)))) await repo.save(channel, report)
-  await Promise.all([...changes.deletes].map(id => repo.remove(channel, id)))
 }
 
 async function syncReports(key, repo) {
@@ -400,11 +337,7 @@ async function syncReturnRecords(key) {
 }
 
 async function persist(key) {
-  if (key.startsWith('weeks_')) return syncWeeks(key)
-  if (key.startsWith('activeWeek_')) return createReportWeeksRepository(supabase).setActive(key.replace('activeWeek_', ''), values.get(key) || '')
-  if (key.startsWith('sheet_reports_')) return syncSheetReports(key)
   if (key === 'tongdon_reports') return syncReports(key, createTongdonReportsRepository(supabase))
-  if (key === 'tmdt_reports') return syncReports(key, createTmdtReportsRepository(supabase))
   if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
   if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
   if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key)
@@ -436,10 +369,7 @@ export const opsStore = {
     trackCollectionChanges(key, values.get(key), '[]')
     values.delete(key)
     writeChain = writeChain.then(async () => {
-      if (key.startsWith('sheet_reports_')) return syncSheetReports(key)
       if (key === 'tongdon_reports') return syncReports(key, createTongdonReportsRepository(supabase))
-      if (key === 'tmdt_reports') return syncReports(key, createTmdtReportsRepository(supabase))
-      if (key.startsWith('weeks_')) return syncWeeks(key)
       if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
       if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
       if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key)
