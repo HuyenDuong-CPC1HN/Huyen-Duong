@@ -390,6 +390,34 @@ describe('parseGoodsReceipt', () => {
     expect(result).toMatchObject({ checked: true, matched: true, declaredTotal: 445 })
   })
 
+  it('biên bản chi tiết DTP của dòng hàng D (bên giao là Công ty cổ phần dược phẩm DTP) không cộng vào tổng kiện, kể cả khác ngày', () => {
+    // Lỗi thực tế: biên bản tổng ngày 25/09 khai 518 kiện (đã gồm dòng D "hàng gửi DTP" không mã hàng), 2
+    // biên bản chi tiết của dòng D do DTP lập ngày 24/09 -> trước đây bị coi là chuyến riêng, cộng thành 540.
+    const pdfTong = 'Ngày 25 tháng 09 năm 2026 Bên giao hàng: Công ty cổ phần dược phẩm CPC1 Hà Nội '
+      + '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 496 272 D HÀNG GỬI DTP 22 Tổng cả đơn 518 Kiện'
+    const pdfDtp1 = 'Ngày 24 tháng 09 năm 2026 Bên giao hàng: CÔNG TY CỔ PHẦN DƯỢC PHẨM DTP '
+      + '1 B01767 Bupi - Hộp 10 lọ 010924 0 12 670 Tổng cả đơn 12 Kiện'
+    const pdfDtp2 = 'Ngày 24 tháng 09 năm 2026 Bên giao hàng: Công ty Cổ phần Dược phẩm DTP '
+      + '1 C02019 Carbamol - Hộp 10 ống 010525 0 22 200 Tổng cả đơn 22 Kiện'
+    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '612', 'Lượng cần': 272, 'Số kiện cần': 518, ĐVT: 'TUYP' }])
+    const rows = readWarehouseExportRows(excelC)
+    const pdfTexts = [pdfDtp2, pdfDtp1, pdfTong]
+    const pdfNames = ['24092026_BBGN_DTP_2.pdf', '24092026_BBGN_DTP_1.pdf', '25092026_BBGN.pdf']
+    expect(buildReceiptFromFiles({ khoCRows: rows, khoLgtRows: [], pdfTexts, pdfNames }).warnings).toHaveLength(0)
+    const result = recheckKienTotal({ khoC: rows, khoLgt: [], pdfTexts, pdfNames })
+    expect(result).toMatchObject({ checked: true, matched: true, declaredTotal: 518 })
+    expect(result.message).toContain('không cộng 2 biên bản chi tiết DTP')
+
+    // Không đọc được dòng bên giao hàng thì dựa vào tên file có chữ "DTP"
+    const noCompany = [pdfDtp1.replace(/CÔNG TY.*DTP/, ''), pdfTong]
+    expect(recheckKienTotal({ khoC: rows, khoLgt: [], pdfTexts: noCompany, pdfNames: ['24092026_BBGN_DTP_1.pdf', '25092026_BBGN.pdf'] }))
+      .toMatchObject({ declaredTotal: 518 })
+
+    // Chuyến chỉ có biên bản DTP (không có biên bản tổng) thì vẫn tính tổng từ biên bản DTP
+    expect(recheckKienTotal({ khoC: rows, khoLgt: [], pdfTexts: [pdfDtp1, pdfDtp2], pdfNames: [] }))
+      .toMatchObject({ declaredTotal: 22 })
+  })
+
   it('keeps multi-token số lô intact (vd "1 14") instead of chopping it down to 1 token', () => {
     // Số lô thật ghi 2 token cách nhau bởi khoảng trắng — trước đây bị cắt mất token đầu.
     const pdfText = '9 L01021 Liproin - Hộp 1 tuýp 5g 1 14 1 1 867 167h thùng số 1 '

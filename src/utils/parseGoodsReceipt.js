@@ -500,6 +500,38 @@ function sumDeclaredTotalsByDate(pdfTexts) {
   return [...maxByDate.values()].reduce((sum, v) => sum + v, 0)
 }
 
+// Biên bản chi tiết của dòng hàng gửi DTP (dòng "D" không mã hàng trên biên bản tổng) — nhận biết theo nội
+// dung: bên giao hàng là "Công ty cổ phần dược phẩm DTP"; dự phòng thêm tên file có chữ "DTP" (vd
+// "24092026_BBGN_DTP_1.pdf") khi không đọc được dòng đó. Phần kiện của các biên bản này đã nằm trong "Tổng cả
+// đơn" của biên bản tổng, nên KHÔNG cộng vào tổng kiện khai báo (kể cả khi khác ngày với biên bản tổng).
+// Số kiện theo từng mã hàng của chúng vẫn dùng để đối chiếu từng mã (buildFactoryReconciliation), vì dòng
+// D trên biên bản tổng không ghi mã hàng.
+const DTP_COMPANY_RE = /công\s*ty\s*cổ\s*phần\s*dược\s*phẩm\s*dtp/iu
+
+function isDtpDetailNote(text, name) {
+  return DTP_COMPANY_RE.test(String(text || '').normalize('NFC')) || /dtp/i.test(String(name || ''))
+}
+
+// Tổng kiện khai báo trên (các) biên bản giao nhận. pdfNames (cùng thứ tự pdfTexts) dùng để bỏ các biên bản
+// chi tiết DTP — chỉ bỏ khi có ít nhất 1 biên bản tổng (không phải DTP) có "Tổng cả đơn"; chuyến chỉ có
+// biên bản DTP thì vẫn tính như cũ. Trả về null khi không đọc được "Tổng cả đơn" ở file nào.
+function declaredKienTotal(pdfTexts, pdfNames = []) {
+  const withTotal = pdfTexts
+    .map((text, i) => ({ text, name: pdfNames[i], total: parseDeliveryNoteDeclaredTotal(text) }))
+    .filter(item => item.total !== null)
+  if (withTotal.length === 0) return null
+  const master = withTotal.filter(item => !isDtpDetailNote(item.text, item.name))
+  const used = master.length > 0 ? master : withTotal
+  return {
+    total: sumDeclaredTotalsByDate(used.map(item => item.text)),
+    excludedDetailFiles: withTotal.length - used.length,
+  }
+}
+
+function excludedNote(excludedDetailFiles) {
+  return excludedDetailFiles > 0 ? ` (không cộng ${excludedDetailFiles} biên bản chi tiết DTP của dòng hàng D)` : ''
+}
+
 function sumKien(rows) {
   return rows.reduce((sum, row) => sum + (row.kienNguyen ?? 0) + (row.kienLe ?? 0), 0)
 }
@@ -568,6 +600,7 @@ export function buildReceiptFromFiles({
   khoCRows = [],
   khoLgtRows = [],
   pdfTexts = [],
+  pdfNames = [],
 }) {
   // Phân loại từng PDF theo ĐÚNG bản chất, không theo vùng người dùng thả file:
   // - "Phiếu xuất kho" (Loại 1, nguồn hàng từ nhà máy DTP — cùng cấp bậc với file Excel của CPC1) tự ghi
@@ -635,13 +668,13 @@ export function buildReceiptFromFiles({
   // 1 dòng không mã hàng (vd "HÀNG GỬI DTP"), cộng dồn sẽ đếm trùng đúng phần đó, nên lấy số LỚN NHẤT
   // trong ngày. Các file KHÁC NGÀY là chuyến giao bổ sung/giao bù riêng — CỘNG DỒN giữa các ngày (xem
   // sumDeclaredTotalsByDate).
-  const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
-  if (declaredTotals.length > 0) {
-    const declaredTotal = sumDeclaredTotalsByDate(pdfTexts)
+  const declared = declaredKienTotal(pdfTexts, pdfNames)
+  if (declared) {
+    const declaredTotal = declared.total
     const actualTotal = sumKien(khoC) + sumKien(khoLgt)
     if (declaredTotal !== actualTotal) {
       warnings.push(
-        `Biên bản giao nhận khai tổng ${declaredTotal} kiện nhưng bảng đã tách được ${actualTotal} kiện `
+        `Biên bản giao nhận khai tổng ${declaredTotal} kiện${excludedNote(declared.excludedDetailFiles)} nhưng bảng đã tách được ${actualTotal} kiện `
         + `(lệch ${declaredTotal - actualTotal}) — có thể do dòng gộp không ghi mã hàng cụ thể (vd hàng ký gửi kho khác). `
         + `Kiểm tra lại bằng chế độ Chỉnh sửa.`,
       )
@@ -657,15 +690,17 @@ export function buildReceiptFromFiles({
 // kiện trong chế độ Chỉnh sửa — với "Tổng cả đơn ... Kiện" trong (các) biên bản giao nhận đã lưu. Dùng khi
 // người dùng muốn kiểm tra lại sau khi tự sửa tay, không phải lúc xử lý file lần đầu (đó là
 // buildReceiptFromFiles ở trên) nên không đụng đến các cảnh báo đối chiếu khác (lệch SL từng dòng...).
-export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [] }) {
-  const declaredTotals = pdfTexts.map(parseDeliveryNoteDeclaredTotal).filter(n => n !== null)
-  if (declaredTotals.length === 0) {
+export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [], pdfNames = [] }) {
+  const declared = declaredKienTotal(pdfTexts, pdfNames)
+  if (!declared) {
     return { checked: false, message: 'Không đọc được "Tổng cả đơn ... Kiện" từ (các) biên bản giao nhận đã lưu.' }
   }
   // Nhiều file cùng chuyến, cùng ngày (vd tổng CPC1HN + riêng DTP) — file tổng đã gộp sẵn phần gửi đi kho
   // khác vào 1 dòng không mã hàng, cộng dồn sẽ đếm trùng, nên lấy số lớn nhất trong ngày. Khác ngày là
-  // chuyến giao bổ sung riêng — cộng dồn giữa các ngày (xem sumDeclaredTotalsByDate).
-  const declaredTotal = sumDeclaredTotalsByDate(pdfTexts)
+  // chuyến giao bổ sung riêng — cộng dồn giữa các ngày (xem sumDeclaredTotalsByDate). Biên bản chi tiết DTP
+  // của dòng hàng D không cộng vào tổng (xem declaredKienTotal).
+  const declaredTotal = declared.total
+  const note = excludedNote(declared.excludedDetailFiles)
   const actualTotal = sumKien(khoC) + sumKien(khoLgt)
   const matched = declaredTotal === actualTotal
   return {
@@ -674,8 +709,8 @@ export function recheckKienTotal({ khoC = [], khoLgt = [], pdfTexts = [] }) {
     declaredTotal,
     actualTotal,
     message: matched
-      ? `Đã khớp — biên bản giao nhận khai ${declaredTotal} kiện, bảng hiện có ${actualTotal} kiện.`
-      : `Biên bản giao nhận khai tổng ${declaredTotal} kiện nhưng bảng hiện có ${actualTotal} kiện `
+      ? `Đã khớp — biên bản giao nhận khai ${declaredTotal} kiện${note}, bảng hiện có ${actualTotal} kiện.`
+      : `Biên bản giao nhận khai tổng ${declaredTotal} kiện${note} nhưng bảng hiện có ${actualTotal} kiện `
         + `(lệch ${declaredTotal - actualTotal}).`,
     factoryReconciliation: buildFactoryReconciliation(khoC, khoLgt, pdfTexts),
   }

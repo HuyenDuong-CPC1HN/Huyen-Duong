@@ -743,12 +743,15 @@ export default function NhapHangTab() {
       // Gộp chung PDF của cả 2 vùng kho + vùng biên bản giao nhận — "Phiếu xuất kho" tự route theo đúng
       // "Lý do xuất kho" trong chính nó (buildReceiptFromFiles), không phụ thuộc vùng thả file; "Biên bản
       // giao nhận" chỉ dùng để đối chiếu, không quan tâm vùng nào.
-      const pdfTexts = [...khoCPdfItems, ...khoLgtPdfItems, ...bienBanPdfItems].map(item => item.text)
+      const allPdfItems = [...khoCPdfItems, ...khoLgtPdfItems, ...bienBanPdfItems]
+      const pdfTexts = allPdfItems.map(item => item.text)
+      // Tên file đi kèm để nhận biết biên bản chi tiết DTP (không cộng vào tổng kiện — xem parseGoodsReceipt).
+      const pdfNames = allPdfItems.map(item => item.name)
 
       const warehouseWarnings = collectWarehouseWarnings(khoCPdfItems, khoLgtPdfItems)
 
       const pdfMetadata = parsePdfMetadata(pdfTexts[0] || '')
-      const { khoC, khoLgt, warnings: reconciliationWarnings, factoryReconciliation } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts })
+      const { khoC, khoLgt, warnings: reconciliationWarnings, factoryReconciliation } = buildReceiptFromFiles({ khoCRows, khoLgtRows, pdfTexts, pdfNames })
 
       const batchId = String(Date.now())
       const processedAt = new Date().toISOString()
@@ -978,6 +981,7 @@ export default function NhapHangTab() {
       const pdfItems = await readPdfTextsFromFiles(pdfFiles, fileErrors)
       if (fileErrors.length > 0) throw new Error(fileErrors.filter(Boolean).join('; ') || 'Có tệp không thể đọc.')
       const pdfTexts = pdfItems.map(item => item.text)
+      const pdfNames = pdfItems.map(item => item.name)
       const warehouseWarnings = warehouse === 'C'
         ? collectWarehouseWarnings(pdfItems, [])
         : collectWarehouseWarnings([], pdfItems)
@@ -985,6 +989,7 @@ export default function NhapHangTab() {
         khoCRows: warehouse === 'C' ? newRawRows : [],
         khoLgtRows: warehouse === 'LGT' ? newRawRows : [],
         pdfTexts,
+        pdfNames,
       })
       const nextKhoC = mergeSupplementRows(active.khoC || [], newKhoC)
       const nextKhoLgt = mergeSupplementRows(active.khoLgt || [], newKhoLgt)
@@ -1019,16 +1024,18 @@ export default function NhapHangTab() {
       const { supabase } = await import('../supabase')
       const repo = createStorageFilesRepository(supabase)
       const pdfTexts = []
+      const pdfNames = []
       const readErrors = []
       for (const bb of bienBan) {
         try {
           const buf = await repo.downloadFile(bb.storagePath)
           pdfTexts.push(await extractPdfText(buf))
+          pdfNames.push(bb.fileName)
         } catch (err) {
           readErrors.push(`${bb.fileName}: ${err.message || err}`)
         }
       }
-      const result = recheckKienTotal({ khoC: active.khoC, khoLgt: active.khoLgt, pdfTexts })
+      const result = recheckKienTotal({ khoC: active.khoC, khoLgt: active.khoLgt, pdfTexts, pdfNames })
       setKienCheckResult(readErrors.length > 0
         ? { matched: false, message: `${result.message} (Không đọc được: ${readErrors.join('; ')})` }
         : { matched: result.matched, message: result.message })
