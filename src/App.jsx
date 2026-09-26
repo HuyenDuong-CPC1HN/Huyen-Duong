@@ -13,6 +13,7 @@ import SwapReturnTab from './components/SwapReturnTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
+import LegacyDataCleanup from './components/LegacyDataCleanup'
 import cpcLogo from './assets/cpc1hn_logo.png'
 
 const TongDonTab = lazy(() => import('./components/TongDonTab'))
@@ -436,6 +437,7 @@ function AppContent({ user }) {
 
         {/* Content */}
         <main id="main-content" className="dashboard-main" tabIndex="-1">
+          {active === 'home' && <LegacyDataCleanup />}
           {active === 'home' && (
             <HomeBrief
               onNavigate={(id) => {
