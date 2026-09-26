@@ -579,7 +579,7 @@ export default function UnifiedTrialTab() {
     <div className="sheet-tab donc-v2">
       <div className="sheet-tab-shell">
         <header className="sheet-tab-context">
-          <span>Gộp kênh (Thử nghiệm) — chạy song song, chưa thay thế 3 tab cũ</span>
+          <span>Chi tiết giao hàng theo kênh (Thử nghiệm) — chạy song song, chưa thay thế 3 tab cũ</span>
         </header>
 
         <div className="flex items-center justify-between" style={{ marginTop: 16 }}>

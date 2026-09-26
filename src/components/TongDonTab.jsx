@@ -92,7 +92,7 @@ function SourcePicker({ open, onToggle, donSOPick, donTTPick }) {
   return (
     <div className="tdr-source-picker rounded-xl p-4" style={{ background: 'var(--bg-card, #ffffff)', boxShadow: 'var(--shadow-card, 0 4px 12px rgba(0,0,0,0.15))' }}>
       <button type="button" onClick={onToggle} className="w-full flex items-center justify-between text-left">
-        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary, #1a1d23)' }}>Chọn tuần so sánh — Gộp kênh</span>
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary, #1a1d23)' }}>Chọn tuần so sánh — Chi tiết giao hàng theo kênh</span>
         {open ? <ChevronUp size={15} className="text-gray-400 shrink-0" /> : <ChevronDown size={15} className="text-gray-400 shrink-0" />}
       </button>
       {open && (

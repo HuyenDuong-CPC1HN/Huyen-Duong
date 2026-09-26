@@ -104,7 +104,7 @@ describe('TongDonTab saved-report composition', () => {
 
     render(<TongDonTab onNavigate={vi.fn()} />)
 
-    expect(screen.getByText('Chọn tuần so sánh — Gộp kênh')).toBeInTheDocument()
+    expect(screen.getByText('Chọn tuần so sánh — Chi tiết giao hàng theo kênh')).toBeInTheDocument()
     expect(screen.queryByText('Nguồn cũ')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Lưu báo cáo tuần này/i })).toBeInTheDocument()
   })

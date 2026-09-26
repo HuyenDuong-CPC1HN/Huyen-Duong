@@ -25,8 +25,8 @@ const NAV = [
     label: 'Báo cáo giao hàng',
     icon: FileBarChart2,
     children: [
-      { id: 'tongdon', label: 'Tổng đơn',           icon: LayoutGrid },
-      { id: 'gopKenh', label: 'Gộp kênh', icon: FlaskConical },
+      { id: 'tongdon', label: 'Phân tích giao hàng',           icon: LayoutGrid },
+      { id: 'gopKenh', label: 'Chi tiết giao hàng theo kênh', icon: FlaskConical },
     ],
   },
   { id: 'tonkhocandate', label: 'Tồn kho cận date', icon: CalendarClock },
@@ -73,8 +73,8 @@ const NAV = [
 
 const BREADCRUMB = {
   home:     ['Trang chủ'],
-  tongdon:  ['Trang chủ', 'Báo cáo giao hàng', 'Tổng đơn'],
-  gopKenh:  ['Trang chủ', 'Báo cáo giao hàng', 'Gộp kênh'],
+  tongdon:  ['Trang chủ', 'Báo cáo giao hàng', 'Phân tích giao hàng'],
+  gopKenh:  ['Trang chủ', 'Báo cáo giao hàng', 'Chi tiết giao hàng theo kênh'],
   tonkhocandate: ['Trang chủ', 'Tồn kho cận date'],
   hangchamluanchuyen: ['Trang chủ', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],

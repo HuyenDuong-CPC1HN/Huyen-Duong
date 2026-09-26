@@ -68,18 +68,18 @@ describe('authenticated application shell', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Trang chủ' })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual([
-      'Bổ sung dữ liệu Tổng đơn',
+      'Bổ sung dữ liệu Phân tích giao hàng',
       'Tình trạng tuần hiện tại',
       'Ngoại lệ cần xử lý',
       'Hành động tiếp theo',
     ])
 
-    const hero = screen.getByRole('region', { name: 'Bổ sung dữ liệu Tổng đơn' })
+    const hero = screen.getByRole('region', { name: 'Bổ sung dữ liệu Phân tích giao hàng' })
     expect(within(hero).getByText('Dữ liệu tuần cần bổ sung')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Mở Tổng đơn: Chưa có dữ liệu tuần' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mở Phân tích giao hàng: Chưa có dữ liệu tuần' })).toBeInTheDocument()
     expect(screen.queryByText(/^0 đơn$/)).not.toBeInTheDocument()
     expect(screen.getAllByText('Chưa có dữ liệu tuần')).toHaveLength(1)
-    expect(screen.getAllByRole('button', { name: 'Bổ sung dữ liệu Tổng đơn' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Bổ sung dữ liệu Phân tích giao hàng' })).toHaveLength(2)
   })
 
   it('chỉ còn thẻ Tổng đơn: không còn thẻ Đơn C, Đơn DTP, TMĐT và không còn dòng chu kỳ phân tích', async () => {
@@ -98,7 +98,7 @@ describe('authenticated application shell', () => {
     render(<App />)
 
     expect(await screen.findByText('Chưa lưu số liệu tuần')).toBeInTheDocument()
-    const hero = screen.getByRole('region', { name: 'Lưu số liệu Tổng đơn' })
+    const hero = screen.getByRole('region', { name: 'Lưu số liệu Phân tích giao hàng' })
     expect(within(hero).getByText('Báo cáo tuần cần lưu')).toBeInTheDocument()
   })
 
@@ -121,10 +121,10 @@ describe('authenticated application shell', () => {
   it('uses the existing next-action destination from the hero CTA', async () => {
     render(<App />)
 
-    const hero = await screen.findByRole('region', { name: 'Bổ sung dữ liệu Tổng đơn' })
-    fireEvent.click(within(hero).getByRole('button', { name: 'Bổ sung dữ liệu Tổng đơn' }))
+    const hero = await screen.findByRole('region', { name: 'Bổ sung dữ liệu Phân tích giao hàng' })
+    fireEvent.click(within(hero).getByRole('button', { name: 'Bổ sung dữ liệu Phân tích giao hàng' }))
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Tổng đơn' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Phân tích giao hàng' })).toBeInTheDocument()
   })
 
   it('keeps a valid zero metric in the ready hero', async () => {
@@ -157,9 +157,9 @@ describe('authenticated application shell', () => {
   it('opens the Tổng đơn tab from its status card', async () => {
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Mở Tổng đơn: Chưa có dữ liệu tuần' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở Phân tích giao hàng: Chưa có dữ liệu tuần' }))
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Tổng đơn' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Phân tích giao hàng' })).toBeInTheDocument()
   })
 
   it('menu không còn 3 tab Giao hàng Đơn C/DTP, Sàn TMĐT; Gộp kênh bỏ chữ (Thử nghiệm)', async () => {
@@ -169,7 +169,7 @@ describe('authenticated application shell', () => {
     for (const label of ['Giao hàng Đơn C', 'Giao hàng Đơn DTP', 'Đơn hàng Sàn TMĐT', 'Gộp kênh (Thử nghiệm)']) {
       expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
     }
-    expect(screen.getByRole('button', { name: 'Gộp kênh' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Chi tiết giao hàng theo kênh' })).toBeInTheDocument()
   })
 
   it('tab đã nhớ là tab đã gỡ (Giao hàng Đơn C) thì mở Trang chủ thay vì màn hình trống', async () => {

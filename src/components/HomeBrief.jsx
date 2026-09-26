@@ -28,7 +28,7 @@ const STATUS = {
 }
 
 const CHANNEL_META = {
-  tongdon: { label: 'Tổng đơn', icon: LayoutGrid, headlineLabel: 'Tổng đơn đã lưu' },
+  tongdon: { label: 'Phân tích giao hàng', icon: LayoutGrid, headlineLabel: 'Tổng đơn đã lưu' },
 }
 
 function readList(key) {
@@ -99,7 +99,7 @@ function getHeroContent(channels, nextAction) {
     description: metricChannel
       ? `${metricChannel.headlineLabel}: ${metricChannel.headline}. Không có ngoại lệ từ trạng thái dữ liệu hiện có.`
       : 'Không có ngoại lệ từ trạng thái dữ liệu hiện có.',
-    actionLabel: 'Xem báo cáo Tổng đơn',
+    actionLabel: 'Xem báo cáo Phân tích giao hàng',
     target: 'tongdon',
     icon: LayoutGrid,
   }
@@ -222,7 +222,7 @@ export default function HomeBrief({ onNavigate }) {
           ) : (
             <button type="button" className="home-action-primary" onClick={() => onNavigate('tongdon')}>
               <LayoutGrid size={18} aria-hidden="true" />
-              Xem báo cáo Tổng đơn
+              Xem báo cáo Phân tích giao hàng
               <ArrowRight size={17} aria-hidden="true" />
             </button>
           )}
