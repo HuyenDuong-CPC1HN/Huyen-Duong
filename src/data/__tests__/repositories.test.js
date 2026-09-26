@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createOpsSettingsRepository } from '../opsSettings'
 import { createStorageFilesRepository } from '../storageFiles'
 import { createGoodsReceiptBatchesRepository } from '../goodsReceiptBatches'
+import { createExpiryStockMonthsRepository } from '../expiryStockMonths'
 
 function chain(result) {
   const api = {
@@ -136,5 +137,21 @@ describe('Supabase repositories', () => {
     const buf = await createStorageFilesRepository(client).downloadFile('goods-receipt/2026/09/b1/bb.pdf')
     expect(new Uint8Array(buf)).toEqual(bytes)
     expect(storage.download).toHaveBeenCalledWith('goods-receipt/2026/09/b1/bb.pdf')
+  })
+
+  it('lưu tháng tồn kho kèm kỳ báo cáo; tháng lưu trước đây (chỉ có mảng dòng) vẫn đọc được', async () => {
+    const written = {}
+    const storage = {
+      upload: vi.fn(async (path, blob) => { written[path] = JSON.parse(await blob.text()); return { error: null } }),
+      download: vi.fn(async (path) => ({ data: new Blob([JSON.stringify(path === 'old.json' ? [{ maVatTu: 'A' }] : written[path])]), error: null })),
+    }
+    const table = chain({ data: null, error: null })
+    const client = { storage: { from: vi.fn(() => storage) }, from: vi.fn(() => table) }
+    const repo = createExpiryStockMonthsRepository(client)
+    const dateRange = { tuNgay: '2026-03-01', denNgay: '2026-05-31', soNgay: 91 }
+
+    await repo.save({ id: 'm1', rows: [{ maVatTu: 'B' }], dateRange, isActive: false })
+    await expect(repo.loadMonth({ storage_path: 'expiry-stock/m1.json' })).resolves.toEqual({ rows: [{ maVatTu: 'B' }], dateRange })
+    await expect(repo.loadMonth({ storage_path: 'old.json' })).resolves.toEqual({ rows: [{ maVatTu: 'A' }], dateRange: null })
   })
 })

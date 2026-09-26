@@ -11,6 +11,7 @@ const COLUMN_MAP = {
   'Mã kho': 'maKho',
   'Đvt': 'dvt',
   'Mã lô': 'maLo',
+  'Tên lô': 'tenLo',
   'Hạn dùng': 'hanDung',
   'Tồn đầu': 'tonDau',
   'Sl nhập': 'slNhap',
@@ -111,6 +112,7 @@ export function parseExpiryStockWorkbook(arrayBuffer) {
       maKho: record.maKho ? String(record.maKho).trim() : '',
       dvt: record.dvt ? String(record.dvt).trim() : '',
       maLo: record.maLo ? String(record.maLo).trim() : '',
+      tenLo: record.tenLo ? String(record.tenLo).trim() : '',
       hanDung: toIsoDate(record.hanDung),
       tonDau: toNumber(record.tonDau),
       slNhap: toNumber(record.slNhap),
@@ -125,7 +127,8 @@ function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x
 function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x }
 
 // Phân loại 1 hạn dùng (chuỗi ISO yyyy-mm-dd) theo mốc "hôm nay": hết hạn / cận dưới 3 tháng /
-// cận dưới 6 tháng / an toàn (>6 tháng) / không rõ hạn (thiếu dữ liệu hạn dùng trên file).
+// cận dưới 6 tháng / cận hạn 6 đến dưới 18 tháng (chỉ để cảnh báo luân chuyển, không vào sheet "Cận date"
+// của báo cáo) / an toàn (từ 18 tháng) / không rõ hạn (thiếu dữ liệu hạn dùng trên file).
 export function classifyExpiry(hanDung, referenceDate = new Date()) {
   if (!hanDung) return 'unknown'
   const today = startOfDay(referenceDate)
@@ -133,7 +136,27 @@ export function classifyExpiry(hanDung, referenceDate = new Date()) {
   if (expiry < today) return 'expired'
   if (expiry < addMonths(today, 3)) return 'near3'
   if (expiry < addMonths(today, 6)) return 'near6'
+  if (expiry < addMonths(today, 18)) return 'near18'
   return 'safe'
+}
+
+// Sheet "Cận date" của báo cáo = hết hạn + cận dưới 3 tháng + cận dưới 6 tháng.
+export const CAN_DATE_BUCKETS = ['expired', 'near3', 'near6']
+
+// Số tháng tròn giữa 2 ngày, cùng cách tính với DATEDIF(from, to, "m") của Excel.
+function wholeMonthsBetween(from, to) {
+  let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth())
+  if (to.getDate() < from.getDate()) months -= 1
+  return months
+}
+
+// "Tuổi thuốc (Tháng)" như file báo cáo mẫu: DATEDIF(TODAY(), Hạn dùng, "m"). Hàng đã hết hạn cho số âm
+// (DATEDIF của Excel báo lỗi khi hạn dùng < hôm nay). null nếu không rõ hạn dùng.
+export function drugAgeMonths(hanDung, referenceDate = new Date()) {
+  if (!hanDung) return null
+  const today = startOfDay(referenceDate)
+  const expiry = startOfDay(new Date(hanDung))
+  return expiry >= today ? wholeMonthsBetween(today, expiry) : -wholeMonthsBetween(expiry, today)
 }
 
 // Số ngày còn lại tới hạn dùng (âm nếu đã quá hạn), null nếu không rõ hạn dùng.

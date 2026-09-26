@@ -111,10 +111,39 @@ async function loadExpiryStock(client) {
     id: record.id,
     fileName: record.file_name,
     uploadedAt: record.uploaded_at,
-    rows: await repo.loadRows(record),
+    ...await repo.loadMonth(record),
   })))
   put('expiry_stock_months', encode(months))
   put('expiry_stock_active', records.find(record => record.is_active)?.id || months[0]?.id || '')
+}
+
+// Tab "Hàng chậm luân chuyển" cũ lưu các tháng đã tải lên trong ops_settings (khoá slow_moving_stock_months).
+// Hai tab đã gộp thành "Tồn kho cận date & chậm luân chuyển" dùng chung bảng expiry_stock_months, nên chuyển
+// các tháng cũ đó sang (1 lần, bỏ qua tháng đã có). Dữ liệu cũ trong ops_settings giữ nguyên, không xoá.
+const SLOW_MOVING_KEY = 'slow_moving_stock_months'
+const SLOW_MOVING_MIGRATED_KEY = 'slow_moving_stock_migrated'
+
+async function migrateSlowMovingMonths(client, settings) {
+  const byKey = new Map((settings || []).map(setting => [setting.key, setting.value]))
+  if (byKey.get(SLOW_MOVING_MIGRATED_KEY)) return false
+  const oldMonths = Array.isArray(byKey.get(SLOW_MOVING_KEY)) ? byKey.get(SLOW_MOVING_KEY) : []
+  const repo = createExpiryStockMonthsRepository(client)
+  const existing = new Set((await repo.list()).map(record => String(record.id)))
+  let moved = 0
+  for (const month of oldMonths) {
+    if (!month?.id || existing.has(String(month.id))) continue
+    await repo.save({
+      id: month.id,
+      fileName: month.fileName,
+      uploadedAt: month.uploadedAt,
+      rows: month.rows || [],
+      dateRange: month.dateRange || null,
+      isActive: false,
+    })
+    moved += 1
+  }
+  await createOpsSettingsRepository(client).set(SLOW_MOVING_MIGRATED_KEY, true)
+  return moved > 0
 }
 
 async function loadReturnRecords(client) {
@@ -174,6 +203,11 @@ export async function loadWorkspace(client = supabase) {
   ])
   if (settingsResult.error) throw new Error(settingsResult.error.message)
   put('tongdon_reports', encode(tongdon))
+  try {
+    if (await migrateSlowMovingMonths(client, settingsResult.data)) await loadExpiryStock(client)
+  } catch (error) {
+    console.error('Không chuyển được dữ liệu tab Hàng chậm luân chuyển cũ:', error)
+  }
   for (const setting of settingsResult.data || []) put(setting.key, encode(setting.value))
 }
 
@@ -291,6 +325,7 @@ async function syncExpiryStockMonths(key) {
       fileName: month.fileName,
       uploadedAt: month.uploadedAt,
       rows: month.rows || [],
+      dateRange: month.dateRange || null,
       isActive: values.get('expiry_stock_active') === month.id,
     })
   }

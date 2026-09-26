@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
-import { parseExpiryStockWorkbook, parseReportDateRange, isSlowMoving } from '../parseExpiryStock'
+import { parseExpiryStockWorkbook, parseReportDateRange, isSlowMoving, classifyExpiry, drugAgeMonths, CAN_DATE_BUCKETS } from '../parseExpiryStock'
 
 // Tái tạo đúng cấu trúc file thật "Báo cáo tổng hợp nhập xuất tồn theo kho": vài dòng tiêu đề (tên báo
 // cáo, khoảng ngày "Từ ngày ... đến ngày ...") phía trên bảng dữ liệu thật.
@@ -67,5 +67,41 @@ describe('parseExpiryStockWorkbook + isSlowMoving — lọc đúng trên dữ li
     const slow = rows.filter(isSlowMoving)
     expect(slow).toHaveLength(1)
     expect(slow[0].maVatTu).toBe('A00001')
+  })
+})
+
+describe('classifyExpiry + drugAgeMonths — mốc cận date và tuổi thuốc như file báo cáo', () => {
+  const today = new Date(2026, 5, 15) // 15/06/2026
+
+  it('chia đúng nhóm: hết hạn, dưới 3 tháng, dưới 6 tháng, 6 đến dưới 18 tháng, an toàn', () => {
+    expect(classifyExpiry('2026-06-01', today)).toBe('expired')
+    expect(classifyExpiry('2026-09-14', today)).toBe('near3')
+    expect(classifyExpiry('2026-12-14', today)).toBe('near6')
+    expect(classifyExpiry('2026-12-15', today)).toBe('near18')
+    expect(classifyExpiry('2027-12-14', today)).toBe('near18')
+    expect(classifyExpiry('2027-12-15', today)).toBe('safe')
+    expect(classifyExpiry(null, today)).toBe('unknown')
+    expect(CAN_DATE_BUCKETS).toEqual(['expired', 'near3', 'near6'])
+  })
+
+  it('tuổi thuốc = số tháng tròn như DATEDIF(TODAY(), Hạn dùng, "m"), âm khi đã hết hạn', () => {
+    expect(drugAgeMonths('2026-08-15', today)).toBe(2)
+    expect(drugAgeMonths('2026-08-14', today)).toBe(1)
+    expect(drugAgeMonths('2027-01-04', today)).toBe(6)
+    expect(drugAgeMonths('2026-06-15', today)).toBe(0)
+    expect(drugAgeMonths('2026-04-10', today)).toBe(-2)
+    expect(drugAgeMonths(null, today)).toBeNull()
+  })
+
+  it('đọc cột "Tên lô" nếu file gốc có', () => {
+    const aoa = [
+      ['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Tên lô', 'Hạn dùng', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối'],
+      [1, 'A1', 'Hàng A', '020101', 'HOP', 'L1', 'Lô một', '', 0, 0, 0, 5],
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1')
+    const [row] = parseExpiryStockWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }))
+    expect(row.maLo).toBe('L1')
+    expect(row.tenLo).toBe('Lô một')
   })
 })

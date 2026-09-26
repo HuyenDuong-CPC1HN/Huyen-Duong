@@ -35,10 +35,12 @@ function buildSampleFile() {
     ['Từ ngày ... đến ngày ...'],
     [],
     ['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối'],
-    [1, 'X001', 'Hàng đã hết hạn', '020101', 'HOP', 'LOT1', addDays(-10), 0, 0, 0, 5],
+    [1, 'X001', 'Hàng đã hết hạn', '020101', 'HOP', 'LOT1', addDays(-45), 0, 0, 0, 5],
     [2, 'X002', 'Hàng cận 3 tháng', '020101', 'HOP', 'LOT2', addDays(30), 0, 0, 0, 20],
     [3, 'X003', 'Hàng cận 6 tháng', '020101', 'HOP', 'LOT3', addDays(120), 0, 0, 0, 15],
-    [4, 'X004', 'Hàng còn an toàn', '020101', 'HOP', 'LOT4', addDays(400), 0, 0, 0, 40],
+    [4, 'X004', 'Hàng cận hạn 6-18 tháng', '020101', 'HOP', 'LOT4', addDays(400), 0, 0, 0, 40],
+    [7, 'X007', 'Hàng còn an toàn', '020101', 'HOP', 'LOT7', addDays(700), 0, 0, 0, 12],
+    [8, 'X008', 'Hàng có xuất', '020101', 'HOP', 'LOT8', addDays(700), 10, 0, 4, 6],
     [5, 'X005', 'Hàng không rõ hạn', '020101', 'HOP', 'LOT5', null, 0, 0, 0, 8],
     [6, 'X006', 'Hàng đã hết tồn kho', '020101', 'HOP', 'LOT6', addDays(10), 0, 0, 0, 0],
   ]
@@ -62,9 +64,29 @@ describe('ExpiryStockTab', () => {
     expect(screen.getByText('Hàng đã hết hạn')).toBeInTheDocument()
     expect(screen.getByText('Hàng cận 3 tháng')).toBeInTheDocument()
     expect(screen.getByText('Hàng cận 6 tháng')).toBeInTheDocument()
+    expect(screen.queryByText('Hàng cận hạn 6-18 tháng')).not.toBeInTheDocument()
     expect(screen.queryByText('Hàng còn an toàn')).not.toBeInTheDocument()
     expect(screen.queryByText('Hàng không rõ hạn')).not.toBeInTheDocument()
     expect(screen.queryByText('Hàng đã hết tồn kho')).not.toBeInTheDocument()
+    // Bảng Cận date có đúng các cột của sheet "Cận date" trong file mẫu
+    expect([...document.querySelectorAll('th')].map(th => th.textContent)).toEqual([
+      'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn cuối',
+    ])
+
+    // Nhóm cận hạn 6–18 tháng chỉ để cảnh báo luân chuyển
+    fireEvent.click(screen.getByText('Cận hạn 6–18 tháng'))
+    expect(screen.getByText('Hàng cận hạn 6-18 tháng')).toBeInTheDocument()
+    expect(screen.queryByText('Hàng còn an toàn')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hàng cận 6 tháng')).not.toBeInTheDocument()
+
+    // CLC: còn tồn, không nhập không xuất; bảng có đủ 13 cột như sheet "CLC"
+    fireEvent.click(screen.getByText('Chậm luân chuyển (CLC)', { selector: 'button' }))
+    expect(screen.getByText('Hàng còn an toàn')).toBeInTheDocument()
+    expect(screen.queryByText('Hàng có xuất')).not.toBeInTheDocument()
+    expect([...document.querySelectorAll('th')].map(th => th.textContent)).toEqual([
+      'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)',
+      'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối',
+    ])
 
     // Bấm "Tất cả tồn kho" phải thấy thêm hàng an toàn + không rõ hạn, vẫn không thấy hàng tồn = 0
     fireEvent.click(screen.getByText('Tất cả tồn kho'))
@@ -108,7 +130,7 @@ describe('ExpiryStockTab', () => {
     fireEvent.change(input, { target: { files: [file] } })
     await waitFor(() => expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument())
 
-    const firstTh = container.querySelectorAll('th')[0] // "Mã vật tư"
+    const firstTh = container.querySelectorAll('th')[1] // "Mã vật tư"
     const handle = firstTh.querySelector('.cursor-col-resize')
     expect(handle).toBeTruthy()
 
@@ -120,10 +142,10 @@ describe('ExpiryStockTab', () => {
       const saved = JSON.parse(store.opsStore.getItem('expiry_stock_colwidths') || '{}')
       expect(saved['Mã vật tư']).toBeGreaterThanOrEqual(60)
     })
-    expect(firstTh.style.width).not.toBe('110px') // đã đổi khỏi mặc định
+    expect(firstTh.style.width).not.toBe('100px') // đã đổi khỏi mặc định
 
     fireEvent.click(screen.getByText('Đặt lại độ rộng cột'))
     expect(store.opsStore.getItem('expiry_stock_colwidths')).toBeNull()
-    expect(container.querySelectorAll('th')[0].style.width).toBe('110px') // về lại mặc định
+    expect(container.querySelectorAll('th')[1].style.width).toBe('100px') // về lại mặc định
   })
 })
