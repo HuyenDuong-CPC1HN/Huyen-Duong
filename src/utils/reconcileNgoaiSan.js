@@ -133,11 +133,13 @@ export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedC
     const maDon = clean(spx['Mã khách hàng'])
     const trangThai = spx['Trạng thái hiện tại']
     const moc1 = salesLookup.get(maDon) || null
+    // Mã vận đơn SPX — hiện kèm Mã đơn trên bảng/file xuất để tra ngược đơn bên SPX.
+    const maVanDon = clean(spx['Mã vận đơn'])
 
     if (!moc1) {
       stats.khongKhop++
       rows.push({
-        maDon, trangThai, moc1: '', moc2: '', gioDongKien: '', tinhTrangDongKien: 'Không khớp Mã đơn',
+        maDon, maVanDon, trangThai, moc1: '', moc2: '', gioDongKien: '', tinhTrangDongKien: 'Không khớp Mã đơn',
         moc3: '', gioLaySauDongKien: '', nhomLay: 'Không khớp Mã đơn',
         moc4: '', gioGiaoTong: '', tinhTrangGiao: 'Không khớp Mã đơn',
       })
@@ -145,7 +147,7 @@ export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedC
     }
     stats.total++
 
-    const trackingCode = clean(spx['Mã vận đơn']).toUpperCase()
+    const trackingCode = maVanDon.toUpperCase()
     const moc2 = packingLookup.get(trackingCode) || null
     const moc3 = parseSpxDateTime(spx['Thời gian lấy hàng/gửi hàng'])
     const moc4raw = parseSpxDateTime(spx['Thời gian giao hàng'])
@@ -154,7 +156,7 @@ export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedC
     if (isCancelledStatus(spx, 'spx')) {
       stats.huy++
       rows.push({
-        maDon, trangThai, moc1: fmtDateTime(moc1), moc2: fmtDateTime(moc2), gioDongKien: '',
+        maDon, maVanDon, trangThai, moc1: fmtDateTime(moc1), moc2: fmtDateTime(moc2), gioDongKien: '',
         tinhTrangDongKien: 'Đã huỷ — không đối soát', moc3: fmtDateTime(moc3), gioLaySauDongKien: '',
         nhomLay: 'Đã huỷ — không đối soát', moc4: fmtDateTime(moc4raw), gioGiaoTong: '',
         tinhTrangGiao: 'Đã huỷ — không đối soát',
@@ -218,7 +220,7 @@ export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedC
     }
 
     rows.push({
-      maDon, trangThai,
+      maDon, maVanDon, trangThai,
       moc1: fmtDateTime(moc1),
       moc2: fmtDateTime(moc2),
       gioDongKien: gioDongKien === undefined ? '' : Math.round(gioDongKien * 10) / 10,

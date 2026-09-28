@@ -16,6 +16,12 @@ const store = vi.hoisted(() => {
 
 vi.mock('../../data/workspace', () => ({ opsStore: store.opsStore }))
 
+const writeFileMock = vi.hoisted(() => vi.fn())
+vi.mock('xlsx', async (importOriginal) => {
+  const actual = await importOriginal()
+  return { ...actual, writeFile: writeFileMock }
+})
+
 afterEach(cleanup)
 
 // Không seed "Danh sách thống kê" (salesWeeks) -> salesLookup rỗng -> MỌI dòng SPX đều thành
@@ -53,6 +59,17 @@ describe('CarrierStats — NgoaiSanPanel (SPX): bấm badge "chưa tìm thấy M
     expect(screen.getByText('DH002')).toBeInTheDocument()
     // Cả 2 dòng hiện trong bảng đều là "Không khớp Mã đơn" — không lẫn dòng nào khác.
     expect(screen.getAllByText('Không khớp Mã đơn').length).toBeGreaterThan(0)
+
+    // Xuất Excel đúng các đơn đang hiện theo bộ lọc
+    fireEvent.click(screen.getByRole('button', { name: /xuất excel \(2 đơn\)/i }))
+    expect(writeFileMock).toHaveBeenCalledTimes(1)
+    const [wb, fileName] = writeFileMock.mock.calls[0]
+    expect(fileName).toMatch(/^DoiSoatSPX_Khong khop Ma don_.*\.xlsx$/)
+    const exported = XLSX.utils.sheet_to_json(wb.Sheets['Doi soat SPX'])
+    expect(exported.map(r => r['Mã đơn'])).toEqual(expect.arrayContaining(['DH001', 'DH002']))
+    expect(exported.find(r => r['Mã đơn'] === 'DH001')['Mã vận đơn SPX']).toBe('SPXA001')
+    expect(screen.getByText('SPXA001')).toBeInTheDocument()
+    expect(Object.keys(exported[0])).toEqual(expect.arrayContaining(['Mốc1 - Tạo lúc', 'Tình trạng đóng kiện', 'Tình trạng giao (≤48h)']))
 
     const activeButton = screen.getByRole('button', { name: /đang chỉ hiện đơn chưa tìm thấy mã đơn tương ứng/i })
     fireEvent.click(activeButton)

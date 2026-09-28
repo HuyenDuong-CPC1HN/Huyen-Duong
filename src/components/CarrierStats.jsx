@@ -1,6 +1,6 @@
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
-import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp, AlertTriangle, Package } from 'lucide-react'
+import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp, AlertTriangle, Package, Download } from 'lucide-react'
 import { parseCarrierFile, computeCarrierStats, getCarrierColumns, buildInternalOrderLookup, buildTrackingSet, reconcileViettelOrders, isHoldStatusRow, getTrackingCode } from '../utils/parseCarrierExport'
 import { reconcileNgoaiSan, buildSalesOrderLookup, buildPackingLookup } from '../utils/reconcileNgoaiSan'
 import * as XLSX from 'xlsx'
@@ -269,6 +269,57 @@ const NGOAI_SAN_MATCHERS = {
   chuaGiaoQuaHan: r => r.tinhTrangGiao === 'CHƯA GIAO — QUÁ 48H' && !r.excludedFromReport,
 }
 
+// Xuất đúng các đơn đang hiện trong bảng "Chi tiết đối soát" (theo bộ lọc đang chọn), cùng các cột như trên
+// màn hình. Tên file ghi kèm bộ lọc để phân biệt nhiều lần xuất.
+function exportNgoaiSanRows(rows, filterLabel, { includeReportFlag = true } = {}) {
+  const blank = v => (v === '' || v === undefined || v === null ? '' : v)
+  const data = rows.map((r, i) => {
+    const row = {
+      'STT': i + 1,
+      'Mã đơn': r.maDon,
+      'Mã vận đơn SPX': r.maVanDon || '',
+      'Trạng thái SPX': r.trangThai || '',
+      'Mốc1 - Tạo lúc': r.moc1 || '',
+      'Mốc2 - Đóng kiện': r.moc2 || '',
+      'Giờ đóng kiện': blank(r.gioDongKien),
+      'Tình trạng đóng kiện': r.tinhTrangDongKien || '',
+      'Mốc3 - SPX lấy hàng': r.moc3 || '',
+      'Giờ lấy sau đóng kiện': blank(r.gioLaySauDongKien),
+      'Nhóm lấy hàng': r.excludedFromReport ? 'Chưa lấy hàng (đã bỏ qua)' : (r.nhomLay || ''),
+    }
+    if (includeReportFlag) row['Tính vào BC'] = r.nhomLay === 'Chưa lấy hàng' || r.excludedFromReport ? (r.excludedFromReport ? 'Không' : 'Có') : ''
+    row['Mốc4 - Giao hàng'] = r.moc4 || ''
+    row['Giờ giao tổng'] = blank(r.gioGiaoTong)
+    row['Tình trạng giao (≤48h)'] = r.tinhTrangGiao || ''
+    return row
+  })
+  const ws = XLSX.utils.json_to_sheet(data)
+  const headers = Object.keys(data[0] || {})
+  ws['!cols'] = headers.map(h => {
+    const maxLen = data.reduce((max, row) => Math.max(max, String(row[h] ?? '').length), h.length)
+    return { wch: Math.min(Math.max(maxLen + 2, 8), 40) }
+  })
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Doi soat SPX')
+  const stamp = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replaceAll('/', '-')
+  const safeLabel = String(filterLabel || 'Tat ca').replace(/[\\/:*?"<>|]/g, '-')
+  XLSX.writeFile(wb, `DoiSoatSPX_${safeLabel}_${stamp}.xlsx`)
+}
+
+function ExportNgoaiSanButton({ rows, filterLabel, includeReportFlag }) {
+  return (
+    <button
+      onClick={() => exportNgoaiSanRows(rows, filterLabel, { includeReportFlag })}
+      disabled={rows.length === 0}
+      title="Xuất Excel đúng các đơn đang hiện trong bảng (theo bộ lọc đang chọn)"
+      className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-green-400 hover:text-green-600 text-gray-600 transition-colors disabled:opacity-40 disabled:pointer-events-none ml-auto"
+    >
+      <Download size={14} />
+      Xuất Excel ({rows.length} đơn)
+    </button>
+  )
+}
+
 // Đối soát "đơn ngoại sàn" (SPX COD) theo 4 mốc thời gian — xem reconcileNgoaiSan.js.
 // Chỉ hiển thị trong tab SPX (carrierType === 'spx').
 const DEFAULT_NGOAI_SAN_NOTE = (
@@ -531,12 +582,19 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
                     <button onClick={() => setStatusFilter(null)} className="text-blue-500 hover:text-blue-800 hover:underline ml-1">Bỏ lọc</button>
                   </span>
                 )}
+                <ExportNgoaiSanButton
+                  rows={visibleRows}
+                  filterLabel={statusFilter
+                    ? NGOAI_SAN_ALL_CARDS.find(c => c.key === statusFilter)?.label
+                    : onlyProblem ? 'Tre qua han' : onlyKhongKhop ? 'Khong khop Ma don' : 'Tat ca'}
+                />
               </div>
               <div className="overflow-x-auto rounded-xl border border-gray-200">
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#1e3a5f] text-white">
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mã đơn</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mã vận đơn SPX</th>
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trạng thái SPX</th>
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc1 - Tạo lúc</th>
                       <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc2 - Đóng kiện</th>
@@ -553,10 +611,11 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
                   </thead>
                   <tbody>
                     {visibleRows.length === 0 ? (
-                      <tr><td colSpan={13} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
+                      <tr><td colSpan={14} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
                     ) : visibleRows.map(r => (
                       <tr key={r.maDon} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
                         <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
+                        <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maVanDon || '—'}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc1 || '—'}</td>
                         <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc2 || '—'}</td>
@@ -655,19 +714,25 @@ export function FrozenNgoaiSanPanel({ frozen }) {
 
       {expanded && (
         <div className="mt-3">
-          {statusFilter && (
-            <div className="flex items-center gap-1.5 mb-3">
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            {statusFilter && (
               <span className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
                 Đang lọc: {NGOAI_SAN_ALL_CARDS.find(c => c.key === statusFilter)?.label}
                 <button onClick={() => setStatusFilter(null)} className="text-blue-500 hover:text-blue-800 hover:underline ml-1">Bỏ lọc</button>
               </span>
-            </div>
-          )}
+            )}
+            <ExportNgoaiSanButton
+              rows={visibleRows}
+              filterLabel={statusFilter ? NGOAI_SAN_ALL_CARDS.find(c => c.key === statusFilter)?.label : 'Tat ca'}
+              includeReportFlag={false}
+            />
+          </div>
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="bg-[#1e3a5f] text-white">
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mã đơn</th>
+                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mã vận đơn SPX</th>
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Trạng thái SPX</th>
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc1 - Tạo lúc</th>
                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Mốc2 - Đóng kiện</th>
@@ -683,10 +748,11 @@ export function FrozenNgoaiSanPanel({ frozen }) {
               </thead>
               <tbody>
                 {visibleRows.length === 0 ? (
-                  <tr><td colSpan={12} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
+                  <tr><td colSpan={13} className="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>
                 ) : visibleRows.map(r => (
                   <tr key={r.maDon} className={`border-b border-gray-100 hover:bg-blue-50/40 ${r.excludedFromReport ? 'opacity-50' : ''}`}>
                     <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maDon}</td>
+                        <td className="px-3 py-2 border border-gray-200 font-mono whitespace-nowrap">{r.maVanDon || '—'}</td>
                     <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.trangThai || '—'}</td>
                     <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc1 || '—'}</td>
                     <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">{r.moc2 || '—'}</td>
