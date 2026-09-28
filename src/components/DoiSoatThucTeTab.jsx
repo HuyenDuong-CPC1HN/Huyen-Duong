@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileUp, FileSpreadsheet, X, RefreshCw, ListChecks, PackageSearch } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import {
@@ -283,14 +283,25 @@ function Tile({ label, count, className, active, onClick }) {
   )
 }
 
+// Chuyển sang tab khác trong menu là màn hình này bị gỡ hẳn (unmount) — giữ lại chuyến đang chọn, file
+// đã thả, kết quả đối soát và bộ lọc trong bộ nhớ của phiên làm việc, để quay lại tab vẫn còn nguyên. Chỉ
+// mất khi tải lại trang (File đã thả không lưu được lên kho dữ liệu).
+let sessionCache = null
+export function resetDoiSoatSessionCache() { sessionCache = null }
+
 export default function DoiSoatThucTeTab() {
   const [batches] = useState(() => readBatches())
-  const [selectedBatchId, setSelectedBatchId] = useState(() => batches[0]?.id || null)
-  const [pendingFiles, setPendingFiles] = useState({ khoC: [], khoLgt: [], khoSo: [] })
-  const [results, setResults] = useState(null)
+  const [cached] = useState(() => (sessionCache && batches.some(b => b.id === sessionCache.selectedBatchId) ? sessionCache : null))
+  const [selectedBatchId, setSelectedBatchId] = useState(() => cached?.selectedBatchId ?? batches[0]?.id ?? null)
+  const [pendingFiles, setPendingFiles] = useState(() => cached?.pendingFiles ?? { khoC: [], khoLgt: [], khoSo: [] })
+  const [results, setResults] = useState(() => cached?.results ?? null)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
-  const [statusFilter, setStatusFilter] = useState(null)
+  const [statusFilter, setStatusFilter] = useState(() => cached?.statusFilter ?? null)
+
+  useEffect(() => {
+    sessionCache = { selectedBatchId, pendingFiles, results, statusFilter }
+  }, [selectedBatchId, pendingFiles, results, statusFilter])
 
   const batch = batches.find(b => b.id === selectedBatchId) || null
 

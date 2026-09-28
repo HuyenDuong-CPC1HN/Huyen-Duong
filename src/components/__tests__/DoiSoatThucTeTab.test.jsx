@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as XLSX from 'xlsx'
-import DoiSoatThucTeTab from '../DoiSoatThucTeTab'
+import DoiSoatThucTeTab, { resetDoiSoatSessionCache } from '../DoiSoatThucTeTab'
 
 const store = vi.hoisted(() => {
   const values = new Map()
@@ -16,7 +16,7 @@ const store = vi.hoisted(() => {
 
 vi.mock('../../data/workspace', () => ({ opsStore: store.opsStore }))
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); resetDoiSoatSessionCache() })
 
 function seedBatch() {
   const batch = {
@@ -43,6 +43,27 @@ function buildActualScanFile(rows, name = 'quet-thuc-te.xlsx') {
   const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
   return new File([buf], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 }
+
+describe('DoiSoatThucTeTab — chuyển tab rồi quay lại', () => {
+  it('giữ nguyên file đã thả, kết quả đối soát và bộ lọc sau khi màn hình bị gỡ rồi mở lại', async () => {
+    seedBatch()
+    const file = buildActualScanFile([{ maHang: 'A00001', tenHang: 'Hàng khớp', soLo: 'L1', soLuong: 10 }])
+    render(<DoiSoatThucTeTab />)
+    fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [file] } })
+    fireEvent.click(await screen.findByRole('button', { name: /chạy đối soát/i }))
+    await waitFor(() => expect(screen.getByText('3 dòng')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByText('Chưa quét').map(el => el.closest('button')).find(Boolean))
+    await waitFor(() => expect(screen.getByText(/Đang lọc theo trạng thái/)).toBeInTheDocument())
+
+    cleanup() // chuyển sang tab khác
+    render(<DoiSoatThucTeTab />)
+
+    expect(screen.getByText('quet-thuc-te.xlsx')).toBeInTheDocument()
+    expect(screen.getByText(/Đang lọc theo trạng thái/)).toBeInTheDocument()
+    expect(screen.getByText('A00003')).toBeInTheDocument()
+    expect(screen.queryByText('A00001')).not.toBeInTheDocument()
+  })
+})
 
 describe('DoiSoatThucTeTab — bấm vào thẻ tổng hợp để lọc bảng theo trạng thái', () => {
   it('bấm 1 thẻ chỉ còn đúng trạng thái đó ở mọi bảng, bấm lại để bỏ lọc', async () => {
