@@ -78,7 +78,8 @@ export async function exportXacMinh(record) {
   const { ngay, thang, nam } = splitDatetime(record.verifyDatetime || record.createdAt)
   const data = {
     khachHangXacMinh: record.customerName || '',
-    ngayXM: ngay, thangXM: thang, namXM: nam,
+    // Đơn nhập theo mẫu cũ giữ nguyên giờ 08h30 như trước khi mẫu có ô giờ xác minh.
+    ngayXM: ngay, thangXM: thang, namXM: nam, gioXM: '08h30’',
     diaDiem: record.verifyLocation || '',
     keToanVienXacMinh: record.repAccounting || '',
     ketQuaXacMinh: record.verifyResult || '',

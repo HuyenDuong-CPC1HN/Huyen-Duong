@@ -6,7 +6,8 @@ import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
 import ExpiryStockTab from './components/ExpiryStockTab'
 import NhapHangTab from './components/NhapHangTab'
 import DoiSoatThucTeTab from './components/DoiSoatThucTeTab'
-import ReturnTrackingTab from './components/ReturnTrackingTab'
+import ReturnSlipsTab from './components/ReturnSlipsTab'
+import ReturnReminderBell from './components/ReturnReminderBell'
 import DamagedGoodsTrackingTab from './components/DamagedGoodsTrackingTab'
 import SwapReturnTab from './components/SwapReturnTab'
 import N8nWebhookForm from './components/N8nWebhookForm'
@@ -46,15 +47,7 @@ const NAV = [
       { id: 'doisoatthucte', label: 'Đối soát Thực tế ↔ Hoá đơn', icon: ListChecks },
     ],
   },
-  {
-    id: 'traHang',
-    label: 'Theo dõi nhập trả lại',
-    icon: RotateCcw,
-    children: [
-      { id: 'traHangC', label: 'Đơn C', icon: Truck },
-      { id: 'traHangDTP', label: 'Đơn DTP', icon: Package },
-    ],
-  },
+  { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
   {
     id: 'hangHuy',
     label: 'Theo dõi hàng huỷ',
@@ -85,8 +78,7 @@ const BREADCRUMB = {
   hangchamluanchuyen: ['Trang chủ', 'Quản lý tồn kho', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
-  traHangC:   ['Trang chủ', 'Theo dõi nhập trả lại', 'Đơn C'],
-  traHangDTP: ['Trang chủ', 'Theo dõi nhập trả lại', 'Đơn DTP'],
+  traHang:    ['Trang chủ', 'Theo dõi nhập trả lại'],
   hangHuyC:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho C'],
   hangHuyDTP: ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho DTP'],
   hangHuyA:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho A'],
@@ -430,6 +422,7 @@ function AppContent({ user }) {
               </nav>
               <h1>{pageTitle}</h1>
             </div>
+            <ReturnReminderBell onOpen={() => setActive('traHang')} />
           </div>
         </header>
 
@@ -451,8 +444,7 @@ function AppContent({ user }) {
           {active === 'hangchamluanchuyen' && <ExpiryStockTab key="clc" mode="clc" />}
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
-          {active === 'traHangC'   && <ReturnTrackingTab type="donC" />}
-          {active === 'traHangDTP' && <ReturnTrackingTab type="donDTP" />}
+          {active === 'traHang' && <ReturnSlipsTab />}
           {active === 'hangHuyC'   && <DamagedGoodsTrackingTab type="khoC" />}
           {active === 'hangHuyDTP' && <DamagedGoodsTrackingTab type="khoDTP" />}
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab type="khoA" />}
