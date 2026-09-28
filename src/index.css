@@ -1294,6 +1294,74 @@ body {
   }
 }
 
+/* ===== ReturnReportPrintView: in trực tiếp Biên bản trả hàng/xác minh (không cần tải .docx mở Word) =====
+   Luôn render trong DOM nhưng ẩn (display:none) ở chế độ xem thường — chỉ hiện khi in (@media print), dùng
+   kỹ thuật "ẩn cả trang, chỉ hiện đúng .rrp-print-root" để không phải liệt kê từng phần tử khác cần ẩn
+   (sidebar, header...), chắc chắn không lẫn nội dung khác vào bản in dù cấu trúc trang thay đổi sau này. */
+.rrp-print-root { display: none; }
+
+@media print {
+  /* body chưa có data-rrp-print (không phải đang in biên bản) -> giữ nguyên hành vi in cũ của trang, không
+     đụng gì thêm. Chỉ khi printReturnReport() đã đánh dấu đúng loại thì mới ẩn hết trang, chỉ hiện đúng 1
+     trong 2 .rrp-print-root--xacMinh/--traHang tương ứng. */
+  body[data-rrp-print] * { visibility: hidden; }
+  body[data-rrp-print="xacMinh"] .rrp-print-root--xacMinh,
+  body[data-rrp-print="xacMinh"] .rrp-print-root--xacMinh *,
+  body[data-rrp-print="traHang"] .rrp-print-root--traHang,
+  body[data-rrp-print="traHang"] .rrp-print-root--traHang * {
+    visibility: visible;
+  }
+  body[data-rrp-print="xacMinh"] .rrp-print-root--xacMinh,
+  body[data-rrp-print="traHang"] .rrp-print-root--traHang {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}
+
+.rrp-sheet {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #000;
+  padding: 24px;
+}
+
+.rrp-sheet p { margin: 4px 0; }
+
+.rrp-head-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+.rrp-head-col { flex: 1; }
+.rrp-head-bold { font-weight: 700; }
+.rrp-underline-bold { font-weight: 700; text-decoration: underline; }
+
+.rrp-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin: 20px 0 12px;
+}
+
+.rrp-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 12px;
+}
+.rrp-table--small { font-size: 11px; }
+.rrp-th, .rrp-td {
+  border: 1px solid #000;
+  padding: 4px 6px;
+  vertical-align: top;
+  text-align: left;
+}
+.rrp-th { font-weight: 700; text-align: center; background: #f3f3f3; }
+
 /* ===== REPORT CHECKPOINT: SAVED ĐƠN C / DTP ===== */
 .report-actions {
   display: flex;

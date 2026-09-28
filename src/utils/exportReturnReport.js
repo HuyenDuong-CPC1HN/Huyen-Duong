@@ -51,11 +51,11 @@ function slugifyName(name) {
   return String(name || 'KhachHang').trim().replace(/\s+/g, ' ').slice(0, 60)
 }
 
-export async function exportTraHang(record) {
-  const template = TEMPLATES[record.entity]?.traHang
-  if (!template) throw new Error('Không xác định được mẫu biên bản (entity không hợp lệ).')
+// Tách riêng phần dựng dữ liệu (không đụng file/DOM) để dùng chung cho cả xuất .docx và xem trước/in
+// trực tiếp trên web (ReturnReportPrintView.jsx) — tránh lệch dữ liệu giữa 2 nơi.
+export function buildTraHangData(record) {
   const { ngay, thang, nam } = splitDatetime(record.createdAt)
-  const data = {
+  return {
     ngay, thang, nam,
     daiDienKeToan: record.repAccounting || '',
     daiDienKinhDoanh: record.repSales || '',
@@ -68,15 +68,11 @@ export async function exportTraHang(record) {
       tenHangHoa: inv.tenHangHoa || '', soLuong: inv.soLuong || '', giaTri: inv.giaTri || '',
     })),
   }
-  const blob = await fillTemplate(template, data)
-  downloadBlob(blob, `BienBanTraHang_${slugifyName(record.customerName)}.docx`)
 }
 
-export async function exportXacMinh(record) {
-  const template = TEMPLATES[record.entity]?.xacMinh
-  if (!template) throw new Error('Không xác định được mẫu biên bản (entity không hợp lệ).')
+export function buildXacMinhData(record) {
   const { ngay, thang, nam } = splitDatetime(record.verifyDatetime || record.createdAt)
-  const data = {
+  return {
     khachHangXacMinh: record.customerName || '',
     // Đơn nhập theo mẫu cũ giữ nguyên giờ 08h30 như trước khi mẫu có ô giờ xác minh.
     ngayXM: ngay, thangXM: thang, namXM: nam, gioXM: '08h30’',
@@ -90,6 +86,18 @@ export async function exportXacMinh(record) {
       tinhTrang: p.tinhTrang || 'Hàng nguyên vẹn',
     })),
   }
-  const blob = await fillTemplate(template, data)
+}
+
+export async function exportTraHang(record) {
+  const template = TEMPLATES[record.entity]?.traHang
+  if (!template) throw new Error('Không xác định được mẫu biên bản (entity không hợp lệ).')
+  const blob = await fillTemplate(template, buildTraHangData(record))
+  downloadBlob(blob, `BienBanTraHang_${slugifyName(record.customerName)}.docx`)
+}
+
+export async function exportXacMinh(record) {
+  const template = TEMPLATES[record.entity]?.xacMinh
+  if (!template) throw new Error('Không xác định được mẫu biên bản (entity không hợp lệ).')
+  const blob = await fillTemplate(template, buildXacMinhData(record))
   downloadBlob(blob, `BienBanXacMinh_${slugifyName(record.customerName)}.docx`)
 }
