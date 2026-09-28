@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { ArrowLeft, FileUp, FileDown, Check, AlertTriangle, CheckCircle } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { ArrowLeft, FileUp, FileDown, Check, AlertTriangle, CheckCircle, Printer } from 'lucide-react'
 import {
   KE_TOAN_LIST, TEMPLATE_LABEL, slipLoai, missingSlipFields, newSlipForm, parseReturnSlipLines, sameCustomer,
 } from '../utils/returnSlips'
@@ -368,6 +369,12 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                 <button key={k} type="button" onClick={() => setDoc(k)} aria-pressed={doc === k}
                   className={`px-2.5 py-1 rounded-md text-xs border ${doc === k ? 'border-[#1e3a5f] text-[#1e3a5f] font-semibold' : 'border-gray-200 text-gray-500'}`}>{label}</button>
               ))}
+              {pdf && (
+                <button type="button" onClick={() => window.print()} className="ml-auto px-2.5 py-1 rounded-md text-xs border border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600 flex items-center gap-1"
+                  title="In trực tiếp đúng biên bản đang xem (mở hộp thoại in của trình duyệt)">
+                  <Printer size={12} /> In
+                </button>
+              )}
               <span className="w-full text-[11px] text-gray-400">
                 <span className="bg-yellow-100 border-b-2 border-yellow-500 px-1">vàng</span> kho điền trên app ·{' '}
                 <span className="bg-red-50 text-red-700 px-1">đỏ</span> còn thiếu · chữ thường lấy từ file website hoặc giá trị mặc định
@@ -381,6 +388,17 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* Portal thẳng ra <body> — chỉ để in (ẩn hoàn toàn ở chế độ xem thường, xem .rsw-print-root trong
+          index.css). Tách khỏi khung "Xem trước" ở trên để không bị lệch vị trí khi in do vướng ancestor
+          có position (khung "Xem trước" đang là sticky) — position:absolute trong bản in sẽ tính theo
+          ancestor gần nhất có position, không phải theo trang, nếu còn nằm lồng bên trong khung đó. */}
+      {pdf && createPortal(
+        <div className="rsw-print-root">
+          {doc === 'traHang' ? <TraHangPaper slip={{ ...slip, form: f }} /> : <XacMinhPaper slip={{ ...slip, form: f }} />}
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

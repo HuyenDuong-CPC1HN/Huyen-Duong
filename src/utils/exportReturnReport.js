@@ -51,8 +51,8 @@ function slugifyName(name) {
   return String(name || 'KhachHang').trim().replace(/\s+/g, ' ').slice(0, 60)
 }
 
-// Tách riêng phần dựng dữ liệu (không đụng file/DOM) để dùng chung cho cả xuất .docx và xem trước/in
-// trực tiếp trên web (ReturnReportPrintView.jsx) — tránh lệch dữ liệu giữa 2 nơi.
+// Tách riêng phần dựng dữ liệu (không đụng file/DOM) khỏi hàm export bên dưới, để nơi khác có thể tái
+// dùng đúng cách map dữ liệu này mà không phải tải/xuất file.
 export function buildTraHangData(record) {
   const { ngay, thang, nam } = splitDatetime(record.createdAt)
   return {
