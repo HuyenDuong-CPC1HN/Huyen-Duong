@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as XLSX from 'xlsx'
-import DoiSoatThucTeTab, { resetDoiSoatSessionCache } from '../DoiSoatThucTeTab'
+import DoiSoatThucTeTab from '../DoiSoatThucTeTab'
+import { resetDoiSoatSessionCache } from '../doiSoatSessionCache'
 
 const store = vi.hoisted(() => {
   const values = new Map()
