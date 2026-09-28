@@ -1,6 +1,4 @@
-import { X, FileDown, Pencil, Printer } from 'lucide-react'
-import ReturnReportPrintView from './ReturnReportPrintView'
-import { printReturnReport } from '../utils/printReturnReport'
+import { X, FileDown, Pencil } from 'lucide-react'
 
 function InfoField({ label, value }) {
   return (
@@ -25,12 +23,6 @@ export default function ReturnRecordView({ record, onClose, onEdit, onExport, ex
         <header className="sheet-tab-context">
           <span>Xem đơn trả hàng — {record.customerName}</span>
           <div className="flex items-center gap-2 ml-auto">
-            <button type="button" onClick={() => printReturnReport('traHang')} className="sheet-tab-action" title="In trực tiếp Biên bản trả hàng (mở hộp thoại in của trình duyệt)">
-              <Printer size={13} /> In Trả hàng
-            </button>
-            <button type="button" onClick={() => printReturnReport('xacMinh')} className="sheet-tab-action" title="In trực tiếp Biên bản xác minh (mở hộp thoại in của trình duyệt)">
-              <Printer size={13} /> In Xác minh
-            </button>
             <button type="button" onClick={() => onExport(record, 'traHang')} disabled={exportingId === `${record.id}_traHang`} className="sheet-tab-action">
               <FileDown size={13} /> Xuất Trả hàng
             </button>
@@ -147,8 +139,6 @@ export default function ReturnRecordView({ record, onClose, onEdit, onExport, ex
           </div>
         </div>
       </div>
-
-      <ReturnReportPrintView record={record} />
     </div>
   )
 }
