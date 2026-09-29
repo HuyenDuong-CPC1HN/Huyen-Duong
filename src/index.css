@@ -1381,9 +1381,12 @@ body {
   .rsw-print-root .rsw-paper.rsw-xm-doc th,
   .rsw-print-root .rsw-paper.rsw-xm-doc td { padding: 4px 6px !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-xm-sign .rsw-sign-gap { height: 8px; }
-  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-mgr-row td { height: 90px; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-mgr-row td { height: 130px; }
   .rsw-print-root .rsw-paper.rsw-xm-doc { break-inside: avoid; }
   .rsw-print-root .rsw-paper .rsw-xm-sign td { vertical-align: top; }
+  /* Khung ký duyệt không lặp lại dòng tiêu đề khi sang trang mới, và không bị cắt đôi giữa 2 trang */
+  .rsw-print-root .rsw-paper .rsw-xm-sign { break-inside: avoid; }
+  .rsw-print-root .rsw-paper .rsw-xm-sign thead { display: table-row-group; }
 
   /* Biên bản xử lý hàng huỷ (11 cột, in DỌC): chữ bảng nhỏ hơn để vừa bề ngang khổ A4 */
   .rsw-print-root .rsw-paper.rsw-xl-doc { line-height: 1.4 !important; }
