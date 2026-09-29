@@ -221,7 +221,7 @@ function XacMinhPaper({ slip }) {
             ))}
           </tr>
           <tr className="rsw-mgr-row">
-            <td className={`${td} text-left align-top`}><b>Xác nhận của Quản lý chi nhánh/ văn phòng</b></td>
+            <td className={`${td} text-center align-top`}><b>Xác nhận của Quản lý chi nhánh/ văn phòng</b></td>
             <td className={td} colSpan={2} />
           </tr>
         </tbody>

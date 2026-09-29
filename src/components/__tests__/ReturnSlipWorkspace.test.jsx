@@ -119,6 +119,7 @@ describe('ReturnSlipWorkspace — khung ký duyệt biên bản xác minh', () =
     const cells = mgrRow.querySelectorAll('td')
     expect(cells).toHaveLength(2)
     expect(cells[0].textContent).toBe('Xác nhận của Quản lý chi nhánh/ văn phòng')
+    expect(cells[0].className).toContain('text-center') // chữ canh giữa ô
     expect(cells[1].getAttribute('colspan')).toBe('2') // ô ký trống chiếm 2 cột
     expect(cells[1].textContent).toBe('')
   })
