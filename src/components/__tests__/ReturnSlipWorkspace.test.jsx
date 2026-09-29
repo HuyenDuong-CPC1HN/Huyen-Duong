@@ -91,19 +91,18 @@ describe('ReturnSlipWorkspace — cấu trúc bản in', () => {
   })
 })
 
-describe('ReturnSlipWorkspace — hướng giấy khi in', () => {
-  it('biên bản trả lại hàng in dọc; biên bản xác minh in ngang (A4 landscape) và gỡ rule sau khi in', () => {
-    const sizes = []
-    vi.spyOn(window, 'print').mockImplementation(() => { sizes.push(document.querySelector('style[data-print-orientation]')?.textContent ?? null) })
+describe('ReturnSlipWorkspace — nhắc chọn hướng giấy khi in', () => {
+  it('không ép hướng giấy (để hộp thoại in hiện mục Layout); nhắc chọn Portrait cho biên bản trả hàng, Landscape cho biên bản xác minh', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
     render(<ReturnSlipWorkspace slip={makeSlip()} onChange={() => {}} onBack={() => {}} />)
+    expect(screen.getByTestId('print-hint').textContent).toContain('Portrait (dọc)')
+    expect(screen.getByTestId('print-hint').textContent).toContain('Pages per sheet')
 
-    fireEvent.click(screen.getByTitle(/In trực tiếp/))
     fireEvent.click(screen.getByRole('button', { name: 'Biên bản xác minh' }))
-    fireEvent.click(screen.getByTitle(/In trực tiếp/))
+    expect(screen.getByTestId('print-hint').textContent).toContain('Landscape (ngang)')
 
-    expect(sizes[0]).toBeNull()
-    expect(sizes[1]).toContain('A4 landscape')
-    window.dispatchEvent(new Event('afterprint'))
+    fireEvent.click(screen.getByTitle(/In trực tiếp/))
+    expect(window.print).toHaveBeenCalledTimes(1)
     expect(document.querySelector('style[data-print-orientation]')).toBeNull()
   })
 })

@@ -1368,7 +1368,7 @@ body {
     vertical-align: middle;
   }
   .rsw-print-root .rsw-paper th { font-weight: 700; text-align: center; }
-  /* Biên bản xác minh in A4 NGANG (xem printOrientation.js) — khổ thấp hơn nên thu gọn khoảng cách để vừa
+  /* Biên bản xác minh in A4 NGANG (chọn Layout = Landscape khi in) — khổ thấp hơn nên thu gọn khoảng cách để vừa
      1 trang, giữ nguyên cỡ chữ 10.5pt. */
   .rsw-print-root .rsw-paper.rsw-xm-doc { line-height: 1.45 !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-head { line-height: 1.3 !important; }
@@ -1391,8 +1391,9 @@ body {
   .rsw-print-root .rsw-paper .rsw-xm-sign .rsw-sign-gap { height: 46px; }
 }
 
-/* Khổ A4 dọc, lề 12mm như bản gốc (lề trái/trên của file PDF gốc ~12mm) */
-@page { size: A4 portrait; margin: 12mm; }
+/* Không khai báo @page size/margin ở đây: để hộp thoại in của trình duyệt hiện đủ mục Layout (dọc/ngang),
+   Margins, Scale cho người dùng tự chọn. Biên bản trả lại hàng in DỌC, biên bản xác minh in NGANG (đúng
+   mẫu Word gốc) — ReturnSlipWorkspace nhắc chọn đúng ngay cạnh nút In. */
 
 /* ===== REPORT CHECKPOINT: SAVED ĐƠN C / DTP ===== */
 .report-actions {
