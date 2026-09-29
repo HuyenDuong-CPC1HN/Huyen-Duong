@@ -25,9 +25,13 @@ export function XuLyPaper({ phieu }) {
   const cols = ['4%', '8%', '15%', '9%', '9%', '7%', '6%', '7%', '7%', '9%', '19%']
   return (
     <div className={`${paperCls} rsw-xl-doc`} style={{ ...paperStyle, minWidth: 600 }}>
-      <div className="grid grid-cols-2 gap-2 text-center font-bold rsw-head">
-        <span>{isC ? <>CÔNG TY CỔ PHẦN DƯỢC PHẨM<br />CPC1 HÀ NỘI</> : 'CÔNG TY CỔ PHẦN UPHARMA'}</span>
-        <span>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br />Độc lập - Tự do - Hạnh phúc<br />---------o0o----------</span>
+      <div className="rsw-xm-head grid items-center gap-3 font-bold" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        {/* Logo và tên công ty liền nhau thành 1 cụm, giống biên bản xác minh */}
+        <div className="flex items-center gap-2">
+          <img src={isC ? '/templates/logo_cpc1hn.png' : '/templates/logo_upharma.png'} alt={isC ? 'Logo CPC1HN' : 'Logo UPHARMA'} className="rsw-logo shrink-0" style={{ width: isC ? 50 : 54, height: 'auto' }} />
+          <span className="text-left">{isC ? <>CÔNG TY CỔ PHẦN DƯỢC PHẨM<br />CPC1 HÀ NỘI</> : 'CÔNG TY CỔ PHẦN UPHARMA'}</span>
+        </div>
+        <span className="text-center">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br />Độc lập - Tự do - Hạnh phúc<br />---------o0o----------</span>
       </div>
       <div className="flex flex-wrap justify-between gap-2 mt-1">
         <span>Số: <V v={f.soBB} />/{y || '2026'}/BC-CPC1HN</span>
