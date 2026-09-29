@@ -67,3 +67,27 @@ describe('ReturnSlipWorkspace — nút "In" khung Xem trước', () => {
     expect(screen.queryByText('BIÊN BẢN TRẢ LẠI HÀNG (NỘI BỘ)')).not.toBeInTheDocument()
   })
 })
+
+// Bản in phải giống bản in gốc của website: chữ thường cho ô đã điền (CSS in bỏ tô/gạch chân qua lớp
+// rsw-fill), chừa khoảng trống để ký trước tên, dòng "Số tiền bằng chữ" nằm trong bảng hàng hoá.
+describe('ReturnSlipWorkspace — cấu trúc bản in', () => {
+  it('bản in có đủ lớp móc cho CSS in: ô đã điền, chỗ ký, dòng "Căn cứ" in nghiêng', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    render(<ReturnSlipWorkspace slip={makeSlip()} onChange={() => {}} onBack={() => {}} />)
+    const root = document.querySelector('.rsw-print-root')
+    expect(root.querySelector('.rsw-paper')).toBeTruthy()
+    expect([...root.querySelectorAll('.rsw-fill')].map(e => e.textContent)).toContain('34528')
+    expect(root.querySelectorAll('.rsw-sign-gap').length).toBe(3) // 3 bên A/B/C đều có chỗ ký
+    expect(root.querySelector('.rsw-it i').textContent).toMatch(/^- Căn cứ vào Nghị định 70\/2025/)
+  })
+
+  it('mẫu có bên mua/bán: "Số tiền bằng chữ" nằm trong bảng hàng hoá, không phải đoạn văn riêng', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    const slip = makeSlip()
+    slip.pdf = { ...slip.pdf, mau: 'CPC1HN', bangChu: 'Một triệu không trăm linh tám nghìn đồng./.', benMua: { ten: 'Khách A', diaChi: 'HCM', mst: '', daiDien: 'Anh B', chucVu: 'Dược sĩ' }, benBan: { ten: 'Công ty', diaChi: 'HN', mst: '01', daiDien: 'Thu', chucVu: 'GĐ' } }
+    render(<ReturnSlipWorkspace slip={slip} onChange={() => {}} onBack={() => {}} />)
+    const root = document.querySelector('.rsw-print-root')
+    expect(root.querySelector('table.rsw-table').textContent).toContain('Số tiền bằng chữ: Một triệu không trăm linh tám nghìn đồng./.')
+  })
+})
+

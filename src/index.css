@@ -1316,7 +1316,70 @@ body {
     top: 0;
     width: 100%;
   }
+
+  /* Bản in phải giống bản in gốc của website (đo từ file PDF gốc): Times New Roman 10.5pt, tiêu đề 12pt,
+     tràn hết bề ngang khổ giấy, ô kho đã điền là chữ thường (không tô vàng / gạch chân — đó chỉ là màu
+     báo trên màn hình), chỗ chưa điền in dấu chấm như file gốc, chừa khoảng trống để ký trước tên. */
+  /* Nền trắng cho cả trang khi in (nếu bật "In cả nền" trình duyệt sẽ không in ô xám của app) */
+  html:has(.rsw-print-root), body:has(.rsw-print-root) { background: #fff !important; }
+  .rsw-print-root .rsw-paper {
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 10.5pt !important;
+    line-height: 1.55 !important;
+  }
+  .rsw-print-root .rsw-paper p { margin: 0 !important; font-size: 10.5pt !important; }
+  .rsw-print-root .rsw-paper .rsw-head { line-height: 1.9 !important; margin: 0 !important; }
+  .rsw-print-root .rsw-paper .rsw-title { font-size: 12pt !important; margin: 0 0 14px !important; }
+  .rsw-print-root .rsw-paper .rsw-gap { margin-top: 5px !important; }
+  .rsw-print-root .rsw-paper .rsw-i10 { padding-left: 10px; }
+  .rsw-print-root .rsw-paper .rsw-i12 { padding-left: 12px; }
+  .rsw-print-root .rsw-paper .rsw-fill {
+    background: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  .rsw-print-root .rsw-paper .rsw-blank {
+    background: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    color: #000 !important;
+    font: inherit !important;
+    font-weight: 400 !important;
+    letter-spacing: 1px;
+  }
+  /* "Đại diện: … Chức vụ: …" — cột chức vụ thẳng hàng như bản gốc */
+  .rsw-print-root .rsw-paper .rsw-rep { display: flex; }
+  .rsw-print-root .rsw-paper .rsw-rep-name { display: inline-block; width: 44%; }
+
+  .rsw-print-root .rsw-paper table { font-size: 10.5pt !important; margin: 10px 0 !important; border-collapse: collapse; }
+  .rsw-print-root .rsw-paper th,
+  .rsw-print-root .rsw-paper td {
+    border: 1px solid #000 !important;
+    padding: 8px 6px !important;
+    font-size: 10.5pt !important;
+    vertical-align: middle;
+  }
+  .rsw-print-root .rsw-paper th { font-weight: 700; text-align: center; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc th,
+  .rsw-print-root .rsw-paper.rsw-xm-doc td { padding: 5px 6px !important; }
+  .rsw-print-root .rsw-paper .rsw-xm-sign td { vertical-align: top; }
+
+  /* Chỗ ký: chừa khoảng trống rồi mới in tên, như bản gốc */
+  .rsw-print-root .rsw-paper .rsw-sign { margin-top: 26px !important; gap: 8px !important; }
+  .rsw-print-root .rsw-paper .rsw-sign-gap { height: 74px; }
+  .rsw-print-root .rsw-paper .rsw-xm-sign .rsw-sign-gap { height: 46px; }
 }
+
+/* Khổ A4 dọc, lề 12mm như bản gốc (lề trái/trên của file PDF gốc ~12mm) */
+@page { size: A4 portrait; margin: 12mm; }
 
 /* ===== REPORT CHECKPOINT: SAVED ĐƠN C / DTP ===== */
 .report-actions {
