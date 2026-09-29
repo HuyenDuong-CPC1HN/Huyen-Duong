@@ -61,7 +61,7 @@ export default function ManualReturnEditor({ n, slip, onChange }) {
           </div>
         </>
       )}
-      <Field label="Lý do xuất trả" kind="hand" full><input value={pdf.lyDo} onChange={e => commit({ ...pdf, lyDo: e.target.value })} className={handCls} /></Field>
+      <Field label="Lý do xuất trả" kind={noiBo ? 'preset' : 'hand'} full><input value={pdf.lyDo} onChange={e => commit({ ...pdf, lyDo: e.target.value })} className={noiBo ? presetCls : handCls} /></Field>
       <div style={{ overflowX: 'auto' }}>
         <table className="w-full text-xs">
           <thead><tr className="text-gray-500">{['Tên hàng hoá', 'ĐVT', 'Số lượng', 'Đơn giá (gồm VAT)', 'Thành tiền', ''].map(h => <th key={h} className="px-1.5 py-1.5 text-left font-semibold">{h}</th>)}</tr></thead>

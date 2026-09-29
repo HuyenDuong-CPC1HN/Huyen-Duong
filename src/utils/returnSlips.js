@@ -84,6 +84,9 @@ export const MANUAL_SELLERS = {
   },
 }
 
+// Lý do mặc định của biên bản nội bộ (đúng câu website in ra cho đơn khách chưa nhận hàng).
+export const NOIBO_LY_DO = 'Bộ phận kinh doanh, kế toán và kho đã kiểm tra lại thông tin, phát hiện sai sót ngay khi hóa đơn được ghi sổ, tại thời điểm phát hiện hàng hóa chưa giao cho khách hàng.'
+
 export function emptyManualItem() {
   return { stt: 0, ten: '', dvt: '', soLuong: 0, soLo: '', donGia: 0, thanhTien: 0 }
 }
@@ -101,7 +104,7 @@ export function recalcManualPdf(pdf) {
 // dùng phần thuộc mẫu đang chọn. sellerKey: bên bán mặc định (mẫu nội bộ không in bên bán, chỉ để khi đổi sang mẫu C/DTP).
 export function newManualPdf(mau, slip = {}, sellerKey = mau === 'NOIBO' ? 'CPC1HN' : mau) {
   return recalcManualPdf({
-    mau, manual: true, fileName: 'Nhập tay', lyDo: slip.lyDo || '', items: [emptyManualItem()],
+    mau, manual: true, fileName: 'Nhập tay', lyDo: slip.lyDo || (mau === 'NOIBO' ? NOIBO_LY_DO : ''), items: [emptyManualItem()],
     benMua: { ten: slip.khachHang || '', diaChi: '', mst: '', daiDien: '', chucVu: '' },
     benBan: { ...MANUAL_SELLERS[sellerKey] },
     benC: { daiDien: slip.nhanVien || '', chucVu: 'Nhân viên kinh doanh' },
@@ -110,7 +113,7 @@ export function newManualPdf(mau, slip = {}, sellerKey = mau === 'NOIBO' ? 'CPC1
 
 // Đổi mẫu biên bản của đơn nhập tay: mẫu C / DTP đặt lại bên bán theo mẫu, mẫu nội bộ giữ nguyên.
 export function switchManualMau(pdf, mau) {
-  return { ...pdf, mau, benBan: mau === 'NOIBO' ? pdf.benBan : { ...MANUAL_SELLERS[mau] } }
+  return { ...pdf, mau, lyDo: pdf.lyDo || (mau === 'NOIBO' ? NOIBO_LY_DO : ''), benBan: mau === 'NOIBO' ? pdf.benBan : { ...MANUAL_SELLERS[mau] } }
 }
 
 // Dựng đơn nhập tay từ hoá đơn đã đọc (parseInvoiceLines): mặc định MẪU NỘI BỘ (đơn cần lập lại theo hoá đơn), mẫu
