@@ -106,6 +106,14 @@ describe('ReturnSlipsTab — Theo dõi nhập trả lại', () => {
     expect(readSlipsFromStore()[0].stage).toBe('done')
   })
 
+  it('phiếu đang điền (đã ký ngoài app): bấm "Đã ký" ngay trên dòng để chuyển sang đã ký, nhập kho', () => {
+    seed([{ id: 's1', maPhieu: 'DHC1', khachHang: 'Khách A', stage: 'doing', createdAt: '2026-09-29T08:00:00', approvedAt: '2026-09-29T09:00:00' }])
+    render(<ReturnSlipsTab />)
+    fireEvent.click(screen.getByRole('button', { name: /Đánh dấu đã ký DHC1/ }))
+    expect(readSlipsFromStore()[0]).toMatchObject({ stage: 'done' })
+    expect(screen.queryByRole('button', { name: /Đánh dấu đã ký/ })).not.toBeInTheDocument()
+  })
+
   it('"Tạo đơn thủ công": tạo phiếu trống, mở thẳng màn làm biên bản với nút Nhập tay theo mẫu', () => {
     render(<ReturnSlipsTab />)
     fireEvent.click(screen.getByRole('button', { name: /Tạo đơn thủ công/ }))

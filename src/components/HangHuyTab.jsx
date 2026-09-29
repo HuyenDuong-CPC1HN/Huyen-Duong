@@ -295,9 +295,16 @@ export default function HangHuyTab() {
                       <td className="px-2 py-2 text-gray-600">{p.items.length}</td>
                       <td className="px-2 py-2"><HuyStagePill stage={p.stage} /></td>
                       <td className="px-2 py-2">
+                        <div className="flex items-center gap-1 whitespace-nowrap">
+                          {(p.stage === 'doing' || p.stage === 'exported') && (
+                            <button type="button" onClick={e => { e.stopPropagation(); markSigned(p.id) }} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Đánh dấu đã ký đủ, huỷ xong" aria-label={`Đánh dấu đã ký ${p.soPhieu}`}>
+                              <Check size={12} /> Đã ký
+                            </button>
+                          )}
                         <button type="button" onClick={e => { e.stopPropagation(); removePhieu(p.id) }} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá phiếu" aria-label={`Xoá phiếu ${p.soPhieu}`}>
                           <Trash2 size={13} />
                         </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

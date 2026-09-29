@@ -452,9 +452,16 @@ export default function ReturnSlipsTab() {
                       <td className="px-2 py-2 text-gray-500 max-w-64"><div className="line-clamp-2" title={s.lyDo || s.pdf?.lyDo}>{s.lyDo || s.pdf?.lyDo || '—'}</div></td>
                       <td className="px-2 py-2"><StagePill stage={s.stage} /></td>
                       <td className="px-2 py-2">
+                        <div className="flex items-center gap-1 whitespace-nowrap">
+                          {(s.stage === 'doing' || s.stage === 'exported') && (
+                            <button type="button" onClick={e => { e.stopPropagation(); markSigned(s.id) }} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Đánh dấu đã ký đủ, nhập kho" aria-label={`Đánh dấu đã ký ${s.maPhieu || s.khachHang}`}>
+                              <Check size={12} /> Đã ký
+                            </button>
+                          )}
                         <button type="button" onClick={e => { e.stopPropagation(); removeSlip(s.id) }} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá phiếu">
                           <Trash2 size={13} />
                         </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

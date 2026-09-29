@@ -428,7 +428,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                       <FileDown size={13} /> {exporting ? 'Đang tạo file…' : `Xuất ${pdf.mau === 'NOIBO' ? 'BB trả hàng nội bộ' : 'BB trả lại hàng'} + BB xác minh (Word)`}
                     </button>
                     <button type="button" onClick={() => onChange({ ...slip, stage: 'done', doneAt: new Date().toISOString() })}
-                      disabled={!(slip.stage === 'exported' || slip.stage === 'done')} className="sheet-tab-action">
+                      disabled={slip.stage === 'done'} className="sheet-tab-action">
                       <Check size={13} /> Đã ký đủ, nhập kho
                     </button>
                   </div>

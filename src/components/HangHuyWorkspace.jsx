@@ -130,7 +130,7 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
                   <FileDown size={13} /> {exporting ? 'Đang tạo file…' : 'Xuất BB xử lý (Excel) + BB xác minh (Word)'}
                 </button>
                 <button type="button" onClick={() => onChange({ ...phieu, stage: 'done', doneAt: new Date().toISOString() })}
-                  disabled={!(phieu.stage === 'exported' || phieu.stage === 'done')} className="sheet-tab-action">
+                  disabled={phieu.stage === 'done'} className="sheet-tab-action">
                   <Check size={13} /> Đã ký đủ, huỷ xong
                 </button>
               </div>
