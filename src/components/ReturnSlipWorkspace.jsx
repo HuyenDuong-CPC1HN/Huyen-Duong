@@ -152,8 +152,8 @@ function XacMinhPaper({ slip }) {
       <p className="rsw-doccode text-right text-[9px]">CNQT019-BM02 | Lần 01 | 05/03/2026</p>
       <div className="rsw-xm-head grid items-center gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
         {/* Logo và tên công ty liền nhau thành 1 cụm (không để tên trôi ra giữa ô) */}
-        <div className="flex items-center gap-3">
-          <img src={isC ? '/templates/logo_cpc1hn.png' : '/templates/logo_upharma.png'} alt={isC ? 'Logo CPC1HN' : 'Logo UPHARMA'} className="rsw-logo shrink-0" style={{ width: isC ? 72 : 78, height: 'auto' }} />
+        <div className="flex items-center gap-2">
+          <img src={isC ? '/templates/logo_cpc1hn.png' : '/templates/logo_upharma.png'} alt={isC ? 'Logo CPC1HN' : 'Logo UPHARMA'} className="rsw-logo shrink-0" style={{ width: isC ? 50 : 54, height: 'auto' }} />
           <b className="text-left">{isC ? 'CÔNG TY CỔ PHẦN DƯỢC PHẨM CPC1 HÀ NỘI' : 'CÔNG TY CỔ PHẦN UPHARMA'}</b>
         </div>
         <span className="text-center"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br /><b>Độc lập - Tự do - Hạnh phúc</b><br />************</span>
