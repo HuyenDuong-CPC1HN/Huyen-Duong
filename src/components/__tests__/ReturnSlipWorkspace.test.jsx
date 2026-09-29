@@ -108,3 +108,19 @@ describe('ReturnSlipWorkspace — hướng giấy khi in', () => {
   })
 })
 
+describe('ReturnSlipWorkspace — khung ký duyệt biên bản xác minh', () => {
+  it('"Xác nhận của Quản lý chi nhánh/ văn phòng" nằm trong khung (ô của bảng ký duyệt) kèm ô trống để ký, như file Word mẫu', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    render(<ReturnSlipWorkspace slip={makeSlip()} onChange={() => {}} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Biên bản xác minh' }))
+
+    const table = document.querySelector('.rsw-print-root table.rsw-xm-sign')
+    const mgrRow = table.querySelector('tr.rsw-mgr-row')
+    const cells = mgrRow.querySelectorAll('td')
+    expect(cells).toHaveLength(2)
+    expect(cells[0].textContent).toBe('Xác nhận của Quản lý chi nhánh/ văn phòng')
+    expect(cells[1].getAttribute('colspan')).toBe('2') // ô ký trống chiếm 2 cột
+    expect(cells[1].textContent).toBe('')
+  })
+})
+

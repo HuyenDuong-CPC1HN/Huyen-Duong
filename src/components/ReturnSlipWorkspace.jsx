@@ -190,7 +190,10 @@ function XacMinhPaper({ slip }) {
       </table>
       <p>6. Kết quả xác minh: <P v={f.xmKetQua} /></p>
       <p>Kết quả + Số phiếu KN (nếu có): ……………………………………</p>
+      {/* Khung ký duyệt đúng cấu trúc bảng trong file Word mẫu: 4 dòng, dòng cuối là ô "Xác nhận của Quản lý
+          chi nhánh/ văn phòng" kèm 1 ô trống (2 cột) để ký. */}
       <table className="rsw-table rsw-xm-sign w-full border-collapse my-1.5 text-[11.5px]" style={{ tableLayout: 'fixed' }}>
+        <colgroup><col style={{ width: '37%' }} /><col style={{ width: '32%' }} /><col style={{ width: '31%' }} /></colgroup>
         <thead>
           <tr>
             <th className={`${td} font-bold`} rowSpan={2}>Đề xuất giải quyết của Dược sĩ phụ trách chuyên môn</th>
@@ -211,9 +214,12 @@ function XacMinhPaper({ slip }) {
               </td>
             ))}
           </tr>
+          <tr className="rsw-mgr-row">
+            <td className={`${td} text-left align-top`}><b>Xác nhận của Quản lý chi nhánh/ văn phòng</b></td>
+            <td className={td} colSpan={2} />
+          </tr>
         </tbody>
       </table>
-      <p className="rsw-gap text-center"><b>Xác nhận của Quản lý chi nhánh/ văn phòng</b></p>
     </div>
   )
 }
