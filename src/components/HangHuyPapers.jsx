@@ -22,7 +22,7 @@ export function XuLyPaper({ phieu }) {
   const [d, m, y] = huyDmy(f.ngayLap)
   const [xd, xm, xy] = huyDmy(f.xlNgay)
   const items = phieu.items || []
-  const cols = ['4%', '8%', '18%', '9%', '9%', '7%', '6%', '8%', '7%', '10%', '14%']
+  const cols = ['4%', '8%', '15%', '9%', '9%', '7%', '6%', '7%', '7%', '9%', '19%']
   return (
     <div className={`${paperCls} rsw-xl-doc`} style={{ ...paperStyle, minWidth: 600 }}>
       <div className="grid grid-cols-2 gap-2 text-center font-bold rsw-head">
