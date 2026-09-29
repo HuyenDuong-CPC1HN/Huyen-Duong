@@ -1380,7 +1380,7 @@ body {
   .rsw-print-root .rsw-paper.rsw-xm-doc th,
   .rsw-print-root .rsw-paper.rsw-xm-doc td { padding: 4px 6px !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-xm-sign .rsw-sign-gap { height: 8px; }
-  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-mgr-row td { height: 100px; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-mgr-row td { height: 90px; }
   .rsw-print-root .rsw-paper.rsw-xm-doc { break-inside: avoid; }
   .rsw-print-root .rsw-paper .rsw-xm-sign td { vertical-align: top; }
 
