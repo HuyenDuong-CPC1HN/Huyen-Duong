@@ -186,9 +186,9 @@ function XacMinhPaper({ slip }) {
                 <td className={`${td} text-center`}><V v={extra.soLo || it.soLo} /></td>
                 <td className={`${td} text-center`}><V v={extra.hanDung ? `${hd}/${hm}/${hy}` : ''} /></td>
                 <td className={`${td} text-center`}>{it.dvt}</td>
-                <td className={`${td} text-right`}>{money(it.soLuong)}</td>
-                <td className={td}><V v={extra.quyCach} /></td>
-                <td className={td}><P v={f.xmTinhTrang} /></td>
+                <td className={`${td} text-center`}>{money(it.soLuong)}</td>
+                <td className={`${td} text-center`}><V v={extra.quyCach} /></td>
+                <td className={`${td} text-center`}><P v={f.xmTinhTrang} /></td>
               </tr>
             )
           })}

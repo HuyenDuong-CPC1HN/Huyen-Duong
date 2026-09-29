@@ -142,3 +142,14 @@ describe('ReturnSlipWorkspace — logo và mã biểu mẫu của biên bản x�
   })
 })
 
+describe('ReturnSlipWorkspace — bảng xác minh tình trạng hàng hoá', () => {
+  it('cột Số lượng, Quy cách, Tình trạng canh giữa', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    render(<ReturnSlipWorkspace slip={makeSlip()} onChange={() => {}} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Biên bản xác minh' }))
+    const cells = document.querySelectorAll('.rsw-print-root table.rsw-table')[1].querySelectorAll('tbody tr:first-child td')
+    const byText = t => [...cells].find(c => c.textContent === t)
+    for (const t of ['80', 'Hộp 10 ống', 'Hàng nguyên vẹn']) expect(byText(t).className).toContain('text-center')
+  })
+})
+
