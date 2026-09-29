@@ -29,9 +29,11 @@ export default function DamagedGoodsRecordView({ record, onClose, onEdit, onExpo
             <button type="button" onClick={() => onExport(record, 'xacMinh')} disabled={exportingId === `${record.id}_xacMinh`} className="sheet-tab-action">
               <FileDown size={13} /> Xuất Xác minh
             </button>
-            <button type="button" onClick={onEdit} className="sheet-tab-action">
-              <Pencil size={13} /> Sửa
-            </button>
+            {onEdit && (
+              <button type="button" onClick={onEdit} className="sheet-tab-action">
+                <Pencil size={13} /> Sửa
+              </button>
+            )}
             <button type="button" onClick={onClose} className="sheet-tab-action">
               <X size={13} /> Đóng
             </button>

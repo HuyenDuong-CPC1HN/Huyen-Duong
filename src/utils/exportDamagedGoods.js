@@ -194,22 +194,24 @@ function fillDataRows(doc, sstDoc, items) {
     setCellStringForce(doc, sstDoc, row, COL.maHang, it.maHang)
     setCellStringForce(doc, sstDoc, row, COL.tenHang, it.tenHang)
     setCellStringForce(doc, sstDoc, row, COL.soLo, it.soLo)
-    // Kho C/DTP: "Hạn dùng" là ô nhập tay tự do trong DamagedGoodsRecordForm.jsx (đã sẵn dạng dd/mm/yyyy
-    // do người dùng gõ), KHÔNG phải ngày ISO như hàng cận date/Kho A — dùng formatDateVi() ở đây từng làm
-    // ô này luôn trống trên file xuất (formatDateVi tách theo dấu "-", chuỗi dd/mm/yyyy không có "-" nên
-    // parse ra rỗng). Ghi thẳng giá trị người dùng đã gõ, không reformat.
+    // Kho C/DTP: "Hạn dùng" là chữ dd/mm/yyyy dựng sẵn (biên bản nhập tay cũ do người dùng gõ; phiếu xuất kho hàng
+    // huỷ đổi từ ISO trước khi vào đây), KHÔNG phải ngày ISO như hàng cận date/Kho A — formatDateVi() tách theo
+    // dấu "-" nên từng làm ô này luôn trống. Ghi thẳng giá trị, không reformat.
     setCellStringForce(doc, sstDoc, row, COL.hanDung, it.hanDung || '')
     setCellStringForce(doc, sstDoc, row, COL.kho, it.kho || '')
     setCellStringForce(doc, sstDoc, row, COL.dvt, it.dvt)
-    setCellNumberForce(doc, row, COL.theoChungTu, it.soLuong ?? 0)
-    setCellNumberForce(doc, row, COL.thucHuy, it.soLuong ?? 0)
+    // Phiếu xuất kho hàng huỷ tách 2 cột (thực huỷ do kho nhập); dữ liệu cũ không có thucHuy thì 2 cột bằng nhau.
+    setCellNumberForce(doc, row, COL.theoChungTu, it.soLuong ?? (it.thucHuy === undefined ? 0 : null))
+    setCellNumberForce(doc, row, COL.thucHuy, it.thucHuy === undefined ? (it.soLuong ?? 0) : it.thucHuy)
     setCellStringForce(doc, sstDoc, row, COL.quyCach, it.quyCach || '')
     setCellStringForce(doc, sstDoc, row, COL.ghiChu, it.ghiChu || '')
   })
 }
 
 // Điền dữ liệu vào file mẫu Biên bản Xử lý của ĐÚNG kho, trả về Uint8Array file .xlsx hoàn chỉnh.
-export async function fillBienBanXuLy(templateBuffer, items, { location = '', ngayGio = '', date = new Date() } = {}) {
+// Tuỳ chọn cho phiếu xuất kho hàng huỷ: soBB (số thứ tự trong "Số: …../2026/BC-CPC1HN"), canCu {soQD, ngayQD
+// (ISO)} (dòng "Căn cứ : Quyết định số"), phuongPhap (mục 5). Không truyền thì giữ nguyên chữ của mẫu.
+export async function fillBienBanXuLy(templateBuffer, items, { location = '', ngayGio = '', date = new Date(), soBB = '', canCu = null, phuongPhap = '' } = {}) {
   const zip = new PizZip(templateBuffer.slice(0))
   const sstDoc = parseXml(zip.file(STRINGS_PATH).asText())
   const sheetDoc = parseXml(zip.file(SHEET_PATH).asText())
@@ -220,6 +222,15 @@ export async function fillBienBanXuLy(templateBuffer, items, { location = '', ng
   appendAfterLabel(sheetDoc, sstDoc, 13, 'A', ngayGio || `Vào lúc 08h30’, ngày ${ngay} tháng ${thang} năm ${nam}`)
   appendAfterLabel(sheetDoc, sstDoc, 14, 'A', location)
 
+  if (soBB) rewriteSoBienBan(sheetDoc, sstDoc, soBB, nam)
+  if (canCu && (canCu.soQD || canCu.ngayQD)) {
+    const [qy, qm, qd] = (canCu.ngayQD || '').split('-')
+    const dots = '……………………'
+    setCellStringForce(sheetDoc, sstDoc, 7, 'A',
+      `- Căn cứ : Quyết định số : ${canCu.soQD || dots}, ngày ${qd || '…'} tháng ${qm || '…'} năm ${qy || '…'} của Giám đốc Công ty về việc hủy sản phẩm`)
+  }
+  if (phuongPhap) setCellStringForce(sheetDoc, sstDoc, 20, 'B', phuongPhap)
+
   const extra = ensureDataRows(sheetDoc, items.length)
   fillDataRows(sheetDoc, sstDoc, items)
   updatePrintArea(workbookDoc, extra)
@@ -228,6 +239,19 @@ export async function fillBienBanXuLy(templateBuffer, items, { location = '', ng
   zip.file(SHEET_PATH, serializeXml(sheetDoc))
   zip.file(WORKBOOK_PATH, serializeXml(workbookDoc))
   return zip.generate({ type: 'uint8array' })
+}
+
+// Ô "Số: …../2026/BC-CPC1HN" nằm ở A4 (mẫu Kho C) hoặc A3 (mẫu Kho DTP): thay dãy chấm bằng số biên bản.
+function rewriteSoBienBan(sheetDoc, sstDoc, soBB, nam) {
+  const sis = sstDoc.documentElement.getElementsByTagName('si')
+  for (const ref of ['A3', 'A4']) {
+    const cell = sheetDoc.querySelector(`c[r="${ref}"]`)
+    const idx = cell?.querySelector('v')?.textContent
+    const text = idx === undefined ? '' : sis[Number(idx)]?.textContent || ''
+    if (!/^\s*Số\s*:/.test(text)) continue
+    setCellStringForce(sheetDoc, sstDoc, Number(ref.slice(1)), 'A', text.replace(/20\d\d/, nam).replace(/[….]{2,}/, soBB))
+    return
+  }
 }
 
 // ---------- Biên bản Xác minh (Word) ----------
@@ -338,6 +362,54 @@ export async function exportDamagedGoodsKhoAXacMinh(record) {
   const blob = await fillXacMinhTemplate(KHO_A_XACMINH_TEMPLATE_URL, data)
   const label = new Date(record.processedAt || Date.now()).toLocaleDateString('vi-VN').replaceAll('/', '-')
   triggerDownloadBlob(blob, `XacMinh_HangHuy_KhoA_${label}.docx`)
+}
+
+// ---------- Phiếu xuất kho hàng huỷ Kho C / Kho DTP (xem utils/hangHuy.js) ----------
+
+const dmyVi = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '' }
+const gioVi = gio => (gio ? `${gio.replace(':', 'h')}’` : '')
+const dateAt = iso => (iso ? new Date(`${iso}T08:00:00`) : new Date())
+
+// Excel Biên bản xử lý: hàng, số lượng thực huỷ, quy cách, Ghi chú = "Tình trạng" kho tự điền (để trống được).
+export async function buildHuyXuLyBytes(phieu, templateBuffer) {
+  const f = phieu.form || {}
+  const xl = todayParts(dateAt(f.xlNgay || f.ngayLap))
+  const items = (phieu.items || []).map(it => ({
+    maHang: it.maHang, tenHang: it.tenHang, soLo: it.soLo, hanDung: dmyVi(it.hanDung), kho: phieu.khoXuat, dvt: it.dvt,
+    soLuong: it.soLuong, thucHuy: it.thucHuy ?? null, quyCach: it.quyCach, ghiChu: it.tinhTrang,
+  }))
+  return fillBienBanXuLy(templateBuffer, items, {
+    location: f.diaDiem || '',
+    ngayGio: `Vào lúc ${gioVi(f.xlGio) || '08h30’'}, ngày ${xl.ngay} tháng ${xl.thang} năm ${xl.nam}`,
+    date: dateAt(f.ngayLap),
+    soBB: f.soBB, canCu: { soQD: f.soQD, ngayQD: f.ngayQD }, phuongPhap: f.phuongPhap,
+  })
+}
+
+// Word Biên bản xác minh: cột "Tình trạng" lấy đúng ô kho điền (trống thì để trống).
+export function buildHuyXacMinhData(phieu) {
+  const f = phieu.form || {}
+  const { ngay, thang, nam } = todayParts(dateAt(f.xmNgay || f.ngayLap))
+  return {
+    ngay, thang, nam, gio: gioVi(f.xmGio) || '08h30’',
+    items: (phieu.items || []).map((it, i) => ({
+      stt: i + 1, maSanPham: it.maHang || '', tenHang: it.tenHang || '', soLo: it.soLo || '',
+      hanDung: dmyVi(it.hanDung), kho: phieu.khoXuat || '', dvt: it.dvt || '',
+      soLuong: it.thucHuy ?? '', quyCach: it.quyCach || '', tinhTrang: it.tinhTrang || '',
+    })),
+  }
+}
+
+export async function exportHangHuyPhieu(phieu) {
+  const entity = phieu.kho === 'DTP' ? 'khoDTP' : 'khoC'
+  if ((phieu.items || []).length === 0) throw new Error('Phiếu không còn mặt hàng nào để lập biên bản.')
+  const [xuLyBuffer, xacMinh] = await Promise.all([
+    loadXuLyTemplateBuffer(entity),
+    fillXacMinhTemplate(TEMPLATES[entity].xacMinh, buildHuyXacMinhData(phieu)),
+  ])
+  const label = String(phieu.soPhieu || 'PhieuXuatKho').replaceAll(/[\\/:*?"<>|]+/g, '-')
+  triggerDownloadBytes(await buildHuyXuLyBytes(phieu, xuLyBuffer), `BBXL_${label}.xlsx`)
+  triggerDownloadBlob(xacMinh, `BBXM_${label}.docx`)
 }
 
 export async function exportDamagedGoodsXacMinh(record) {

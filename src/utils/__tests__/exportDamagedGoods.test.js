@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import PizZip from 'pizzip'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fillBienBanXuLy, todayParts, exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh, exportDamagedGoodsKhoAXuLy, exportDamagedGoodsKhoAXacMinh } from '../exportDamagedGoods'
+import { fillBienBanXuLy, buildHuyXuLyBytes, buildHuyXacMinhData, exportHangHuyPhieu, todayParts, exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh, exportDamagedGoodsKhoAXuLy, exportDamagedGoodsKhoAXacMinh } from '../exportDamagedGoods'
 
 const TPL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../public/templates')
 const XULY_C_PATH = `${TPL_DIR}/BIEN_BAN_XU_LY_HANG_LOI_KHO_C.xlsx`
@@ -18,8 +18,8 @@ function loadBuffer(path) {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
 }
 
-// hanDung ở đây CỐ TÌNH đã là dd/mm/yyyy (không phải ISO) — đúng thật với DamagedGoodsRecordForm.jsx, nơi
-// "Hạn dùng" của Kho C/DTP là 1 ô <input> gõ tay tự do, không phải ngày ISO như hàng cận date/Kho A.
+// hanDung ở đây CỐ TÌNH đã là dd/mm/yyyy (không phải ISO) — đúng thật với biên bản Kho C/DTP nhập tay
+// theo mẫu cũ: "Hạn dùng" là chữ gõ tay, không phải ngày ISO như hàng cận date/Kho A.
 function makeItem(overrides = {}) {
   return {
     maHang: 'W00517', tenHang: 'Falgankid', soLo: '020126', hanDung: '15/01/2029',
@@ -269,5 +269,81 @@ describe('exportDamagedGoodsKhoAXacMinh — dùng chung mẫu Xác minh với h�
 
   it('báo lỗi rõ ràng khi chưa có mặt hàng nào', async () => {
     await expect(exportDamagedGoodsKhoAXacMinh({ entity: 'khoA', items: [] })).rejects.toThrow(/chưa có mặt hàng/i)
+  })
+})
+
+
+// ---------- Phiếu xuất kho hàng huỷ Kho C / Kho DTP ----------
+function makePhieu(kho, overrides = {}) {
+  return {
+    kho, soPhieu: kho === 'C' ? 'XT2621/00810' : 'XK2621/00104', khoXuat: kho === 'C' ? '020102' : '020105',
+    items: [
+      { maHang: 'W00520', tenHang: 'Falgankid 25 mg/ml', dvt: 'ONG', soLuong: 60, thucHuy: 60, soLo: '020126', hanDung: '2029-01-12', quyCach: 'Hộp 20 ống', tinhTrang: '' },
+      { maHang: 'TH00899', tenHang: 'Golistin-enema 133ml', dvt: 'Lọ', soLuong: null, thucHuy: 2, soLo: '13326G02', hanDung: '2031-07-11', quyCach: '', tinhTrang: 'Hàng chảy dịch' },
+    ],
+    form: {
+      soBB: '12', ngayLap: '2026-09-30', soQD: '05/QĐ-CPC1HN', ngayQD: '2026-09-28',
+      xlNgay: '2026-10-05', xlGio: '09:15', diaDiem: 'Kho CN Hồ Chí Minh', phuongPhap: 'Xuất gửi nhà máy xử lý',
+      xmNgay: '2026-10-01', xmGio: '08:30',
+    },
+    ...overrides,
+  }
+}
+
+describe('Biên bản xử lý hàng huỷ (Excel) từ phiếu xuất kho', () => {
+  it.each([['C', XULY_C_PATH, 'A4'], ['DTP', XULY_DTP_PATH, 'A3']])('Kho %s: điền số biên bản, ngày, căn cứ, thời gian, địa điểm; Ghi chú = Tình trạng để trống', async (kho, path) => {
+    const bytes = await buildHuyXuLyBytes(makePhieu(kho), loadBuffer(path))
+    const cell = readCells(bytes)
+    expect(cell(Number(kho === 'C' ? 4 : 3), 'A')).toBe('Số: 12/2026/BC-CPC1HN')
+    expect(cell(5, 'I')).toBe('TP.Hồ Chí Minh, Ngày 30 tháng 09 năm 2026')
+    expect(cell(7, 'A')).toBe('- Căn cứ : Quyết định số : 05/QĐ-CPC1HN, ngày 28 tháng 09 năm 2026 của Giám đốc Công ty về việc hủy sản phẩm')
+    expect(cell(13, 'A')).toContain('Vào lúc 09h15’, ngày 05 tháng 10 năm 2026')
+    expect(cell(14, 'A')).toContain('Kho CN Hồ Chí Minh')
+    expect(cell(18, 'E')).toBe('12/01/2029')
+    expect(cell(18, 'F')).toBe(kho === 'C' ? '020102' : '020105')
+    expect(cell(18, 'H')).toBe('60')
+    expect(cell(18, 'I')).toBe('60')
+    expect(cell(18, 'K')).toBeNull() // Tình trạng trống → ô Ghi chú trống, không còn chữ ví dụ của mẫu
+    expect(cell(19, 'H')).toBeNull() // phiếu không có số lượng → Theo chứng từ trống
+    expect(cell(19, 'I')).toBe('2') // Thực huỷ kho nhập tay
+    expect(cell(19, 'K')).toBe('Hàng chảy dịch')
+  })
+
+  it('để trống số quyết định thì giữ nguyên dòng căn cứ của mẫu', async () => {
+    const phieu = makePhieu('C'); phieu.form.soQD = ''; phieu.form.ngayQD = ''
+    const cell = readCells(await buildHuyXuLyBytes(phieu, loadBuffer(XULY_C_PATH)))
+    expect(cell(7, 'A')).toContain('Quyết định số :……')
+  })
+})
+
+describe('Biên bản xác minh hàng huỷ (Word) từ phiếu xuất kho', () => {
+  it('cột Tình trạng lấy từ ô kho điền (trống thì để trống), giờ/ngày theo form', () => {
+    const data = buildHuyXacMinhData(makePhieu('DTP'))
+    expect(data).toMatchObject({ ngay: '01', thang: '10', nam: '2026', gio: '08h30’' })
+    expect(data.items[0]).toMatchObject({ stt: 1, maSanPham: 'W00520', hanDung: '12/01/2029', kho: '020105', soLuong: 60, quyCach: 'Hộp 20 ống', tinhTrang: '' })
+    expect(data.items[1]).toMatchObject({ soLuong: 2, tinhTrang: 'Hàng chảy dịch' })
+  })
+
+  it('exportHangHuyPhieu tải 2 file: Excel xử lý + Word xác minh đúng mẫu của kho', async () => {
+    const saved = []
+    const anchors = []
+    URL.createObjectURL = vi.fn((blob) => { saved.push(blob); return `blob:${saved.length}` })
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function click() { anchors.push(this.download) })
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = { [`/templates/BIEN_BAN_XU_LY_HANG_LOI_KHO_LGT.xlsx`]: XULY_DTP_PATH, [`/templates/BIEN_BAN_XAC_MINH_HANG_LOI_KHO_LGT.docx`]: XACMINH_DTP_PATH }[url]
+      const buf = readFileSync(path)
+      return { ok: true, arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) }
+    })
+    await exportHangHuyPhieu(makePhieu('DTP'))
+    expect(anchors).toEqual(['BBXL_XK2621-00104.xlsx', 'BBXM_XK2621-00104.docx'])
+    const word = new PizZip(new Uint8Array(await saved[1].arrayBuffer())).file('word/document.xml').asText()
+    expect(word).toContain('UPHARMA')
+    expect(word).toContain('Hàng chảy dịch')
+    vi.restoreAllMocks()
+  })
+
+  it('báo lỗi khi phiếu không còn hàng', async () => {
+    await expect(exportHangHuyPhieu(makePhieu('C', { items: [] }))).rejects.toThrow(/không còn mặt hàng/)
   })
 })

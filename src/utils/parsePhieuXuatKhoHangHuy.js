@@ -72,3 +72,57 @@ export function parsePhieuXuatKhoNgayLap(pdfText) {
   const [, dd, mo, yyyy] = m
   return `${yyyy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}`
 }
+
+// ---------- Phiếu xuất kho của Kho C (CPC1HN) và Kho DTP (UPHARMA) ----------
+// Hai kho in phiếu khác cột: Kho C có "Nước SX" trước Lô rồi mới đến Hạn dùng; Kho DTP có thêm cột "Vị trí",
+// không có "Nước SX", và Hạn dùng đứng TRƯỚC Lô. Mã vật tư của DTP có thể 2 chữ cái (TH00893). Dòng nào không
+// đọc được số lượng (PDF để trống) thì soLuong = null để app báo kho nhập tay.
+const HUY_HEADER_CUT_RE = /^[\s\S]*?Nước SX\s*(?:Vị trí\s*)?A\s+B\s*C\s+D\s+2\s+3\s+(?:4\s+1|5\s+1\s+4)\s*/i
+const HUY_CODE_RE = /\b([A-Z]{1,2}\d{4,5})\b/g
+const HUY_DATE_RE = /(\d{1,2})\/(\d{1,2})\/(\d{4})/g
+const isoFromDmy = (dd, mo, yyyy) => `${yyyy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}`
+const parseQty = raw => (/^[\d.,]+$/.test(raw || '') ? Number(raw.split(',')[0].replaceAll('.', '')) : null)
+
+export function parsePhieuXuatKhoHuyPdf(pdfText) {
+  const text = String(pdfText || '').replace(/\s+/g, ' ').trim()
+  const result = { kho: null, soPhieu: '', ngayPhieu: parsePhieuXuatKhoNgayLap(text), khoXuat: '', lyDo: '', items: [] }
+  if (!text) return result
+
+  const head = text.slice(0, Math.max(text.search(/\bStt\b/), 0) || text.length)
+  if (/UPHARMA/i.test(head)) result.kho = 'DTP'
+  else if (/CPC1/i.test(head)) result.kho = 'C'
+  result.soPhieu = /\b([A-Z]{2}\d{4}\/\d{4,6})\b/.exec(head)?.[1] || ''
+  result.khoXuat = /\b(0201\d{2})\b/.exec(head)?.[1] || ''
+  result.lyDo = /Lý do xuất kho:\s*(.*?)\s+0201\d{2}\b/.exec(head)?.[1]?.trim() || ''
+
+  const dtp = result.kho === 'DTP'
+  const body = text.replace(HUY_HEADER_CUT_RE, '')
+  if (body === text) return result
+
+  let cursor = 0
+  for (const anchor of body.matchAll(HUY_CODE_RE)) {
+    const maHang = anchor[1]
+    const before = body.slice(cursor, anchor.index).trim()
+    HUY_DATE_RE.lastIndex = anchor.index + maHang.length
+    const date = HUY_DATE_RE.exec(body)
+    if (!date) break
+    const stt = /^(\d{1,3})\s+([\s\S]+)$/.exec(before)
+    const between = body.slice(anchor.index + maHang.length, date.index).trim().split(/\s+/).filter(Boolean)
+    const dateEnd = date.index + date[0].length
+    let soLo
+    if (dtp) {
+      const lot = /^\s*(\S+)/.exec(body.slice(dateEnd))
+      soLo = lot?.[1] || ''
+      cursor = dateEnd + (lot ? lot[0].length : 0)
+    } else {
+      soLo = between.at(-1) || ''
+      cursor = dateEnd
+    }
+    if (!stt || !between[0] || !soLo) continue
+    result.items.push({
+      maHang, tenHang: stt[2].trim(), dvt: between[0], soLuong: parseQty(between[1]),
+      soLo, hanDung: isoFromDmy(date[1], date[2], date[3]),
+    })
+  }
+  return result
+}

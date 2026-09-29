@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
 import { ChevronDown, ChevronRight, Plus, Trash2, FileDown, Pencil, FolderOpen, Eye } from 'lucide-react'
-import DamagedGoodsRecordForm from './DamagedGoodsRecordForm'
 import DamagedGoodsKhoAForm from './DamagedGoodsKhoAForm'
 import DamagedGoodsRecordView from './DamagedGoodsRecordView'
-import { exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh, exportDamagedGoodsKhoAXuLy, exportDamagedGoodsKhoAXacMinh } from '../utils/exportDamagedGoods'
+import { exportDamagedGoodsKhoAXuLy, exportDamagedGoodsKhoAXacMinh } from '../utils/exportDamagedGoods'
 
 const STORAGE_KEY = 'damaged_goods_records'
 
@@ -18,7 +17,7 @@ function readAllRecords() {
 }
 function writeAllRecords(records) { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)) }
 
-const TYPE_LABEL = type => ({ khoC: 'Kho C', khoDTP: 'Kho DTP', khoA: 'Kho A' })[type] || type
+const ENTITY = 'khoA'
 const MONTH_LABELS = ['', 'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12']
 
 function formatDateVi(iso) {
@@ -40,7 +39,8 @@ function groupByYearMonth(records) {
   return byYear
 }
 
-export default function DamagedGoodsTrackingTab({ type }) {
+// Tab Kho A (hàng huỷ tạo từ phiếu xuất kho PDF). Kho C / Kho DTP đã chuyển sang HangHuyTab.jsx.
+export default function DamagedGoodsTrackingTab() {
   const [allRecords, setAllRecords] = useState(() => readAllRecords())
   const [now] = useState(() => new Date())
   const [openYears, setOpenYears] = useState(() => new Set([now.getFullYear()]))
@@ -49,7 +49,7 @@ export default function DamagedGoodsTrackingTab({ type }) {
   const [viewingId, setViewingId] = useState(null)
   const [exportingId, setExportingId] = useState(null)
 
-  const entityRecords = useMemo(() => allRecords.filter(r => r.entity === type), [allRecords, type])
+  const entityRecords = useMemo(() => allRecords.filter(r => r.entity === ENTITY), [allRecords])
   const byYearMonth = useMemo(() => groupByYearMonth(entityRecords), [entityRecords])
   const years = useMemo(() => {
     const set = new Set(byYearMonth.keys())
@@ -90,8 +90,8 @@ export default function DamagedGoodsTrackingTab({ type }) {
   const handleExport = async (record, kind) => {
     setExportingId(`${record.id}_${kind}`)
     try {
-      if (kind === 'xuLy') await (record.entity === 'khoA' ? exportDamagedGoodsKhoAXuLy(record) : exportDamagedGoodsXuLy(record))
-      else await (record.entity === 'khoA' ? exportDamagedGoodsKhoAXacMinh(record) : exportDamagedGoodsXacMinh(record))
+      if (kind === 'xuLy') await exportDamagedGoodsKhoAXuLy(record)
+      else await exportDamagedGoodsKhoAXacMinh(record)
       if (record.status !== 'exported') {
         persist(allRecords.map(r => (r.id === record.id ? { ...r, status: 'exported' } : r)))
       }
@@ -108,24 +108,13 @@ export default function DamagedGoodsTrackingTab({ type }) {
     const record = formState === 'new' ? null : formState
     return (
       <div className="sheet-tab">
-        {type === 'khoA' ? (
-          <DamagedGoodsKhoAForm
-            year={selected.year}
-            month={selected.month}
-            record={record}
-            onSave={handleSave}
-            onCancel={() => setFormState(null)}
-          />
-        ) : (
-          <DamagedGoodsRecordForm
-            type={type}
-            year={selected.year}
-            month={selected.month}
-            record={record}
-            onSave={handleSave}
-            onCancel={() => setFormState(null)}
-          />
-        )}
+        <DamagedGoodsKhoAForm
+          year={selected.year}
+          month={selected.month}
+          record={record}
+          onSave={handleSave}
+          onCancel={() => setFormState(null)}
+        />
       </div>
     )
   }
@@ -146,7 +135,7 @@ export default function DamagedGoodsTrackingTab({ type }) {
     <div className="sheet-tab">
       <div className="sheet-tab-shell">
         <header className="sheet-tab-context">
-          <span>Theo dõi hàng huỷ — {TYPE_LABEL(type)}</span>
+          <span>Theo dõi hàng huỷ — Kho A</span>
           <div className="flex items-center gap-2 ml-auto">
             <button type="button" onClick={() => setFormState('new')} className="sheet-tab-action is-primary">
               <Plus size={13} /> Thêm biên bản hàng huỷ

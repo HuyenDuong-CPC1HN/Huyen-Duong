@@ -7,6 +7,7 @@ import ExpiryStockTab from './components/ExpiryStockTab'
 import NhapHangTab from './components/NhapHangTab'
 import DoiSoatThucTeTab from './components/DoiSoatThucTeTab'
 import ReturnSlipsTab from './components/ReturnSlipsTab'
+import HangHuyTab from './components/HangHuyTab'
 import ReturnReminderBell from './components/ReturnReminderBell'
 import DamagedGoodsTrackingTab from './components/DamagedGoodsTrackingTab'
 import SwapReturnTab from './components/SwapReturnTab'
@@ -53,8 +54,7 @@ const NAV = [
     label: 'Theo dõi hàng huỷ',
     icon: PackageX,
     children: [
-      { id: 'hangHuyC', label: 'Kho C', icon: Truck },
-      { id: 'hangHuyDTP', label: 'Kho DTP', icon: Package },
+      { id: 'hangHuyCD', label: 'Kho C & Kho DTP', icon: Truck },
       { id: 'hangHuyA', label: 'Kho A', icon: PackageX },
     ],
   },
@@ -79,8 +79,7 @@ const BREADCRUMB = {
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
   traHang:    ['Trang chủ', 'Theo dõi nhập trả lại'],
-  hangHuyC:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho C'],
-  hangHuyDTP: ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho DTP'],
+  hangHuyCD:  ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho C & Kho DTP'],
   hangHuyA:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho A'],
   doiTraC:    ['Trang chủ', 'Đổi trả hàng', 'Đơn C'],
   doiTraDTP:  ['Trang chủ', 'Đổi trả hàng', 'Đơn DTP'],
@@ -422,7 +421,7 @@ function AppContent({ user }) {
               </nav>
               <h1>{pageTitle}</h1>
             </div>
-            <ReturnReminderBell onOpen={() => setActive('traHang')} />
+            <ReturnReminderBell onOpen={setActive} />
           </div>
         </header>
 
@@ -445,9 +444,8 @@ function AppContent({ user }) {
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
           {active === 'traHang' && <ReturnSlipsTab />}
-          {active === 'hangHuyC'   && <DamagedGoodsTrackingTab type="khoC" />}
-          {active === 'hangHuyDTP' && <DamagedGoodsTrackingTab type="khoDTP" />}
-          {active === 'hangHuyA'   && <DamagedGoodsTrackingTab type="khoA" />}
+          {active === 'hangHuyCD'  && <HangHuyTab />}
+          {active === 'hangHuyA'   && <DamagedGoodsTrackingTab />}
           {active === 'doiTraC'    && <SwapReturnTab key="donC" type="donC" />}
           {active === 'doiTraDTP'  && <SwapReturnTab key="donDTP" type="donDTP" />}
           {active === 'guilen8n' && <N8nWebhookForm />}

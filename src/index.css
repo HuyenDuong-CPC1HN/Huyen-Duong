@@ -1385,6 +1385,13 @@ body {
   .rsw-print-root .rsw-paper.rsw-xm-doc { break-inside: avoid; }
   .rsw-print-root .rsw-paper .rsw-xm-sign td { vertical-align: top; }
 
+  /* Biên bản xử lý hàng huỷ (11 cột, in DỌC): chữ bảng nhỏ hơn để vừa bề ngang khổ A4 */
+  .rsw-print-root .rsw-paper.rsw-xl-doc { line-height: 1.4 !important; }
+  .rsw-print-root .rsw-paper.rsw-xl-doc table { font-size: 9pt !important; margin: 6px 0 !important; }
+  .rsw-print-root .rsw-paper.rsw-xl-doc th,
+  .rsw-print-root .rsw-paper.rsw-xl-doc td { font-size: 9pt !important; padding: 3px 3px !important; }
+  .rsw-print-root .rsw-paper.rsw-xl-doc .rsw-sign-gap { height: 70px; }
+
   /* Chỗ ký: chừa khoảng trống rồi mới in tên, như bản gốc */
   .rsw-print-root .rsw-paper .rsw-sign { margin-top: 26px !important; gap: 8px !important; }
   .rsw-print-root .rsw-paper .rsw-sign-gap { height: 74px; }

@@ -130,7 +130,22 @@ describe('ReturnReminderBell', () => {
     render(<ReturnReminderBell onOpen={onOpen} />)
     const bell = screen.getByRole('button', { name: /Nhắc việc: 1 việc/ })
     fireEvent.click(bell)
-    expect(onOpen).toHaveBeenCalled()
+    expect(onOpen).toHaveBeenCalledWith('traHang')
+  })
+
+  it('gộp cả việc hàng huỷ: chỉ có hàng huỷ thì mở thẳng tab hàng huỷ; có cả hai thì cho chọn tab', () => {
+    store.values.set('huy_slips', JSON.stringify([{ id: 'h1', kho: 'C', soPhieu: 'XT1', items: [], stage: 'todo', importedAt: '2026-09-20T08:00:00' }]))
+    const onOpen = vi.fn()
+    const { unmount } = render(<ReturnReminderBell onOpen={onOpen} />)
+    fireEvent.click(screen.getByRole('button', { name: /Nhắc việc: 1 việc/ }))
+    expect(onOpen).toHaveBeenLastCalledWith('hangHuyCD')
+    unmount()
+
+    seed([{ id: 's1', maPhieu: 'DHC1', khachHang: 'A', stage: 'exported', exportedAt: '2026-09-20T08:00:00' }])
+    render(<ReturnReminderBell onOpen={onOpen} />)
+    fireEvent.click(screen.getByRole('button', { name: /Nhắc việc: 2 việc/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Nhập trả lại/ }))
+    expect(onOpen).toHaveBeenLastCalledWith('traHang')
   })
 })
 
