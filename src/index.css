@@ -1373,12 +1373,14 @@ body {
   .rsw-print-root .rsw-paper.rsw-xm-doc { line-height: 1.45 !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-head { line-height: 1.45 !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-title { margin: 2px 0 6px !important; }
+  .rsw-print-root .rsw-paper .rsw-doccode { font-size: 9pt !important; line-height: 1.2 !important; margin: 0 0 2px !important; }
+  .rsw-print-root .rsw-paper .rsw-logo { display: block; }
   .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-gap { margin-top: 2px !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc table { margin: 6px 0 !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc th,
   .rsw-print-root .rsw-paper.rsw-xm-doc td { padding: 4px 6px !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-xm-sign .rsw-sign-gap { height: 8px; }
-  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-mgr-row td { height: 110px; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-mgr-row td { height: 100px; }
   .rsw-print-root .rsw-paper.rsw-xm-doc { break-inside: avoid; }
   .rsw-print-root .rsw-paper .rsw-xm-sign td { vertical-align: top; }
 

@@ -148,7 +148,10 @@ function XacMinhPaper({ slip }) {
   const gio = f.xmGio ? `${f.xmGio.replace(':', 'h')}’` : ''
   return (
     <div className={`${paperCls} rsw-xm-doc`} style={paperStyle}>
-      <div className="grid gap-2 text-center" style={{ gridTemplateColumns: '52% 1fr' }}>
+      {/* Mã biểu mẫu (đầu trang file Word mẫu, căn phải) + logo công ty ở ô đầu bảng tiêu đề, như file Word mẫu */}
+      <p className="rsw-doccode text-right text-[9px]">CNQT019-BM02 | Lần 01 | 05/03/2026</p>
+      <div className="rsw-xm-head grid items-center text-center gap-2" style={{ gridTemplateColumns: '11% 47% 1fr' }}>
+        <img src={isC ? '/templates/logo_cpc1hn.png' : '/templates/logo_upharma.png'} alt={isC ? 'Logo CPC1HN' : 'Logo UPHARMA'} className="rsw-logo mx-auto" style={{ width: isC ? 72 : 78, height: 'auto' }} />
         <b>{isC ? 'CÔNG TY CỔ PHẦN DƯỢC PHẨM CPC1 HÀ NỘI' : 'CÔNG TY CỔ PHẦN UPHARMA'}</b>
         <span><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br /><b>Độc lập - Tự do - Hạnh phúc</b><br />************</span>
       </div>

@@ -124,3 +124,21 @@ describe('ReturnSlipWorkspace — khung ký duyệt biên bản xác minh', () =
   })
 })
 
+describe('ReturnSlipWorkspace — logo và mã biểu mẫu của biên bản xác minh', () => {
+  it('mẫu C dùng logo CPC1HN, mẫu U (Đơn DTP) dùng logo UPHARMA; có mã biểu mẫu đầu trang như file Word mẫu', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    const { unmount } = render(<ReturnSlipWorkspace slip={makeSlip()} onChange={() => {}} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Biên bản xác minh' }))
+    const root = document.querySelector('.rsw-print-root')
+    expect(root.querySelector('img.rsw-logo').getAttribute('src')).toBe('/templates/logo_cpc1hn.png')
+    expect(root.querySelector('.rsw-doccode').textContent).toBe('CNQT019-BM02 | Lần 01 | 05/03/2026')
+    unmount()
+
+    const slipU = makeSlip()
+    slipU.pdf = { ...slipU.pdf, mau: 'UPHARMA' }
+    render(<ReturnSlipWorkspace slip={slipU} onChange={() => {}} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Biên bản xác minh' }))
+    expect(document.querySelector('.rsw-print-root img.rsw-logo').getAttribute('src')).toBe('/templates/logo_upharma.png')
+  })
+})
+
