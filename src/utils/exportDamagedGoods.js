@@ -209,9 +209,9 @@ function fillDataRows(doc, sstDoc, items) {
 }
 
 // Điền dữ liệu vào file mẫu Biên bản Xử lý của ĐÚNG kho, trả về Uint8Array file .xlsx hoàn chỉnh.
-// Tuỳ chọn cho phiếu xuất kho hàng huỷ: soBB (số thứ tự trong "Số: …../2026/BC-CPC1HN"), canCu {soQD, ngayQD
-// (ISO)} (dòng "Căn cứ : Quyết định số"), phuongPhap (mục 5). Không truyền thì giữ nguyên chữ của mẫu.
-export async function fillBienBanXuLy(templateBuffer, items, { location = '', ngayGio = '', date = new Date(), soBB = '', canCu = null, phuongPhap = '' } = {}) {
+// Tuỳ chọn cho phiếu xuất kho hàng huỷ: soBB (số thứ tự trong "Số: …../2026/BC-CPC1HN"), phuongPhap (mục 5).
+// Không truyền thì giữ nguyên chữ của mẫu (dòng "Căn cứ : Quyết định số" luôn giữ nguyên như mẫu).
+export async function fillBienBanXuLy(templateBuffer, items, { location = '', ngayGio = '', date = new Date(), soBB = '', phuongPhap = '' } = {}) {
   const zip = new PizZip(templateBuffer.slice(0))
   const sstDoc = parseXml(zip.file(STRINGS_PATH).asText())
   const sheetDoc = parseXml(zip.file(SHEET_PATH).asText())
@@ -223,12 +223,6 @@ export async function fillBienBanXuLy(templateBuffer, items, { location = '', ng
   appendAfterLabel(sheetDoc, sstDoc, 14, 'A', location)
 
   if (soBB) rewriteSoBienBan(sheetDoc, sstDoc, soBB, nam)
-  if (canCu && (canCu.soQD || canCu.ngayQD)) {
-    const [qy, qm, qd] = (canCu.ngayQD || '').split('-')
-    const dots = '……………………'
-    setCellStringForce(sheetDoc, sstDoc, 7, 'A',
-      `- Căn cứ : Quyết định số : ${canCu.soQD || dots}, ngày ${qd || '…'} tháng ${qm || '…'} năm ${qy || '…'} của Giám đốc Công ty về việc hủy sản phẩm`)
-  }
   if (phuongPhap) setCellStringForce(sheetDoc, sstDoc, 20, 'B', phuongPhap)
 
   const extra = ensureDataRows(sheetDoc, items.length)
@@ -382,7 +376,7 @@ export async function buildHuyXuLyBytes(phieu, templateBuffer) {
     location: f.diaDiem || '',
     ngayGio: `Vào lúc ${gioVi(f.xlGio) || '08h30’'}, ngày ${xl.ngay} tháng ${xl.thang} năm ${xl.nam}`,
     date: dateAt(f.ngayLap),
-    soBB: f.soBB, canCu: { soQD: f.soQD, ngayQD: f.ngayQD }, phuongPhap: f.phuongPhap,
+    soBB: f.soBB, phuongPhap: f.phuongPhap,
   })
 }
 

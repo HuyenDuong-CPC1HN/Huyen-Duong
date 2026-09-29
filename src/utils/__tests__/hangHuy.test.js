@@ -30,8 +30,7 @@ describe('newHuyPhieu', () => {
 describe('missingHuyFields', () => {
   it('nhắc số quyết định, số lượng thực huỷ, quy cách, tình trạng còn trống', () => {
     const p = newHuyPhieu(parsed, 'a.pdf', [], new Date('2026-09-30T09:00:00'))
-    expect(missingHuyFields(p)).toEqual(['số quyết định', 'ngày quyết định', 'số lượng thực huỷ', 'quy cách', 'tình trạng'])
-    p.form.soQD = '05'; p.form.ngayQD = '2026-09-28'
+    expect(missingHuyFields(p)).toEqual(['số lượng thực huỷ', 'quy cách', 'tình trạng'])
     p.items = p.items.map(i => ({ ...i, thucHuy: 1, quyCach: 'Hộp', tinhTrang: 'Hàng vỡ' }))
     expect(missingHuyFields(p)).toEqual([])
   })

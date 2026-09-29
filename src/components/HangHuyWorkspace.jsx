@@ -105,14 +105,12 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
               <div style={grid(170)}>
                 <Field label="Số biên bản (…../2026/BC-CPC1HN)" kind="preset"><input value={f.soBB} onChange={e => setForm('soBB', e.target.value)} className={presetCls} /></Field>
                 <Field label="Ngày lập biên bản" kind="hand"><input type="date" value={f.ngayLap} onChange={e => setForm('ngayLap', e.target.value)} className={handCls} /></Field>
-                <Field label="Quyết định số" kind="hand"><input value={f.soQD} onChange={e => setForm('soQD', e.target.value)} className={handCls} /></Field>
-                <Field label="Ngày quyết định" kind="hand"><input type="date" value={f.ngayQD} onChange={e => setForm('ngayQD', e.target.value)} className={handCls} /></Field>
                 <Field label="Ngày xử lý" kind="hand"><input type="date" value={f.xlNgay} onChange={e => setForm('xlNgay', e.target.value)} className={handCls} /></Field>
                 <Field label="Giờ xử lý" kind="hand"><input type="time" value={f.xlGio} onChange={e => setForm('xlGio', e.target.value)} className={handCls} /></Field>
                 <Field label="Địa điểm xử lý" kind="preset"><input value={f.diaDiem} onChange={e => setForm('diaDiem', e.target.value)} className={presetCls} /></Field>
                 <Field label="Phương pháp xử lý" kind="preset"><input value={f.phuongPhap} onChange={e => setForm('phuongPhap', e.target.value)} className={presetCls} /></Field>
               </div>
-              <span className="text-xs text-gray-400">Số biên bản app gợi ý theo số kế tiếp trong năm, sửa được nếu khác.</span>
+              <span className="text-xs text-gray-400">Số biên bản app gợi ý theo số kế tiếp trong năm, sửa được nếu khác. Dòng "Căn cứ : Quyết định số" giữ nguyên như file mẫu.</span>
             </Step>
 
             <Step n={4} title="Biên bản xác minh tình trạng hàng hoá (Word)">

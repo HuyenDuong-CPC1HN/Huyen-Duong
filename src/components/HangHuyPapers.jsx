@@ -20,7 +20,6 @@ export function XuLyPaper({ phieu }) {
   const f = phieu.form || {}
   const isC = phieu.kho === 'C'
   const [d, m, y] = huyDmy(f.ngayLap)
-  const [qd, qm, qy] = huyDmy(f.ngayQD)
   const [xd, xm, xy] = huyDmy(f.xlNgay)
   const items = phieu.items || []
   const cols = ['5%', '9%', '20%', '9%', '9%', '8%', '6%', '8%', '8%', '9%', '9%']
@@ -35,7 +34,7 @@ export function XuLyPaper({ phieu }) {
         <i>TP.Hồ Chí Minh, Ngày <V v={d} /> tháng <V v={m} /> năm <V v={y} /></i>
       </div>
       <p className="rsw-title text-center text-base font-bold my-2">BIÊN BẢN XỬ LÝ SẢN PHẨM</p>
-      <p>- Căn cứ : Quyết định số : <V v={f.soQD} />, ngày <V v={qd} /> tháng <V v={qm} /> năm <V v={qy} /> của Giám đốc Công ty về việc hủy sản phẩm</p>
+      <p>- Căn cứ : Quyết định số :……………………, ngày  tháng  năm   của Giám đốc Công ty về việc hủy sản phẩm</p>
       <p className="rsw-gap"><b>1. Thành phần:</b></p>
       <table className="rsw-table w-full border-collapse my-1.5 text-[11.5px]">
         <thead><tr>{['TT', 'Họ và tên', 'Chức vụ', 'Phòng/ Bộ phận'].map(h => <th key={h} className={`${td} font-bold`}>{h}</th>)}</tr></thead>

@@ -282,7 +282,7 @@ function makePhieu(kho, overrides = {}) {
       { maHang: 'TH00899', tenHang: 'Golistin-enema 133ml', dvt: 'Lọ', soLuong: null, thucHuy: 2, soLo: '13326G02', hanDung: '2031-07-11', quyCach: '', tinhTrang: 'Hàng chảy dịch' },
     ],
     form: {
-      soBB: '12', ngayLap: '2026-09-30', soQD: '05/QĐ-CPC1HN', ngayQD: '2026-09-28',
+      soBB: '12', ngayLap: '2026-09-30',
       xlNgay: '2026-10-05', xlGio: '09:15', diaDiem: 'Kho CN Hồ Chí Minh', phuongPhap: 'Xuất gửi nhà máy xử lý',
       xmNgay: '2026-10-01', xmGio: '08:30',
     },
@@ -291,12 +291,12 @@ function makePhieu(kho, overrides = {}) {
 }
 
 describe('Biên bản xử lý hàng huỷ (Excel) từ phiếu xuất kho', () => {
-  it.each([['C', XULY_C_PATH, 'A4'], ['DTP', XULY_DTP_PATH, 'A3']])('Kho %s: điền số biên bản, ngày, căn cứ, thời gian, địa điểm; Ghi chú = Tình trạng để trống', async (kho, path) => {
+  it.each([['C', XULY_C_PATH, 'A4'], ['DTP', XULY_DTP_PATH, 'A3']])('Kho %s: điền số biên bản, ngày, thời gian, địa điểm; Ghi chú = Tình trạng để trống', async (kho, path) => {
     const bytes = await buildHuyXuLyBytes(makePhieu(kho), loadBuffer(path))
     const cell = readCells(bytes)
     expect(cell(Number(kho === 'C' ? 4 : 3), 'A')).toBe('Số: 12/2026/BC-CPC1HN')
     expect(cell(5, 'I')).toBe('TP.Hồ Chí Minh, Ngày 30 tháng 09 năm 2026')
-    expect(cell(7, 'A')).toBe('- Căn cứ : Quyết định số : 05/QĐ-CPC1HN, ngày 28 tháng 09 năm 2026 của Giám đốc Công ty về việc hủy sản phẩm')
+    expect(cell(7, 'A')).toContain('Quyết định số :……') // dòng căn cứ giữ nguyên như mẫu, không điền
     expect(cell(13, 'A')).toContain('Vào lúc 09h15’, ngày 05 tháng 10 năm 2026')
     expect(cell(14, 'A')).toContain('Kho CN Hồ Chí Minh')
     expect(cell(18, 'E')).toBe('12/01/2029')
@@ -307,12 +307,6 @@ describe('Biên bản xử lý hàng huỷ (Excel) từ phiếu xuất kho', () 
     expect(cell(19, 'H')).toBeNull() // phiếu không có số lượng → Theo chứng từ trống
     expect(cell(19, 'I')).toBe('2') // Thực huỷ kho nhập tay
     expect(cell(19, 'K')).toBe('Hàng chảy dịch')
-  })
-
-  it('để trống số quyết định thì giữ nguyên dòng căn cứ của mẫu', async () => {
-    const phieu = makePhieu('C'); phieu.form.soQD = ''; phieu.form.ngayQD = ''
-    const cell = readCells(await buildHuyXuLyBytes(phieu, loadBuffer(XULY_C_PATH)))
-    expect(cell(7, 'A')).toContain('Quyết định số :……')
   })
 })
 

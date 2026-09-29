@@ -45,7 +45,6 @@ export function newHuyForm(phieus = [], today = new Date()) {
   const iso = toIsoDate(today)
   return {
     soBB: nextSoBienBan(phieus, today.getFullYear()), ngayLap: iso,
-    soQD: '', ngayQD: '',
     xlNgay: iso, xlGio: '08:30', diaDiem: 'Kho CN Hồ Chí Minh', phuongPhap: 'Xuất gửi nhà máy xử lý',
     xmNgay: iso, xmGio: '08:30',
   }
@@ -70,8 +69,6 @@ export function missingHuyFields(phieu) {
   const items = phieu.items || []
   const missing = []
   if (!f.soBB) missing.push('số biên bản')
-  if (!f.soQD) missing.push('số quyết định')
-  if (!f.ngayQD) missing.push('ngày quyết định')
   if (items.some(it => it.thucHuy === null || it.thucHuy === '' || it.thucHuy === undefined)) missing.push('số lượng thực huỷ')
   if (items.some(it => !it.quyCach)) missing.push('quy cách')
   if (items.some(it => !it.tinhTrang)) missing.push('tình trạng')
