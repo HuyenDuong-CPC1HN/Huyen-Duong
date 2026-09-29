@@ -131,7 +131,7 @@ describe('ReturnSlipWorkspace — logo và mã biểu mẫu của biên bản x�
     fireEvent.click(screen.getByRole('button', { name: 'Biên bản xác minh' }))
     const root = document.querySelector('.rsw-print-root')
     expect(root.querySelector('img.rsw-logo').getAttribute('src')).toBe('/templates/logo_cpc1hn.png')
-    expect(root.querySelector('.rsw-doccode').textContent).toBe('CNQT019-BM02 | Lần 01 | 05/03/2026')
+    expect(root.querySelector('.rsw-doccode').textContent).toBe('CNQT019-BM02Lần 0105/03/2026') // 3 dòng: mã / lần / ngày
     unmount()
 
     const slipU = makeSlip()

@@ -148,15 +148,15 @@ function XacMinhPaper({ slip }) {
   const gio = f.xmGio ? `${f.xmGio.replace(':', 'h')}’` : ''
   return (
     <div className={`${paperCls} rsw-xm-doc`} style={paperStyle}>
-      {/* Mã biểu mẫu (đầu trang file Word mẫu, căn phải) + logo công ty ở ô đầu bảng tiêu đề, như file Word mẫu */}
-      <p className="rsw-doccode text-right text-[9px]">CNQT019-BM02 | Lần 01 | 05/03/2026</p>
-      <div className="rsw-xm-head grid items-center gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
+      {/* Logo công ty + tên (trái), Cộng hoà xã hội (giữa), mã biểu mẫu đầu trang file Word mẫu (phải) — cùng 1 hàng cho gọn */}
+      <div className="rsw-xm-head grid items-center gap-3" style={{ gridTemplateColumns: '1fr 1fr 96px' }}>
         {/* Logo và tên công ty liền nhau thành 1 cụm (không để tên trôi ra giữa ô) */}
         <div className="flex items-center gap-2">
           <img src={isC ? '/templates/logo_cpc1hn.png' : '/templates/logo_upharma.png'} alt={isC ? 'Logo CPC1HN' : 'Logo UPHARMA'} className="rsw-logo shrink-0" style={{ width: isC ? 50 : 54, height: 'auto' }} />
           <b className="text-left">{isC ? 'CÔNG TY CỔ PHẦN DƯỢC PHẨM CPC1 HÀ NỘI' : 'CÔNG TY CỔ PHẦN UPHARMA'}</b>
         </div>
         <span className="text-center"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br /><b>Độc lập - Tự do - Hạnh phúc</b><br />************</span>
+        <span className="rsw-doccode self-start text-right text-[9px] leading-tight">CNQT019-BM02<br />Lần 01<br />05/03/2026</span>
       </div>
       <p className="rsw-title text-center text-base font-bold my-2">BIÊN BẢN XÁC MINH TÌNH TRẠNG HÀNG HOÁ</p>
       <p>1. Căn cứ tiến hành xác minh: Hàng trả về của <V v={slip.khachHang || pdf.benMua?.ten} /></p>
