@@ -1,6 +1,6 @@
 import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
-import { slipLoai } from './returnSlips'
+import { slipLoai, effectiveLyDo } from './returnSlips'
 
 // Xuất bộ file Word cho 1 phiếu trả hàng: biên bản trả lại hàng (mẫu CPC1HN / UPHARMA / nội bộ, dựng theo
 // đúng nội dung file PDF website in ra) + biên bản xác minh (mẫu C hoặc U). Chỗ kho chưa điền giữ "……" như
@@ -41,7 +41,7 @@ export function buildTraHangData(slip) {
   const common = {
     ngay, thang, nam,
     soHD: orBlank(f.soHD), kyHieu: orBlank(f.kyHieu), ngayHD, thangHD, namHD,
-    lyDo: pdf.lyDo || '',
+    lyDo: effectiveLyDo(pdf),
     items,
     tongTien: money(pdf.tongTien),
   }

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, FileUp, FileDown, Check, AlertTriangle, CheckCircle, Printer } from 'lucide-react'
 import {
-  KE_TOAN_LIST, TEMPLATE_LABEL, slipLoai, missingSlipFields, newSlipForm, parseReturnSlipLines, sameCustomer, newManualPdf, manualPdfFromInvoice,
+  KE_TOAN_LIST, TEMPLATE_LABEL, slipLoai, missingSlipFields, newSlipForm, parseReturnSlipLines, sameCustomer, newManualPdf, manualPdfFromInvoice, effectiveLyDo,
 } from '../utils/returnSlips'
 import { extractPdfLines } from '../utils/returnSlipPdf'
 import { parseInvoiceLines } from '../utils/parseInvoicePdf'
@@ -97,7 +97,7 @@ function TraHangPaper({ slip }) {
           <p>đã lập, có ký hiệu: <V v={f.kyHieu} /> ngày <V v={hd} /> tháng <V v={hm} /> năm <V v={hy} /></p>
         </>
       )}
-      <p className="rsw-i10 rsw-gap">1. Lý do xuất trả: {pdf.lyDo}</p>
+      <p className="rsw-i10 rsw-gap">1. Lý do xuất trả: {effectiveLyDo(pdf)}</p>
       <p className="rsw-i10">2. Chi tiết về hàng hóa xuất trả:</p>
       <ItemsTable slip={slip} dvtLabel={noiBo ? 'Đơn vị tính' : 'ĐVT'} bangChu={noiBo ? '' : pdf.bangChu} />
       {pdf.mau === 'CPC1HN' && <p className="rsw-i10">Trị giá hàng nhập lại trên sẽ được Công ty bù trừ công nợ, chuyển khoản hoặc trả lại tiền mặt cho bên mua.</p>}

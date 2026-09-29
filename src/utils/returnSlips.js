@@ -87,6 +87,11 @@ export const MANUAL_SELLERS = {
 // Lý do mặc định của biên bản nội bộ (đúng câu website in ra cho đơn khách chưa nhận hàng).
 export const NOIBO_LY_DO = 'Bộ phận kinh doanh, kế toán và kho đã kiểm tra lại thông tin, phát hiện sai sót ngay khi hóa đơn được ghi sổ, tại thời điểm phát hiện hàng hóa chưa giao cho khách hàng.'
 
+// Lý do xuất trả dùng để in / xuất: đơn nhập tay mẫu nội bộ chưa có lý do thì lấy câu mặc định (kể cả phiếu tạo từ bản cũ).
+export function effectiveLyDo(pdf) {
+  return pdf?.lyDo || (pdf?.manual && pdf.mau === 'NOIBO' ? NOIBO_LY_DO : '')
+}
+
 export function emptyManualItem() {
   return { stt: 0, ten: '', dvt: '', soLuong: 0, soLo: '', donGia: 0, thanhTien: 0 }
 }

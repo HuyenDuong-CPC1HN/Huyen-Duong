@@ -23,6 +23,13 @@ describe('xuất Word cho đơn nhập tay từ hoá đơn (Đơn DTP)', () => {
     for (const s of ['00581703', '1C26MNT', 'Topi Nebuliser - Hộp 10 ống 5ml', '011125', '84,000', '2,520,000']) expect(t).toContain(s)
   })
 
+  it('phiếu nội bộ nhập tay tạo từ bản cũ (lý do lưu trống) vẫn in/xuất câu lý do mặc định', () => {
+    const old = { ...slip, pdf: { ...pdf, lyDo: '' } }
+    const t = text(renderDocx(load('BBTH_NOIBO.docx'), buildTraHangData(old), 'uint8array'))
+    expect(t).toContain('phát hiện sai sót ngay khi hóa đơn được ghi sổ')
+    expect(buildTraHangData({ ...old, pdf: { ...old.pdf, mau: 'UPHARMA' } }).lyDo).toBe('') // mẫu khác để trống cho kho điền
+  })
+
   it('đổi sang mẫu UPHARMA: có bên bán, bên mua, bằng chữ', () => {
     const u = { ...slip, pdf: switchManualMau(pdf, 'UPHARMA') }
     const t = text(renderDocx(load('BBTH_UPHARMA.docx'), buildTraHangData(u), 'uint8array'))
