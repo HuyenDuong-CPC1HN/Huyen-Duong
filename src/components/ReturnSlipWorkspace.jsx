@@ -326,7 +326,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                   </button>
                   {(!pdf || pdf.manual) && (
                     <button type="button" onClick={() => invoiceRef.current.click()} disabled={reading} className="sheet-tab-action">
-                      <FileUp size={13} /> Đọc từ hoá đơn (PDF)
+                      <FileUp size={13} /> Đọc từ hoá đơn / phiếu xuất kho (PDF)
                     </button>
                   )}
                   {!pdf && (

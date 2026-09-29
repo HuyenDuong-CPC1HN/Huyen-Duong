@@ -16,7 +16,21 @@ describe('parseInvoiceLines', () => {
     }])
   })
 
+  it('phiếu xuất kho bán hàng Kho C: số HĐ, ký hiệu, ngày, người mua, hàng có lô/hạn dùng; bỏ dòng voucher chiết khấu', () => {
+    const r = parseInvoiceLines(fixtures.kho_c_phieu_xuat_ban)
+    expect(r).toMatchObject({
+      soHD: '138169', kyHieu: 'C26MSG', ngayHD: '2026-06-29', mau: 'CPC1HN',
+      benBan: 'CÔNG TY CP DƯỢC PHẨM CPC1 HÀ NỘI - CHI NHÁNH TP HỒ CHÍ MINH',
+      benMua: { ten: 'Nguyễn Văn B', diaChi: '12 Đường A, Phường B, Thành phố C', mst: '' },
+    })
+    expect(r.items).toEqual([{
+      stt: 1, ten: 'Actiso Viet - Hộp 4 vỉ x 5 ống 10ml', soLo: '010526', hanDung: '2029-05-10', dvt: 'ONG',
+      soLuong: 40, donGia: 5950, thanhTien: 238000, // đơn giá 5.509,259 + VAT 8% = 5,950 gồm VAT; voucher bị bỏ
+    }])
+    expect(r.tongTien).toBe(238000)
+  })
+
   it('không phải hoá đơn → báo lỗi', () => {
-    expect(() => parseInvoiceLines(['Biên bản trả lại hàng'])).toThrow(/Không nhận ra hoá đơn/)
+    expect(() => parseInvoiceLines(['Biên bản trả lại hàng'])).toThrow(/Không nhận ra file/)
   })
 })
