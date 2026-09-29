@@ -329,6 +329,19 @@ export default function ReturnSlipsTab() {
     }
   }
 
+  // Đơn không có phiếu/PDF từ website: tạo phiếu trống rồi mở thẳng màn làm biên bản, nơi có nút "Nhập tay" và
+  // "Đọc từ hoá đơn (PDF)" (xem ReturnSlipWorkspace).
+  const createManual = () => {
+    const nowIso = new Date().toISOString()
+    const slip = {
+      id: `slip_${Date.now()}`, maPhieu: '', donHang: '', khachHang: '', nhanVien: '', lyDo: '',
+      createdAt: nowIso, approvedAt: nowIso, stage: 'doing', form: newSlipForm(0), pdf: null,
+    }
+    save([slip, ...slips])
+    setMonth(monthKey(nowIso))
+    setOpenId(slip.id)
+  }
+
   const openSlip = slips.find(s => s.id === openId)
   if (openSlip) {
     return (
@@ -379,6 +392,9 @@ export default function ReturnSlipsTab() {
                 <FileUp size={13} /> {uploading ? 'Đang đọc file…' : 'Tải PDF phiếu đã duyệt'}
               </button>
               <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden" onChange={e => { void createFromPdf(e.target.files[0]); e.target.value = '' }} />
+              <button type="button" onClick={createManual} className="sheet-tab-action" title="Đơn không có phiếu/PDF từ website: nhập tay hoặc đọc từ hoá đơn">
+                <Plus size={13} /> Tạo đơn thủ công
+              </button>
               <button type="button" onClick={() => setAdding(a => !a)} className="sheet-tab-action is-primary" aria-expanded={adding}>
                 <Plus size={13} /> Thêm phiếu
               </button>

@@ -106,6 +106,14 @@ describe('ReturnSlipsTab — Theo dõi nhập trả lại', () => {
     expect(readSlipsFromStore()[0].stage).toBe('done')
   })
 
+  it('"Tạo đơn thủ công": tạo phiếu trống, mở thẳng màn làm biên bản với nút Nhập tay theo mẫu', () => {
+    render(<ReturnSlipsTab />)
+    fireEvent.click(screen.getByRole('button', { name: /Tạo đơn thủ công/ }))
+    expect(readSlipsFromStore()).toMatchObject([{ stage: 'doing', pdf: null }])
+    expect(screen.getByRole('button', { name: /Nhập tay · Đơn DTP/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Đọc từ hoá đơn/ })).toBeInTheDocument()
+  })
+
   it('file của khách khác phiếu đang chọn thì cảnh báo', async () => {
     seed([{ id: 's1', maPhieu: 'DHC160926/01227', khachHang: 'Phòng khám Bác sĩ Gia đình DOMED', stage: 'todo', createdAt: '2026-09-16T13:54:00', approvedAt: '2026-09-25T15:44:00' }])
     pdfMock.lines = fixtures.bbth_2
