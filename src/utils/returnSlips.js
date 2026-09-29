@@ -97,21 +97,28 @@ export function recalcManualPdf(pdf) {
   return { ...pdf, items, tongTien, bangChu: soTienBangChu(tongTien).replace(/đồng chẵn$/, 'đồng./.') }
 }
 
-export function newManualPdf(mau, slip = {}) {
-  const base = { mau, manual: true, fileName: 'Nhập tay', benMua: null, benBan: null, benC: null, lyDo: slip.lyDo || '', items: [emptyManualItem()] }
-  if (mau === 'NOIBO') base.benC = { daiDien: slip.nhanVien || '', chucVu: '' }
-  else {
-    base.benMua = { ten: slip.khachHang || '', diaChi: '', mst: '', daiDien: '', chucVu: '' }
-    base.benBan = { ...MANUAL_SELLERS[mau] }
-  }
-  return recalcManualPdf(base)
+// Đơn nhập tay luôn mang đủ bên mua / bên bán / bên C để đổi qua lại giữa 3 mẫu mà không mất dữ liệu; biên bản chỉ
+// dùng phần thuộc mẫu đang chọn. sellerKey: bên bán mặc định (mẫu nội bộ không in bên bán, chỉ để khi đổi sang mẫu C/DTP).
+export function newManualPdf(mau, slip = {}, sellerKey = mau === 'NOIBO' ? 'CPC1HN' : mau) {
+  return recalcManualPdf({
+    mau, manual: true, fileName: 'Nhập tay', lyDo: slip.lyDo || '', items: [emptyManualItem()],
+    benMua: { ten: slip.khachHang || '', diaChi: '', mst: '', daiDien: '', chucVu: '' },
+    benBan: { ...MANUAL_SELLERS[sellerKey] },
+    benC: { daiDien: slip.nhanVien || '', chucVu: '' },
+  })
 }
 
-// Dựng đơn nhập tay từ hoá đơn đã đọc (parseInvoiceLines): mẫu theo bên bán, bên mua, hàng hoá; số hoá đơn, ký hiệu,
-// ngày hoá đơn, số lô, hạn dùng điền sẵn vào form. Trả về { pdf, formPatch } — kho vẫn sửa được trên màn nhập tay.
-export function manualPdfFromInvoice(inv, slip = {}) {
-  const mau = inv.mau || 'UPHARMA'
-  const base = newManualPdf(mau, slip)
+// Đổi mẫu biên bản của đơn nhập tay: mẫu C / DTP đặt lại bên bán theo mẫu, mẫu nội bộ giữ nguyên.
+export function switchManualMau(pdf, mau) {
+  return { ...pdf, mau, benBan: mau === 'NOIBO' ? pdf.benBan : { ...MANUAL_SELLERS[mau] } }
+}
+
+// Dựng đơn nhập tay từ hoá đơn đã đọc (parseInvoiceLines): mặc định MẪU NỘI BỘ (đơn cần lập lại theo hoá đơn), mẫu
+// biên bản xác minh theo bên bán (UPHARMA → U, CPC1 → C); bên mua, hàng hoá, số hoá đơn, ký hiệu, ngày hoá đơn, số lô,
+// hạn dùng điền sẵn. Trả về { pdf, formPatch } — kho vẫn đổi mẫu / sửa được trên màn nhập tay.
+export function manualPdfFromInvoice(inv, slip = {}, mau = 'NOIBO') {
+  const sellerKey = inv.mau || 'UPHARMA'
+  const base = newManualPdf(mau, slip, sellerKey)
   const pdf = recalcManualPdf({
     ...base,
     fileName: 'Hoá đơn',
@@ -122,7 +129,7 @@ export function manualPdfFromInvoice(inv, slip = {}) {
     pdf,
     formPatch: {
       mst: inv.benMua.mst || '', soHD: inv.soHD, kyHieu: inv.kyHieu, ngayHD: inv.ngayHD,
-      xmMau: mau === 'UPHARMA' ? 'U' : 'C',
+      xmMau: sellerKey === 'UPHARMA' ? 'U' : 'C',
       items: inv.items.map(it => ({ soLo: it.soLo, hanDung: it.hanDung, quyCach: '' })),
     },
   }

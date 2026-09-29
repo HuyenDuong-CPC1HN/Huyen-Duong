@@ -196,22 +196,27 @@ describe('ReturnSlipWorkspace — đơn nhập tay (không có PDF website)', ()
     let slip = makeSlip({ pdf: null, nhanVien: 'Nguyễn Hồng Nhung', form: null })
     render(<ReturnSlipWorkspace slip={slip} onChange={(n) => { slip = n }} onBack={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /Nhập tay · Nội bộ/ }))
-    expect(slip.pdf).toMatchObject({ mau: 'NOIBO', benMua: null, benBan: null, benC: { daiDien: 'Nguyễn Hồng Nhung' } })
+    expect(slip.pdf).toMatchObject({ mau: 'NOIBO', benC: { daiDien: 'Nguyễn Hồng Nhung' } })
   })
 })
 
 describe('ReturnSlipWorkspace — đọc từ hoá đơn PDF (đơn nhập tay)', () => {
-  it('đọc hoá đơn Đơn DTP: chọn mẫu UPHARMA, điền hàng, số hoá đơn, ký hiệu, ngày, lô, hạn dùng', async () => {
+  it('đọc hoá đơn Đơn DTP: mặc định mẫu nội bộ, xác minh mẫu U, điền hàng, số hoá đơn, ký hiệu, ngày, lô, hạn dùng; đổi mẫu được', async () => {
     vi.spyOn(window, 'print').mockImplementation(() => {})
     let slip = makeSlip({ pdf: null, khachHang: '', form: null })
     const onChange = (next) => { slip = next }
-    render(<ReturnSlipWorkspace slip={slip} onChange={onChange} onBack={() => {}} />)
+    const view = render(<ReturnSlipWorkspace slip={slip} onChange={onChange} onBack={() => {}} />)
     fireEvent.change(screen.getByLabelText('File hoá đơn PDF'), { target: { files: [new File(['%PDF'], 'hoadon.pdf')] } })
     await waitFor(() => expect(slip.pdf).toBeTruthy())
-    expect(slip.pdf).toMatchObject({ mau: 'UPHARMA', manual: true, tongTien: 2520000, benMua: { ten: 'Nguyễn Văn A' }, benBan: { ten: 'CÔNG TY CỔ PHẦN UPHARMA' } })
+    expect(slip.pdf).toMatchObject({ mau: 'NOIBO', manual: true, tongTien: 2520000, benMua: { ten: 'Nguyễn Văn A' }, benBan: { ten: 'CÔNG TY CỔ PHẦN UPHARMA' } })
     expect(slip.pdf.items[0]).toMatchObject({ ten: 'Topi Nebuliser - Hộp 10 ống 5ml', dvt: 'Ống', soLuong: 30, donGia: 84000, soLo: '011125' })
     expect(slip.form).toMatchObject({ soHD: '00581703', kyHieu: '1C26MNT', ngayHD: '2026-08-06', xmMau: 'U', items: [{ soLo: '011125', hanDung: '2028-11-28', quyCach: '' }] })
     expect(slip.khachHang).toBe('Nguyễn Văn A')
     expect(slip.stage).toBe('doing')
+
+    // đổi sang mẫu UPHARMA: giữ nguyên hàng, bên bán theo mẫu
+    view.rerender(<ReturnSlipWorkspace slip={slip} onChange={onChange} onBack={() => {}} />)
+    fireEvent.change(screen.getByLabelText('Mẫu biên bản'), { target: { value: 'UPHARMA' } })
+    expect(slip.pdf).toMatchObject({ mau: 'UPHARMA', tongTien: 2520000, benBan: { mst: '0109313177' } })
   })
 })

@@ -1,5 +1,5 @@
 import { Plus, Trash2 } from 'lucide-react'
-import { emptyManualItem, recalcManualPdf } from '../utils/returnSlips'
+import { emptyManualItem, recalcManualPdf, switchManualMau, TEMPLATE_LABEL } from '../utils/returnSlips'
 import { Field, Step } from './WorkspaceParts'
 import { handCls, presetCls, grid } from './workspaceStyles'
 
@@ -16,6 +16,7 @@ export default function ManualReturnEditor({ n, slip, onChange }) {
     const recalced = recalcManualPdf(nextPdf)
     onChange({ ...slip, pdf: recalced, form: { ...f, items: formItems } })
   }
+  const setMau = (mau) => commit(switchManualMau(pdf, mau))
   const setParty = (who, k, v) => commit({ ...pdf, [who]: { ...pdf[who], [k]: v } })
   const setItem = (i, k, v) => commit({ ...pdf, items: pdf.items.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)) })
   const addItem = () => commit(
@@ -29,8 +30,15 @@ export default function ManualReturnEditor({ n, slip, onChange }) {
   const num = raw => (raw === '' ? 0 : Number(raw))
 
   return (
-    <Step n={n} title={`Thông tin đơn nhập tay · ${noiBo ? 'Mẫu nội bộ' : pdf.mau === 'CPC1HN' ? 'Mẫu CPC1HN (Đơn C)' : 'Mẫu UPHARMA (Đơn DTP)'}`}>
-      <span className="text-xs text-gray-400">Đơn không có file PDF từ website: anh nhập bên mua và hàng hoá, app tính thành tiền, tổng tiền và số tiền bằng chữ. Số lô nhập ở bước sau.</span>
+    <Step n={n} title="Thông tin đơn nhập tay">
+      <span className="text-xs text-gray-400">Đơn không có file PDF từ website: anh chọn mẫu, nhập bên mua và hàng hoá, app tính thành tiền, tổng tiền và số tiền bằng chữ.</span>
+      <div style={grid(190)}>
+        <Field label="Mẫu biên bản trả lại hàng" kind="hand">
+          <select value={pdf.mau} onChange={e => setMau(e.target.value)} className={handCls} aria-label="Mẫu biên bản">
+            {['NOIBO', 'CPC1HN', 'UPHARMA'].map(m => <option key={m} value={m}>{TEMPLATE_LABEL[m]}{m === 'NOIBO' ? ' (khách chưa nhận)' : m === 'CPC1HN' ? ' (Đơn C, khách đã nhận)' : ' (Đơn DTP, khách đã nhận)'}</option>)}
+          </select>
+        </Field>
+      </div>
       {noiBo ? (
         <div style={grid(170)}>
           <Field label="Bên C · Kinh doanh — đại diện" kind="hand"><input value={pdf.benC?.daiDien || ''} onChange={e => setParty('benC', 'daiDien', e.target.value)} className={handCls} /></Field>
