@@ -3,6 +3,8 @@
 // hàng + biên bản xác minh). Trạng thái duyệt trên website do kho tự kiểm tra rồi cập nhật trên app — app
 // không truy cập được website, chỉ nhắc việc theo số ngày chờ.
 
+import { soTienBangChu } from './numberToVietnameseWords'
+
 export const RETURN_SLIPS_KEY = 'return_slips'
 export const RETURN_SLIPS_EVENT = 'return-slips-changed'
 
@@ -64,6 +66,66 @@ export function missingSlipFields(slip) {
   if ((f.items || []).some(it => !it.soLo)) missing.push('số lô')
   if ((f.items || []).some(it => !it.hanDung)) missing.push('hạn dùng')
   return missing
+}
+
+// ---------- Đơn tạo thủ công (không có PDF từ website) ----------
+// Dựng ra đúng dạng dữ liệu như khi đọc PDF (pdf.mau, bên mua/bán, hàng hoá, tổng tiền...) để xem trước, in, xuất
+// Word và nhắc việc chạy y như đơn có PDF. pdf.manual = true để màn làm biên bản hiện phần nhập tay.
+export const MANUAL_SELLERS = {
+  CPC1HN: {
+    ten: 'CÔNG TY CỔ PHẦN DƯỢC PHẨM CPC1 HÀ NỘI - CHI NHÁNH THÀNH PHỐ HỒ CHÍ MINH',
+    diaChi: 'Số 26-28 đường Hàn Mạc Tử, Phường Phú Thọ Hòa, Thành phố Hồ Chí Minh, Việt Nam',
+    mst: '0104089394-002', daiDien: 'Phương Thu', chucVu: 'Giám đốc chi nhánh',
+  },
+  UPHARMA: {
+    ten: 'CÔNG TY CỔ PHẦN UPHARMA',
+    diaChi: 'Tòa nhà Vinh Quang Group, lô DX, KDDT Tây Nam hồ Linh Đàm, phường Hoàng Liệt, thành phố Hà Nội',
+    mst: '0109313177', daiDien: 'Bà Phương Thu', chucVu: 'Giám đốc',
+  },
+}
+
+export function emptyManualItem() {
+  return { stt: 0, ten: '', dvt: '', soLuong: 0, soLo: '', donGia: 0, thanhTien: 0 }
+}
+
+// Tính lại STT, thành tiền từng dòng, tổng tiền và số tiền bằng chữ (đúng văn phong file website: "…đồng./.").
+export function recalcManualPdf(pdf) {
+  const items = (pdf.items || []).map((it, i) => ({
+    ...it, stt: i + 1, thanhTien: (Number(it.soLuong) || 0) * (Number(it.donGia) || 0),
+  }))
+  const tongTien = items.reduce((sum, it) => sum + it.thanhTien, 0)
+  return { ...pdf, items, tongTien, bangChu: soTienBangChu(tongTien).replace(/đồng chẵn$/, 'đồng./.') }
+}
+
+export function newManualPdf(mau, slip = {}) {
+  const base = { mau, manual: true, fileName: 'Nhập tay', benMua: null, benBan: null, benC: null, lyDo: slip.lyDo || '', items: [emptyManualItem()] }
+  if (mau === 'NOIBO') base.benC = { daiDien: slip.nhanVien || '', chucVu: '' }
+  else {
+    base.benMua = { ten: slip.khachHang || '', diaChi: '', mst: '', daiDien: '', chucVu: '' }
+    base.benBan = { ...MANUAL_SELLERS[mau] }
+  }
+  return recalcManualPdf(base)
+}
+
+// Dựng đơn nhập tay từ hoá đơn đã đọc (parseInvoiceLines): mẫu theo bên bán, bên mua, hàng hoá; số hoá đơn, ký hiệu,
+// ngày hoá đơn, số lô, hạn dùng điền sẵn vào form. Trả về { pdf, formPatch } — kho vẫn sửa được trên màn nhập tay.
+export function manualPdfFromInvoice(inv, slip = {}) {
+  const mau = inv.mau || 'UPHARMA'
+  const base = newManualPdf(mau, slip)
+  const pdf = recalcManualPdf({
+    ...base,
+    fileName: 'Hoá đơn',
+    benMua: { ...base.benMua, ten: inv.benMua.ten || base.benMua.ten, diaChi: inv.benMua.diaChi || '' },
+    items: inv.items.map(it => ({ stt: 0, ten: it.ten, dvt: it.dvt, soLuong: it.soLuong, soLo: it.soLo, donGia: it.donGia, thanhTien: 0 })),
+  })
+  return {
+    pdf,
+    formPatch: {
+      mst: inv.benMua.mst || '', soHD: inv.soHD, kyHieu: inv.kyHieu, ngayHD: inv.ngayHD,
+      xmMau: mau === 'UPHARMA' ? 'U' : 'C',
+      items: inv.items.map(it => ({ soLo: it.soLo, hanDung: it.hanDung, quyCach: '' })),
+    },
+  }
 }
 
 // ---------- Nhắc việc ----------

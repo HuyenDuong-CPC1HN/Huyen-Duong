@@ -2,12 +2,14 @@ import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, FileUp, FileDown, Check, AlertTriangle, CheckCircle, Printer } from 'lucide-react'
 import {
-  KE_TOAN_LIST, TEMPLATE_LABEL, slipLoai, missingSlipFields, newSlipForm, parseReturnSlipLines, sameCustomer,
+  KE_TOAN_LIST, TEMPLATE_LABEL, slipLoai, missingSlipFields, newSlipForm, parseReturnSlipLines, sameCustomer, newManualPdf, manualPdfFromInvoice,
 } from '../utils/returnSlips'
 import { extractPdfLines } from '../utils/returnSlipPdf'
+import { parseInvoiceLines } from '../utils/parseInvoicePdf'
 import { exportReturnSlipDocs } from '../utils/exportReturnSlip'
 import { LoaiTag, StagePill } from './ReturnSlipBadges'
 import { Field, Step } from './WorkspaceParts'
+import ManualReturnEditor from './ManualReturnEditor'
 import { handCls, presetCls, grid } from './workspaceStyles'
 
 // ---------- Xem trước biên bản ----------
@@ -202,6 +204,7 @@ function XacMinhPaper({ slip }) {
 // ---------- Màn làm bộ biên bản ----------
 export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
   const inputRef = useRef()
+  const invoiceRef = useRef()
   const [doc, setDoc] = useState('traHang')
   const [reading, setReading] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -219,6 +222,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
 
   const readFile = async (file) => {
     if (!file) return
+    if (pdf?.manual && !window.confirm('Đơn này đang nhập tay. Tải file PDF sẽ thay toàn bộ phần nhập tay bằng dữ liệu trong file. Tiếp tục?')) return
     setError('')
     setReading(true)
     try {
@@ -240,6 +244,42 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
     }
   }
 
+  // Đơn không có PDF website: dựng dữ liệu rỗng theo mẫu đã chọn để kho nhập tay (xem ManualReturnEditor).
+  const startManual = (mau) => {
+    const fresh = newManualPdf(mau, slip)
+    onChange({
+      ...slip,
+      stage: slip.stage === 'todo' || slip.stage === 'wait' ? 'doing' : slip.stage,
+      approvedAt: slip.approvedAt || new Date().toISOString(),
+      pdf: fresh,
+      form: { ...f, items: fresh.items.map(() => ({ soLo: '', hanDung: '', quyCach: '' })), xmMau: mau === 'UPHARMA' ? 'U' : f.xmMau },
+    })
+  }
+
+  // Có hoá đơn PDF của đơn cần trả: app đọc hoá đơn để điền sẵn đơn nhập tay (mẫu theo bên bán, hàng hoá, số hoá đơn...).
+  const readInvoice = async (file) => {
+    if (!file) return
+    if (pdf && !window.confirm('Đọc hoá đơn sẽ thay phần thông tin đơn đang có bằng dữ liệu trong hoá đơn. Tiếp tục?')) return
+    setError('')
+    setReading(true)
+    try {
+      const inv = parseInvoiceLines(await extractPdfLines(await file.arrayBuffer()))
+      const { pdf: fresh, formPatch } = manualPdfFromInvoice(inv, slip)
+      onChange({
+        ...slip,
+        khachHang: slip.khachHang || inv.benMua.ten,
+        stage: slip.stage === 'todo' || slip.stage === 'wait' ? 'doing' : slip.stage,
+        approvedAt: slip.approvedAt || new Date().toISOString(),
+        pdf: { ...fresh, fileName: file.name },
+        form: { ...f, ...formPatch },
+      })
+    } catch (err) {
+      setError(err.message || 'Không đọc được file hoá đơn.')
+    } finally {
+      setReading(false)
+    }
+  }
+
   const exportDocs = async () => {
     setError('')
     setExporting(true)
@@ -253,7 +293,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
     }
   }
 
-  const mismatch = pdf && pdf.mau !== 'NOIBO' && !sameCustomer(slip.khachHang, pdf.benMua?.ten)
+  const mismatch = pdf && !pdf.manual && pdf.mau !== 'NOIBO' && !sameCustomer(slip.khachHang, pdf.benMua?.ten)
   const missing = pdf ? missingSlipFields({ ...slip, form: f }) : []
 
   return (
@@ -284,7 +324,21 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                   <button type="button" onClick={() => inputRef.current.click()} disabled={reading} className="sheet-tab-action is-primary">
                     <FileUp size={13} /> {reading ? 'Đang đọc file…' : pdf ? 'Tải lại file khác' : 'Tải file PDF biên bản'}
                   </button>
+                  {(!pdf || pdf.manual) && (
+                    <button type="button" onClick={() => invoiceRef.current.click()} disabled={reading} className="sheet-tab-action">
+                      <FileUp size={13} /> Đọc từ hoá đơn (PDF)
+                    </button>
+                  )}
+                  {!pdf && (
+                    <span className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                      hoặc không có file, nhập tay:
+                      {[['CPC1HN', 'Đơn C'], ['UPHARMA', 'Đơn DTP'], ['NOIBO', 'Nội bộ (khách chưa nhận)']].map(([mau, label]) => (
+                        <button key={mau} type="button" onClick={() => startManual(mau)} className="sheet-tab-action" style={{ minHeight: 28, padding: '0 10px', fontSize: 12 }}>Nhập tay · {label}</button>
+                      ))}
+                    </span>
+                  )}
                   <input ref={inputRef} type="file" accept=".pdf" className="hidden" onChange={e => { void readFile(e.target.files[0]); e.target.value = '' }} />
+                  <input ref={invoiceRef} type="file" accept=".pdf" className="hidden" aria-label="File hoá đơn PDF" onChange={e => { void readInvoice(e.target.files[0]); e.target.value = '' }} />
                   {pdf?.fileName && <span className="text-xs text-gray-500">📄 {pdf.fileName}</span>}
                 </div>
               </div>
@@ -294,15 +348,19 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                   <span>
                     {mismatch
                       ? <>Khách hàng trong file (<b>{pdf.benMua?.ten}</b>) khác phiếu đang chọn. Kiểm tra lại đúng file của phiếu này.</>
-                      : <><b>{TEMPLATE_LABEL[pdf.mau]}</b> → {pdf.mau === 'NOIBO' ? <>khách <b>chưa nhận</b> hàng</> : <>khách <b>đã nhận</b> hàng · <b>{pdf.mau === 'CPC1HN' ? 'Đơn C' : 'Đơn DTP'}</b></>} · {pdf.items.length} mặt hàng · {money(pdf.tongTien)} đ</>}
+                      : pdf.manual
+                        ? <>Đơn <b>nhập tay</b> · <b>{TEMPLATE_LABEL[pdf.mau]}</b> · {pdf.items.length} mặt hàng · {money(pdf.tongTien)} đ</>
+                        : <><b>{TEMPLATE_LABEL[pdf.mau]}</b> → {pdf.mau === 'NOIBO' ? <>khách <b>chưa nhận</b> hàng</> : <>khách <b>đã nhận</b> hàng · <b>{pdf.mau === 'CPC1HN' ? 'Đơn C' : 'Đơn DTP'}</b></>} · {pdf.items.length} mặt hàng · {money(pdf.tongTien)} đ</>}
                   </span>
                 </div>
               )}
             </Step>
 
+            {pdf?.manual && <ManualReturnEditor n={2} slip={{ ...slip, form: f }} onChange={onChange} />}
+
             {pdf && (
               <>
-                <Step n={2} title="Điền phần website để trống">
+                <Step n={pdf.manual ? 3 : 2} title="Điền phần website để trống">
                   <span className="text-xs text-gray-400">Các ô vàng là chỗ trên file website đang để "……". Điền 1 lần, app điền vào cả 2 biên bản.</span>
                   <div style={grid(170)}>
                     <Field label="Ngày lập biên bản" kind="hand"><input type="date" value={f.ngayLap} onChange={e => setForm('ngayLap', e.target.value)} className={handCls} /></Field>
@@ -340,7 +398,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                   <span className="text-xs text-gray-400">Số lô vào cả biên bản trả hàng và biên bản xác minh. Hạn dùng, quy cách chỉ vào biên bản xác minh.</span>
                 </Step>
 
-                <Step n={3} title="Biên bản xác minh tình trạng hàng hoá">
+                <Step n={pdf.manual ? 4 : 3} title="Biên bản xác minh tình trạng hàng hoá">
                   <div style={grid(170)}>
                     {pdf.mau === 'NOIBO' && (
                       <Field label="Mẫu xác minh (tuỳ đơn)" kind="hand">
@@ -361,7 +419,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                   </div>
                 </Step>
 
-                <Step n={4} title="Xuất bộ file Word">
+                <Step n={pdf.manual ? 5 : 4} title="Xuất bộ file Word">
                   {missing.length > 0
                     ? <div className="rounded-lg bg-amber-50 text-amber-800 px-3 py-2 text-sm">Còn thiếu: {missing.join(', ')}. Vẫn xuất được, chỗ thiếu giữ "……" để anh sửa trong Word.</div>
                     : <div className="rounded-lg bg-green-50 text-green-800 px-3 py-2 text-sm">Đã điền đủ các chỗ trống.</div>}

@@ -1,6 +1,9 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import invoiceFixtures from '../../utils/__tests__/fixtures/invoiceLines.json'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ReturnSlipWorkspace from '../ReturnSlipWorkspace'
+
+vi.mock('../../utils/returnSlipPdf', () => ({ extractPdfLines: vi.fn(async () => invoiceFixtures.dtp_1item) }))
 
 afterEach(() => {
   cleanup()
@@ -153,3 +156,62 @@ describe('ReturnSlipWorkspace — bảng xác minh tình trạng hàng hoá', ()
   })
 })
 
+
+describe('ReturnSlipWorkspace — đơn nhập tay (không có PDF website)', () => {
+  it('chọn mẫu → dựng dữ liệu rỗng, nhập hàng thì tự tính thành tiền, tổng tiền, bằng chữ; thêm/xoá dòng giữ form.items khớp', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    let slip = makeSlip({ pdf: null, khachHang: 'Khách A', lyDo: '', form: null })
+    const onChange = (next) => { slip = next }
+    const view = render(<ReturnSlipWorkspace slip={slip} onChange={onChange} onBack={() => {}} />)
+    const rerender = () => view.rerender(<ReturnSlipWorkspace slip={slip} onChange={onChange} onBack={() => {}} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Nhập tay · Đơn DTP/ }))
+    rerender()
+    expect(slip.pdf).toMatchObject({ mau: 'UPHARMA', manual: true, benBan: { ten: 'CÔNG TY CỔ PHẦN UPHARMA' }, benMua: { ten: 'Khách A' } })
+    expect(slip.stage).toBe('doing')
+    expect(slip.form.xmMau).toBe('U')
+
+    fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Tranfast' } })
+    rerender()
+    fireEvent.change(screen.getByLabelText('Số lượng dòng 1'), { target: { value: '100' } })
+    rerender()
+    fireEvent.change(screen.getByLabelText('Đơn giá dòng 1'), { target: { value: '29500' } })
+    rerender()
+    expect(slip.pdf).toMatchObject({ tongTien: 2950000, bangChu: 'Hai triệu chín trăm năm mươi nghìn đồng./.' })
+    expect(slip.pdf.items[0]).toMatchObject({ stt: 1, ten: 'Tranfast', thanhTien: 2950000 })
+
+    fireEvent.click(screen.getByRole('button', { name: /Thêm dòng hàng/ }))
+    rerender()
+    expect(slip.pdf.items).toHaveLength(2)
+    expect(slip.form.items).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá dòng 2' }))
+    rerender()
+    expect(slip.pdf.items).toHaveLength(1)
+    expect(slip.form.items).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Xoá dòng 1' })).toBeDisabled() // luôn còn ít nhất 1 dòng
+  })
+
+  it('mẫu nội bộ chỉ nhập bên C (kinh doanh), không có bên mua/bán', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    let slip = makeSlip({ pdf: null, nhanVien: 'Nguyễn Hồng Nhung', form: null })
+    render(<ReturnSlipWorkspace slip={slip} onChange={(n) => { slip = n }} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /Nhập tay · Nội bộ/ }))
+    expect(slip.pdf).toMatchObject({ mau: 'NOIBO', benMua: null, benBan: null, benC: { daiDien: 'Nguyễn Hồng Nhung' } })
+  })
+})
+
+describe('ReturnSlipWorkspace — đọc từ hoá đơn PDF (đơn nhập tay)', () => {
+  it('đọc hoá đơn Đơn DTP: chọn mẫu UPHARMA, điền hàng, số hoá đơn, ký hiệu, ngày, lô, hạn dùng', async () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    let slip = makeSlip({ pdf: null, khachHang: '', form: null })
+    const onChange = (next) => { slip = next }
+    render(<ReturnSlipWorkspace slip={slip} onChange={onChange} onBack={() => {}} />)
+    fireEvent.change(screen.getByLabelText('File hoá đơn PDF'), { target: { files: [new File(['%PDF'], 'hoadon.pdf')] } })
+    await waitFor(() => expect(slip.pdf).toBeTruthy())
+    expect(slip.pdf).toMatchObject({ mau: 'UPHARMA', manual: true, tongTien: 2520000, benMua: { ten: 'Nguyễn Văn A' }, benBan: { ten: 'CÔNG TY CỔ PHẦN UPHARMA' } })
+    expect(slip.pdf.items[0]).toMatchObject({ ten: 'Topi Nebuliser - Hộp 10 ống 5ml', dvt: 'Ống', soLuong: 30, donGia: 84000, soLo: '011125' })
+    expect(slip.form).toMatchObject({ soHD: '00581703', kyHieu: '1C26MNT', ngayHD: '2026-08-06', xmMau: 'U', items: [{ soLo: '011125', hanDung: '2028-11-28', quyCach: '' }] })
+    expect(slip.khachHang).toBe('Nguyễn Văn A')
+    expect(slip.stage).toBe('doing')
+  })
+})
