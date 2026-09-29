@@ -25,8 +25,11 @@ const viNum = s => {
 }
 
 // Phiếu xuất kho bán hàng của Kho C (mẫu "Ký hiệu: C26MSG", cột Mã SP / Số lô / Hạn dùng / Kho / Đvt / Số lượng /
-// Đơn giá / % CK / Thành tiền / VAT). Dòng chiết khấu, voucher (không có lô/hạn dùng) bị bỏ vì không phải hàng trả.
+// Đơn giá / % CK / Thành tiền / VAT). Dòng chiết khấu/voucher (không có lô/hạn dùng,
+// thành tiền âm) không thành dòng riêng: số tiền được trừ thẳng vào đơn giá các dòng hàng (chia theo tỷ lệ thành
+// tiền) để tổng khớp "Tổng cộng tiền thanh toán" trên phiếu.
 const SALES_ROW_RE = /^(\d{1,3})\s+(\S+)\s+(.+?)\s+(\S+)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+\d{6}\s+(\S+)\s+([\d.,]+)\s+[\d.,]+\s+(?:[\d.,]+\s+)?(\(?[\d.,]+\)?)\s+(\d+)$/
+const SALES_DISCOUNT_RE = /^\d{1,3}\s+[A-Z0-9][A-Z0-9-]*\s+.+?\s+\d{6}\s+\S+\s+[\d.,]+\s+[\d.,]+\s+(\([\d.,]+\))\s+(\d+)$/
 const SALES_ANY_ROW_RE = /^\d{1,3}\s+[A-Z0-9][A-Z0-9-]*\s/
 
 function parseSalesSlipLines(lines) {
@@ -53,6 +56,7 @@ function parseSalesSlipLines(lines) {
   }
   const start = lines.findIndex(l => /^0\s+1\s+2\s+3\s+4/.test(l))
   const end = lines.findIndex(l => /^Cộng tiền hàng/i.test(l))
+  let discount = 0 // tổng chiết khấu gồm VAT (số âm)
   if (start !== -1) {
     let current = null
     for (const line of lines.slice(start + 1, end === -1 ? undefined : end)) {
@@ -68,9 +72,23 @@ function parseSalesSlipLines(lines) {
           thanhTien: Math.round(thanhTien * (1 + vat / 100)),
         }
         result.items.push(current)
-      } else if (SALES_ANY_ROW_RE.test(line)) current = null // dòng chiết khấu/voucher
+      } else if (SALES_DISCOUNT_RE.test(line)) {
+        const d = SALES_DISCOUNT_RE.exec(line)
+        discount += Math.round(viNum(d[1]) * (1 + (Number(d[2]) || 0) / 100))
+        current = null
+      } else if (SALES_ANY_ROW_RE.test(line)) current = null
       else if (current) current.ten = clean(`${current.ten} ${line}`)
     }
+  }
+  if (discount) {
+    const gross = result.items.reduce((sum, it) => sum + it.thanhTien, 0)
+    let left = discount
+    result.items.forEach((it, i) => {
+      const share = i === result.items.length - 1 ? left : Math.round((discount * it.thanhTien) / gross)
+      left -= share
+      it.thanhTien += share
+      it.donGia = it.soLuong ? Math.round(it.thanhTien / it.soLuong) : 0
+    })
   }
   result.tongTien = result.items.reduce((sum, it) => sum + it.thanhTien, 0)
   if (result.items.length === 0) throw new Error('Không đọc được bảng hàng hoá trong phiếu xuất kho. Kiểm tra lại file PDF.')

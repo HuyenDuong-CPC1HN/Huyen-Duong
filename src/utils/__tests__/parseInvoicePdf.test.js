@@ -16,7 +16,7 @@ describe('parseInvoiceLines', () => {
     }])
   })
 
-  it('phiếu xuất kho bán hàng Kho C: số HĐ, ký hiệu, ngày, người mua, hàng có lô/hạn dùng; bỏ dòng voucher chiết khấu', () => {
+  it('phiếu xuất kho bán hàng Kho C: số HĐ, ký hiệu, ngày, người mua, hàng có lô/hạn dùng; trừ chiết khấu voucher vào đơn giá, tổng khớp phiếu', () => {
     const r = parseInvoiceLines(fixtures.kho_c_phieu_xuat_ban)
     expect(r).toMatchObject({
       soHD: '138169', kyHieu: 'C26MSG', ngayHD: '2026-06-29', mau: 'CPC1HN',
@@ -25,9 +25,9 @@ describe('parseInvoiceLines', () => {
     })
     expect(r.items).toEqual([{
       stt: 1, ten: 'Actiso Viet - Hộp 4 vỉ x 5 ống 10ml', soLo: '010526', hanDung: '2029-05-10', dvt: 'ONG',
-      soLuong: 40, donGia: 5950, thanhTien: 238000, // đơn giá 5.509,259 + VAT 8% = 5,950 gồm VAT; voucher bị bỏ
+      soLuong: 40, donGia: 5375, thanhTien: 215000, // 238,000 gồm VAT 8% − 23,000 voucher = 215,000
     }])
-    expect(r.tongTien).toBe(238000)
+    expect(r.tongTien).toBe(215000) // = Tổng cộng tiền thanh toán trên phiếu
   })
 
   it('không phải hoá đơn → báo lỗi', () => {
