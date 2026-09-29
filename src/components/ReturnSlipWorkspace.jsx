@@ -6,6 +6,7 @@ import {
 } from '../utils/returnSlips'
 import { extractPdfLines } from '../utils/returnSlipPdf'
 import { exportReturnSlipDocs } from '../utils/exportReturnSlip'
+import { printWithOrientation } from '../utils/printOrientation'
 import { LoaiTag, StagePill } from './ReturnSlipBadges'
 
 const inputBase = 'w-full px-2.5 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200'
@@ -405,8 +406,8 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                   className={`px-2.5 py-1 rounded-md text-xs border ${doc === k ? 'border-[#1e3a5f] text-[#1e3a5f] font-semibold' : 'border-gray-200 text-gray-500'}`}>{label}</button>
               ))}
               {pdf && (
-                <button type="button" onClick={() => window.print()} className="ml-auto px-2.5 py-1 rounded-md text-xs border border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600 flex items-center gap-1"
-                  title="In trực tiếp đúng biên bản đang xem (mở hộp thoại in của trình duyệt)">
+                <button type="button" onClick={() => printWithOrientation(doc === 'xacMinh' ? 'landscape' : 'portrait')} className="ml-auto px-2.5 py-1 rounded-md text-xs border border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600 flex items-center gap-1"
+                  title={`In trực tiếp đúng biên bản đang xem, ${doc === 'xacMinh' ? 'giấy A4 ngang' : 'giấy A4 dọc'} (mở hộp thoại in của trình duyệt)`}>
                   <Printer size={12} /> In
                 </button>
               )}

@@ -91,3 +91,20 @@ describe('ReturnSlipWorkspace — cấu trúc bản in', () => {
   })
 })
 
+describe('ReturnSlipWorkspace — hướng giấy khi in', () => {
+  it('biên bản trả lại hàng in dọc; biên bản xác minh in ngang (A4 landscape) và gỡ rule sau khi in', () => {
+    const sizes = []
+    vi.spyOn(window, 'print').mockImplementation(() => { sizes.push(document.querySelector('style[data-print-orientation]')?.textContent ?? null) })
+    render(<ReturnSlipWorkspace slip={makeSlip()} onChange={() => {}} onBack={() => {}} />)
+
+    fireEvent.click(screen.getByTitle(/In trực tiếp/))
+    fireEvent.click(screen.getByRole('button', { name: 'Biên bản xác minh' }))
+    fireEvent.click(screen.getByTitle(/In trực tiếp/))
+
+    expect(sizes[0]).toBeNull()
+    expect(sizes[1]).toContain('A4 landscape')
+    window.dispatchEvent(new Event('afterprint'))
+    expect(document.querySelector('style[data-print-orientation]')).toBeNull()
+  })
+})
+

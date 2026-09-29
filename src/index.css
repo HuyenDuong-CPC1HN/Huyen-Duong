@@ -1368,8 +1368,17 @@ body {
     vertical-align: middle;
   }
   .rsw-print-root .rsw-paper th { font-weight: 700; text-align: center; }
+  /* Biên bản xác minh in A4 NGANG (xem printOrientation.js) — khổ thấp hơn nên thu gọn khoảng cách để vừa
+     1 trang, giữ nguyên cỡ chữ 10.5pt. */
+  .rsw-print-root .rsw-paper.rsw-xm-doc { line-height: 1.45 !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-head { line-height: 1.45 !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-title { margin: 2px 0 6px !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-gap { margin-top: 2px !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc table { margin: 6px 0 !important; }
   .rsw-print-root .rsw-paper.rsw-xm-doc th,
-  .rsw-print-root .rsw-paper.rsw-xm-doc td { padding: 5px 6px !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc td { padding: 4px 6px !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-xm-sign .rsw-sign-gap { height: 56px; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc { break-inside: avoid; }
   .rsw-print-root .rsw-paper .rsw-xm-sign td { vertical-align: top; }
 
   /* Chỗ ký: chừa khoảng trống rồi mới in tên, như bản gốc */
