@@ -196,7 +196,7 @@ describe('ReturnSlipWorkspace — đơn nhập tay (không có PDF website)', ()
     let slip = makeSlip({ pdf: null, nhanVien: 'Nguyễn Hồng Nhung', form: null })
     render(<ReturnSlipWorkspace slip={slip} onChange={(n) => { slip = n }} onBack={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /Nhập tay · Nội bộ/ }))
-    expect(slip.pdf).toMatchObject({ mau: 'NOIBO', benC: { daiDien: 'Nguyễn Hồng Nhung' } })
+    expect(slip.pdf).toMatchObject({ mau: 'NOIBO', benC: { daiDien: 'Nguyễn Hồng Nhung', chucVu: 'Nhân viên kinh doanh' } })
   })
 })
 

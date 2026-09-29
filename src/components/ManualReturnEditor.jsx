@@ -42,7 +42,7 @@ export default function ManualReturnEditor({ n, slip, onChange }) {
       {noiBo ? (
         <div style={grid(170)}>
           <Field label="Bên C · Kinh doanh — đại diện" kind="hand"><input value={pdf.benC?.daiDien || ''} onChange={e => setParty('benC', 'daiDien', e.target.value)} className={handCls} /></Field>
-          <Field label="Bên C · Chức vụ" kind="hand"><input value={pdf.benC?.chucVu || ''} onChange={e => setParty('benC', 'chucVu', e.target.value)} className={handCls} /></Field>
+          <Field label="Bên C · Chức vụ" kind="preset"><input value={pdf.benC?.chucVu || ''} onChange={e => setParty('benC', 'chucVu', e.target.value)} className={presetCls} /></Field>
         </div>
       ) : (
         <>

@@ -104,7 +104,7 @@ export function newManualPdf(mau, slip = {}, sellerKey = mau === 'NOIBO' ? 'CPC1
     mau, manual: true, fileName: 'Nhập tay', lyDo: slip.lyDo || '', items: [emptyManualItem()],
     benMua: { ten: slip.khachHang || '', diaChi: '', mst: '', daiDien: '', chucVu: '' },
     benBan: { ...MANUAL_SELLERS[sellerKey] },
-    benC: { daiDien: slip.nhanVien || '', chucVu: '' },
+    benC: { daiDien: slip.nhanVien || '', chucVu: 'Nhân viên kinh doanh' },
   })
 }
 
