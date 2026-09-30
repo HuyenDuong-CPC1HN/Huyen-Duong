@@ -109,7 +109,7 @@ export function XacMinhPaper({ phieu }) {
       <p>2. Thời gian: Vào lúc <V v={huyGioVi(f.xmGio)} />, ngày <V v={d} /> tháng <V v={m} /> năm <V v={y} /></p>
       <p>3. Địa điểm: {isC ? 'Tại CN.Hồ Chí Minh' : ''}</p>
       <p>4. Thành phần:</p>
-      <table className="rsw-table w-full border-collapse my-1.5 text-[11.5px]" style={{ tableLayout: 'fixed' }}>
+      <table className="rsw-table rsw-xm-people w-full border-collapse my-1.5 text-[11.5px]" style={{ tableLayout: 'fixed' }}>
         <colgroup><col style={{ width: '8%' }} /><col style={{ width: '46%' }} /><col style={{ width: '46%' }} /></colgroup>
         <thead><tr>{['STT', 'Họ và tên', 'Chức vụ/Bộ phận'].map(h => <th key={h} className={`${td} font-bold`}>{h}</th>)}</tr></thead>
         <tbody>
