@@ -10,6 +10,7 @@ import { exportReturnSlipDocs } from '../utils/exportReturnSlip'
 import { LoaiTag, StagePill } from './ReturnSlipBadges'
 import { Field, Step } from './WorkspaceParts'
 import ManualReturnEditor from './ManualReturnEditor'
+import ReturnItemsEditor from './ReturnItemsEditor'
 import { handCls, presetCls, grid } from './workspaceStyles'
 
 // ---------- Xem trước biên bản ----------
@@ -357,10 +358,16 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
             </Step>
 
             {pdf?.manual && <ManualReturnEditor n={2} slip={{ ...slip, form: f }} onChange={onChange} />}
+            {pdf && !pdf.manual && (
+              <Step n={2} title="Hàng hoá đọc từ file">
+                <span className="text-xs text-gray-400">Kiểm tra app đọc đúng hàng chưa. Đọc nhầm thì sửa trực tiếp, thêm hoặc xoá dòng: thành tiền, tổng tiền và bằng chữ tự tính lại.</span>
+                <ReturnItemsEditor slip={{ ...slip, form: f }} onChange={onChange} />
+              </Step>
+            )}
 
             {pdf && (
               <>
-                <Step n={pdf.manual ? 3 : 2} title="Điền phần website để trống">
+                <Step n={3} title="Điền phần website để trống">
                   <span className="text-xs text-gray-400">Các ô vàng là chỗ trên file website đang để "……". Điền 1 lần, app điền vào cả 2 biên bản.</span>
                   <div style={grid(170)}>
                     <Field label="Ngày lập biên bản" kind="hand"><input type="date" value={f.ngayLap} onChange={e => setForm('ngayLap', e.target.value)} className={handCls} /></Field>
@@ -398,7 +405,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                   <span className="text-xs text-gray-400">Số lô vào cả biên bản trả hàng và biên bản xác minh. Hạn dùng, quy cách chỉ vào biên bản xác minh.</span>
                 </Step>
 
-                <Step n={pdf.manual ? 4 : 3} title="Biên bản xác minh tình trạng hàng hoá">
+                <Step n={4} title="Biên bản xác minh tình trạng hàng hoá">
                   <div style={grid(170)}>
                     {pdf.mau === 'NOIBO' && (
                       <Field label="Mẫu xác minh (tuỳ đơn)" kind="hand">
@@ -419,7 +426,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                   </div>
                 </Step>
 
-                <Step n={pdf.manual ? 5 : 4} title="Xuất bộ file Word">
+                <Step n={5} title="Xuất bộ file Word">
                   {missing.length > 0
                     ? <div className="rounded-lg bg-amber-50 text-amber-800 px-3 py-2 text-sm">Còn thiếu: {missing.join(', ')}. Vẫn xuất được, chỗ thiếu giữ "……" để anh sửa trong Word.</div>
                     : <div className="rounded-lg bg-green-50 text-green-800 px-3 py-2 text-sm">Đã điền đủ các chỗ trống.</div>}

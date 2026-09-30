@@ -200,6 +200,37 @@ describe('ReturnSlipWorkspace — đơn nhập tay (không có PDF website)', ()
   })
 })
 
+describe('ReturnSlipWorkspace — sửa hàng hoá đọc nhầm từ file PDF website', () => {
+  it('sửa tên/số lượng/đơn giá, thêm và xoá dòng: tính lại tiền, form.items khớp số dòng; luôn còn ít nhất 1 dòng', () => {
+    vi.spyOn(window, 'print').mockImplementation(() => {})
+    let slip = makeSlip()
+    const onChange = (next) => { slip = next }
+    const view = render(<ReturnSlipWorkspace slip={slip} onChange={onChange} onBack={() => {}} />)
+    const rerender = () => view.rerender(<ReturnSlipWorkspace slip={slip} onChange={onChange} onBack={() => {}} />)
+
+    fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Viên đặt pH.Balance - 7 viên (B)' } })
+    rerender()
+    fireEvent.change(screen.getByLabelText('Số lượng dòng 1'), { target: { value: '56' } })
+    rerender()
+    fireEvent.change(screen.getByLabelText('Đơn giá dòng 1'), { target: { value: '10000' } })
+    rerender()
+    expect(slip.pdf.items[0]).toMatchObject({ ten: 'Viên đặt pH.Balance - 7 viên (B)', soLuong: 56, donGia: 10000, thanhTien: 560000 })
+    expect(slip.pdf.tongTien).toBe(560000)
+    expect(slip.pdf.mau).toBe('NOIBO') // không đổi mẫu, không thành đơn nhập tay
+    expect(slip.pdf.manual).toBeUndefined()
+
+    fireEvent.click(screen.getByRole('button', { name: /Thêm dòng hàng/ }))
+    rerender()
+    expect(slip.pdf.items).toHaveLength(2)
+    expect(slip.form.items).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá dòng 1' }))
+    rerender()
+    expect(slip.pdf.items).toHaveLength(1)
+    expect(slip.form.items).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Xoá dòng 1' })).toBeDisabled()
+  })
+})
+
 describe('ReturnSlipWorkspace — đọc từ hoá đơn PDF (đơn nhập tay)', () => {
   it('đọc hoá đơn Đơn DTP: mặc định mẫu nội bộ, xác minh mẫu U, điền hàng, số hoá đơn, ký hiệu, ngày, lô, hạn dùng; đổi mẫu được', async () => {
     vi.spyOn(window, 'print').mockImplementation(() => {})
