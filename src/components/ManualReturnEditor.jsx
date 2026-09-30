@@ -1,7 +1,7 @@
 import { effectiveLyDo, recalcManualPdf, switchManualMau, TEMPLATE_LABEL } from '../utils/returnSlips'
 import { Field, Step } from './WorkspaceParts'
 import ReturnItemsEditor from './ReturnItemsEditor'
-import { handCls, presetCls, grid } from './workspaceStyles'
+import { handCls, presetCls, grid, wrapStyle } from './workspaceStyles'
 
 // Phần nhập tay của đơn không có PDF website: bên mua, bên bán, lý do và các dòng hàng. Mỗi lần sửa dựng lại
 // thành tiền / tổng tiền / số tiền bằng chữ (recalcManualPdf) và giữ form.items (số lô, hạn dùng, quy cách) khớp
@@ -49,7 +49,7 @@ export default function ManualReturnEditor({ n, slip, onChange }) {
           </div>
         </>
       )}
-      <Field label="Lý do xuất trả" kind={noiBo ? 'preset' : 'hand'} full><input value={effectiveLyDo(pdf)} onChange={e => commit({ ...pdf, lyDo: e.target.value })} className={noiBo ? presetCls : handCls} /></Field>
+      <Field label="Lý do xuất trả" kind={noiBo ? 'preset' : 'hand'} full><textarea rows={2} value={effectiveLyDo(pdf)} onChange={e => commit({ ...pdf, lyDo: e.target.value })} className={noiBo ? presetCls : handCls} style={wrapStyle} /></Field>
       <ReturnItemsEditor slip={slip} onChange={onChange} />
     </Step>
   )

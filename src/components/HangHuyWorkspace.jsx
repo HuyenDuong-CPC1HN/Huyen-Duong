@@ -6,7 +6,7 @@ import { exportHangHuyPhieu } from '../utils/exportDamagedGoods'
 import { KhoTag, HuyStagePill } from './HangHuyBadges'
 import { XuLyPaper, XacMinhPaper } from './HangHuyPapers'
 import { Field, Step } from './WorkspaceParts'
-import { handCls, presetCls, grid } from './workspaceStyles'
+import { handCls, presetCls, grid, wrapStyle } from './workspaceStyles'
 
 const fmtDate = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '' }
 
@@ -88,8 +88,8 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
                           <input type="number" min="0" value={it.thucHuy ?? ''} onChange={e => setQty(i, e.target.value)} aria-label={`Thực huỷ ${it.maHang}`}
                             className={it.thucHuy === null || it.thucHuy === '' ? 'w-full px-2 py-1.5 border rounded-lg text-sm bg-red-50 border-red-400 text-red-800' : handCls} />
                         </td>
-                        <td className="px-1.5 py-1.5" style={{ minWidth: 110 }}><input value={it.quyCach} onChange={e => setItem(i, 'quyCach', e.target.value)} className={handCls} placeholder="VD: Hộp 20 ống" aria-label={`Quy cách ${it.maHang}`} /></td>
-                        <td className="px-1.5 py-1.5" style={{ minWidth: 150 }}><input value={it.tinhTrang} onChange={e => setItem(i, 'tinhTrang', e.target.value)} className={handCls} placeholder="VD: Hàng gãy, vỡ ống" aria-label={`Tình trạng ${it.maHang}`} /></td>
+                        <td className="px-1.5 py-1.5" style={{ minWidth: 110 }}><textarea rows={2} value={it.quyCach} onChange={e => setItem(i, 'quyCach', e.target.value)} className={handCls} style={wrapStyle} placeholder="VD: Hộp 20 ống" aria-label={`Quy cách ${it.maHang}`} /></td>
+                        <td className="px-1.5 py-1.5" style={{ minWidth: 180 }}><textarea rows={2} value={it.tinhTrang} onChange={e => setItem(i, 'tinhTrang', e.target.value)} className={handCls} style={wrapStyle} placeholder="VD: Hàng gãy, vỡ ống" aria-label={`Tình trạng ${it.maHang}`} /></td>
                         <td className="px-1.5 py-1.5">
                           <button type="button" onClick={() => removeItem(i)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Bỏ dòng này khỏi bộ biên bản" aria-label={`Xoá dòng ${it.maHang}`}><Trash2 size={13} /></button>
                         </td>

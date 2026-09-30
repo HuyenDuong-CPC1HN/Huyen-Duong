@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { emptyManualItem, recalcManualPdf } from '../utils/returnSlips'
-import { handCls } from './workspaceStyles'
+import { handCls, wrapStyle } from './workspaceStyles'
 
 const money = n => (Number(n) || 0).toLocaleString('en-US')
 const num = raw => (raw === '' ? 0 : Number(raw))
@@ -29,7 +29,7 @@ export default function ReturnItemsEditor({ slip, onChange }) {
           <tbody>
             {pdf.items.map((it, i) => (
               <tr key={i} className="border-t border-gray-100 align-top">
-                <td className="px-1.5 py-1.5" style={{ minWidth: 170 }}><input value={it.ten} onChange={e => setItem(i, 'ten', e.target.value)} className={handCls} aria-label={`Tên hàng dòng ${i + 1}`} /></td>
+                <td className="px-1.5 py-1.5" style={{ minWidth: 220 }}><textarea rows={2} value={it.ten} onChange={e => setItem(i, 'ten', e.target.value)} className={handCls} style={wrapStyle} aria-label={`Tên hàng dòng ${i + 1}`} /></td>
                 <td className="px-1.5 py-1.5" style={{ minWidth: 64 }}><input value={it.dvt} onChange={e => setItem(i, 'dvt', e.target.value)} className={handCls} aria-label={`ĐVT dòng ${i + 1}`} /></td>
                 <td className="px-1.5 py-1.5" style={{ minWidth: 76 }}><input type="number" min="0" value={it.soLuong || ''} onChange={e => setItem(i, 'soLuong', num(e.target.value))} className={handCls} aria-label={`Số lượng dòng ${i + 1}`} /></td>
                 <td className="px-1.5 py-1.5" style={{ minWidth: 96 }}><input type="number" min="0" value={it.donGia || ''} onChange={e => setItem(i, 'donGia', num(e.target.value))} className={handCls} aria-label={`Đơn giá dòng ${i + 1}`} /></td>
