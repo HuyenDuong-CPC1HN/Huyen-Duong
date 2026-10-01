@@ -169,3 +169,30 @@ describe('Xuất bộ file Word', () => {
     expect(text).not.toMatch(/[{}]/)
   })
 })
+
+describe('parseReturnSlipLines — tên hàng xuống dòng, tiêu đề bảng bị xếp lộn (mẫu nội bộ thật)', () => {
+  it('dòng số liệu không có tên: lấy tên từ dòng trên + dưới, bỏ chữ tiêu đề bảng', async () => {
+    const { default: fixtures } = await import('./fixtures/returnSlipPdfLines.json')
+    const { parseReturnSlipLines } = await import('../returnSlips')
+    const r = parseReturnSlipLines(fixtures.bbth_noibo_tenhang_xuong_dong)
+    expect(r.mau).toBe('NOIBO')
+    expect(r.items).toEqual([{
+      stt: 1, ten: 'Dung dịch khí dung Nebusal 3% - Hộp 1 vỉ x 5 ống 5ml (Ống vuông)', dvt: 'ONG',
+      soLuong: 150, soLo: '', donGia: 8400, thanhTien: 1260000,
+    }])
+    expect(r.tongTien).toBe(1260000)
+    expect(r.benC).toMatchObject({ daiDien: 'Nguyễn Minh Hằng' })
+  })
+
+  it('tiêu đề dính liền đầu tên hàng trên cùng 1 dòng thì bỏ phần tiêu đề, giữ tên', async () => {
+    const { parseReturnSlipLines } = await import('../returnSlips')
+    const lines = [
+      'BIÊN BẢN TRẢ LẠI HÀNG (NỘI BỘ)', 'BÊN C: Bộ phận Kinh Doanh', 'Đại Diện: A', 'Chức vụ: B',
+      '1. Lý do xuất trả: x', '2. Chi tiết về hàng hóa xuất trả:',
+      'Đơn vị Số Số Đơn giá Thành tính lượng Lô (gồm VAT) tiền Bộ cốc thủy tinh xoay 360 độ',
+      '1 BO 1 010526 50,000 50,000', 'Tổng cộng tiền thanh toán', '50,000',
+    ]
+    const r = parseReturnSlipLines(lines)
+    expect(r.items[0]).toMatchObject({ ten: 'Bộ cốc thủy tinh xoay 360 độ', dvt: 'BO', soLuong: 1, soLo: '010526', thanhTien: 50000 })
+  })
+})

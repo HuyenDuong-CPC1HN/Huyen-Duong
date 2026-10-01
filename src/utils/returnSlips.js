@@ -192,6 +192,18 @@ export function parseMoney(s) {
   return digits ? Number(digits) : 0
 }
 
+// Tên hàng dài xuống dòng thì dòng số liệu không còn tên: "1 ONG 150 8,400 1,260,000" (tên nằm ở dòng trên/dưới).
+const ITEM_NO_NAME_RE = /^(\d{1,3})\s+([^\d\s.,]\S*)\s+([\d.,]+)\s+(?:(\S+)\s+)?([\d.,]+)\s+([\d.,]+)$/
+// Chữ tiêu đề bảng ("STT Tên hàng hóa, dịch vụ Đơn vị tính Số lượng Số Lô Đơn giá (gồm VAT) Thành tiền") bị PDF xếp
+// lộn thành nhiều dòng, có khi dính liền đầu tên hàng: bỏ dãy chữ tiêu đề ở đầu dòng.
+const HEADER_WORDS = new Set(['stt', 'tên', 'hàng', 'hóa', 'hoá', 'dịch', 'vụ', 'đơn', 'vị', 'tính', 'đvt', 'số', 'lượng', 'lô', 'giá', '(gồm', 'vat)', 'thành', 'tiền'])
+function stripHeaderPrefix(line) {
+  const tokens = line.split(' ')
+  let n = 0
+  while (n < tokens.length && HEADER_WORDS.has(tokens[n].toLowerCase().replace(/,$/, ''))) n += 1
+  return n >= 2 ? tokens.slice(n).join(' ') : line
+}
+
 const ITEM_RE = /^(\d{1,3})\s+(.+?)\s+(\S+)\s+([\d.,]+)\s+(?:(\S+)\s+)?([\d.,]+)\s+([\d.,]+)$/
 
 function afterLabel(line, label) {
@@ -273,8 +285,11 @@ export function parseReturnSlipLines(rawLines) {
   const tong = idx(/^Tổng cộng tiền thanh toán/i, Math.max(chiTiet, 0))
   if (chiTiet !== -1) {
     let pendingName = ''
-    for (const line of lines.slice(chiTiet + 1, tong === -1 ? undefined : tong)) {
-      const m = ITEM_RE.exec(line)
+    for (const rawLine of lines.slice(chiTiet + 1, tong === -1 ? undefined : tong)) {
+      const line = stripHeaderPrefix(rawLine)
+      if (!line) continue
+      const noName = ITEM_NO_NAME_RE.exec(line)
+      const m = noName ? [line, noName[1], '', noName[2], noName[3], noName[4], noName[5], noName[6]] : ITEM_RE.exec(line)
       if (m) {
         result.items.push({
           stt: Number(m[1]),
