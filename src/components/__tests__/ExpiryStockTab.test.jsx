@@ -41,7 +41,7 @@ function buildSampleFile() {
     [1, 'X001', 'Hàng đã hết hạn', '020101', 'HOP', 'LOT1', addDays(-45), 0, 0, 0, 5],
     [2, 'X002', 'Hàng cận 3 tháng', '020101', 'HOP', 'LOT2', addDays(30), 0, 0, 0, 20],
     [3, 'X003', 'Hàng cận 6 tháng', '020101', 'HOP', 'LOT3', addDays(120), 0, 0, 0, 15],
-    [4, 'X004', 'Hàng cận hạn 6-18 tháng', '020101', 'HOP', 'LOT4', addDays(400), 0, 0, 0, 40],
+    [4, 'X004', 'Hàng cận hạn 6-12 tháng', '020101', 'HOP', 'LOT4', addDays(250), 0, 0, 0, 40],
     [7, 'X007', 'Hàng còn an toàn', '020101', 'HOP', 'LOT7', addDays(700), 0, 0, 0, 12],
     [8, 'X008', 'Hàng có xuất', '020101', 'HOP', 'LOT8', addDays(700), 10, 0, 4, 6],
     [5, 'X005', 'Hàng không rõ hạn', '020101', 'HOP', 'LOT5', null, 0, 0, 0, 8],
@@ -67,18 +67,18 @@ describe('ExpiryStockTab', () => {
     expect(screen.getByText('Hàng đã hết hạn')).toBeInTheDocument()
     expect(screen.getByText('Hàng cận 3 tháng')).toBeInTheDocument()
     expect(screen.getByText('Hàng cận 6 tháng')).toBeInTheDocument()
-    expect(screen.queryByText('Hàng cận hạn 6-18 tháng')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hàng cận hạn 6-12 tháng')).not.toBeInTheDocument()
     expect(screen.queryByText('Hàng còn an toàn')).not.toBeInTheDocument()
     expect(screen.queryByText('Hàng không rõ hạn')).not.toBeInTheDocument()
     expect(screen.queryByText('Hàng đã hết tồn kho')).not.toBeInTheDocument()
     // Bảng Cận date có đúng các cột của sheet "Cận date" trong file mẫu
     expect([...document.querySelectorAll('th')].map(th => th.textContent)).toEqual([
-      '', 'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn cuối',
+      '', 'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn cuối', 'Hướng xử lý',
     ])
 
-    // Nhóm cận hạn 6–18 tháng chỉ để cảnh báo luân chuyển
-    fireEvent.click(screen.getByText('Cận hạn 6–18 tháng'))
-    expect(screen.getByText('Hàng cận hạn 6-18 tháng')).toBeInTheDocument()
+    // Nhóm cận hạn 6–12 tháng chỉ để cảnh báo luân chuyển
+    fireEvent.click(screen.getByText('Cận hạn 6–12 tháng'))
+    expect(screen.getByText('Hàng cận hạn 6-12 tháng')).toBeInTheDocument()
     expect(screen.queryByText('Hàng còn an toàn')).not.toBeInTheDocument()
     expect(screen.queryByText('Hàng cận 6 tháng')).not.toBeInTheDocument()
 
@@ -100,11 +100,21 @@ describe('ExpiryStockTab', () => {
     expect(screen.queryByText('Hàng có xuất')).not.toBeInTheDocument()
     expect([...document.querySelectorAll('th')].map(th => th.textContent)).toEqual([
       '', 'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)',
-      'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối',
+      'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối', 'Hướng xử lý',
     ])
     expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC/ })).toBeInTheDocument()
     expect(screen.queryByText(/Xuất biên bản hàng cận date/)).not.toBeInTheDocument()
 
+  })
+
+  it('cột Hướng xử lý nhập tay được và được nhớ theo tháng', async () => {
+    render(<ExpiryStockTab />)
+    const input = screen.getAllByPlaceholderText('Nhập hướng xử lý...')[0]
+    fireEvent.change(input, { target: { value: 'Đổi trả NCC' } })
+    expect(input.value).toBe('Đổi trả NCC')
+    cleanup()
+    render(<ExpiryStockTab />)
+    expect(screen.getAllByPlaceholderText('Nhập hướng xử lý...').some(i => i.value === 'Đổi trả NCC')).toBe(true)
   })
 
   it('xuất Excel đúng 12 cột yêu cầu, "Tên lô" trùng "Mã lô", "Tuổi thuốc" âm khi đã hết hạn', async () => {

@@ -221,10 +221,10 @@ const REPORT_TITLE = { canDate: 'Báo cáo hàng cận date', clc: 'Báo cáo h�
 
 // Tên file theo mẫu "CNHCM-T06.26_Báo cáo hàng cận date_CLC.xlsx", tách theo từng báo cáo — tháng/năm lấy
 // theo ngày xuất báo cáo.
-export function stockReportFileName(kind, date = new Date()) {
+export function stockReportFileName(kind, date = new Date(), suffix = '') {
   const mm = String(date.getMonth() + 1).padStart(2, '0')
   const yy = String(date.getFullYear()).slice(-2)
-  return `CNHCM-T${mm}.${yy}_${REPORT_TITLE[kind]}.xlsx`
+  return `CNHCM-T${mm}.${yy}_${REPORT_TITLE[kind]}${suffix ? `_${suffix}` : ''}.xlsx`
 }
 
 let cachedTemplate = null
@@ -236,13 +236,13 @@ async function loadTemplate() {
   return cachedTemplate
 }
 
-export async function exportStockReport({ kind, rows, dateRange }) {
+export async function exportStockReport({ kind, rows, dateRange, suffix = '' }) {
   const bytes = fillStockReport(await loadTemplate(), { kind, rows, dateRange })
   const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = stockReportFileName(kind)
+  a.download = stockReportFileName(kind, new Date(), suffix)
   a.click()
   URL.revokeObjectURL(url)
 }

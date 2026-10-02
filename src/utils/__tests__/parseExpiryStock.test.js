@@ -73,13 +73,13 @@ describe('parseExpiryStockWorkbook + isSlowMoving — lọc đúng trên dữ li
 describe('classifyExpiry + drugAgeMonths — mốc cận date và tuổi thuốc như file báo cáo', () => {
   const today = new Date(2026, 5, 15) // 15/06/2026
 
-  it('chia đúng nhóm: hết hạn, dưới 3 tháng, dưới 6 tháng, 6 đến dưới 18 tháng, an toàn', () => {
+  it('chia đúng nhóm: hết hạn, dưới 3 tháng, dưới 6 tháng, 6 đến dưới 12 tháng, an toàn', () => {
     expect(classifyExpiry('2026-06-01', today)).toBe('expired')
     expect(classifyExpiry('2026-09-14', today)).toBe('near3')
     expect(classifyExpiry('2026-12-14', today)).toBe('near6')
-    expect(classifyExpiry('2026-12-15', today)).toBe('near18')
-    expect(classifyExpiry('2027-12-14', today)).toBe('near18')
-    expect(classifyExpiry('2027-12-15', today)).toBe('safe')
+    expect(classifyExpiry('2026-12-15', today)).toBe('near12')
+    expect(classifyExpiry('2027-06-14', today)).toBe('near12')
+    expect(classifyExpiry('2027-06-15', today)).toBe('safe')
     expect(classifyExpiry(null, today)).toBe('unknown')
     expect(CAN_DATE_BUCKETS).toEqual(['expired', 'near3', 'near6'])
   })

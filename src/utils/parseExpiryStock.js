@@ -30,6 +30,27 @@ const COLUMN_MAP = {
   'Tồn cuối': 'tonCuoi',
 }
 
+// Hàng cận date / chậm luân chuyển theo dõi 2 loại đơn, mỗi loại là 1 phần mềm kho riêng (mã kho có thể trùng nhau):
+//  - Kho C: các kho 020101, 020102, 020105 (kho online miền Nam), 020106; các kho còn lại bị loại khỏi theo dõi.
+//  - Kho DTP: chỉ kho 020105 (không liên quan kho 020105 của Kho C).
+export const EXPIRY_ENTITIES = {
+  donC: { label: 'Kho C', kho: ['020101', '020102', '020105', '020106'] },
+  donDTP: { label: 'Kho DTP', kho: ['020105'] },
+}
+
+// File của Kho DTP có mã vật tư 2 chữ cái trước số (MP02295, TH00893...), Kho C 1 chữ cái (A01338, J00559...).
+export function detectExpiryEntity(rows) {
+  const codes = rows.map(r => r.maVatTu).filter(Boolean)
+  if (codes.length === 0) return 'donC'
+  const twoLetters = codes.filter(c => /^[A-Za-z]{2}\d/.test(c)).length
+  return twoLetters / codes.length >= 0.8 ? 'donDTP' : 'donC'
+}
+
+export function filterByExpiryEntity(rows, entity) {
+  const allowed = EXPIRY_ENTITIES[entity]?.kho
+  return allowed ? rows.filter(r => allowed.includes(r.maKho)) : rows
+}
+
 function toNumber(v) {
   if (v === null || v === undefined || v === '') return 0
   const n = Number(v)
@@ -138,8 +159,8 @@ function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x
 function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x }
 
 // Phân loại 1 hạn dùng (chuỗi ISO yyyy-mm-dd) theo mốc "hôm nay": hết hạn / cận dưới 3 tháng /
-// cận dưới 6 tháng / cận hạn 6 đến dưới 18 tháng (chỉ để cảnh báo luân chuyển, không vào sheet "Cận date"
-// của báo cáo) / an toàn (từ 18 tháng) / không rõ hạn (thiếu dữ liệu hạn dùng trên file).
+// cận dưới 6 tháng / cận hạn 6 đến dưới 12 tháng (chỉ để cảnh báo luân chuyển, không vào sheet "Cận date"
+// của báo cáo) / an toàn (từ 12 tháng) / không rõ hạn (thiếu dữ liệu hạn dùng trên file).
 export function classifyExpiry(hanDung, referenceDate = new Date()) {
   if (!hanDung) return 'unknown'
   const today = startOfDay(referenceDate)
@@ -147,7 +168,7 @@ export function classifyExpiry(hanDung, referenceDate = new Date()) {
   if (expiry < today) return 'expired'
   if (expiry < addMonths(today, 3)) return 'near3'
   if (expiry < addMonths(today, 6)) return 'near6'
-  if (expiry < addMonths(today, 18)) return 'near18'
+  if (expiry < addMonths(today, 12)) return 'near12'
   return 'safe'
 }
 
