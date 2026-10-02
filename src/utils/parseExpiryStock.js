@@ -5,6 +5,17 @@ import * as XLSX from 'xlsx'
 // phải dò dòng chứa "Mã vật tư" để tìm đúng dòng tiêu đề cột.
 const REQUIRED_HEADER = 'Mã vật tư'
 
+// Hệ thống kho còn xuất file "Excel XML 2003" (đuôi .xml, mở bằng Excel được). SheetJS đọc được nhưng phải đưa vào dạng
+// chữ UTF-8, nếu đưa mảng byte thì tiếng Việt bị đọc sai bảng mã và không tìm thấy cột "Mã vật tư".
+function readWorkbook(arrayBuffer) {
+  const bytes = arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer)
+  const head = new TextDecoder('utf-8').decode(bytes.slice(0, 200)).replace(/^\uFEFF/, '').trimStart()
+  if (head.startsWith('<?xml') || head.startsWith('<Workbook')) {
+    return XLSX.read(new TextDecoder('utf-8').decode(bytes), { type: 'string', cellDates: true })
+  }
+  return XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
+}
+
 const COLUMN_MAP = {
   'Mã vật tư': 'maVatTu',
   'Tên vật tư': 'tenVatTu',
@@ -56,7 +67,7 @@ function toIsoFromParts(d, m, y) {
 // Trả về { tuNgay, denNgay (ISO yyyy-mm-dd), soNgay } đọc từ dòng "Từ ngày ... đến ngày ..." ở đầu file,
 // hoặc null nếu không tìm thấy (file có thể xuất từ nguồn/đợt khác không có dòng này).
 export function parseReportDateRange(arrayBuffer) {
-  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
+  const wb = readWorkbook(arrayBuffer)
   const ws = wb.Sheets[wb.SheetNames[0]]
   const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
   for (const row of grid) {
@@ -83,7 +94,7 @@ export function isSlowMoving(row) {
 
 // Đọc toàn bộ workbook, trả về danh sách vật tư (kể cả tồn = 0) đã chuẩn hoá kiểu dữ liệu.
 export function parseExpiryStockWorkbook(arrayBuffer) {
-  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
+  const wb = readWorkbook(arrayBuffer)
   const ws = wb.Sheets[wb.SheetNames[0]]
   const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
 

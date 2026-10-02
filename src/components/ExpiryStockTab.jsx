@@ -238,7 +238,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
     setError('')
     if (!file) return
     const ext = file.name.split('.').pop().toLowerCase()
-    if (!['xlsx', 'xls'].includes(ext)) { setError('Chỉ hỗ trợ file .xlsx hoặc .xls'); return }
+    if (!['xlsx', 'xls', 'xml'].includes(ext)) { setError('Chỉ hỗ trợ file .xlsx, .xls hoặc .xml (Excel XML xuất từ phần mềm kho)'); return }
     try {
       const buffer = await file.arrayBuffer()
       const rows = parseExpiryStockWorkbook(buffer)
@@ -391,9 +391,9 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
           </div>
           <div className="text-center">
             <p className="text-gray-700 font-semibold text-sm">Kéo & thả file "Báo cáo tổng hợp nhập xuất tồn theo kho" vào đây</p>
-            <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx</span> — mỗi lần upload là 1 tháng dữ liệu, dùng chung cho cả Hàng cận date và Hàng chậm luân chuyển; nên xuất báo cáo với khoảng thời gian từ {MIN_SLOW_DAYS} ngày trở lên để lọc đúng hàng chậm luân chuyển</p>
+            <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx / .xml</span> — mỗi lần upload là 1 tháng dữ liệu, dùng chung cho cả Hàng cận date và Hàng chậm luân chuyển; nên xuất báo cáo với khoảng thời gian từ {MIN_SLOW_DAYS} ngày trở lên để lọc đúng hàng chậm luân chuyển</p>
           </div>
-          <input ref={inputRef} type="file" accept=".xlsx,.xls" className="sr-only" onChange={e => void parseFile(e.target.files[0])} />
+          <input ref={inputRef} type="file" accept=".xlsx,.xls,.xml" className="sr-only" onChange={e => void parseFile(e.target.files[0])} />
         </label>
         {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
       </div>
@@ -438,7 +438,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
           <Upload size={14} />
           Upload tháng mới
         </button>
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => void parseFile(e.target.files[0])} />
+        <input ref={inputRef} type="file" accept=".xlsx,.xls,.xml" className="hidden" onChange={e => void parseFile(e.target.files[0])} />
         <span className="text-xs text-gray-400">
           Cập nhật: {new Date(active.uploadedAt).toLocaleString('vi-VN')}
           {dateRange && <> · Kỳ báo cáo: {formatDateVi(dateRange.tuNgay)} → {formatDateVi(dateRange.denNgay)} ({dateRange.soNgay} ngày)</>}
