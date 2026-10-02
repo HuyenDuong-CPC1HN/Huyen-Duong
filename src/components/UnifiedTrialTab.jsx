@@ -64,6 +64,7 @@ const SO_META_KEY = 'unified_trial_donSO_meta'
 const TT_ROWS_KEY = 'unified_trial_donTT_rows'
 const TT_META_KEY = 'unified_trial_donTT_meta'
 const STAFF_ROSTER_KEY = 'unified_trial_hcm_staff_roster'
+const STAFF_COUNT_MISMATCH_KEY = 'unified_trial_hcm_count_mismatch'
 
 function readJSON(key, fallback) {
   try {
@@ -361,7 +362,7 @@ function DonTruyenThongSnapshotView({ entry }) {
   )
 }
 
-function DonSanView({ rosterSet, viewingId, setViewingId }) {
+function DonSanView({ rosterSet, countMismatch, viewingId, setViewingId }) {
   const [meta, setMeta] = useState(() => readJSON(SO_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(SO_ROWS_KEY, null))
   const [reports, setReports] = useState(() => readTrialReports('donSO'))
@@ -379,7 +380,11 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
     () => splitByWarehouseStaff(rows || [], rosterSet),
     [rows, rosterSet],
   )
-  const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(hcmRows), [hcmRows])
+  const countedRows = useMemo(
+    () => (countMismatch ? hcmRows.concat(mismatchRows) : hcmRows),
+    [hcmRows, mismatchRows, countMismatch],
+  )
+  const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(countedRows), [countedRows])
   const total = tmdt.length + ngoaiSan.length
   const { shops } = useMemo(() => splitTmdtByShop(tmdt), [tmdt])
 
@@ -459,7 +464,7 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
   )
 }
 
-function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setChannel }) {
+function DonTruyenThongView({ rosterSet, countMismatch, viewingId, setViewingId, channel, setChannel }) {
   const [meta, setMeta] = useState(() => readJSON(TT_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(TT_ROWS_KEY, null))
   const [reports, setReports] = useState(() => readTrialReports('donTruyenThong'))
@@ -477,7 +482,11 @@ function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setCh
     () => splitByWarehouseStaff(rows || [], rosterSet),
     [rows, rosterSet],
   )
-  const { donC, donDTP } = useMemo(() => splitDonTruyenThong(hcmRows), [hcmRows])
+  const countedRows = useMemo(
+    () => (countMismatch ? hcmRows.concat(mismatchRows) : hcmRows),
+    [hcmRows, mismatchRows, countMismatch],
+  )
+  const { donC, donDTP } = useMemo(() => splitDonTruyenThong(countedRows), [countedRows])
 
   const uploadNode = (
     <ExcelUpload onData={onData} fileName="" onClear={() => {}} />
@@ -563,6 +572,10 @@ function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setCh
 export default function UnifiedTrialTab() {
   const [activeTab, setActiveTab] = useState('donsan')
   const [rosterText, setRosterText] = useState(() => readJSON(STAFF_ROSTER_KEY, ''))
+  // Mặc định đơn LỆCH kho (chỉ 1 trong 2 khớp danh sách) bị loại khỏi thống kê, chỉ hiện cảnh báo —
+  // tick ô này để gộp luôn các đơn đó vào tổng. Đơn KHÔNG THUỘC kho HCM (cả 2 đều không khớp) thì
+  // luôn luôn bị loại, không có tuỳ chọn.
+  const [countMismatch, setCountMismatch] = useState(() => readJSON(STAFF_COUNT_MISMATCH_KEY, false))
   // Nâng lên đây (thay vì giữ trong DonSanView/DonTruyenThongView) để không bị reset về "Upload
   // tuần tiếp theo" mỗi khi chuyển qua lại 2 pill — 2 view bị unmount/remount theo activeTab.
   const [donSoViewingId, setDonSoViewingId] = useState(null)
@@ -572,6 +585,10 @@ export default function UnifiedTrialTab() {
   const onRosterChange = (text) => {
     setRosterText(text)
     localStorage.setItem(STAFF_ROSTER_KEY, JSON.stringify(text))
+  }
+  const onCountMismatchChange = (enabled) => {
+    setCountMismatch(enabled)
+    localStorage.setItem(STAFF_COUNT_MISMATCH_KEY, JSON.stringify(enabled))
   }
   const rosterSet = useMemo(() => parseStaffRoster(rosterText), [rosterText])
 
@@ -587,16 +604,30 @@ export default function UnifiedTrialTab() {
             <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn SO</button>
             <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
           </div>
-          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
+          <div className="flex items-center gap-3">
+            <label
+              className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none"
+              title="Đơn lệch kho: bốc/đóng chỉ 1 trong 2 khớp danh sách nhân sự kho HCM. Đơn không thuộc kho HCM (cả 2 đều không khớp) luôn bị loại, không bật được."
+            >
+              <input
+                type="checkbox"
+                checked={countMismatch}
+                onChange={e => onCountMismatchChange(e.target.checked)}
+              />
+              Tính cả đơn lệch kho
+            </label>
+            <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
+          </div>
         </div>
 
         <div className="sheet-tab-report">
           {activeTab === 'donsan' && (
-            <DonSanView rosterSet={rosterSet} viewingId={donSoViewingId} setViewingId={setDonSoViewingId} />
+            <DonSanView rosterSet={rosterSet} countMismatch={countMismatch} viewingId={donSoViewingId} setViewingId={setDonSoViewingId} />
           )}
           {activeTab === 'truyenthong' && (
             <DonTruyenThongView
               rosterSet={rosterSet}
+              countMismatch={countMismatch}
               viewingId={donTTViewingId} setViewingId={setDonTTViewingId}
               channel={donTTChannel} setChannel={setDonTTChannel}
             />
