@@ -4,7 +4,6 @@ import {
   CircleCheck,
   ClipboardList,
   LayoutGrid,
-  Send,
 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import { readTrialReports } from '../utils/unifiedTrialReports'
@@ -112,7 +111,6 @@ export default function HomeBrief({ onNavigate }) {
   const channels = deriveChannels()
   const exceptions = channels.filter((channel) => channel.state !== 'ready')
   const nextAction = exceptions.find((channel) => channel.id !== 'tongdon') || exceptions[0]
-  const totalReady = channels[0].state === 'ready'
   const hero = getHeroContent(channels, nextAction)
   // Nhắc việc nhập trả lại — gộp theo từng mốc nhắc, mở tab Theo dõi nhập trả lại để xử lý.
   const returnReminders = useReturnReminders()
@@ -251,12 +249,6 @@ export default function HomeBrief({ onNavigate }) {
               <LayoutGrid size={18} aria-hidden="true" />
               Xem báo cáo Phân tích giao hàng
               <ArrowRight size={17} aria-hidden="true" />
-            </button>
-          )}
-          {totalReady && (
-            <button type="button" className="home-action-secondary" onClick={() => onNavigate('guilen8n')}>
-              <Send size={17} aria-hidden="true" />
-              Gửi báo cáo lên n8n
             </button>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Send, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
+import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -11,7 +11,6 @@ import HangHuyTab from './components/HangHuyTab'
 import ReturnReminderBell from './components/ReturnReminderBell'
 import DamagedGoodsTrackingTab from './components/DamagedGoodsTrackingTab'
 import SwapReturnTab from './components/SwapReturnTab'
-import N8nWebhookForm from './components/N8nWebhookForm'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
 import cpcLogo from './assets/cpc1hn_logo.png'
@@ -74,7 +73,6 @@ const NAV = [
       },
     ],
   },
-  { id: 'guilen8n', label: 'Gửi lên n8n', icon: Send },
 ]
 
 // Mục menu (hoặc con của nó, tới cấp cuối) có đang được chọn không — để tô sáng cả nhóm cha.
@@ -95,7 +93,6 @@ const BREADCRUMB = {
   hangHuyA:   ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho A'],
   doiTraC:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng', 'Đơn C'],
   doiTraDTP:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng', 'Đơn DTP'],
-  guilen8n: ['Trang chủ', 'Gửi lên n8n'],
 }
 
 export default function App() {
@@ -494,7 +491,6 @@ function AppContent({ user }) {
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab />}
           {active === 'doiTraC'    && <SwapReturnTab key="donC" type="donC" />}
           {active === 'doiTraDTP'  && <SwapReturnTab key="donDTP" type="donDTP" />}
-          {active === 'guilen8n' && <N8nWebhookForm />}
         </main>
       </div>
     </div>

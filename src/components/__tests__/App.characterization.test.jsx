@@ -102,7 +102,7 @@ describe('authenticated application shell', () => {
     expect(within(hero).getByText('Báo cáo tuần cần lưu')).toBeInTheDocument()
   })
 
-  it('shows a clear week and offers n8n once Tổng đơn has a saved report', async () => {
+  it('shows a clear week once Tổng đơn has a saved report', async () => {
     workspaceMocks.opsStore.setItem(
       'tongdon_reports',
       JSON.stringify([{ id: 'all-1', label: 'Tuần 32', current: { grandTotal: 1450 } }]),
@@ -114,8 +114,7 @@ describe('authenticated application shell', () => {
     expect(screen.getByText('Không có ngoại lệ từ trạng thái dữ liệu hiện có.')).toBeInTheDocument()
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo lên n8n' }))
-    expect(screen.getByRole('heading', { level: 1, name: 'Gửi lên n8n' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /n8n/ })).not.toBeInTheDocument()
   })
 
   it('uses the existing next-action destination from the hero CTA', async () => {
