@@ -9,6 +9,7 @@ import { KpiTile, SectionCard } from './ReportCards'
 import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
+import { buildAutoSalesOrderLookup } from '../utils/reconcileNgoaiSan'
 import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport } from '../utils/unifiedTrialReports'
 
 const NGOAI_SAN_CARRIER_KEY = 'unifiedTrial_donSO_spx'
@@ -22,12 +23,13 @@ const SHOP_CLS = {
   L00704: 'bg-purple-50 border-purple-200 text-purple-700',
 }
 
-// Note rút gọn cho panel Đối soát đơn ngoại sàn — bỏ nhắc "file bốc đóng" vì tab này đã tự động lấy
-// Mốc 2 từ file Đơn SO (không còn nút upload tay), khác với Đơn C production vẫn cần upload tay.
+// Note rút gọn cho panel Đối soát đơn ngoại sàn — bỏ nhắc "file bốc đóng"/"Sales Order" vì tab này đã
+// tự động lấy cả Mốc 1 lẫn Mốc 2 từ file Đơn SO (không còn nút upload tay nào), khác với Đơn C
+// production vẫn cần upload tay.
 const NGOAI_SAN_NOTE = (
   <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">
     <div className="space-y-0.5">
-      <div>Mốc 1: Sales order</div>
+      <div>Mốc 1: Ngày tạo đơn (file Đơn SO)</div>
       <div>Mốc 2: Kho đóng kiện</div>
       <div>Mốc 3: SPX lấy hàng</div>
       <div>Mốc 4: SPX giao hàng thành công.</div>
@@ -40,12 +42,15 @@ const NGOAI_SAN_NOTE = (
   </div>
 )
 
-// "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx")
-// cần 2 nguồn: "Sales Order" (Mốc 1, người dùng upload tay qua đúng nút có sẵn trong
-// NgoaiSanPanel) và "file bốc đóng" (Mốc 2). Mốc 2 với kênh Ngoại sàn thực ra đã có sẵn trong
-// chính file Đơn SO (cột "TG Đóng hàng" + "Mã vận đơn") — nên ở đây tự ghi thẳng vào đúng ô nhớ
-// NgoaiSanPanel đọc (`carrier_packingweeks_<carrierKey>`) mỗi khi có file Đơn SO mới, khỏi phải
-// upload thêm 1 file "bốc đóng" riêng. Nút "Upload File bốc đóng" bị dư nên đã ẩn qua prop
+// "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx") cần
+// 2 nguồn: Mốc 1 (Sales order) và Mốc 2 (file bốc đóng) — CẢ HAI đều đã có sẵn trong chính file Đơn
+// SO, khỏi cần upload riêng:
+//  - Mốc 2: cột "TG Đóng hàng" + "Mã vận đơn" — tự ghi thẳng vào đúng ô nhớ NgoaiSanPanel đọc
+//    (`carrier_packingweeks_<carrierKey>`) mỗi khi có file Đơn SO mới (xem seedNgoaiSanPackingWeek).
+//  - Mốc 1: cột "Ngày tạo" (thời gian duyệt đơn) + "Mã vận đơn" — truyền thẳng qua prop
+//    `autoSalesLookup` (buildAutoSalesOrderLookup, xem DonSanView), KHÔNG ghi qua storage như Mốc 2 vì
+//    khớp theo Mã vận đơn (khác khoá "Mã đơn" mà buildSalesOrderLookup/luồng upload tay cũ dùng).
+// Cả 2 nút "Upload Sales Order"/"Upload File bốc đóng" đều dư, đã ẩn qua prop `hideSalesUpload`/
 // `hidePackingUpload` (thêm trong CarrierStats.jsx, mặc định tắt — Đơn C/DTP không bị ảnh hưởng).
 function seedNgoaiSanPackingWeek(carrierKey, ngoaiSanRows, uploadedAt) {
   const entry = { id: uploadedAt, fileName: 'Tự động lấy từ file Đơn SO (cột TG Đóng hàng)', uploadedAt, rows: ngoaiSanRows }
@@ -387,6 +392,10 @@ function DonSanView({ rosterSet, countMismatch, viewingId, setViewingId }) {
   const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(countedRows), [countedRows])
   const total = tmdt.length + ngoaiSan.length
   const { shops } = useMemo(() => splitTmdtByShop(tmdt), [tmdt])
+  // Mốc 1 (Sales order) tự động lấy từ chính file Đơn SO — cột "Ngày tạo" (thời gian duyệt đơn) khớp
+  // với cột "Mã vận đơn" (so với Mã vận đơn bên file SPX, khớp 1-1 tuyệt đối — đã xác nhận với người
+  // dùng). Giống hệt cơ chế Mốc 2 ở effect dưới, khỏi cần upload riêng file Sales Order nữa.
+  const autoSalesLookup = useMemo(() => buildAutoSalesOrderLookup(ngoaiSan), [ngoaiSan])
 
   useEffect(() => {
     if (!meta || ngoaiSan.length === 0) return
@@ -454,7 +463,8 @@ function DonSanView({ rosterSet, countMismatch, viewingId, setViewingId }) {
               referenceDate: meta?.uploadedAt,
               liveSessionKey: meta?.uploadedAt ?? null,
               hidePackingUpload: true,
-              salesFileNoun: 'Sales Order',
+              hideSalesUpload: true,
+              autoSalesLookup,
               ngoaiSanNote: NGOAI_SAN_NOTE,
             }}
           />

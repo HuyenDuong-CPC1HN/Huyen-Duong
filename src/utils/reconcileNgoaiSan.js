@@ -67,6 +67,16 @@ function parseVnDateTime(str) {
   return null
 }
 
+// Cột "Ngày tạo" trong chính file Đơn SO (đã upload sẵn để tính tổng tuần) — dd/mm/yyyy giờ:phút:giây,
+// khoảng trắng giữa ngày và giờ có thể là 1 hay 2 ký tự tuỳ cách Excel xuất ("02/10/2026  16:22:37").
+function parseDonSoNgayTao(str) {
+  const s = clean(str)
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/)
+  if (!m) return null
+  const [, dd, MM, yyyy, hh, mm, ss] = m
+  return new Date(Number(yyyy), Number(MM) - 1, Number(dd), Number(hh), Number(mm), Number(ss))
+}
+
 function fmtDateTime(d) {
   if (!d) return ''
   const p = n => String(n).padStart(2, '0')
@@ -91,6 +101,21 @@ export function buildSalesOrderLookup(weeks) {
 // hoặc "TG Đóng hàng" (file "Đóng hàng website" — riêng kênh website/SPX).
 export function getPackingTimeRaw(row) {
   return row['TG Đóng kiện'] ?? row['TG Đóng hàng']
+}
+
+// Mốc 1 tự động từ chính file Đơn SO (không cần upload riêng file Sales Order nữa) — khớp theo
+// "Mã vận đơn" (so với Mã vận đơn bên file SPX, khớp 1-1 tuyệt đối — ĐÃ xác nhận với người dùng,
+// KHÁC với buildSalesOrderLookup ở trên khớp theo "Mã đơn" cho luồng upload tay cũ). "Ngày tạo" ở
+// đây là thời gian duyệt đơn, dùng thay cho "Tạo lúc" của file Sales Order cũ.
+export function buildAutoSalesOrderLookup(ngoaiSanRows) {
+  const map = new Map()
+  for (const row of ngoaiSanRows || []) {
+    const code = clean(row['Mã vận đơn']).toUpperCase()
+    if (!code) continue
+    const ngayTao = parseDonSoNgayTao(row['Ngày tạo'])
+    if (ngayTao) map.set(code, ngayTao)
+  }
+  return map
 }
 
 // Gộp "Mã vận đơn" -> thời điểm đóng kiện (mốc 2) từ TOÀN BỘ các tuần file bốc đóng đã upload (tích luỹ dần)
@@ -119,7 +144,9 @@ export function buildPackingLookup(weeks) {
 // Đơn "Đã hủy" bỏ qua đối soát; "Đang/Đã trả hàng" tính là Hoàn hàng (vẫn giữ mốc 2/3 nếu có).
 // excludedCodes: Mã đơn đã đánh dấu tay "không cần tính" khi đang ở nhóm "Chưa lấy hàng" (đơn trùng, chỉ
 // cần huỷ bên SPX) — loại khỏi thống kê nhóm lấy hàng + giao hàng, không phải vấn đề thật.
-export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedCodes = new Set()) {
+// autoSalesLookup: Mốc 1 tự động từ file Đơn SO (buildAutoSalesOrderLookup, khớp theo Mã vận đơn) — ưu
+// tiên trước salesLookup (khớp theo Mã đơn, từ file Sales Order upload tay); null/không có thì bỏ qua.
+export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedCodes = new Set(), autoSalesLookup = null) {
   const now = new Date()
   const rows = []
   const stats = {
@@ -132,9 +159,10 @@ export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedC
   for (const spx of spxRows || []) {
     const maDon = clean(spx['Mã khách hàng'])
     const trangThai = spx['Trạng thái hiện tại']
-    const moc1 = salesLookup.get(maDon) || null
     // Mã vận đơn SPX — hiện kèm Mã đơn trên bảng/file xuất để tra ngược đơn bên SPX.
     const maVanDon = clean(spx['Mã vận đơn'])
+    const trackingCode = maVanDon.toUpperCase()
+    const moc1 = (autoSalesLookup && autoSalesLookup.get(trackingCode)) || salesLookup.get(maDon) || null
 
     if (!moc1) {
       stats.khongKhop++
@@ -147,7 +175,6 @@ export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedC
     }
     stats.total++
 
-    const trackingCode = maVanDon.toUpperCase()
     const moc2 = packingLookup.get(trackingCode) || null
     const moc3 = parseSpxDateTime(spx['Thời gian lấy hàng/gửi hàng'])
     const moc4raw = parseSpxDateTime(spx['Thời gian giao hàng'])
