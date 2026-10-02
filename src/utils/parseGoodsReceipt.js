@@ -1005,9 +1005,3 @@ export async function extractPdfText(arrayBuffer) {
     throw new Error(`Không đọc được nội dung file PDF (${reason}).`, { cause: err })
   }
 }
-
-export function exportReceiptWorkbook() {
-  throw new Error('Dùng exportReceiptFromTemplate() để xuất theo file mẫu BIEN_BAN_NHAP_HANG.xlsx')
-}
-
-export const enrichRowsFromPdfText = enrichRowsFromPdfCatalog
