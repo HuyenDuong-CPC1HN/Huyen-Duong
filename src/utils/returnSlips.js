@@ -56,6 +56,11 @@ export function newSlipForm(itemCount = 0, today = new Date()) {
 }
 
 // Các chỗ còn trống cần kho điền — vẫn cho xuất (chỗ trống giữ "……" như file gốc), chỉ để nhắc.
+// Các dòng hàng của phiếu kèm vị trí gốc (khớp form.items).
+export function goodsRowsOf(slip) {
+  return (slip.pdf?.items || []).map((it, i) => ({ it, i }))
+}
+
 export function missingSlipFields(slip) {
   const f = slip.form || {}
   const missing = []

@@ -8,6 +8,7 @@ import {
 } from '../utils/returnSlips'
 import { extractPdfLines } from '../utils/returnSlipPdf'
 import ReturnSlipWorkspace from './ReturnSlipWorkspace'
+import HangLookup from './HangLookup'
 import { LoaiTag, StagePill } from './ReturnSlipBadges'
 import ReturnRecordForm from './ReturnRecordForm'
 import ReturnRecordView from './ReturnRecordView'
@@ -235,6 +236,7 @@ export default function ReturnSlipsTab() {
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [lookup, setLookup] = useState(false)
   const pdfInputRef = useRef()
 
   // Thời gian trôi khi để app mở lâu: tính lại nhắc việc mỗi 10 phút.
@@ -350,6 +352,10 @@ export default function ReturnSlipsTab() {
     setOpenId(slip.id)
   }
 
+  if (lookup) {
+    return <HangLookup loai="tra" onBack={() => setLookup(false)} onOpen={(id, loai) => { if (loai === 'tra') { setLookup(false); setOpenId(id) } }} />
+  }
+
   const openSlip = slips.find(s => s.id === openId)
   if (openSlip) {
     return (
@@ -397,6 +403,7 @@ export default function ReturnSlipsTab() {
                 <FileUp size={13} /> {uploading ? 'Đang đọc file…' : 'Tải PDF phiếu đã duyệt'}
               </button>
               <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden" onChange={e => { void createFromPdf(e.target.files[0]); e.target.value = '' }} />
+              <button type="button" onClick={() => setLookup(true)} className="sheet-tab-action" title="Tra cứu hàng đã nhập trả lại"><Search size={13} /> Tra cứu hàng</button>
               <button type="button" onClick={createManual} className="sheet-tab-action" title="Đơn không có phiếu/PDF từ website: nhập tay hoặc đọc từ hoá đơn">
                 <Plus size={13} /> Tạo đơn thủ công
               </button>
