@@ -90,7 +90,7 @@ function WaitActions({ slip, onApprove, onSnooze }) {
   )
 }
 
-function ReminderPanel({ reminders, onApprove, onSnooze, onOpen, onSigned }) {
+function ReminderPanel({ reminders, onApprove, onSnooze, onOpen, onSigned, onWaitSign }) {
   if (reminders.length === 0) {
     return <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">Không có việc tồn về nhập trả lại.</div>
   }
@@ -119,7 +119,12 @@ function ReminderPanel({ reminders, onApprove, onSnooze, onOpen, onSigned }) {
                   </div>
                 </div>
                 {rule.kind === 'wait' && <WaitActions slip={slip} onApprove={onApprove} onSnooze={onSnooze} />}
-                {rule.kind === 'todo' && <button type="button" onClick={() => onOpen(slip.id)} className="sheet-tab-action is-primary" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}>Làm biên bản</button>}
+                {rule.kind === 'todo' && (
+                  <div className="flex flex-wrap gap-1">
+                    <button type="button" onClick={() => onWaitSign(slip.id)} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }} title="Đã làm biên bản xong, đang chờ ký"><Clock size={12} /> Đã làm xong, chờ ký</button>
+                    <button type="button" onClick={() => onOpen(slip.id)} className="sheet-tab-action is-primary" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}>Làm biên bản</button>
+                  </div>
+                )}
                 {rule.kind === 'sign' && <button type="button" onClick={() => onSigned(slip.id)} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}><Check size={12} /> Đã ký đủ, nhập kho</button>}
               </div>
             ))}
@@ -296,6 +301,7 @@ export default function ReturnSlipsTab() {
 
   const approve = (id) => updateSlip(id, { stage: 'todo', approvedAt: new Date().toISOString(), snoozeUntil: null })
   const snooze = (id) => updateSlip(id, { snoozeUntil: nextMorning(new Date()) })
+  const markWaitSign = (id) => updateSlip(id, { stage: 'exported', exportedAt: new Date().toISOString() })
   const markSigned = (id) => updateSlip(id, { stage: 'done', doneAt: new Date().toISOString() })
   const removeSlip = (id) => {
     if (!window.confirm('Xoá phiếu trả hàng này khỏi app? Không thể hoàn tác.')) return
@@ -367,7 +373,7 @@ export default function ReturnSlipsTab() {
           <span>Sales tạo phiếu → GĐ chi nhánh / ASM / SS duyệt trên website → kho làm bộ biên bản trên app → ký đủ, nhập kho</span>
         </header>
 
-        <ReminderPanel reminders={reminders} onApprove={approve} onSnooze={snooze} onOpen={setOpenId} onSigned={markSigned} />
+        <ReminderPanel reminders={reminders} onApprove={approve} onSnooze={snooze} onOpen={setOpenId} onSigned={markSigned} onWaitSign={markWaitSign} />
 
         <div className="report-section">
           <div className="report-section-trigger flex-wrap gap-2" style={{ cursor: 'default' }}>
@@ -453,6 +459,11 @@ export default function ReturnSlipsTab() {
                       <td className="px-2 py-2"><StagePill stage={s.stage} /></td>
                       <td className="px-2 py-2">
                         <div className="flex items-center gap-1 whitespace-nowrap">
+                          {s.stage === 'doing' && (
+                            <button type="button" onClick={e => { e.stopPropagation(); markWaitSign(s.id) }} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Đã làm biên bản, chờ ký" aria-label={`Chuyển chờ ký ${s.maPhieu || s.khachHang}`}>
+                              <Clock size={12} /> Chờ ký
+                            </button>
+                          )}
                           {(s.stage === 'doing' || s.stage === 'exported') && (
                             <button type="button" onClick={e => { e.stopPropagation(); markSigned(s.id) }} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Đánh dấu đã ký đủ, nhập kho" aria-label={`Đánh dấu đã ký ${s.maPhieu || s.khachHang}`}>
                               <Check size={12} /> Đã ký

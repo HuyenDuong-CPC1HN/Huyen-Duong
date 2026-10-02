@@ -114,6 +114,15 @@ describe('ReturnSlipsTab — Theo dõi nhập trả lại', () => {
     expect(screen.queryByRole('button', { name: /Đánh dấu đã ký/ })).not.toBeInTheDocument()
   })
 
+  it('phiếu đã làm biên bản, đang chờ ký: bấm "Đã làm xong, chờ ký" trong nhắc việc → chuyển Đã xuất, chờ ký, hết nhắc "chưa làm"', () => {
+    seed([{ id: 's1', maPhieu: 'DHC1', khachHang: 'Khách A', stage: 'doing', createdAt: '2026-09-27T08:00:00', approvedAt: '2026-09-27T09:00:00' }])
+    render(<ReturnSlipsTab />)
+    fireEvent.click(screen.getByRole('button', { name: /Đã làm xong, chờ ký/ }))
+    expect(readSlipsFromStore()[0]).toMatchObject({ stage: 'exported' })
+    expect(readSlipsFromStore()[0].exportedAt).toBeTruthy()
+    expect(screen.queryByText(/Đã duyệt, chưa làm xong biên bản/)).not.toBeInTheDocument()
+  })
+
   it('"Tạo đơn thủ công": tạo phiếu trống, mở thẳng màn làm biên bản với nút Nhập tay theo mẫu', () => {
     render(<ReturnSlipsTab />)
     fireEvent.click(screen.getByRole('button', { name: /Tạo đơn thủ công/ }))

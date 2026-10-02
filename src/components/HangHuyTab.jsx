@@ -36,7 +36,7 @@ const fmtDate = iso => { const [y, m, d] = String(iso || '').split('-'); return 
 const monthKey = iso => { const d = new Date(iso || Date.now()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 const monthLabel = key => { const [y, m] = key.split('-'); return `${m}/${y}` }
 
-function ReminderPanel({ reminders, onOpen, onSigned }) {
+function ReminderPanel({ reminders, onOpen, onSigned, onWaitSign }) {
   if (reminders.length === 0) {
     return <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">Không có việc tồn về hàng huỷ.</div>
   }
@@ -63,7 +63,12 @@ function ReminderPanel({ reminders, onOpen, onSigned }) {
                   </div>
                 </div>
                 {rule.kind === 'todo'
-                  ? <button type="button" onClick={() => onOpen(slip.id)} className="sheet-tab-action is-primary" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}>Làm biên bản</button>
+                  ? (
+                    <div className="flex flex-wrap gap-1">
+                      <button type="button" onClick={() => onWaitSign(slip.id)} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }} title="Đã làm biên bản xong, đang chờ ký">Đã làm xong, chờ ký</button>
+                      <button type="button" onClick={() => onOpen(slip.id)} className="sheet-tab-action is-primary" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}>Làm biên bản</button>
+                    </div>
+                  )
                   : <button type="button" onClick={() => onSigned(slip.id)} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}><Check size={12} /> Đã ký đủ, huỷ xong</button>}
               </div>
             ))}
@@ -191,6 +196,7 @@ export default function HangHuyTab() {
 
   const selectKho = (v) => { setKhoFilter(v); writePref(v) }
   const update = (next) => save(phieus.map(p => (p.id === next.id ? next : p)))
+  const markWaitSign = (id) => save(phieus.map(p => (p.id === id ? { ...p, stage: 'exported', exportedAt: new Date().toISOString() } : p)))
   const markSigned = (id) => save(phieus.map(p => (p.id === id ? { ...p, stage: 'done', doneAt: new Date().toISOString() } : p)))
   const removePhieu = (id) => {
     if (!window.confirm('Xoá phiếu này khỏi app? Không thể hoàn tác.')) return
@@ -236,7 +242,7 @@ export default function HangHuyTab() {
           <span>Tải phiếu xuất kho (PDF) → app điền bộ biên bản → xuất Excel/Word hoặc in → ký đủ, huỷ xong · 1 phiếu = 1 bộ biên bản</span>
         </header>
 
-        <ReminderPanel reminders={reminders} onOpen={openPhieu} onSigned={markSigned} />
+        <ReminderPanel reminders={reminders} onOpen={openPhieu} onSigned={markSigned} onWaitSign={markWaitSign} />
 
         <div className="report-section">
           <div className="report-section-trigger flex-wrap gap-2" style={{ cursor: 'default' }}>
