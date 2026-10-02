@@ -104,6 +104,7 @@ function StaffRosterEditor({ rosterText, onChange }) {
               onChange={e => onChange(e.target.value)}
               placeholder={'Phạm Thị Kiều Mi (0941512763)\nBùi Thị Diễm Duy (0354240857)\n...'}
               rows={8}
+              spellCheck={false}
               className="w-full text-sm font-mono border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
             <p className="text-xs text-gray-400 mt-2">
