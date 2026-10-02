@@ -125,7 +125,7 @@ function ReminderPanel({ reminders, onApprove, onSnooze, onOpen, onSigned, onWai
                     <button type="button" onClick={() => onOpen(slip.id)} className="sheet-tab-action is-primary" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}>Làm biên bản</button>
                   </div>
                 )}
-                {rule.kind === 'sign' && <button type="button" onClick={() => onSigned(slip.id)} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}><Check size={12} /> Đã ký đủ, nhập kho</button>}
+                {rule.kind === 'sign' && <button type="button" onClick={() => onSigned(slip.id)} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 10px', fontSize: 12 }}><Check size={12} /> Đã ký, chuyển kế toán</button>}
               </div>
             ))}
           </div>
@@ -271,6 +271,7 @@ export default function ReturnSlipsTab() {
     wait: typeSlips.filter(s => s.stage === 'wait').length,
     todo: typeSlips.filter(s => s.stage === 'todo').length,
     doing: typeSlips.filter(s => s.stage === 'doing' || s.stage === 'exported').length,
+    acct: typeSlips.filter(s => s.stage === 'acct').length,
     done: typeSlips.filter(s => s.stage === 'done').length,
   }
   const visible = typeSlips
@@ -302,7 +303,8 @@ export default function ReturnSlipsTab() {
   const approve = (id) => updateSlip(id, { stage: 'todo', approvedAt: new Date().toISOString(), snoozeUntil: null })
   const snooze = (id) => updateSlip(id, { snoozeUntil: nextMorning(new Date()) })
   const markWaitSign = (id) => updateSlip(id, { stage: 'exported', exportedAt: new Date().toISOString() })
-  const markSigned = (id) => updateSlip(id, { stage: 'done', doneAt: new Date().toISOString() })
+  const markSigned = (id) => updateSlip(id, { stage: 'acct', signedAt: new Date().toISOString() })
+  const markDone = (id) => updateSlip(id, { stage: 'done', doneAt: new Date().toISOString() })
   const removeSlip = (id) => {
     if (!window.confirm('Xoá phiếu trả hàng này khỏi app? Không thể hoàn tác.')) return
     save(slips.filter(s => s.id !== id))
@@ -363,7 +365,8 @@ export default function ReturnSlipsTab() {
     ['wait', 'Chờ duyệt trên website'],
     ['todo', 'Đã duyệt, chưa làm biên bản'],
     ['doing', 'Đang điền / chờ ký'],
-    ['done', 'Đã ký, nhập kho'],
+    ['acct', 'Đã ký, chờ kế toán nhập'],
+    ['done', 'Hoàn thành, đã nhập kho'],
   ]
 
   return (
@@ -464,8 +467,13 @@ export default function ReturnSlipsTab() {
                               <Clock size={12} /> Chờ ký
                             </button>
                           )}
+                          {s.stage === 'acct' && (
+                            <button type="button" onClick={e => { e.stopPropagation(); markDone(s.id) }} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Kế toán đã nhập phần mềm, hoàn thành" aria-label={`Hoàn thành ${s.maPhieu || s.khachHang}`}>
+                              <Check size={12} /> Đã nhập PM
+                            </button>
+                          )}
                           {(s.stage === 'doing' || s.stage === 'exported') && (
-                            <button type="button" onClick={e => { e.stopPropagation(); markSigned(s.id) }} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Đánh dấu đã ký đủ, nhập kho" aria-label={`Đánh dấu đã ký ${s.maPhieu || s.khachHang}`}>
+                            <button type="button" onClick={e => { e.stopPropagation(); markSigned(s.id) }} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Giám đốc đã ký, chuyển giấy tờ sang kế toán" aria-label={`Đánh dấu đã ký ${s.maPhieu || s.khachHang}`}>
                               <Check size={12} /> Đã ký
                             </button>
                           )}

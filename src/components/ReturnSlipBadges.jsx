@@ -4,6 +4,7 @@ const STAGE_PILL = {
   wait: 'bg-gray-100 text-gray-600',
   todo: 'bg-amber-50 text-amber-700',
   doing: 'bg-blue-50 text-blue-700',
+  acct: 'bg-purple-50 text-purple-700',
   done: 'bg-green-50 text-green-700',
 }
 // Nhãn loại đơn: đỏ = Đơn C, xanh dương = Đơn DTP.

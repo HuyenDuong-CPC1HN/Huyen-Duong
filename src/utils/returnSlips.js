@@ -12,13 +12,14 @@ export const KE_TOAN_LIST = ['Phạm Thị Tuyết Trinh', 'Trần Thị Ái Lâ
 export const THU_KHO = 'Dương Thị Ngọc Huyền'
 
 // wait: chờ duyệt trên website · todo: đã duyệt, chưa tải file · doing: đang điền · exported: đã xuất, chờ ký
-// · done: đã ký đủ, nhập kho
+// · acct: Giám đốc đã ký, kho chuyển giấy tờ sang kế toán, chờ nhập phần mềm · done: kế toán đã nhập phần mềm, hoàn thành
 export const SLIP_STAGES = {
   wait: { label: 'Chờ duyệt trên website', tone: 'wait' },
   todo: { label: 'Chưa làm biên bản', tone: 'todo' },
   doing: { label: 'Đang điền', tone: 'doing' },
   exported: { label: 'Đã xuất, chờ ký', tone: 'doing' },
-  done: { label: 'Đã ký, nhập kho', tone: 'done' },
+  acct: { label: 'Đã ký, chờ kế toán nhập', tone: 'acct' },
+  done: { label: 'Hoàn thành, đã nhập kho', tone: 'done' },
 }
 
 // Mẫu biên bản website in ra: CPC1HN (khách đã nhận, Đơn C), UPHARMA (khách đã nhận, Đơn DTP), NOIBO

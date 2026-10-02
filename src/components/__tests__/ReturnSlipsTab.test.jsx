@@ -102,7 +102,9 @@ describe('ReturnSlipsTab — Theo dõi nhập trả lại', () => {
     fireEvent.click(screen.getByRole('button', { name: /Xuất BB trả lại hàng \+ BB xác minh/ }))
     await waitFor(() => expect(exportMock).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(readSlipsFromStore()[0].stage).toBe('exported'))
-    fireEvent.click(screen.getByRole('button', { name: /Đã ký đủ, nhập kho/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Giám đốc đã ký, chuyển kế toán/ }))
+    expect(readSlipsFromStore()[0].stage).toBe('acct')
+    fireEvent.click(screen.getByRole('button', { name: /Kế toán đã nhập phần mềm/ }))
     expect(readSlipsFromStore()[0].stage).toBe('done')
   })
 
@@ -110,8 +112,10 @@ describe('ReturnSlipsTab — Theo dõi nhập trả lại', () => {
     seed([{ id: 's1', maPhieu: 'DHC1', khachHang: 'Khách A', stage: 'doing', createdAt: '2026-09-29T08:00:00', approvedAt: '2026-09-29T09:00:00' }])
     render(<ReturnSlipsTab />)
     fireEvent.click(screen.getByRole('button', { name: /Đánh dấu đã ký DHC1/ }))
-    expect(readSlipsFromStore()[0]).toMatchObject({ stage: 'done' })
+    expect(readSlipsFromStore()[0]).toMatchObject({ stage: 'acct' })
     expect(screen.queryByRole('button', { name: /Đánh dấu đã ký/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Hoàn thành DHC1/ }))
+    expect(readSlipsFromStore()[0]).toMatchObject({ stage: 'done' })
   })
 
   it('phiếu đã làm biên bản, đang chờ ký: bấm "Đã làm xong, chờ ký" trong nhắc việc → chuyển Đã xuất, chờ ký, hết nhắc "chưa làm"', () => {

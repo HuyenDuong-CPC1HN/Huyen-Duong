@@ -286,7 +286,7 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
     setExporting(true)
     try {
       await exportReturnSlipDocs(slip)
-      if (slip.stage !== 'done') onChange({ ...slip, stage: 'exported', exportedAt: new Date().toISOString() })
+      if (slip.stage !== 'done' && slip.stage !== 'acct') onChange({ ...slip, stage: 'exported', exportedAt: new Date().toISOString() })
     } catch (err) {
       setError(err.message || 'Xuất file thất bại.')
     } finally {
@@ -434,9 +434,11 @@ export default function ReturnSlipWorkspace({ slip, onChange, onBack }) {
                     <button type="button" onClick={() => void exportDocs()} disabled={exporting} className="sheet-tab-action is-primary">
                       <FileDown size={13} /> {exporting ? 'Đang tạo file…' : `Xuất ${pdf.mau === 'NOIBO' ? 'BB trả hàng nội bộ' : 'BB trả lại hàng'} + BB xác minh (Word)`}
                     </button>
-                    <button type="button" onClick={() => onChange({ ...slip, stage: 'done', doneAt: new Date().toISOString() })}
+                    <button type="button" onClick={() => onChange(slip.stage === 'acct'
+                      ? { ...slip, stage: 'done', doneAt: new Date().toISOString() }
+                      : { ...slip, stage: 'acct', signedAt: new Date().toISOString() })}
                       disabled={slip.stage === 'done'} className="sheet-tab-action">
-                      <Check size={13} /> Đã ký đủ, nhập kho
+                      <Check size={13} /> {slip.stage === 'acct' ? 'Kế toán đã nhập phần mềm, hoàn thành' : 'Giám đốc đã ký, chuyển kế toán'}
                     </button>
                   </div>
                 </Step>
