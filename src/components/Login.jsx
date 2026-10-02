@@ -36,7 +36,7 @@ export default function Login() {
 
         <div className="login-heading">
           <h1>Chào mừng quay trở lại</h1>
-          <p>Đăng nhập để tiếp tục vào Báo cáo giao hàng.</p>
+          <p>Đăng nhập để tiếp tục vào Huyền Dương's Inventory Management.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
