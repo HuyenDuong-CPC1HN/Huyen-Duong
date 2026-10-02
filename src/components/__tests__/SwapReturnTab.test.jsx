@@ -143,6 +143,19 @@ describe('SwapReturnTab — bộ xuất huỷ và checklist trình ký', () => {
     expect(screen.getByLabelText('Bỏ đánh dấu trình ký Bộ 01')).toBeDisabled()
   })
 
+  it('bộ đã trình ký có nút Xem: mở bảng chỉ đọc liệt kê các mặt hàng của bộ', async () => {
+    render(<SwapReturnTab type="donC" />)
+    await exportBoth()
+    fireEvent.click(signBox('Bộ 01'))
+    fireEvent.click(screen.getByText('Bộ đã trình ký'))
+    fireEvent.click(screen.getByRole('button', { name: 'Xem Bộ 01' }))
+    const dialog = screen.getByRole('dialog', { name: 'Xem Bộ 01' })
+    expect(within(dialog).getByText('TH00893')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Đóng' }))
+    expect(screen.queryByRole('dialog', { name: 'Xem Bộ 01' })).not.toBeInTheDocument()
+  })
+
   it('bộ đã trình ký chờ kế toán xuất kho: tick "Kế toán xuất kho" mới hoàn thành; đã xuất kho thì không bỏ tick trình ký được', async () => {
     render(<SwapReturnTab type="donC" />)
     await exportBoth()

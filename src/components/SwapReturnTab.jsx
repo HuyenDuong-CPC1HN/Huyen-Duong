@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
-import { Plus, Trash2, FileDown, Pencil } from 'lucide-react'
+import { Plus, Trash2, FileDown, Pencil, Eye, X } from 'lucide-react'
 import SwapReturnRecordForm from './SwapReturnRecordForm'
 import LotBadge from './SwapReturnLotBadge'
 import {
@@ -49,6 +49,7 @@ export default function SwapReturnTab({ type }) {
   const [allBatches, setAllBatches] = useState(() => readArray(BATCHES_KEY))
   const [formState, setFormState] = useState(null) // null | 'new' | record đang sửa
   const [busy, setBusy] = useState(null)
+  const [viewingBatch, setViewingBatch] = useState(null) // bộ đã trình ký đang xem lại (chỉ đọc)
 
   const { openBatch, signedBatches, recordsOf } = useMemo(() => resolveBatches(type, allBatches, allRecords), [type, allBatches, allRecords])
   const openRecords = recordsOf(openBatch.no)
@@ -351,6 +352,10 @@ export default function SwapReturnTab({ type }) {
                               <td className="px-2 py-2 whitespace-nowrap text-gray-500">{b.accountant}</td>
                               <td className="px-2 py-2 whitespace-nowrap">
                                 <div className="flex gap-1">
+                                  <button type="button" onClick={() => setViewingBatch(b)} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }}
+                                    aria-label={`Xem ${batchLabel(b.no)}`}>
+                                    <Eye size={12} /> Xem
+                                  </button>
                                   {FILES.map(f => (
                                     <button key={f.key} type="button" onClick={() => exportSignedFile(b, f)} disabled={busy === `signed_${b.no}_${f.key}`}
                                       className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }}>
@@ -386,6 +391,47 @@ export default function SwapReturnTab({ type }) {
           </details>
         </div>
       </div>
+
+      {viewingBatch && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto p-4 sm:p-10" onMouseDown={e => { if (e.target === e.currentTarget) setViewingBatch(null) }}>
+          <div role="dialog" aria-modal="true" aria-label={`Xem ${batchLabel(viewingBatch.no)}`} className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col">
+            <div className="px-5 pt-5 flex items-start gap-3">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">{batchLabel(viewingBatch.no)} — {type === 'donC' ? 'Đơn C' : 'Đơn DTP'}</h2>
+                <p className="text-xs text-gray-500 mt-1">Chỉ xem, không sửa được. Ký {formatDay(viewingBatch.signedAt)} · Kế toán {viewingBatch.accountant}</p>
+              </div>
+              <button type="button" onClick={() => setViewingBatch(null)} className="ml-auto p-1.5 rounded hover:bg-gray-100" aria-label="Đóng"><X size={16} /></button>
+            </div>
+            <div className="p-5" style={{ overflowX: 'auto' }}>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    {['STT', 'Khách hàng', 'Mã hàng', 'Tên hàng', 'Lô lỗi', 'Lô đổi', 'HD lô lỗi', 'HD lô đổi', 'ĐVT', 'SL', 'Quy cách', 'Lý do'].map(h => <th key={h} className={thCls}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {batchItems(recordsOf(viewingBatch.no)).map((it, i) => (
+                    <tr key={i} className="border-b border-gray-50 align-top">
+                      <td className="px-2 py-2">{i + 1}</td>
+                      <td className="px-2 py-2">{it.customerName}</td>
+                      <td className="px-2 py-2 font-mono">{it.maHang}</td>
+                      <td className="px-2 py-2" style={{ minWidth: 180 }}>{it.tenHang}</td>
+                      <td className="px-2 py-2 font-mono">{it.loLoi}</td>
+                      <td className="px-2 py-2 font-mono">{it.loDoi}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{it.hanDungLoi}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">{it.hanDungDoi}</td>
+                      <td className="px-2 py-2">{it.dvt}</td>
+                      <td className="px-2 py-2">{it.soLuong}</td>
+                      <td className="px-2 py-2">{it.quyCach}</td>
+                      <td className="px-2 py-2" style={{ minWidth: 160 }}>{it.lyDo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {formState && (
         <SwapReturnRecordForm
