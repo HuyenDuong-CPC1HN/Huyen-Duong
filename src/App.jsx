@@ -14,6 +14,7 @@ import SwapReturnTab from './components/SwapReturnTab'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
 import cpcLogo from './assets/cpc1hn_logo.png'
+import { loginExpired } from './utils/dailyLogin'
 
 const TongDonTab = lazy(() => import('./components/TongDonTab'))
 const UnifiedTrialTab = lazy(() => import('./components/UnifiedTrialTab'))
@@ -137,6 +138,12 @@ export default function App() {
         await assertCloudAvailable(supabase)
         const { data, error } = await supabase.auth.getSession()
         if (error) throw error
+        // Sang ngày mới (hoặc phiên cũ chưa ghi ngày đăng nhập) thì bắt đăng nhập lại.
+        if (data.session && loginExpired()) {
+          await supabase.auth.signOut()
+          await openWorkspace(null)
+          return
+        }
         await openWorkspace(data.session)
       } catch (error) {
         if (active) {
@@ -162,7 +169,12 @@ export default function App() {
       }
       void openWorkspace(session)
     })
-    return () => { active = false; subscription.unsubscribe() }
+    // App mở xuyên đêm: quay lại tab sau nửa đêm thì đăng xuất.
+    const checkDay = () => {
+      if (document.visibilityState === 'visible' && currentUserIdRef.current && loginExpired()) void supabase.auth.signOut()
+    }
+    document.addEventListener('visibilitychange', checkDay)
+    return () => { active = false; subscription.unsubscribe(); document.removeEventListener('visibilitychange', checkDay) }
   }, [])
 
   if (!supabaseConfigReady) {

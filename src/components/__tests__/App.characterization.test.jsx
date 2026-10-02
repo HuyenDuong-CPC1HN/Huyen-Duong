@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { markLoginToday } from '../../utils/dailyLogin'
 import App from '../../App'
 import { resetActiveTabCache } from '../../utils/activeTabCache'
 import { loadWorkspace } from '../../data/workspace'
@@ -49,6 +50,7 @@ describe('authenticated application shell', () => {
   }
 
   beforeEach(() => {
+    markLoginToday() // phiên mô phỏng là đã đăng nhập hôm nay
     authMocks.getSession.mockResolvedValue({ data: { session: { user: { email: 'operations@cpc1hn.com' } } }, error: null })
     authMocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
   })

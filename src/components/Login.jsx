@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Eye, EyeOff, LogIn, Loader2 } from 'lucide-react'
 import { supabase } from '../supabase'
 import cpcLogo from '../assets/cpc1hn_logo.png'
+import { markLoginToday } from '../utils/dailyLogin'
 
 const ERROR_MESSAGES = {
   'invalid_credentials': 'Email hoặc mật khẩu không đúng.',
@@ -22,6 +23,7 @@ export default function Login() {
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
       if (signInError) throw signInError
+      markLoginToday()
     } catch (err) {
       setError(ERROR_MESSAGES[err.code] || 'Đăng nhập thất bại. Vui lòng thử lại.')
     } finally {

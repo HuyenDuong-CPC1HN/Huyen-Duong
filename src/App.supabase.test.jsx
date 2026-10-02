@@ -1,13 +1,14 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { clearLoginDay, markLoginToday } from './utils/dailyLogin'
 
-const authMocks = vi.hoisted(() => ({ getSession: vi.fn(), onAuthStateChange: vi.fn() }))
+const authMocks = vi.hoisted(() => ({ getSession: vi.fn(), onAuthStateChange: vi.fn(), signOut: vi.fn() }))
 
 vi.mock('./supabase', () => ({
   supabaseConfigReady: true,
   supabaseMissingEnv: [],
-  supabase: { auth: { getSession: authMocks.getSession, onAuthStateChange: authMocks.onAuthStateChange, signOut: vi.fn() } },
+  supabase: { auth: { getSession: authMocks.getSession, onAuthStateChange: authMocks.onAuthStateChange, signOut: authMocks.signOut } },
   assertCloudAvailable: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -43,6 +44,24 @@ describe('Supabase application gate', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { level: 1, name: "HUYEN DUONG'S INVENTORY MANAGEMENT" })).toBeInTheDocument()
+  })
+
+  it('bắt đăng nhập lại khi sang ngày mới hoặc phiên cũ chưa ghi ngày đăng nhập', async () => {
+    authMocks.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1', email: 'a@b.c' } } }, error: null })
+    authMocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    clearLoginDay()
+    render(<App />)
+    expect(await screen.findByRole('heading', { level: 1, name: "HUYEN DUONG'S INVENTORY MANAGEMENT" })).toBeInTheDocument()
+    expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('đăng nhập trong ngày thì vào thẳng, không đăng xuất', async () => {
+    authMocks.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1', email: 'a@b.c' } } }, error: null })
+    authMocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    markLoginToday()
+    render(<App />)
+    expect(await screen.findByRole('navigation', { name: 'Điều hướng chính' })).toBeInTheDocument()
+    expect(authMocks.signOut).not.toHaveBeenCalled()
   })
 
   it('blocks the workspace with a Vietnamese online-only message when cloud health fails', async () => {
