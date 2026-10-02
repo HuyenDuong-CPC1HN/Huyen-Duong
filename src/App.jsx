@@ -22,7 +22,7 @@ const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
   {
     id: 'baocao',
-    label: 'Báo cáo giao hàng',
+    label: 'Báo cáo giao ban',
     icon: FileBarChart2,
     children: [
       { id: 'tongdon', label: 'Phân tích giao hàng',           icon: LayoutGrid },
@@ -82,8 +82,8 @@ function hasActiveDescendant(item, active) {
 
 const BREADCRUMB = {
   home:     ['Trang chủ'],
-  tongdon:  ['Trang chủ', 'Báo cáo giao hàng', 'Phân tích giao hàng'],
-  gopKenh:  ['Trang chủ', 'Báo cáo giao hàng', 'Chi tiết giao hàng theo kênh'],
+  tongdon:  ['Trang chủ', 'Báo cáo giao ban', 'Phân tích giao hàng'],
+  gopKenh:  ['Trang chủ', 'Báo cáo giao ban', 'Chi tiết giao hàng theo kênh'],
   tonkhocandate: ['Trang chủ', 'Quản lý tồn kho', 'Hàng cận date'],
   hangchamluanchuyen: ['Trang chủ', 'Quản lý tồn kho', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
