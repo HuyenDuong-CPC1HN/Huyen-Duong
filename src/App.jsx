@@ -48,27 +48,39 @@ const NAV = [
       { id: 'doisoatthucte', label: 'Đối soát Thực tế ↔ Hoá đơn', icon: ListChecks },
     ],
   },
-  { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
   {
-    id: 'hangHuy',
-    label: 'Theo dõi hàng huỷ',
-    icon: PackageX,
+    id: 'hangTraDoiHuy',
+    label: 'Quản lý hàng trả, đổi, huỷ',
+    icon: RotateCcw,
     children: [
-      { id: 'hangHuyCD', label: 'Kho C & Kho DTP', icon: Truck },
-      { id: 'hangHuyA', label: 'Kho A', icon: PackageX },
-    ],
-  },
-  {
-    id: 'doiTra',
-    label: 'Đổi trả hàng',
-    icon: ArrowLeftRight,
-    children: [
-      { id: 'doiTraC', label: 'Đơn C', icon: Truck },
-      { id: 'doiTraDTP', label: 'Đơn DTP', icon: Package },
+      { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
+      {
+        id: 'hangHuy',
+        label: 'Theo dõi hàng huỷ',
+        icon: PackageX,
+        children: [
+          { id: 'hangHuyCD', label: 'Kho C & Kho DTP', icon: Truck },
+          { id: 'hangHuyA', label: 'Kho A', icon: PackageX },
+        ],
+      },
+      {
+        id: 'doiTra',
+        label: 'Đổi trả hàng',
+        icon: ArrowLeftRight,
+        children: [
+          { id: 'doiTraC', label: 'Đơn C', icon: Truck },
+          { id: 'doiTraDTP', label: 'Đơn DTP', icon: Package },
+        ],
+      },
     ],
   },
   { id: 'guilen8n', label: 'Gửi lên n8n', icon: Send },
 ]
+
+// Mục menu (hoặc con của nó, tới cấp cuối) có đang được chọn không — để tô sáng cả nhóm cha.
+function hasActiveDescendant(item, active) {
+  return !!item.children?.some(child => child.id === active || hasActiveDescendant(child, active))
+}
 
 const BREADCRUMB = {
   home:     ['Trang chủ'],
@@ -78,11 +90,11 @@ const BREADCRUMB = {
   hangchamluanchuyen: ['Trang chủ', 'Quản lý tồn kho', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
-  traHang:    ['Trang chủ', 'Theo dõi nhập trả lại'],
-  hangHuyCD:  ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho C & Kho DTP'],
-  hangHuyA:   ['Trang chủ', 'Theo dõi hàng huỷ', 'Kho A'],
-  doiTraC:    ['Trang chủ', 'Đổi trả hàng', 'Đơn C'],
-  doiTraDTP:  ['Trang chủ', 'Đổi trả hàng', 'Đơn DTP'],
+  traHang:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi nhập trả lại'],
+  hangHuyCD:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho C & Kho DTP'],
+  hangHuyA:   ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho A'],
+  doiTraC:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng', 'Đơn C'],
+  doiTraDTP:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng', 'Đơn DTP'],
   guilen8n: ['Trang chủ', 'Gửi lên n8n'],
 }
 
@@ -331,7 +343,7 @@ function AppContent({ user }) {
             const hasChildren = !!item.children
             const isExpanded = expanded[item.id]
             const isActive = active === item.id
-            const isSectionActive = isActive || item.children?.some(child => child.id === active)
+            const isSectionActive = isActive || hasActiveDescendant(item, active)
 
             return (
               <div key={item.id} className="dashboard-nav-group">
@@ -361,11 +373,45 @@ function AppContent({ user }) {
                     {item.children.map(child => {
                       const ChildIcon = child.icon
                       const isChildActive = active === child.id
+                      const goTo = (id) => { setActive(id); if (window.innerWidth < 900) closeSidebar() }
+                      if (child.children) {
+                        const open = expanded[child.id]
+                        return (
+                          <div key={child.id}>
+                            <button
+                              type="button"
+                              onClick={() => setExpanded(e => ({ ...e, [child.id]: !e[child.id] }))}
+                              className={`dashboard-nav-child ${hasActiveDescendant(child, active) ? 'is-active' : ''}`}
+                              aria-expanded={open}
+                              aria-controls={`nav-group-${child.id}`}
+                            >
+                              <ChildIcon size={16} aria-hidden="true" />
+                              <span>{child.label}</span>
+                              <ChevronDown size={14} className={`dashboard-nav-chevron ${open ? 'is-expanded' : ''}`} aria-hidden="true" />
+                            </button>
+                            {open && (
+                              <div id={`nav-group-${child.id}`} style={{ paddingLeft: 14 }}>
+                                {child.children.map(sub => {
+                                  const SubIcon = sub.icon
+                                  const isSubActive = active === sub.id
+                                  return (
+                                    <button type="button" key={sub.id} onClick={() => goTo(sub.id)}
+                                      className={`dashboard-nav-child ${isSubActive ? 'is-active' : ''}`} aria-current={isSubActive ? 'page' : undefined}>
+                                      <SubIcon size={15} aria-hidden="true" />
+                                      <span>{sub.label}</span>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
                       return (
                         <button
                           type="button"
                           key={child.id}
-                          onClick={() => { setActive(child.id); if (window.innerWidth < 900) closeSidebar() }}
+                          onClick={() => goTo(child.id)}
                           className={`dashboard-nav-child ${isChildActive ? 'is-active' : ''}`}
                           aria-current={isChildActive ? 'page' : undefined}
                         >
