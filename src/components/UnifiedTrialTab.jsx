@@ -125,7 +125,7 @@ function StaffRosterEditor({ rosterText, onChange }) {
   )
 }
 
-function MismatchWarning({ mismatchRows, otherCount }) {
+function MismatchWarning({ mismatchRows, otherCount, countMismatch, onCountMismatchChange }) {
   const [open, setOpen] = useState(false)
   if (mismatchRows.length === 0 && otherCount === 0) return null
   return (
@@ -139,9 +139,19 @@ function MismatchWarning({ mismatchRows, otherCount }) {
       </div>
       {mismatchRows.length > 0 && (
         <>
-          <button type="button" onClick={() => setOpen(o => !o)} className="text-xs text-blue-600 hover:underline mt-1">
-            {open ? 'Ẩn danh sách' : `Xem ${mismatchRows.length} đơn lệch kho`}
-          </button>
+          <div className="flex items-center justify-between mt-1">
+            <button type="button" onClick={() => setOpen(o => !o)} className="text-xs text-blue-600 hover:underline">
+              {open ? 'Ẩn danh sách' : `Xem ${mismatchRows.length} đơn lệch kho`}
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-amber-800 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={countMismatch}
+                onChange={e => onCountMismatchChange(e.target.checked)}
+              />
+              Tính cả đơn lệch kho
+            </label>
+          </div>
           {open && (
             <div className="mt-2 overflow-x-auto rounded-lg border border-amber-100 bg-white">
               <table className="w-full text-xs">
@@ -368,7 +378,7 @@ function DonTruyenThongSnapshotView({ entry }) {
   )
 }
 
-function DonSanView({ rosterSet, countMismatch, viewingId, setViewingId }) {
+function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId, setViewingId }) {
   const [meta, setMeta] = useState(() => readJSON(SO_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(SO_ROWS_KEY, null))
   const [reports, setReports] = useState(() => readTrialReports('donSO'))
@@ -452,7 +462,10 @@ function DonSanView({ rosterSet, countMismatch, viewingId, setViewingId }) {
         <div>{uploadNode}</div>
       ) : (
         <>
-          <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
+          <MismatchWarning
+            mismatchRows={mismatchRows} otherCount={otherRows.length}
+            countMismatch={countMismatch} onCountMismatchChange={onCountMismatchChange}
+          />
           <DonSanReportBody
             total={total} tmdtCount={tmdt.length} ngoaiSanCount={ngoaiSan.length} shops={shops}
             carrierPanelKey={meta?.uploadedAt}
@@ -475,7 +488,7 @@ function DonSanView({ rosterSet, countMismatch, viewingId, setViewingId }) {
   )
 }
 
-function DonTruyenThongView({ rosterSet, countMismatch, viewingId, setViewingId, channel, setChannel }) {
+function DonTruyenThongView({ rosterSet, countMismatch, onCountMismatchChange, viewingId, setViewingId, channel, setChannel }) {
   const [meta, setMeta] = useState(() => readJSON(TT_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(TT_ROWS_KEY, null))
   const [reports, setReports] = useState(() => readTrialReports('donTruyenThong'))
@@ -556,7 +569,10 @@ function DonTruyenThongView({ rosterSet, countMismatch, viewingId, setViewingId,
         <div>{uploadNode}</div>
       ) : (
         <>
-          <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
+          <MismatchWarning
+            mismatchRows={mismatchRows} otherCount={otherRows.length}
+            countMismatch={countMismatch} onCountMismatchChange={onCountMismatchChange}
+          />
 
           <div className="tdr-tabswitch" style={{ marginBottom: 16 }}>
             <button type="button" className={channel === 'donC' ? 'active' : ''} onClick={() => setChannel('donC')}>
@@ -615,30 +631,20 @@ export default function UnifiedTrialTab() {
             <button type="button" className={activeTab === 'donsan' ? 'active' : ''} onClick={() => setActiveTab('donsan')}>Đơn SO</button>
             <button type="button" className={activeTab === 'truyenthong' ? 'active' : ''} onClick={() => setActiveTab('truyenthong')}>Đơn truyền thống</button>
           </div>
-          <div className="flex items-center gap-3">
-            <label
-              className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none"
-              title="Đơn lệch kho: bốc/đóng chỉ 1 trong 2 khớp danh sách nhân sự kho HCM. Đơn không thuộc kho HCM (cả 2 đều không khớp) luôn bị loại, không bật được."
-            >
-              <input
-                type="checkbox"
-                checked={countMismatch}
-                onChange={e => onCountMismatchChange(e.target.checked)}
-              />
-              Tính cả đơn lệch kho
-            </label>
-            <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
-          </div>
+          <StaffRosterEditor rosterText={rosterText} onChange={onRosterChange} />
         </div>
 
         <div className="sheet-tab-report">
           {activeTab === 'donsan' && (
-            <DonSanView rosterSet={rosterSet} countMismatch={countMismatch} viewingId={donSoViewingId} setViewingId={setDonSoViewingId} />
+            <DonSanView
+              rosterSet={rosterSet} countMismatch={countMismatch} onCountMismatchChange={onCountMismatchChange}
+              viewingId={donSoViewingId} setViewingId={setDonSoViewingId}
+            />
           )}
           {activeTab === 'truyenthong' && (
             <DonTruyenThongView
               rosterSet={rosterSet}
-              countMismatch={countMismatch}
+              countMismatch={countMismatch} onCountMismatchChange={onCountMismatchChange}
               viewingId={donTTViewingId} setViewingId={setDonTTViewingId}
               channel={donTTChannel} setChannel={setDonTTChannel}
             />

@@ -67,13 +67,16 @@ function parseVnDateTime(str) {
   return null
 }
 
-// Cột "Ngày tạo" trong chính file Đơn SO (đã upload sẵn để tính tổng tuần) — dd/mm/yyyy giờ:phút:giây,
-// khoảng trắng giữa ngày và giờ có thể là 1 hay 2 ký tự tuỳ cách Excel xuất ("02/10/2026  16:22:37").
+// Cột "Ngày tạo" trong chính file Đơn SO (đã upload sẵn để tính tổng tuần) — dd/mm/yyyy giờ:phút[:giây]
+// tuỳ nguồn: xem trực tiếp trong Excel có giây ("02/10/2026  16:22:37", 1-2 khoảng trắng), nhưng qua
+// ExcelUpload.jsx (cột đã thêm vào DATETIME_COLUMNS) bị format lại thành "dd/mm/yyyy HH:mm" (không giây,
+// đúng 1 khoảng trắng — xem formatDate trong ExcelUpload.jsx), hoặc chỉ "dd/mm/yyyy" (không giờ) khi đúng
+// nửa đêm — nhận cả 3 dạng để không phụ thuộc đường đi nào xử lý ra chuỗi.
 function parseDonSoNgayTao(str) {
   const s = clean(str)
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/)
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
   if (!m) return null
-  const [, dd, MM, yyyy, hh, mm, ss] = m
+  const [, dd, MM, yyyy, hh = '0', mm = '0', ss = '0'] = m
   return new Date(Number(yyyy), Number(MM) - 1, Number(dd), Number(hh), Number(mm), Number(ss))
 }
 
