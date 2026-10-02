@@ -128,6 +128,13 @@ export default function SwapReturnTab({ type }) {
     persistBatches(upsertBatch({ ...openBatch, signedAt: new Date().toISOString() }))
   }
 
+  // Kế toán xuất kho xong thì tick: bộ mới tính hoàn thành (trình ký → chờ kế toán xuất kho → hoàn thành).
+  const toggleAccounted = (batch) => {
+    const next = batch.accountedAt ? null : new Date().toISOString()
+    if (!next && !window.confirm(`Bỏ đánh dấu kế toán đã xuất kho ${batchLabel(batch.no)}?`)) return
+    persistBatches(upsertBatch({ ...batch, accountedAt: next }))
+  }
+
   const unsign = (batch) => {
     if (!window.confirm(`Bỏ đánh dấu trình ký ${batchLabel(batch.no)}? Bộ sẽ mở lại để thêm/sửa, và đợt mới sẽ vào lại ${batchLabel(batch.no)}.`)) return
     const rest = allBatches.filter(b => !(b.entity === type && b.no === batch.no + 1))
@@ -316,7 +323,7 @@ export default function SwapReturnTab({ type }) {
           <details className="report-section">
             <summary className="report-section-trigger" style={{ cursor: 'pointer' }}>
               <span className="report-section-title">Bộ đã trình ký</span>
-              <span className="report-section-count">{signedBatches.length} bộ</span>
+              <span className="report-section-count">{signedBatches.length} bộ{signedBatches.some(b => !b.accountedAt) ? ` · ${signedBatches.filter(b => !b.accountedAt).length} chờ kế toán xuất kho` : ''}</span>
             </summary>
             <div className="report-section-content flex flex-col gap-2">
               {signedBatches.length === 0 ? (
@@ -328,15 +335,15 @@ export default function SwapReturnTab({ type }) {
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-100">
                           <th className={thCls}>Bộ</th><th className={thCls}>Mặt hàng</th><th className={thCls}>Kế toán</th>
-                          <th className={thCls}>Tải lại file</th><th className={thCls}>Trình ký</th>
+                          <th className={thCls}>Tải lại file</th><th className={thCls}>Trình ký</th><th className={thCls}>Kế toán xuất kho</th>
                         </tr>
                       </thead>
                       <tbody>
                         {signedBatches.map(b => {
                           const records = recordsOf(b.no)
-                          const undoable = b === latestSigned && canUnsign
+                          const undoable = b === latestSigned && canUnsign && !b.accountedAt
                           const title = b !== latestSigned ? 'Chỉ bỏ tick được bộ ký gần nhất'
-                            : !canUnsign ? `${openName} đã có hàng nên không bỏ tick được` : 'Bỏ tick để mở lại bộ này'
+                            : b.accountedAt ? 'Kế toán đã xuất kho nên không bỏ tick trình ký được' : !canUnsign ? `${openName} đã có hàng nên không bỏ tick được` : 'Bỏ tick để mở lại bộ này'
                           return (
                             <tr key={b.id} className="border-b border-gray-50">
                               <td className="px-2 py-2 whitespace-nowrap font-semibold text-gray-800">{batchLabel(b.no)}</td>
@@ -359,13 +366,20 @@ export default function SwapReturnTab({ type }) {
                                   Đã ký {formatDay(b.signedAt)}
                                 </label>
                               </td>
+                              <td className="px-2 py-2 whitespace-nowrap">
+                                <label className="flex items-center gap-2 font-medium text-gray-700" title="Kế toán xuất kho xong thì tick để hoàn thành bộ này">
+                                  <input type="checkbox" className={checkCls} checked={!!b.accountedAt} onChange={() => toggleAccounted(b)}
+                                    aria-label={`Kế toán đã xuất kho ${batchLabel(b.no)}`} />
+                                  {b.accountedAt ? `Đã xuất kho ${formatDay(b.accountedAt)} · hoàn thành` : 'Chờ kế toán xuất kho'}
+                                </label>
+                              </td>
                             </tr>
                           )
                         })}
                       </tbody>
                     </table>
                   </div>
-                  <p className="text-xs text-gray-500">Bộ đã ký bị khoá: không thêm, sửa, xoá đợt được. Chỉ bỏ tick được bộ ký gần nhất, khi bộ đang gom chưa có hàng.</p>
+                  <p className="text-xs text-gray-500">Bộ đã ký bị khoá: không thêm, sửa, xoá đợt được. Chỉ bỏ tick trình ký được bộ ký gần nhất, khi bộ đang gom chưa có hàng và kế toán chưa xuất kho.</p>
                 </>
               )}
             </div>

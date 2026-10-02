@@ -143,6 +143,24 @@ describe('SwapReturnTab — bộ xuất huỷ và checklist trình ký', () => {
     expect(screen.getByLabelText('Bỏ đánh dấu trình ký Bộ 01')).toBeDisabled()
   })
 
+  it('bộ đã trình ký chờ kế toán xuất kho: tick "Kế toán xuất kho" mới hoàn thành; đã xuất kho thì không bỏ tick trình ký được', async () => {
+    render(<SwapReturnTab type="donC" />)
+    await exportBoth()
+    fireEvent.click(signBox('Bộ 01'))
+    fireEvent.click(screen.getByText('Bộ đã trình ký'))
+    expect(screen.getByText(/1 bộ · 1 chờ kế toán xuất kho/)).toBeInTheDocument()
+    expect(screen.getByText('Chờ kế toán xuất kho')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Kế toán đã xuất kho Bộ 01'))
+    expect(readStore('swap_return_batches')[0].accountedAt).toBeTruthy()
+    expect(screen.getByText(/hoàn thành/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Bỏ đánh dấu trình ký Bộ 01')).toBeDisabled()
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(screen.getByLabelText('Kế toán đã xuất kho Bộ 01'))
+    expect(readStore('swap_return_batches')[0].accountedAt).toBeNull()
+  })
+
   it('BB nhập lại kho: đợt khác lô bắt chọn kế toán; xuất rồi mới tick được "Đã trình ký"', async () => {
     render(<SwapReturnTab type="donC" />)
     fireEvent.click(screen.getByRole('button', { name: /Thêm đợt đổi trả/ }))
