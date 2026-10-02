@@ -135,7 +135,7 @@ export default function DamagedGoodsTrackingTab() {
     <div className="sheet-tab">
       <div className="sheet-tab-shell">
         <header className="sheet-tab-context">
-          <span>Theo dõi hàng huỷ — Kho A</span>
+          <span>Hồ sơ huỷ Kho A cho kế toán</span>
           <div className="flex items-center gap-2 ml-auto">
             <button type="button" onClick={() => setFormState('new')} className="sheet-tab-action is-primary">
               <Plus size={13} /> Thêm biên bản hàng huỷ

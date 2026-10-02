@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
+import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -56,18 +56,12 @@ const NAV = [
     children: [
       { id: 'traCuuHang', label: 'Tra cứu hàng', icon: Search },
       { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
-      {
-        id: 'hangHuy',
-        label: 'Theo dõi hàng huỷ',
-        icon: PackageX,
-        children: [
-          { id: 'hangHuyCD', label: 'Kho C & Kho DTP', icon: Truck },
-          { id: 'hangHuyA', label: 'Kho A', icon: PackageX },
-        ],
-      },
+      { id: 'hangHuyCD', label: 'Theo dõi hàng huỷ', icon: PackageX },
       { id: 'doiTra', label: 'Đổi trả hàng', icon: ArrowLeftRight },
     ],
   },
+  // Kho A không phải kho theo dõi hàng: mỗi tháng chỉ hoàn thiện hồ sơ huỷ cho kế toán, nên tách riêng khỏi nhóm trên.
+  { id: 'hangHuyA', label: 'Hồ sơ huỷ Kho A', icon: FolderOpen },
 ]
 
 // Mục menu (hoặc con của nó, tới cấp cuối) có đang được chọn không — để tô sáng cả nhóm cha.
@@ -85,8 +79,8 @@ const BREADCRUMB = {
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
   traHang:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi nhập trả lại'],
   traCuuHang: ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Tra cứu hàng'],
-  hangHuyCD:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho C & Kho DTP'],
-  hangHuyA:   ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho A'],
+  hangHuyCD:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ'],
+  hangHuyA:   ['Trang chủ', 'Hồ sơ huỷ Kho A'],
   doiTra:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng'],
 }
 
