@@ -42,7 +42,7 @@ const thCls = 'px-2 py-2 text-left text-gray-500 font-semibold whitespace-nowrap
 const checkCls = 'w-5 h-5 accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 shrink-0'
 const smallBtn = { minHeight: 26, padding: '0 8px', fontSize: 11 }
 
-export default function SwapReturnHub() {
+export default function SwapReturnHub({ initialOpenRecordId = null }) {
   const [allRecords, setAllRecords] = useState(() => readArray(RECORDS_KEY))
   const [batches, setBatches] = useState(() => readArray(BATCHES_KEY))
   const [kind, setKind] = useState(() => readPref())
@@ -52,7 +52,7 @@ export default function SwapReturnHub() {
   const [busy, setBusy] = useState(null)
   const [viewing, setViewing] = useState(null)
   const [legacy, setLegacy] = useState(false)
-  const [open, setOpen] = useState(null) // { kind: 'record' | 'batch', id } — màn xem trước / in
+  const [open, setOpen] = useState(() => (initialOpenRecordId ? { kind: 'record', id: initialOpenRecordId } : null)) // { kind: 'record' | 'batch', id } — màn xem trước / in
 
   const records = useMemo(() => allRecords.filter(isV2), [allRecords])
   const inKind = (x) => kind === 'all' || x.entity === kind
@@ -273,7 +273,7 @@ export default function SwapReturnHub() {
                   const items = batchItems(recordsOfBatch(b))
                   return (
                     <tr key={b.id} className="border-b border-gray-50 align-top">
-                      <td className="px-2 py-2 whitespace-nowrap font-semibold text-gray-800">{batchLabel(b.no)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap font-semibold text-gray-800">{batchLabel(b.no)}{b.soPhieuXuat && <div className="text-[11px] font-normal text-gray-400 font-mono">{b.soPhieuXuat}</div>}</td>
                       <td className="px-2 py-2"><LoaiTag loai={loai(b.entity)} /></td>
                       <td className="px-2 py-2 whitespace-nowrap">{items.length} mặt hàng · {recordsOfBatch(b).length} đợt</td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-500">{b.accountant}</td>

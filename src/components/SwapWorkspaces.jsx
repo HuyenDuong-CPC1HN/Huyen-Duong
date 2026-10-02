@@ -104,6 +104,7 @@ export function SwapBatchWorkspace({ batch, records, onChange, onBack, onExport,
                     {SWAP_RETURN_ACCOUNTANTS.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </Field>
+                <Field label="Số phiếu xuất kho huỷ (nhập khi kế toán xuất)" kind="hand" full><input value={batch.soPhieuXuat || ''} onChange={e => onChange({ soPhieuXuat: e.target.value })} placeholder="VD: XT2621/00837" className={handCls} /></Field>
                 <Field label="Số biên bản xử lý (…../năm/BC-CPC1HN)" kind="hand"><input value={form.soBB} onChange={e => setForm('soBB', e.target.value)} disabled={frozen} className={handCls} /></Field>
                 <Field label="Ngày lập BB xử lý" kind="hand"><input type="date" value={form.ngayLap} onChange={e => setForm('ngayLap', e.target.value)} disabled={frozen} className={handCls} /></Field>
                 <Field label="Ngày xử lý" kind="hand"><input type="date" value={form.xlNgay} onChange={e => setForm('xlNgay', e.target.value)} disabled={frozen} className={handCls} /></Field>

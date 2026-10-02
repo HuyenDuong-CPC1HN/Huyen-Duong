@@ -489,11 +489,11 @@ function AppContent({ user }) {
           {active === 'hangchamluanchuyen' && <ExpiryStockTab key="clc" mode="clc" />}
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
-          {active === 'traCuuHang' && <HangLookup onOpen={(id, loai) => { setOpenTarget(id); setActive(loai === 'huy' ? 'hangHuyCD' : 'traHang') }} />}
+          {active === 'traCuuHang' && <HangLookup onOpen={(row) => { setOpenTarget(row.ref); setActive({ tra: 'traHang', doitra: 'doiTra', kho: 'hangHuyCD' }[row.nguon]) }} />}
           {active === 'traHang' && <ReturnSlipsTab key={`tra-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyCD'  && <HangHuyTab key={`huy-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab />}
-          {active === 'doiTra'     && <SwapReturnHub />}
+          {active === 'doiTra'     && <SwapReturnHub key={`swap-${openTarget}`} initialOpenRecordId={openTarget} />}
         </main>
       </div>
     </div>

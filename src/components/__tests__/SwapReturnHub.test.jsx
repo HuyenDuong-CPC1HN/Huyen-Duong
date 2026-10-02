@@ -99,3 +99,23 @@ describe('SwapReturnHub — quy trình đổi trả mới, gộp Đơn C và Đ�
     expect(within(document.body).getAllByText('Khách cũ').length).toBeGreaterThan(0)
   })
 })
+
+describe('SwapReturnHub — số phiếu xuất kho huỷ và mở sẵn đợt từ Tra cứu', () => {
+  it('initialOpenRecordId mở thẳng màn xem trước của đợt', () => {
+    store.values.set('swap_return_records', JSON.stringify([rec('a', 'donC', 'Khách A')]))
+    render(<SwapReturnHub initialOpenRecordId="a" />)
+    expect(screen.getByRole('button', { name: /Danh sách/ })).toBeInTheDocument()
+    expect(screen.getAllByText('BIÊN BẢN XÁC MINH TÌNH TRẠNG HÀNG HOÁ').length).toBeGreaterThan(0)
+  })
+
+  it('bộ huỷ có ô Số phiếu xuất kho huỷ, lưu vào bộ và hiện ở danh sách', () => {
+    store.values.set('swap_return_records', JSON.stringify([rec('a', 'donDTP', 'Khách A', { nhapLaiSignedAt: 'x', nhapLaiDoneAt: 'x', huyBatchId: 'huy_donDTP_1' })]))
+    store.values.set('swap_huy_batches', JSON.stringify([{ id: 'huy_donDTP_1', entity: 'donDTP', no: 1, recordIds: ['a'], accountant: 'Lưu Thị Thuỳ', exported: {}, signedAt: null, accountedAt: null }]))
+    render(<SwapReturnHub />)
+    fireEvent.click(screen.getByRole('button', { name: 'Xem và in Bộ 01 Đơn DTP' }))
+    fireEvent.change(screen.getByPlaceholderText('VD: XT2621/00837'), { target: { value: 'XK2621/00104' } })
+    expect(read('swap_huy_batches')[0].soPhieuXuat).toBe('XK2621/00104')
+    fireEvent.click(screen.getByRole('button', { name: /Danh sách/ }))
+    expect(screen.getByText('XK2621/00104')).toBeInTheDocument()
+  })
+})
