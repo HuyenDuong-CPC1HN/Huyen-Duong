@@ -50,10 +50,10 @@ describe('fillStockReport — điền đúng file mẫu Báo cáo hàng cận da
     }
   })
 
-  it('sheet Cận date: 9 cột như mẫu, dữ liệu từ dòng 5, hạn dùng là ngày thật, tuổi thuốc là công thức', () => {
+  it('sheet Cận date: 9 cột + Hướng xử lý như mẫu, dữ liệu từ dòng 5, hạn dùng là ngày thật, tuổi thuốc là công thức', () => {
     const ws = canDateWb.Sheets['Cận date']
     const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
-    expect(grid[3]).toEqual(['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tuổi thuốc\r\n(Tháng)', 'Tồn cuối'])
+    expect(grid[3]).toEqual(['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tuổi thuốc\r\n(Tháng)', 'Tồn cuối', 'Hướng xử lý'])
     expect(grid[4].slice(0, 6)).toEqual([1, 'B01767', 'Bupi-BFS heavy - Hộp 10 lọ 2ml', '020101', 'LO', '010924'])
     expect(grid[5][1]).toBe('J00643')
     expect(grid).toHaveLength(6)
@@ -61,16 +61,17 @@ describe('fillStockReport — điền đúng file mẫu Báo cáo hàng cận da
     expect(ws.G5.v.toISOString().slice(0, 10)).toBe('2026-09-13')
     expect(ws.H5.f).toBe('IF(G5>=TODAY(),DATEDIF(TODAY(),G5,"m"),-DATEDIF(G5,TODAY(),"m"))')
     expect(ws.I5.v).toBe(670)
-    expect(ws['!ref']).toBe('A1:I6')
-    expect(ws['!merges'].map(m => XLSX.utils.encode_range(m))).toEqual(['A1:I1', 'A2:I2'])
+    expect(ws['!ref']).toBe('A1:J6')
+    expect(ws['!merges'].map(m => XLSX.utils.encode_range(m))).toEqual(['A1:J1', 'A2:J2'])
   })
 
-  it('sheet CLC: 13 cột, "Tên lô" lấy theo Mã lô khi file gốc không có, hàng không rõ hạn thì để trống ngày và tuổi thuốc', () => {
+  it('sheet CLC: 13 cột + Hướng xử lý, "Tên lô" lấy theo Mã lô khi file gốc không có, hàng không rõ hạn thì để trống ngày và tuổi thuốc', () => {
     const ws = clcWb.Sheets.CLC
     const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
-    expect(grid[3]).toHaveLength(13)
+    expect(grid[3]).toHaveLength(14)
+    expect(grid[3][13]).toBe('Hướng xử lý')
     expect(grid[4].slice(5, 7)).toEqual(['010924', 'LO-TEN'])
-    expect(grid[4].slice(9)).toEqual([670, 0, 0, 670])
+    expect(grid[4].slice(9, 13)).toEqual([670, 0, 0, 670])
     expect(ws.G6.v).toBe('010924')
     expect(ws.H6).toBeUndefined()
     expect(ws.I6).toBeUndefined()
@@ -82,19 +83,19 @@ describe('fillStockReport — điền đúng file mẫu Báo cáo hàng cận da
     expect(zip.file('xl/calcChain.xml')).toBeNull()
     expect(zip.file('xl/worksheets/sheet2.xml')).toBeNull()
     const workbookXml = zip.file('xl/workbook.xml').asText()
-    expect(workbookXml).toContain("'Cận date'!$A$4:$I$6")
+    expect(workbookXml).toContain("'Cận date'!$A$4:$J$6")
     expect(workbookXml).not.toContain('CLC')
     expect(workbookXml).toContain('activeTab="0"')
     expect(zip.file('xl/_rels/workbook.xml.rels').asText()).not.toContain('sheet2.xml')
     expect(zip.file('[Content_Types].xml').asText()).not.toContain('sheet2.xml')
     expect(zip.file('docProps/app.xml').asText()).toContain('<vt:vector size="1" baseType="lpstr"><vt:lpstr>Cận date</vt:lpstr></vt:vector>')
-    expect(zip.file('xl/worksheets/sheet1.xml').asText()).toContain('<autoFilter ref="A4:I6"')
+    expect(zip.file('xl/worksheets/sheet1.xml').asText()).toContain('<autoFilter ref="A4:J6"')
 
     const clcZip = new PizZip(clcBytes)
     expect(clcZip.file('xl/worksheets/sheet1.xml')).toBeNull()
     const clcWorkbookXml = clcZip.file('xl/workbook.xml').asText()
     expect(clcWorkbookXml).toContain('localSheetId="0"')
-    expect(clcWorkbookXml).toContain('CLC!$A$4:$M$6')
+    expect(clcWorkbookXml).toContain('CLC!$A$4:$N$6')
     expect(clcWorkbookXml).not.toContain('Cận date')
   })
 

@@ -20,7 +20,7 @@ const SHEETS = [
     kind: 'canDate',
     path: 'xl/worksheets/sheet1.xml',
     sheetName: 'Cận date',
-    lastCol: 'I',
+    lastCol: 'J',
     columns: [
       { col: 'A', type: 'number', value: (r, i) => i + 1 },
       { col: 'B', type: 'text', value: r => r.maVatTu },
@@ -31,13 +31,14 @@ const SHEETS = [
       { col: 'G', type: 'date', value: r => r.hanDung },
       { col: 'H', type: 'age', dateCol: 'G', value: r => r.tuoiThuoc },
       { col: 'I', type: 'number', value: r => r.tonCuoi },
+      { col: 'J', type: 'text', value: r => r.huongXuLy, extra: true },
     ],
   },
   {
     kind: 'clc',
     path: 'xl/worksheets/sheet2.xml',
     sheetName: 'CLC',
-    lastCol: 'M',
+    lastCol: 'N',
     columns: [
       { col: 'A', type: 'number', value: (r, i) => i + 1 },
       { col: 'B', type: 'text', value: r => r.maVatTu },
@@ -52,6 +53,7 @@ const SHEETS = [
       { col: 'K', type: 'number', value: r => r.slNhap },
       { col: 'L', type: 'number', value: r => r.slXuat },
       { col: 'M', type: 'number', value: r => r.tonCuoi },
+      { col: 'N', type: 'text', value: r => r.huongXuLy, extra: true },
     ],
   },
 ]
@@ -114,6 +116,36 @@ function buildCell(doc, spec, style, rowNum, row, index) {
   return cell
 }
 
+// Cột "Hướng xử lý" (người dùng tự điền) không có trong mẫu gốc: dựng thêm sau cột cuối của mẫu, mượn style
+// của cột liền trước (tiêu đề + ô dữ liệu) và mở rộng vùng <cols>.
+function addNoteColumn(doc, spec, styles) {
+  const extra = spec.columns.find(c => c.extra)
+  const prev = spec.columns[spec.columns.indexOf(extra) - 1]
+  styles[extra.col] = styles[prev.col]
+  const headerRow = [...doc.getElementsByTagName('row')].find(r => r.getAttribute('r') === String(HEADER_ROW))
+  if (headerRow) {
+    const prevHeader = [...headerRow.getElementsByTagName('c')].find(c => c.getAttribute('r') === `${prev.col}${HEADER_ROW}`)
+    const cell = el(doc, 'c')
+    cell.setAttribute('r', `${extra.col}${HEADER_ROW}`)
+    if (prevHeader?.getAttribute('s')) cell.setAttribute('s', prevHeader.getAttribute('s'))
+    setInlineString(doc, cell, 'Hướng xử lý')
+    headerRow.appendChild(cell)
+  }
+  for (const mc of doc.getElementsByTagName('mergeCell')) {
+    mc.setAttribute('ref', mc.getAttribute('ref').replace(new RegExp(`:${prev.col}(\\d+)$`), `:${extra.col}$1`))
+  }
+  const cols = doc.getElementsByTagName('cols')[0]
+  if (cols) {
+    const idx = extra.col.charCodeAt(0) - 64
+    const colEl = el(doc, 'col')
+    colEl.setAttribute('min', String(idx))
+    colEl.setAttribute('max', String(idx))
+    colEl.setAttribute('width', '32')
+    colEl.setAttribute('customWidth', '1')
+    cols.appendChild(colEl)
+  }
+}
+
 function fillSheet(doc, spec, rows, dateRangeText) {
   const sheetData = doc.getElementsByTagName('sheetData')[0]
   const rowNodes = [...sheetData.getElementsByTagName('row')]
@@ -122,6 +154,7 @@ function fillSheet(doc, spec, rows, dateRangeText) {
   for (const c of protoRow?.getElementsByTagName('c') || []) {
     styles[c.getAttribute('r').replace(/\d+$/, '')] = c.getAttribute('s')
   }
+  addNoteColumn(doc, spec, styles)
   rowNodes.filter(r => Number(r.getAttribute('r')) >= FIRST_DATA_ROW).forEach(r => r.remove())
 
   // Dòng 2: khoảng thời gian của file báo cáo gốc.

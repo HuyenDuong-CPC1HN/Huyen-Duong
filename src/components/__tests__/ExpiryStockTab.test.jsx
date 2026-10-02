@@ -73,7 +73,7 @@ describe('ExpiryStockTab', () => {
     expect(screen.queryByText('Hàng đã hết tồn kho')).not.toBeInTheDocument()
     // Bảng Cận date có đúng các cột của sheet "Cận date" trong file mẫu
     expect([...document.querySelectorAll('th')].map(th => th.textContent)).toEqual([
-      '', 'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn cuối', 'Hướng xử lý',
+      '', 'Stt', 'Loại', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn cuối', 'Hướng xử lý',
     ])
 
     // Nhóm cận hạn 6–12 tháng chỉ để cảnh báo luân chuyển
@@ -99,7 +99,7 @@ describe('ExpiryStockTab', () => {
     expect(screen.getByText('Hàng còn an toàn')).toBeInTheDocument()
     expect(screen.queryByText('Hàng có xuất')).not.toBeInTheDocument()
     expect([...document.querySelectorAll('th')].map(th => th.textContent)).toEqual([
-      '', 'Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)',
+      '', 'Stt', 'Loại', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)',
       'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối', 'Hướng xử lý',
     ])
     expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC/ })).toBeInTheDocument()
@@ -152,7 +152,7 @@ describe('ExpiryStockTab', () => {
     fireEvent.change(input, { target: { files: [file] } })
     await waitFor(() => expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument())
 
-    const firstTh = container.querySelectorAll('th')[2] // "Mã vật tư"
+    const firstTh = container.querySelectorAll('th')[3] // "Mã vật tư"
     const handle = firstTh.querySelector('.cursor-col-resize')
     expect(handle).toBeTruthy()
 
@@ -168,12 +168,12 @@ describe('ExpiryStockTab', () => {
 
     fireEvent.click(screen.getByText('Đặt lại độ rộng cột'))
     expect(store.opsStore.getItem('expiry_stock_colwidths')).toBeNull()
-    expect(container.querySelectorAll('th')[2].style.width).toBe('100px') // về lại mặc định
+    expect(container.querySelectorAll('th')[3].style.width).toBe('100px') // về lại mặc định
   })
 
   it('check list: mặc định chưa tích, chỉ hàng đủ tiêu chí mới tích được, báo cáo chỉ lấy hàng đã tích, lưu theo tháng', async () => {
     render(<ExpiryStockTab />)
-    const exportButton = screen.getByRole('button', { name: /Xuất báo cáo hàng cận date \(0\/3\)/ })
+    const exportButton = screen.getByRole('button', { name: /Xuất báo cáo hàng cận date · Kho C \(0\/3\)/ })
     expect(exportButton).toBeDisabled()
 
     // Xem "Tất cả tồn kho": hàng không đủ tiêu chí (an toàn) không có ô tích
@@ -183,13 +183,14 @@ describe('ExpiryStockTab', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: /X002/ }))
     expect(screen.getByRole('checkbox', { name: /X002/ })).toBeChecked()
-    const button = screen.getByRole('button', { name: /Xuất báo cáo hàng cận date \(1\/3\)/ })
+    const button = screen.getByRole('button', { name: /Xuất báo cáo hàng cận date · Kho C \(1\/3\)/ })
     expect(button).toBeEnabled()
     fireEvent.click(button)
     await waitFor(() => expect(exportStockReportMock).toHaveBeenCalledTimes(1))
     const [{ kind, rows }] = exportStockReportMock.mock.calls[0]
     expect(kind).toBe('canDate')
     expect(rows.map(r => r.maVatTu)).toEqual(['X002'])
+    expect(rows[0]).toHaveProperty('huongXuLy')
 
     // Dấu tích được lưu lại theo tháng; tab CLC có danh sách tích riêng
     cleanup()
@@ -198,10 +199,50 @@ describe('ExpiryStockTab', () => {
     expect(screen.getByRole('checkbox', { name: /X002/ })).toBeChecked()
     cleanup()
     render(<ExpiryStockTab mode="clc" />)
-    expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC \(0\/6\)/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC · Kho C \(0\/6\)/ })).toBeDisabled()
 
     // Ô tích ở tiêu đề: tích tất cả hàng đủ tiêu chí đang hiện
     fireEvent.click(screen.getByRole('checkbox', { name: 'Tích tất cả hàng đang hiện để đưa vào báo cáo' }))
-    expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC \(6\/6\)/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC · Kho C \(6\/6\)/ })).toBeEnabled()
+  })
+
+  it('tải thêm file Kho DTP: có nút Tất cả / Kho C / Kho DTP, cột Loại, lọc theo loại, báo cáo kèm Hướng xử lý', async () => {
+    const today = new Date()
+    const soon = new Date(today); soon.setDate(soon.getDate() + 20)
+    const aoa = [
+      ['Báo cáo tổng hợp nhập xuất tồn theo kho'],
+      ['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối'],
+      [1, 'TH00893', 'Thuốc DTP cận date', '020105', 'HOP', 'D1', soon, 0, 0, 0, 9],
+      [2, 'TH00894', 'Thuốc DTP kho khác', '020199', 'HOP', 'D2', soon, 0, 0, 0, 9],
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1')
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    const dtpFile = new File([buf], 'dtp.xlsx')
+
+    render(<ExpiryStockTab />)
+    fireEvent.change(screen.getByLabelText('Tải file Kho DTP'), { target: { files: [dtpFile] } })
+    await waitFor(() => expect(screen.getByText('dtp.xlsx')).toBeInTheDocument())
+
+    expect(screen.getByText('Thuốc DTP cận date')).toBeInTheDocument()
+    expect(screen.queryByText('Thuốc DTP kho khác')).not.toBeInTheDocument() // kho 020199 bị loại
+    expect(screen.getByText('Hàng đã hết hạn')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Kho DTP' }))
+    expect(screen.getByText('Thuốc DTP cận date')).toBeInTheDocument()
+    expect(screen.queryByText('Hàng đã hết hạn')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Kho C' }))
+    expect(screen.queryByText('Thuốc DTP cận date')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }))
+
+    // Hướng xử lý nhập tay đi cùng vào báo cáo của đúng kho
+    fireEvent.click(screen.getByRole('checkbox', { name: /TH00893/ }))
+    fireEvent.change(screen.getByLabelText(/Hướng xử lý TH00893/), { target: { value: 'Xuất huỷ' } })
+    exportStockReportMock.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: /Xuất báo cáo hàng cận date · Kho DTP \(1\/1\)/ }))
+    await waitFor(() => expect(exportStockReportMock).toHaveBeenCalledTimes(1))
+    const [{ rows, suffix }] = exportStockReportMock.mock.calls[0]
+    expect(suffix).toBe('KhoDTP')
+    expect(rows).toEqual([expect.objectContaining({ maVatTu: 'TH00893', huongXuLy: 'Xuất huỷ' })])
   })
 })

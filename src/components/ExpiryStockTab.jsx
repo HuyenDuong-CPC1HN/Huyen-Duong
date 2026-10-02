@@ -22,15 +22,20 @@ const DISPOSAL_DAYS_THRESHOLD = 30
 // phủ ("Từ ngày ... đến ngày ..." ở đầu file) — khoảng này nên từ MIN_SLOW_DAYS ngày trở lên.
 const MIN_SLOW_DAYS = 90
 
-// ---- Lưu trữ dữ liệu upload theo TỪNG THÁNG, cố định/không bị ghi đè khi upload file mới ----
-// expiry_stock_months = [{ id, fileName, uploadedAt, rows, dateRange }, ...] (mới nhất ở đầu)
+// ---- Lưu trữ dữ liệu upload: mỗi file là 1 mục {id, fileName, uploadedAt, rows, dateRange, entity} ----
+// Mỗi tháng có tối đa 1 file Kho C và 1 file Kho DTP (tải lại cùng loại trong tháng thì thay file cũ). Dữ liệu cũ
+// chưa ghi loại là Kho C. Dấu tích và "Hướng xử lý" lưu theo THÁNG (yyyy-mm) + từng dòng (đã gắn loại kho).
 const STORAGE_KEY = 'expiry_stock_months'
 const ACTIVE_KEY = 'expiry_stock_active'
-const ENTITY_KEY = 'expiry_stock_entity'
-// Mỗi file tải lên thuộc 1 loại kho (Kho C hoặc Kho DTP — 2 phần mềm kho riêng); dữ liệu cũ chưa ghi loại là Kho C.
+const ENTITY_KEYS = Object.keys(EXPIRY_ENTITIES)
 const entityOf = m => m.entity || 'donC'
-const activeKeyOf = entity => (entity === 'donC' ? ACTIVE_KEY : `${ACTIVE_KEY}_${entity}`)
-const MAX_MONTHS = 24 // tối đa số tháng giữ lại
+const MAX_MONTHS = 24 // tối đa số file giữ lại
+
+function periodOf(m) {
+  const d = new Date(m.uploadedAt)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+function periodLabel(p) { const [y, mo] = p.split('-'); return `${mo}/${y}` }
 
 function readMonths() {
   try {
@@ -41,56 +46,50 @@ function readMonths() {
 function writeMonths(months) { localStorage.setItem(STORAGE_KEY, JSON.stringify(months)) }
 
 function addMonth(entry) {
-  const months = readMonths()
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
-  const next = [withId, ...months].slice(0, MAX_MONTHS)
-  writeMonths(next)
-  localStorage.setItem(activeKeyOf(entityOf(withId)), withId.id)
+  const period = periodOf(withId)
+  const kept = readMonths().filter(m => !(periodOf(m) === period && entityOf(m) === entityOf(withId)))
+  writeMonths([withId, ...kept].slice(0, MAX_MONTHS))
+  localStorage.setItem(ACTIVE_KEY, period)
   return withId
 }
 // Check list "đưa vào báo cáo" — lưu theo từng tháng và từng tab con (ops_settings, dùng chung mọi máy).
 // Mặc định chưa tích hàng nào; chỉ hàng đủ tiêu chí của báo cáo mới tích được.
-function checkedKey(mode, monthId) { return `expiry_report_checked_${mode}_${monthId}` }
-// Cột "Hướng xử lý" do người dùng tự điền tay — lưu theo từng tháng, dùng chung cho cả 2 tab con.
-function noteKey(monthId) { return `expiry_huong_xu_ly_${monthId}` }
-function readNotes(monthId) {
-  if (!monthId) return {}
+function checkedKey(mode, period) { return `expiry_report_checked_${mode}_${period}` }
+function readChecked(mode, period) {
+  if (!period) return []
   try {
-    const obj = JSON.parse(localStorage.getItem(noteKey(monthId)) || '{}')
-    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {}
-  } catch { return {} }
-}
-function readChecked(mode, monthId) {
-  if (!monthId) return []
-  try {
-    const list = JSON.parse(localStorage.getItem(checkedKey(mode, monthId)) || '[]')
+    const list = JSON.parse(localStorage.getItem(checkedKey(mode, period)) || '[]')
     return Array.isArray(list) ? list : []
   } catch { return [] }
 }
+// Cột "Hướng xử lý" do người dùng tự điền tay — lưu theo từng tháng, dùng chung cho cả 2 tab con.
+function noteKey(period) { return `expiry_huong_xu_ly_${period}` }
+function readNotes(period) {
+  if (!period) return {}
+  try {
+    const obj = JSON.parse(localStorage.getItem(noteKey(period)) || '{}')
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {}
+  } catch { return {} }
+}
 
-// Khoá ổn định cho 1 dòng trong tháng: mã + lô + kho + hạn dùng, thêm số thứ tự nếu file có dòng trùng.
-function withRowKeys(rows) {
+function withRowKeys(rows, entity) {
   const seen = new Map()
   return rows.map(r => {
-    const base = [r.maVatTu, r.maLo, r.maKho, r.hanDung || ''].join('|')
+    const base = [entity, r.maVatTu, r.maLo, r.maKho, r.hanDung || ''].join('|')
     const n = seen.get(base) || 0
     seen.set(base, n + 1)
-    return { ...r, rowKey: n ? `${base}#${n}` : base }
+    return { ...r, entity, rowKey: n ? `${base}#${n}` : base }
   })
 }
 
 function removeMonthEntry(id) {
-  for (const mode of ['canDate', 'clc']) {
-    if (localStorage.getItem(checkedKey(mode, id)) !== null) localStorage.removeItem(checkedKey(mode, id))
-  }
-  localStorage.removeItem(noteKey(id))
+  const target = readMonths().find(m => m.id === id)
   const months = readMonths().filter(m => m.id !== id)
   writeMonths(months)
-  for (const entity of Object.keys(EXPIRY_ENTITIES)) {
-    if (localStorage.getItem(activeKeyOf(entity)) !== id) continue
-    const fallback = months.find(m => entityOf(m) === entity)
-    if (fallback) localStorage.setItem(activeKeyOf(entity), fallback.id)
-    else localStorage.removeItem(activeKeyOf(entity))
+  if (target && !months.some(m => periodOf(m) === periodOf(target))) {
+    for (const mode of ['canDate', 'clc']) localStorage.removeItem(checkedKey(mode, periodOf(target)))
+    localStorage.removeItem(noteKey(periodOf(target)))
   }
   return months
 }
@@ -109,11 +108,11 @@ const CAN_DATE_VIEWS = [
 ]
 
 // Cột bảng đúng theo 2 sheet của file báo cáo mẫu: "Cận date" (9 cột) và "CLC" (13 cột).
-const CAN_DATE_COLUMNS = ['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn cuối', 'Hướng xử lý']
-const CLC_COLUMNS = ['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối', 'Hướng xử lý']
+const CAN_DATE_COLUMNS = ['Stt', 'Loại', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn cuối', 'Hướng xử lý']
+const CLC_COLUMNS = ['Stt', 'Loại', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối', 'Hướng xử lý']
 const NUMERIC_COLUMNS = new Set(['Stt', 'Tuổi thuốc (Tháng)', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối'])
 const DEFAULT_COL_WIDTH = {
-  'Stt': 56, 'Mã vật tư': 100, 'Tên vật tư': 280, 'Mã kho': 84, 'Đvt': 70, 'Mã lô': 100, 'Tên lô': 100,
+  'Stt': 56, 'Loại': 90, 'Mã vật tư': 100, 'Tên vật tư': 280, 'Mã kho': 84, 'Đvt': 70, 'Mã lô': 100, 'Tên lô': 100,
   'Hạn dùng': 100, 'Tuổi thuốc (Tháng)': 120, 'Tồn đầu': 90, 'Sl nhập': 84, 'Sl xuất': 84, 'Tồn cuối': 90, 'Hướng xử lý': 220,
 }
 const COLWIDTHS_KEY = 'expiry_stock_colwidths'
@@ -168,6 +167,7 @@ function ageTitle(daysLeft) {
 function cellValue(col, r, i) {
   switch (col) {
     case 'Stt': return i + 1
+    case 'Loại': return EXPIRY_ENTITIES[r.entity]?.label || ''
     case 'Mã vật tư': return r.maVatTu
     case 'Tên vật tư': return r.tenVatTu || '—'
     case 'Mã kho': return r.maKho || '—'
@@ -187,7 +187,7 @@ function cellValue(col, r, i) {
 const VIEW_FILE_LABEL = { canDate: 'CanDate', expired: 'HetHan', near3: 'Duoi3Thang', near6: 'Duoi6Thang', near12: 'CanHan6-12Thang', clc: 'CLC', all: 'TatCa' }
 
 // Xuất nhanh đúng danh sách đang xem trên màn hình (theo bộ lọc) — khác với "Xuất báo cáo" đúng mẫu 2 sheet.
-function exportRowsToExcel(rows, active, view) {
+function exportRowsToExcel(rows, period, view) {
   const data = rows.map((r, i) => ({
     'Stt': i + 1,
     'Mã vật tư': r.maVatTu,
@@ -213,65 +213,60 @@ function exportRowsToExcel(rows, active, view) {
   })
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Ton kho can date')
-  const monthLabel = new Date(active.uploadedAt).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' }).replace('/', '-')
+  const monthLabel = periodLabel(period).replace('/', '-')
   XLSX.writeFile(wb, `TonKhoCanDate_${VIEW_FILE_LABEL[view] || 'CanDate'}_${monthLabel}.xlsx`)
+}
+
+const ENTITY_BADGE = {
+  donC: 'bg-red-100 text-red-700 border-red-200',
+  donDTP: 'bg-blue-100 text-blue-700 border-blue-200',
 }
 
 export default function ExpiryStockTab({ mode = 'canDate' }) {
   const isClc = mode === 'clc'
-  const inputRef = useRef()
-  const [dragging, setDragging] = useState(false)
+  const inputRefs = useRef({})
+  const [dragging, setDragging] = useState('')
   const [error, setError] = useState('')
   const [months, setMonths] = useState(() => readMonths())
-  const [entity, setEntityState] = useState(() => {
-    const saved = localStorage.getItem(ENTITY_KEY)
-    return EXPIRY_ENTITIES[saved] ? saved : 'donC'
-  })
-  const pickActive = (list, ent) => {
-    const own = list.filter(m => entityOf(m) === ent)
-    const saved = localStorage.getItem(activeKeyOf(ent))
-    return own.some(m => m.id === saved) ? saved : (own[0]?.id || null)
-  }
-  const [activeId, setActiveId] = useState(() => pickActive(readMonths(), entity))
-  const setEntity = (ent) => {
-    localStorage.setItem(ENTITY_KEY, ent)
-    setEntityState(ent)
-    setActiveId(pickActive(months, ent))
-    setKhoFilter('all')
-  }
-  const entityMonths = useMemo(() => months.filter(m => entityOf(m) === entity), [months, entity])
+  const periods = useMemo(() => [...new Set(months.map(periodOf))].sort().reverse(), [months])
+  const [periodSel, setPeriodSel] = useState(() => localStorage.getItem(ACTIVE_KEY))
+  const period = periods.includes(periodSel) ? periodSel : (periods[0] || null)
+  const [entSel, setEntSel] = useState('all') // all | donC | donDTP
+  const entries = useMemo(() => {
+    const out = {}
+    for (const k of ENTITY_KEYS) out[k] = months.find(m => periodOf(m) === period && entityOf(m) === k) || null
+    return out
+  }, [months, period])
   const [view, setView] = useState(isClc ? 'clc' : 'canDate') // canDate | expired | near3 | near6 | near12 | all (tab Hàng cận date); clc (tab Hàng chậm luân chuyển)
   const [search, setSearch] = useState('')
   const [khoFilter, setKhoFilter] = useState('all')
   const [exportingDisposal, setExportingDisposal] = useState(false)
-  const [exportingReport, setExportingReport] = useState(false)
+  const [exportingReport, setExportingReport] = useState('')
   const [colWidths, setColWidth, resetColWidths] = useColWidths()
 
-  const active = entityMonths.find(m => m.id === activeId) || null
-  const [checkedState, setCheckedState] = useState(() => ({ monthId: activeId, keys: readChecked(mode, activeId) }))
+  const [checkedState, setCheckedState] = useState(() => ({ period, keys: readChecked(mode, period) }))
   // Đổi tháng thì nạp lại dấu tích đã lưu của tháng đó.
   const checkedKeys = useMemo(
-    () => new Set(checkedState.monthId === activeId ? checkedState.keys : readChecked(mode, activeId)),
-    [checkedState, activeId, mode],
+    () => new Set(checkedState.period === period ? checkedState.keys : readChecked(mode, period)),
+    [checkedState, period, mode],
   )
   const saveChecked = (nextSet) => {
     const keys = [...nextSet]
-    setCheckedState({ monthId: activeId, keys })
-    if (activeId) localStorage.setItem(checkedKey(mode, activeId), JSON.stringify(keys))
+    setCheckedState({ period, keys })
+    if (period) localStorage.setItem(checkedKey(mode, period), JSON.stringify(keys))
   }
-
-  const [notesState, setNotesState] = useState(() => ({ monthId: activeId, notes: readNotes(activeId) }))
-  const notes = notesState.monthId === activeId ? notesState.notes : readNotes(activeId)
+  const [notesState, setNotesState] = useState(() => ({ period, notes: readNotes(period) }))
+  const notes = notesState.period === period ? notesState.notes : readNotes(period)
   const setNote = (rowKey, text) => {
-    if (!activeId) return
+    if (!period) return
     const next = { ...notes }
     if (text) next[rowKey] = text
     else delete next[rowKey]
-    setNotesState({ monthId: activeId, notes: next })
-    localStorage.setItem(noteKey(activeId), JSON.stringify(next))
+    setNotesState({ period, notes: next })
+    localStorage.setItem(noteKey(period), JSON.stringify(next))
   }
 
-  const parseFile = async (file) => {
+  const parseFile = async (file, expected) => {
     setError('')
     if (!file) return
     const ext = file.name.split('.').pop().toLowerCase()
@@ -282,63 +277,70 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
       if (rows.length === 0) { setError('Không tìm thấy dữ liệu vật tư trong file.'); return }
       const dateRange = parseReportDateRange(buffer)
       const fileEntity = detectExpiryEntity(rows)
+      if (expected && fileEntity !== expected) {
+        setError(`File "${file.name}" là của ${EXPIRY_ENTITIES[fileEntity].label}, anh tải vào ô ${EXPIRY_ENTITIES[fileEntity].label} giúp em.`)
+        return
+      }
       if (filterByExpiryEntity(rows, fileEntity).length === 0) { setError(`File không có dữ liệu của các kho ${EXPIRY_ENTITIES[fileEntity].kho.join(', ')} (${EXPIRY_ENTITIES[fileEntity].label}).`); return }
       const entry = addMonth({ fileName: file.name, uploadedAt: new Date().toISOString(), rows, dateRange, entity: fileEntity })
-      const all = readMonths()
-      setMonths(all)
-      localStorage.setItem(ENTITY_KEY, fileEntity)
-      setEntityState(fileEntity)
-      setActiveId(entry.id)
+      setMonths(readMonths())
+      setPeriodSel(periodOf(entry))
       setKhoFilter('all')
     } catch (err) {
       setError(err.message || 'Không đọc được file. Vui lòng kiểm tra lại.')
     }
   }
 
-  const handleDrop = (e) => { e.preventDefault(); setDragging(false); void parseFile(e.dataTransfer.files[0]) }
+  const handleDrop = (e, ent) => { e.preventDefault(); setDragging(''); void parseFile(e.dataTransfer.files[0], ent) }
 
-  const removeActive = () => {
-    if (!active) return
-    if (!window.confirm(`Xoá dữ liệu tháng "${active.fileName}"? Các tháng khác vẫn được giữ nguyên.`)) return
-    const next = removeMonthEntry(active.id)
-    setMonths(next)
-    setActiveId(pickActive(next, entity))
+  const removeEntry = (entry) => {
+    if (!window.confirm(`Xoá dữ liệu "${entry.fileName}" (${EXPIRY_ENTITIES[entityOf(entry)].label})? Dữ liệu loại kho còn lại vẫn được giữ nguyên.`)) return
+    setMonths(removeMonthEntry(entry.id))
   }
 
-  const selectMonth = (id) => {
-    localStorage.setItem(activeKeyOf(entity), id)
-    setActiveId(id)
+  const selectPeriod = (p) => {
+    localStorage.setItem(ACTIVE_KEY, p)
+    setPeriodSel(p)
   }
 
-  const activeRows = active?.rows
+  const rowsC = entries.donC?.rows
+  const rowsD = entries.donDTP?.rows
   const inStock = useMemo(() => {
-    if (!activeRows) return []
     const today = new Date()
-    return withRowKeys(filterByExpiryEntity(activeRows, entity))
-      .filter(r => r.tonCuoi > 0)
-      .map(r => ({
-        ...r,
-        bucket: classifyExpiry(r.hanDung, today),
-        daysLeft: daysUntil(r.hanDung, today),
-        tuoiThuoc: drugAgeMonths(r.hanDung, today),
-        slow: isSlowMoving(r),
-      }))
-  }, [activeRows, entity])
+    const out = []
+    for (const [ent, rows] of [['donC', rowsC], ['donDTP', rowsD]]) {
+      if (!rows) continue
+      for (const r of withRowKeys(filterByExpiryEntity(rows, ent), ent)) {
+        if (!(r.tonCuoi > 0)) continue
+        out.push({
+          ...r,
+          bucket: classifyExpiry(r.hanDung, today),
+          daysLeft: daysUntil(r.hanDung, today),
+          tuoiThuoc: drugAgeMonths(r.hanDung, today),
+          slow: isSlowMoving(r),
+        })
+      }
+    }
+    return out
+  }, [rowsC, rowsD])
+  // Phạm vi đang xem: Tất cả hoặc riêng 1 loại kho — thẻ đếm, số hàng đủ tiêu chí và danh sách đều theo phạm vi này.
+  const scoped = useMemo(() => (entSel === 'all' ? inStock : inStock.filter(r => r.entity === entSel)), [inStock, entSel])
+  const shownEntries = ENTITY_KEYS.filter(k => (entSel === 'all' || entSel === k) && entries[k]).map(k => entries[k])
 
   const counts = useMemo(() => ({
-    expired: inStock.filter(r => r.bucket === 'expired').length,
-    near3: inStock.filter(r => r.bucket === 'near3').length,
-    near6: inStock.filter(r => r.bucket === 'near6').length,
-    near12: inStock.filter(r => r.bucket === 'near12').length,
-    clc: inStock.filter(r => r.slow).length,
-  }), [inStock])
+    expired: scoped.filter(r => r.bucket === 'expired').length,
+    near3: scoped.filter(r => r.bucket === 'near3').length,
+    near6: scoped.filter(r => r.bucket === 'near6').length,
+    near12: scoped.filter(r => r.bucket === 'near12').length,
+    clc: scoped.filter(r => r.slow).length,
+  }), [scoped])
 
   // Hàng đủ tiêu chí báo cáo của tab này (mới được tích); báo cáo chỉ lấy hàng đủ tiêu chí ĐÃ tích —
   // trong toàn bộ tháng đang chọn, không phụ thuộc tìm kiếm/lọc kho đang xem.
   const isEligible = (r) => (isClc ? r.slow : CAN_DATE_BUCKETS.includes(r.bucket))
   const eligibleRows = useMemo(
-    () => inStock.filter(r => (isClc ? r.slow : CAN_DATE_BUCKETS.includes(r.bucket))).sort(byExpiry),
-    [inStock, isClc],
+    () => scoped.filter(r => (isClc ? r.slow : CAN_DATE_BUCKETS.includes(r.bucket))).sort(byExpiry),
+    [scoped, isClc],
   )
   const reportRows = useMemo(() => eligibleRows.filter(r => checkedKeys.has(r.rowKey)), [eligibleRows, checkedKeys])
 
@@ -349,10 +351,10 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
     saveChecked(next)
   }
 
-  const khoOptions = useMemo(() => [...new Set(inStock.map(r => r.maKho).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [inStock])
+  const khoOptions = useMemo(() => [...new Set(scoped.map(r => r.maKho).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [scoped])
 
   const filteredRows = useMemo(() => {
-    let rows = inStock
+    let rows = scoped
     if (view === 'canDate') rows = rows.filter(r => CAN_DATE_BUCKETS.includes(r.bucket))
     else if (view === 'clc') rows = rows.filter(r => r.slow)
     else if (view !== 'all') rows = rows.filter(r => r.bucket === view)
@@ -362,7 +364,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
       rows = rows.filter(r => r.maVatTu.toLowerCase().includes(q) || r.tenVatTu.toLowerCase().includes(q) || r.maLo.toLowerCase().includes(q))
     }
     return [...rows].sort(byExpiry)
-  }, [inStock, view, khoFilter, search])
+  }, [scoped, view, khoFilter, search])
 
   const columns = view === 'clc' ? CLC_COLUMNS : CAN_DATE_COLUMNS
   // Ô tích ở tiêu đề: tích/bỏ tích toàn bộ hàng đủ tiêu chí đang hiện trên bảng (theo tìm kiếm, lọc kho).
@@ -379,19 +381,18 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
   }
   const activeView = ['expired', 'near3', 'near6'].includes(view) ? 'canDate' : view
 
-  // Hàng còn hạn dùng dưới 1 tháng (chưa hết hạn) — nguồn cho Biên bản Xử lý + Xác minh, tính từ toàn bộ
-  // inStock (không phụ thuộc tab/tìm kiếm/lọc kho đang chọn trên bảng), vì biên bản hủy cần đủ toàn bộ
-  // hàng cận date trong tháng, không phải chỉ phần đang xem trên màn hình.
-  // Biên bản hàng cận date là của Kho A (mã kho 020110, nằm ngoài các kho theo dõi) nên lấy từ TOÀN BỘ file Kho C,
-  // không bị lọc theo kho theo dõi; Kho DTP không có biên bản này.
+  // Hàng còn hạn dùng dưới 1 tháng (chưa hết hạn) — nguồn cho Biên bản Xử lý + Xác minh, tính từ toàn bộ file
+  // Kho C (không phụ thuộc tab/tìm kiếm/lọc kho đang chọn trên bảng), vì biên bản hủy cần đủ toàn bộ hàng cận date
+  // trong tháng. Biên bản hàng cận date là của Kho A (mã kho 020110, nằm ngoài các kho theo dõi) nên lấy từ TOÀN BỘ
+  // file Kho C, không bị lọc theo kho theo dõi; Kho DTP không có biên bản này.
   const disposalRows = useMemo(() => {
-    if (!active || entity !== 'donC') return []
+    if (!rowsC) return []
     const today = new Date()
-    return (active.rows || [])
+    return rowsC
       .filter(r => r.tonCuoi > 0)
       .map(r => ({ ...r, daysLeft: daysUntil(r.hanDung, today) }))
       .filter(r => r.daysLeft !== null && r.daysLeft >= 0 && r.daysLeft < DISPOSAL_DAYS_THRESHOLD)
-  }, [active, entity])
+  }, [rowsC])
 
   const handleExportDisposal = async () => {
     if (disposalRows.length === 0) return
@@ -414,118 +415,160 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
     }
   }
 
-  const handleExportReport = async () => {
-    setExportingReport(true)
+  // Báo cáo xuất riêng từng loại kho (file Kho C, file Kho DTP), kèm cột "Hướng xử lý" đã điền.
+  const handleExportReport = async (ent) => {
+    setExportingReport(ent)
     setError('')
     try {
-      await exportStockReport({ kind: isClc ? 'clc' : 'canDate', rows: reportRows, dateRange: active?.dateRange || null, suffix: entity === 'donDTP' ? 'DonDTP' : 'DonC' })
+      const rows = reportRows.filter(r => r.entity === ent).map(r => ({ ...r, huongXuLy: notes[r.rowKey] || '' }))
+      await exportStockReport({
+        kind: isClc ? 'clc' : 'canDate',
+        rows,
+        dateRange: entries[ent]?.dateRange || null,
+        suffix: ent === 'donDTP' ? 'KhoDTP' : 'KhoC',
+      })
     } catch (err) {
       setError(err.message || 'Không xuất được báo cáo.')
     } finally {
-      setExportingReport(false)
+      setExportingReport('')
     }
   }
 
-  const entityBar = (
-    <div className="flex items-center gap-2 mb-3 flex-wrap">
-      <div className="flex gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1" role="group" aria-label="Loại kho">
-        {Object.entries(EXPIRY_ENTITIES).map(([k, v]) => (
-          <button key={k} type="button" onClick={() => setEntity(k)} aria-pressed={entity === k}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${entity === k ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
-            {v.label} ({months.filter(m => entityOf(m) === k).length})
-          </button>
-        ))}
-      </div>
-      <span className="text-xs text-gray-400">
-        {entity === 'donC' ? 'Kho theo dõi: 020101, 020102, 020105 (online miền Nam), 020106; các kho khác bị loại.' : 'Kho theo dõi: 020105 (phần mềm riêng của Kho DTP, không liên quan kho 020105 của Kho C).'}
-      </span>
+  const slotInfo = {
+    donC: 'Giữ kho 020101, 020102, 020105 (online miền Nam), 020106; các kho khác bị loại.',
+    donDTP: 'Giữ kho 020105 (phần mềm riêng của Kho DTP, không liên quan kho 020105 của Kho C).',
+  }
+  const slots = (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+      {ENTITY_KEYS.map(k => {
+        const entry = entries[k]
+        const label = EXPIRY_ENTITIES[k].label
+        const kept = entry ? filterByExpiryEntity(entry.rows, k).filter(r => r.tonCuoi > 0).length : 0
+        return (
+          <div
+            key={k}
+            onDragOver={(e) => { e.preventDefault(); setDragging(k) }}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging('') }}
+            onDrop={(e) => handleDrop(e, k)}
+            className={`rounded-xl border p-3 flex flex-col gap-1.5 ${entry ? 'border-green-300 bg-green-50' : 'border-2 border-dashed border-gray-300 bg-gray-50'} ${dragging === k ? 'ring-2 ring-blue-400' : ''}`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-0.5 rounded border text-[11px] font-semibold ${ENTITY_BADGE[k]}`}>{label}</span>
+              {entry ? (
+                <>
+                  <FileSpreadsheet size={14} className="text-green-600 shrink-0" />
+                  <span className="text-sm text-green-700 font-medium truncate" title={entry.fileName}>{entry.fileName}</span>
+                  <button onClick={() => removeEntry(entry)} className="ml-auto p-0.5 rounded hover:bg-green-100 text-green-500 hover:text-green-700" title={`Xoá dữ liệu ${label} của tháng này`}>
+                    <X size={14} />
+                  </button>
+                </>
+              ) : (
+                <span className="text-sm text-gray-500">Chưa có file {label}</span>
+              )}
+            </div>
+            {entry && (
+              <div className="text-xs text-green-700">
+                ✓ Đã nhận đúng {label} · {kept} mặt hàng còn tồn
+                {entry.dateRange && <> · Kỳ báo cáo: {formatDateVi(entry.dateRange.tuNgay)} → {formatDateVi(entry.dateRange.denNgay)} ({entry.dateRange.soNgay} ngày)</>}
+              </div>
+            )}
+            <div className="text-xs text-gray-400">{slotInfo[k]}</div>
+            <div>
+              <button
+                type="button"
+                onClick={() => inputRefs.current[k]?.click()}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${entry ? 'bg-white border border-gray-200 text-gray-600 hover:border-blue-400 hover:text-blue-600' : 'bg-[#1e3a5f] text-white hover:bg-[#2a4d7a]'}`}
+              >
+                {dragging === k ? <FileUp size={14} /> : <Upload size={14} />}
+                {entry ? 'Tải lại file' : `Tải file ${label}`}
+              </button>
+              <input
+                ref={el => { inputRefs.current[k] = el }}
+                type="file"
+                accept=".xlsx,.xls,.xml"
+                aria-label={`Tải file ${label}`}
+                className="sr-only"
+                onChange={e => { void parseFile(e.target.files[0], k); e.target.value = '' }}
+              />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 
-  if (!active) {
+  const hint = (
+    <p className="text-xs text-gray-400 mb-3">
+      Mỗi tháng tải 2 file "Báo cáo tổng hợp nhập xuất tồn theo kho" (.xlsx / .xml): 1 file Kho C, 1 file Kho DTP. App tự nhận file của kho nào và tự tìm hàng cận date lẫn hàng chậm luân chuyển, dùng chung cho cả 2 tab; nên xuất báo cáo với khoảng thời gian từ {MIN_SLOW_DAYS} ngày trở lên để lọc đúng hàng chậm luân chuyển.
+    </p>
+  )
+
+  if (periods.length === 0) {
     return (
       <div>
-      {entityBar}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <label
-          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
-          onDrop={handleDrop}
-          className={`flex flex-col items-center justify-center gap-3 w-full h-56 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none
-            ${dragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'}`}
-        >
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${dragging ? 'bg-blue-100' : 'bg-gray-100'}`}>
-            {dragging ? <FileUp size={24} className="text-blue-500" /> : <Upload size={24} className="text-gray-400" />}
-          </div>
-          <div className="text-center">
-            <p className="text-gray-700 font-semibold text-sm">Chưa có dữ liệu {EXPIRY_ENTITIES[entity].label}. Kéo & thả file "Báo cáo tổng hợp nhập xuất tồn theo kho" vào đây</p>
-            <p className="text-gray-400 text-xs mt-1">hoặc <span className="text-blue-600 underline font-medium">click để chọn file .xlsx / .xml</span> — app tự nhận file của Kho C hay Kho DTP; mỗi lần upload là 1 tháng dữ liệu, dùng chung cho cả Hàng cận date và Hàng chậm luân chuyển; nên xuất báo cáo với khoảng thời gian từ {MIN_SLOW_DAYS} ngày trở lên để lọc đúng hàng chậm luân chuyển</p>
-          </div>
-          <input ref={inputRef} type="file" accept=".xlsx,.xls,.xml" className="sr-only" onChange={e => void parseFile(e.target.files[0])} />
-        </label>
+        {slots}
+        {hint}
         {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-      </div>
       </div>
     )
   }
 
-  const dateRange = active.dateRange || null
+  // Kỳ báo cáo dùng cho phần CLC: lấy kỳ ngắn nhất trong các file đang xem (thiếu kỳ ở file nào thì coi là chưa rõ).
+  const ranges = shownEntries.map(e => e.dateRange || null)
+  const dateRange = ranges.length > 0 && ranges.every(Boolean) ? ranges.reduce((a, b) => (b.soNgay < a.soNgay ? b : a)) : null
   const rangeTooShort = dateRange && dateRange.soNgay < MIN_SLOW_DAYS
+  const exportEntities = ENTITY_KEYS.filter(k => entries[k] && (entSel === 'all' || entSel === k))
 
   return (
     <div>
-      {entityBar}
-      {entityMonths.length > 1 && (
+      {periods.length > 1 && (
         <div className="flex flex-wrap gap-1.5 mb-3">
-          {entityMonths.map(m => (
+          {periods.map(p => (
             <button
-              key={m.id}
-              onClick={() => selectMonth(m.id)}
+              key={p}
+              onClick={() => selectPeriod(p)}
               className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                m.id === activeId ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                p === period ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
               }`}
-              title={m.fileName}
             >
-              {new Date(m.uploadedAt).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}
+              {periodLabel(p)}
             </button>
           ))}
         </div>
       )}
+      {slots}
+      {hint}
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
-          <FileSpreadsheet size={15} className="text-green-600 shrink-0" />
-          <span className="text-green-700 font-medium truncate max-w-72">{active.fileName}</span>
-          <span className="text-green-500 text-xs">({inStock.length} mặt hàng còn tồn)</span>
-          <button onClick={removeActive} className="ml-1 p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-700" title="Xoá hẳn dữ liệu tháng này (các tháng khác không bị ảnh hưởng)">
-            <X size={14} />
-          </button>
+        <div className="flex gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1" role="group" aria-label="Loại kho">
+          {[['all', 'Tất cả'], ...ENTITY_KEYS.filter(k => entries[k]).map(k => [k, EXPIRY_ENTITIES[k].label])].map(([k, l]) => (
+            <button key={k} type="button" onClick={() => { setEntSel(k); setKhoFilter('all') }} aria-pressed={entSel === k}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${entSel === k ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
+              {l}
+            </button>
+          ))}
         </div>
-        <button
-          onClick={() => inputRef.current.click()}
-          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors"
-        >
-          <Upload size={14} />
-          Upload tháng mới
-        </button>
-        <input ref={inputRef} type="file" accept=".xlsx,.xls,.xml" className="hidden" onChange={e => void parseFile(e.target.files[0])} />
-        <span className="text-xs text-gray-400">
-          Cập nhật: {new Date(active.uploadedAt).toLocaleString('vi-VN')}
-          {dateRange && <> · Kỳ báo cáo: {formatDateVi(dateRange.tuNgay)} → {formatDateVi(dateRange.denNgay)} ({dateRange.soNgay} ngày)</>}
-        </span>
-        <button
-          onClick={() => void handleExportReport()}
-          disabled={exportingReport || reportRows.length === 0}
-          title={reportRows.length === 0
-            ? 'Tích chọn ở cột đầu bảng những hàng cần đưa vào báo cáo'
-            : isClc
-              ? 'Xuất file báo cáo đúng mẫu sheet CLC, gồm các hàng đã tích'
-              : 'Xuất file báo cáo đúng mẫu sheet Cận date, gồm các hàng đã tích'}
-          className="flex items-center gap-1.5 px-3 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#2a4d7a] transition-colors ml-auto disabled:opacity-40 disabled:pointer-events-none"
-        >
-          <FileDown size={15} />
-          {exportingReport ? 'Đang tạo báo cáo...' : `${isClc ? 'Xuất báo cáo hàng CLC' : 'Xuất báo cáo hàng cận date'} (${reportRows.length}/${eligibleRows.length})`}
-        </button>
+        <div className="ml-auto flex gap-2 flex-wrap">
+          {exportEntities.map(k => {
+            const n = reportRows.filter(r => r.entity === k).length
+            const total = eligibleRows.filter(r => r.entity === k).length
+            const label = EXPIRY_ENTITIES[k].label
+            return (
+              <button
+                key={k}
+                onClick={() => void handleExportReport(k)}
+                disabled={Boolean(exportingReport) || n === 0}
+                title={n === 0
+                  ? 'Tích chọn ở cột đầu bảng những hàng cần đưa vào báo cáo'
+                  : `Xuất file báo cáo ${label} đúng mẫu ${isClc ? 'sheet CLC' : 'sheet Cận date'}, gồm các hàng đã tích và cột Hướng xử lý`}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#2a4d7a] transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <FileDown size={15} />
+                {exportingReport === k ? 'Đang tạo báo cáo...' : `${isClc ? 'Xuất báo cáo hàng CLC' : 'Xuất báo cáo hàng cận date'} · ${label} (${n}/${total})`}
+              </button>
+            )
+          })}
+        </div>
       </div>
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
 
@@ -609,7 +652,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
           Đặt lại độ rộng cột
         </button>
         <button
-          onClick={() => exportRowsToExcel(filteredRows, active, view)}
+          onClick={() => exportRowsToExcel(filteredRows, period, view)}
           disabled={filteredRows.length === 0}
           title="Xuất nhanh danh sách đang xem trên màn hình"
           className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-green-400 hover:text-green-600 text-gray-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
@@ -617,7 +660,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
           <Download size={14} />
           Xuất Excel
         </button>
-        {!isClc && entity === 'donC' && <button
+        {!isClc && entries.donC && <button
           onClick={() => void handleExportDisposal()}
           disabled={disposalRows.length === 0 || exportingDisposal}
           title="Xuất Biên bản Xử lý (Excel) + Biên bản Xác minh (Word) cho hàng còn hạn dùng dưới 1 tháng"
@@ -680,6 +723,13 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                   )}
                 </td>
                 {columns.map(c => {
+                  if (c === 'Loại') {
+                    return (
+                      <td key={c} className="px-2 py-2">
+                        <span className={`px-2 py-0.5 rounded border text-[11px] font-semibold ${ENTITY_BADGE[r.entity]}`}>{EXPIRY_ENTITIES[r.entity]?.label}</span>
+                      </td>
+                    )
+                  }
                   if (c === 'Hướng xử lý') {
                     return (
                       <td key={c} className="px-1.5 py-1" style={{ maxWidth: 0 }}>
