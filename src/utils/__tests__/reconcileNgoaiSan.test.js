@@ -124,6 +124,26 @@ describe('buildAutoSalesOrderLookup — đọc "Ngày tạo" từ file Đơn SO,
     expect(buildAutoSalesOrderLookup(rows).get('SPXVN002')).toBeInstanceOf(Date)
   })
 
+  // Bug thật đã gặp: qua ExcelUpload.jsx (cột "Ngày tạo" đã thêm vào DATETIME_COLUMNS), chuỗi ra "dd/mm/yyyy
+  // HH:mm" KHÔNG CÓ GIÂY — nếu parser bắt buộc phải có giây thì không dòng nào khớp, cả tuần báo
+  // "không khớp Mã đơn" dù đã upload đúng file.
+  it('đọc đúng cả khi KHÔNG có giây — "dd/mm/yyyy HH:mm" (dạng ExcelUpload.jsx thực tế trả về)', () => {
+    const rows = [{ 'Mã vận đơn': 'SPXVN004', 'Ngày tạo': '02/10/2026 16:22' }]
+    const date = buildAutoSalesOrderLookup(rows).get('SPXVN004')
+    expect(date).toBeInstanceOf(Date)
+    expect(date.getHours()).toBe(16)
+    expect(date.getMinutes()).toBe(22)
+    expect(date.getSeconds()).toBe(0)
+  })
+
+  it('đọc được cả khi không có giờ (đúng nửa đêm, ExcelUpload.jsx bỏ hẳn phần giờ)', () => {
+    const rows = [{ 'Mã vận đơn': 'SPXVN005', 'Ngày tạo': '02/10/2026' }]
+    const date = buildAutoSalesOrderLookup(rows).get('SPXVN005')
+    expect(date).toBeInstanceOf(Date)
+    expect(date.getHours()).toBe(0)
+    expect(date.getMinutes()).toBe(0)
+  })
+
   it('bỏ qua dòng thiếu Mã vận đơn hoặc không đọc được Ngày tạo thay vì lưu nhầm', () => {
     const rows = [
       { 'Mã vận đơn': '', 'Ngày tạo': '02/10/2026  16:22:37' },
