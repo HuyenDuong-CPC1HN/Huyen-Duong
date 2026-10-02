@@ -113,7 +113,7 @@ function TraHangPaper({ slip }) {
   )
 }
 
-function XacMinhPaper({ slip }) {
+export function XacMinhPaper({ slip }) {
   const { pdf, form: f } = slip
   const isC = slipLoai(slip) === 'C'
   const [d, m, y] = dmy(f.xmNgay)
@@ -160,7 +160,7 @@ function XacMinhPaper({ slip }) {
                 <td className={`${td} text-center`}>{it.dvt}</td>
                 <td className={`${td} text-center`}>{money(it.soLuong)}</td>
                 <td className={`${td} text-center`}><V v={extra.quyCach} /></td>
-                <td className={`${td} text-center`}><P v={f.xmTinhTrang} /></td>
+                <td className={`${td} text-center`}><P v={extra.tinhTrang ?? f.xmTinhTrang} /></td>
               </tr>
             )
           })}

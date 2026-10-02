@@ -57,9 +57,29 @@ export function tinhTrangFromLyDo(lyDo) {
   return text.slice(0, cut).replace(/[\s,;.:–-]+$/u, '').trim()
 }
 
-// BB xác minh nhập lại kho chỉ cần cho các dòng khác lô, mỗi khách hàng 1 biên bản.
+// BB xác minh nhập lại kho: quy trình mới (flow 'v2') lập cho MỌI dòng hàng lỗi khách trả về, mỗi đợt 1 biên bản;
+// quy trình cũ chỉ cho các dòng khác lô.
 export function nhapLaiItems(record) {
-  return (record?.items || []).filter(item => lotStatus(item) === 'diff')
+  const items = record?.items || []
+  return record?.flow === 'v2' ? items : items.filter(item => lotStatus(item) === 'diff')
+}
+
+// ---------- Quy trình mới: bộ huỷ gom từ các đợt đã hoàn thành nhập lại ----------
+export const SWAP_FLOW = 'v2'
+export const isV2 = record => record?.flow === SWAP_FLOW
+
+// Đợt đã hoàn thành (kế toán nhập hàng lỗi + xuất hàng mới) và chưa vào bộ huỷ nào → chờ gom.
+export function pendingHuyRecords(records) {
+  return records.filter(r => isV2(r) && r.nhapLaiDoneAt && !r.huyBatchId)
+}
+
+export function nextHuyNo(batches, entity) {
+  return Math.max(0, ...batches.filter(b => b.entity === entity).map(b => b.no)) + 1
+}
+
+export function newHuyBatch(batches, entity, recordIds, accountant, now = new Date()) {
+  const no = nextHuyNo(batches, entity)
+  return { id: `huy_${entity}_${no}`, entity, no, recordIds, accountant: accountant || DEFAULT_ACCOUNTANT, exported: {}, signedAt: null, accountedAt: null, createdAt: now.toISOString() }
 }
 
 // ---------- Bộ xuất huỷ ----------

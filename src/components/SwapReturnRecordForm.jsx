@@ -95,7 +95,7 @@ const COLUMNS = [
   { key: 'lyDo', label: 'Lý do', width: 220, wrap: true },
 ]
 
-export default function SwapReturnRecordForm({ entity, defaultDate, record, batchName, batchExported, onSave, onCancel }) {
+export default function SwapReturnRecordForm({ entity, defaultDate, record, batchName, batchExported, v2 = false, onSave, onCancel }) {
   const [date, setDate] = useState(record?.date || defaultDate)
   const [customerName, setCustomerName] = useState(record?.customerName || '')
   const [accountantNhapLai, setAccountantNhapLai] = useState(record?.accountantNhapLai || '')
@@ -103,14 +103,14 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, batc
   const [error, setError] = useState('')
 
   const filled = items.filter(it => String(it.maHang || '').trim())
-  const diffCount = filled.filter(it => lotStatus(it) === 'diff').length
+  const diffCount = v2 ? filled.length : filled.filter(it => lotStatus(it) === 'diff').length // quy trình mới: mọi hàng đều lập BB nhập lại kho
 
   // Cùng lô = cùng 1 lô vật lý -> hạn dùng bắt buộc giống nhau: HD lô đổi đi theo HD lô lỗi và bị khoá.
   const updateItem = (index, key, value) => {
     setItems(prev => prev.map((it, i) => {
       if (i !== index) return it
       const next = { ...it, [key]: value }
-      if (lotStatus(next) === 'same') next.hanDungDoi = next.hanDungLoi
+      if (!v2 && lotStatus(next) === 'same') next.hanDungDoi = next.hanDungLoi
       return next
     }))
   }
@@ -124,7 +124,7 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, batc
     if (filled.length === 0) return setError('Chưa có mặt hàng nào — nhập ít nhất Mã hàng.')
     const badDate = filled.findIndex(it => [it.hanDungLoi, it.hanDungDoi].some(v => v && !isValidDateText(v)))
     if (badDate >= 0) return setError(`Hạn dùng của mặt hàng ${filled[badDate].maHang} chưa đúng dạng dd/mm/yyyy.`)
-    if (diffCount > 0 && !accountantNhapLai) return setError('Có hàng khác lô — chọn kế toán cho BB xác minh nhập lại kho.')
+    if (diffCount > 0 && !accountantNhapLai) return setError(v2 ? 'Chọn kế toán cho BB xác minh nhập lại kho.' : 'Có hàng khác lô — chọn kế toán cho BB xác minh nhập lại kho.')
     onSave({
       id: record?.id || `swap_${entity}_${Date.now()}`,
       entity,
@@ -133,6 +133,7 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, batc
       accountantNhapLai: diffCount > 0 ? accountantNhapLai : '',
       items: filled.map(it => ({ ...it, maHang: it.maHang.trim() })),
       nhapLaiExportedAt: record?.nhapLaiExportedAt || null,
+      ...(v2 ? { flow: 'v2', nhapLaiSignedAt: record?.nhapLaiSignedAt || null, nhapLaiDoneAt: record?.nhapLaiDoneAt || null, huyBatchId: record?.huyBatchId || null } : {}),
       createdAt: record?.createdAt || new Date().toISOString(),
     })
   }
@@ -146,7 +147,7 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, batc
             <h2 id="swap-form-title" className="text-base font-bold text-gray-900">
               {record ? 'Sửa đợt đổi trả' : 'Thêm đợt đổi trả'} — {entity === 'donC' ? 'Đơn C' : 'Đơn DTP'}
             </h2>
-            <p className="text-xs text-gray-500 mt-1">Thường chỉ 1 mặt hàng — cần thêm thì bấm "Thêm dòng". Cột "Lô" tự nhận theo 2 số lô.</p>
+            <p className="text-xs text-gray-500 mt-1">{v2 ? 'Hàng lỗi khách trả về. Thường chỉ 1 mặt hàng — cần thêm thì bấm "Thêm dòng".' : 'Thường chỉ 1 mặt hàng — cần thêm thì bấm "Thêm dòng". Cột "Lô" tự nhận theo 2 số lô.'}</p>
           </div>
           <button type="button" onClick={onCancel} className="ml-auto p-1.5 rounded hover:bg-gray-100 text-gray-400" aria-label="Đóng"><X size={16} /></button>
         </div>
@@ -167,7 +168,7 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, batc
             <table className="w-full text-xs" style={{ minWidth: 1180 }}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {COLUMNS.map(c => <th key={c.key} className="px-2 py-2 text-left text-gray-500 font-semibold whitespace-nowrap">{c.label}</th>)}
+                  {COLUMNS.filter(c => !(v2 && c.key === 'status')).map(c => <th key={c.key} className="px-2 py-2 text-left text-gray-500 font-semibold whitespace-nowrap">{c.label}</th>)}
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -176,13 +177,13 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, batc
                   const status = lotStatus(it)
                   return (
                     <tr key={i} className="border-b border-gray-50">
-                      {COLUMNS.map(c => (
+                      {COLUMNS.filter(c => !(v2 && c.key === 'status')).map(c => (
                         <td key={c.key} className="px-1.5 py-1.5 align-top" style={c.width ? { minWidth: c.width } : undefined}>
                           {c.key === 'status' && <div className="pt-1"><LotBadge status={status} /></div>}
                           {c.date && (
                             <DateTextField value={it[c.key]} onChange={v => updateItem(i, c.key, v)}
                               label={`${c.label} dòng ${i + 1}`}
-                              disabled={c.key === 'hanDungDoi' && status === 'same'}
+                              disabled={!v2 && c.key === 'hanDungDoi' && status === 'same'}
                               className={cellCls} />
                           )}
                           {c.wrap && (
@@ -225,6 +226,9 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, batc
 
           <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600 flex flex-col gap-1.5">
             <div className="font-semibold text-gray-800">Sau khi lưu:</div>
+            {v2 ? (
+              <div>• Lưu xong: xuất <b>BB xác minh nhập lại kho</b> → trình ký → kế toán nhập hàng lỗi + xuất hàng mới → tick hoàn thành. Sau đó đợt này mới gom vào bộ huỷ.</div>
+            ) : <>
             <div>
               • {filled.length || 'Các'} mặt hàng nằm trong <b>{batchName}</b> (bộ xuất huỷ đang gom) — không xuất file gì ngay.
             </div>
@@ -236,6 +240,7 @@ export default function SwapReturnRecordForm({ entity, defaultDate, record, batc
                 ? <>Có <b>{diffCount} dòng khác lô</b> → cần 1 <b>BB xác minh nhập lại kho</b> cho khách này (xuất ở khung "BB xác minh nhập lại kho").</>
                 : <>Không có dòng khác lô → <b>không cần</b> BB xác minh nhập lại kho.</>}
             </div>
+            </>}
           </div>
 
           {error && <div className="text-sm text-red-600" role="alert">{error}</div>}

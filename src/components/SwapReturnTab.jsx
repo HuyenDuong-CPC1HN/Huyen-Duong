@@ -44,8 +44,9 @@ const thCls = 'px-2 py-2 text-left text-gray-500 font-semibold whitespace-nowrap
 const checkCls = 'w-5 h-5 accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 shrink-0'
 const smallBtnStyle = { minHeight: 28, padding: '0 10px', fontSize: 12 }
 
-export default function SwapReturnTab({ type }) {
-  const [allRecords, setAllRecords] = useState(() => readArray(RECORDS_KEY))
+// legacy: dữ liệu theo quy trình cũ trong Đổi trả hàng (đợt không có flow 'v2'); chỉ xem/xuất, không thêm đợt mới.
+export default function SwapReturnTab({ type, legacy = false }) {
+  const [allRecords, setAllRecords] = useState(() => readArray(RECORDS_KEY).filter(r => !legacy || r.flow !== 'v2'))
   const [allBatches, setAllBatches] = useState(() => readArray(BATCHES_KEY))
   const [formState, setFormState] = useState(null) // null | 'new' | record đang sửa
   const [busy, setBusy] = useState(null)
@@ -67,7 +68,9 @@ export default function SwapReturnTab({ type }) {
   const nhapLaiDone = nhapLaiRecords.filter(r => r.nhapLaiSignedAt)
 
   const persistRecords = (records) => {
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
+    // Chế độ cũ: giữ nguyên các đợt theo quy trình mới nằm chung khoá lưu trữ.
+    const keep = legacy ? readArray(RECORDS_KEY).filter(r => r.flow === 'v2') : []
+    localStorage.setItem(RECORDS_KEY, JSON.stringify([...records, ...keep]))
     setAllRecords(records)
   }
   const persistBatches = (batches) => {
@@ -199,11 +202,13 @@ export default function SwapReturnTab({ type }) {
       <div className="sheet-tab-shell">
         <header className="sheet-tab-context">
           <span>Đổi trả hàng — {kindLabel}</span>
-          <div className="flex items-center gap-2 ml-auto">
-            <button type="button" onClick={() => setFormState('new')} className="sheet-tab-action is-primary">
-              <Plus size={13} /> Thêm đợt đổi trả
-            </button>
-          </div>
+          {!legacy && (
+            <div className="flex items-center gap-2 ml-auto">
+              <button type="button" onClick={() => setFormState('new')} className="sheet-tab-action is-primary">
+                <Plus size={13} /> Thêm đợt đổi trả
+              </button>
+            </div>
+          )}
         </header>
 
         <div className="flex flex-col gap-3" style={{ paddingTop: 12 }}>

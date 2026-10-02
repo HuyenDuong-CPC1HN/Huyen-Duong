@@ -16,7 +16,7 @@ const paperCls = 'rsw-paper bg-[#fffdf8] text-[#16181c] shadow-md mx-auto px-8 p
 const paperStyle = { fontFamily: '"Times New Roman", Times, serif', minWidth: 540, maxWidth: 780 }
 const td = 'border border-gray-600 px-1.5 py-0.5'
 
-export function XuLyPaper({ phieu }) {
+export function XuLyPaper({ phieu, keToan = 'Lưu Thị Thùy' }) {
   const f = phieu.form || {}
   const isC = phieu.kho === 'C'
   const [d, m, y] = huyDmy(f.ngayLap)
@@ -45,7 +45,7 @@ export function XuLyPaper({ phieu }) {
         <tbody>
           <tr><td className={`${td} text-center`}>1</td><td className={td}>Phương Thu</td><td className={td}>{isC ? 'Giám Đốc Chi Nhánh' : 'Tổng Giám Đốc'}</td><td className={td}>{isC ? 'Giám Đốc Chi Nhánh' : 'Tổng Giám Đốc'}</td></tr>
           <tr><td className={`${td} text-center`}>2</td><td className={td}>Dương Thị Ngọc Huyền</td><td className={td}>Thủ kho</td><td className={td}>{isC ? 'Kho CN Hồ Chí Minh' : 'Kho Vận'}</td></tr>
-          <tr><td className={`${td} text-center`}>3</td><td className={td}>Lưu Thị Thùy</td><td className={td}>Kế toán đơn hàng</td><td className={td}>Kế toán</td></tr>
+          <tr><td className={`${td} text-center`}>3</td><td className={td}>{keToan}</td><td className={td}>Kế toán đơn hàng</td><td className={td}>Kế toán</td></tr>
         </tbody>
       </table>
       <p>2. Thời gian xử lý: Vào lúc <V v={huyGioVi(f.xlGio)} />, ngày <V v={xd} /> tháng <V v={xm} /> năm <V v={xy} /></p>
@@ -90,7 +90,7 @@ export function XuLyPaper({ phieu }) {
   )
 }
 
-export function XacMinhPaper({ phieu }) {
+export function XacMinhPaper({ phieu, keToan = 'Lưu Thị Thuỳ' }) {
   const f = phieu.form || {}
   const isC = phieu.kho === 'C'
   const [d, m, y] = huyDmy(f.xmNgay)
@@ -114,7 +114,7 @@ export function XacMinhPaper({ phieu }) {
         <thead><tr>{['STT', 'Họ và tên', 'Chức vụ/Bộ phận'].map(h => <th key={h} className={`${td} font-bold`}>{h}</th>)}</tr></thead>
         <tbody>
           <tr><td className={`${td} text-center`}>1</td><td className={td}>Phương Thu</td><td className={td}>Giám Đốc Chi Nhánh</td></tr>
-          <tr><td className={`${td} text-center`}>2</td><td className={td}>Lưu Thị Thuỳ</td><td className={td}>Kế Toán Đơn Hàng</td></tr>
+          <tr><td className={`${td} text-center`}>2</td><td className={td}>{keToan}</td><td className={td}>Kế Toán Đơn Hàng</td></tr>
           <tr><td className={`${td} text-center`}>3</td><td className={td}>Dương Thị Ngọc Huyền</td><td className={td}>Thủ Kho</td></tr>
         </tbody>
       </table>

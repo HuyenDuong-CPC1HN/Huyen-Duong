@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
+import { Truck, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -11,7 +11,7 @@ import HangHuyTab from './components/HangHuyTab'
 import HangLookup from './components/HangLookup'
 import ReturnReminderBell from './components/ReturnReminderBell'
 import DamagedGoodsTrackingTab from './components/DamagedGoodsTrackingTab'
-import SwapReturnTab from './components/SwapReturnTab'
+import SwapReturnHub from './components/SwapReturnHub'
 import Login from './components/Login'
 import HomeBrief from './components/HomeBrief'
 import cpcLogo from './assets/cpc1hn_logo.png'
@@ -65,15 +65,7 @@ const NAV = [
           { id: 'hangHuyA', label: 'Kho A', icon: PackageX },
         ],
       },
-      {
-        id: 'doiTra',
-        label: 'Đổi trả hàng',
-        icon: ArrowLeftRight,
-        children: [
-          { id: 'doiTraC', label: 'Đơn C', icon: Truck },
-          { id: 'doiTraDTP', label: 'Đơn DTP', icon: Package },
-        ],
-      },
+      { id: 'doiTra', label: 'Đổi trả hàng', icon: ArrowLeftRight },
     ],
   },
 ]
@@ -95,8 +87,7 @@ const BREADCRUMB = {
   traCuuHang: ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Tra cứu hàng'],
   hangHuyCD:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho C & Kho DTP'],
   hangHuyA:   ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho A'],
-  doiTraC:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng', 'Đơn C'],
-  doiTraDTP:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng', 'Đơn DTP'],
+  doiTra:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng'],
 }
 
 export default function App() {
@@ -508,8 +499,7 @@ function AppContent({ user }) {
           {active === 'traHang' && <ReturnSlipsTab key={`tra-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyCD'  && <HangHuyTab key={`huy-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab />}
-          {active === 'doiTraC'    && <SwapReturnTab key="donC" type="donC" />}
-          {active === 'doiTraDTP'  && <SwapReturnTab key="donDTP" type="donDTP" />}
+          {active === 'doiTra'     && <SwapReturnHub />}
         </main>
       </div>
     </div>

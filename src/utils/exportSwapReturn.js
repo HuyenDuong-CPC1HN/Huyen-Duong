@@ -75,13 +75,13 @@ function defaultKhoOf(entity) {
   return kho
 }
 
-export async function buildBatchXuLy(templateBuffer, items, accountant, { entity, date = new Date() }) {
+export async function buildBatchXuLy(templateBuffer, items, accountant, { entity, date = new Date(), soBB = '' }) {
   const kho = defaultKhoOf(entity)
   const rows = items.map(it => ({
     maHang: it.maHang, tenHang: it.tenHang, soLo: it.loLoi, hanDung: it.hanDungLoi || '',
     kho, dvt: it.dvt, soLuong: it.soLuong, quyCach: it.quyCach || '', ghiChu: it.lyDo || '',
   }))
-  return fillBienBanXuLy(withAccountantInXuLyTemplate(templateBuffer, accountant), rows, { location: XU_LY_LOCATION, date })
+  return fillBienBanXuLy(withAccountantInXuLyTemplate(templateBuffer, accountant), rows, { location: XU_LY_LOCATION, date, soBB })
 }
 
 export function buildBatchXuatKho(templateBuffer, items, accountant, { entity, date = new Date() }) {
@@ -152,9 +152,9 @@ function downloadBlob(blob, filename) {
 }
 
 // date: ngày ghi trên biên bản — bộ đã trình ký tải lại thì truyền đúng ngày xuất lần đầu.
-export async function exportSwapBatchXuLy({ entity, batchNo, items, accountant, date = new Date() }) {
+export async function exportSwapBatchXuLy({ entity, batchNo, items, accountant, date = new Date(), soBB = '' }) {
   if (!items.length) throw new Error('Bộ này chưa có mặt hàng nào.')
-  const bytes = await buildBatchXuLy(await fetchTemplate(templatesOf(entity).xuLy), items, accountant, { entity, date })
+  const bytes = await buildBatchXuLy(await fetchTemplate(templatesOf(entity).xuLy), items, accountant, { entity, date, soBB })
   downloadBlob(new Blob([bytes], { type: XLSX_MIME }), `BBXL_DoiTra_${entityLabel(entity)}_${batchFileLabel(batchNo)}.xlsx`)
 }
 
