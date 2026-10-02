@@ -26,6 +26,7 @@ describe('lookupRows', () => {
   })
   it('tình trạng: nhập trả lại lấy từ BB xác minh, đổi trả lấy từ lý do, hàng huỷ lấy từ ô tình trạng kho ghi', () => {
     expect(rows.find(r => r.so === 'DHC1').extra).toBe('Hàng nguyên vẹn')
+    expect(rows.find(r => r.so === 'DHC2').extra).toBe('Nguyên vẹn') // phiếu chưa ghi tình trạng ở BB xác minh
     expect(rows.find(r => r.ten === 'Laci-eye').extra).toBe('Rách vỏ')
   })
   it('hàng khách trả lỗi đã xuất huỷ chỉ hiện 1 dòng: dòng trùng (cùng phiếu xuất huỷ + hàng + lô) trong Hàng huỷ bị ẩn, dòng khác vẫn hiện', () => {
@@ -45,6 +46,8 @@ describe('filterLookup / summarizeLookup / sameLot', () => {
   const rows = lookupRows({ slips, phieus, swapRecords, swapBatches })
   it('lọc kho, nguồn, hướng xử lý, tháng, trạng thái; tìm không dấu kể cả số phiếu xuất huỷ', () => {
     expect(filterLookup(rows, { nguon: 'doitra' })).toHaveLength(3)
+    expect(filterLookup(rows, { nguon: 'khach' })).toHaveLength(5) // nhập trả lại + đổi trả
+    expect(filterLookup(rows, { nguon: 'kho' })).toHaveLength(1)
     expect(filterLookup(rows, { huong: 'nhap' })).toHaveLength(2)
     expect(filterLookup(rows, { kho: 'DTP' }).map(r => r.ten).sort()).toEqual(['Actiso Viet', 'Hàng X'])
     expect(filterLookup(rows, { month: '2026-08' })).toHaveLength(1)

@@ -5,10 +5,12 @@ import { slipLoai } from './returnSlips'
 import { isV2 } from './swapReturnBatch'
 
 export const NGUON = {
-  tra: { label: 'Khách trả · nguyên vẹn', huong: 'nhap', tab: 'traHang' },
-  doitra: { label: 'Khách trả · lỗi', huong: 'huy', tab: 'doiTra' },
+  tra: { label: 'Khách trả', huong: 'nhap', tab: 'traHang' }, // hàng nguyên vẹn, nhập lại kho
+  doitra: { label: 'Khách trả', huong: 'huy', tab: 'doiTra' }, // hàng lỗi, xuất huỷ — phân biệt ở cột Tình trạng
   kho: { label: 'Phát sinh', huong: 'huy', tab: 'hangHuyCD' },
 }
+// Nút lọc Nguồn: Khách trả (nhập trả lại + đổi trả) hoặc Phát sinh (hàng huỷ trong kho)
+export const NGUON_FILTER = [['khach', 'Khách trả'], ['kho', 'Phát sinh']]
 export const HUONG = { nhap: 'Nhập trả lại', huy: 'Xuất huỷ' }
 
 // stage của dòng: doing = đang làm / chờ ký · nhap = chờ nhập · gom = chờ gom huỷ · xuat = chờ xuất · done = hoàn thành
@@ -47,7 +49,7 @@ export function lookupRows({ slips = [], phieus = [], swapRecords = [], swapBatc
       id: `tra:${s.id}#${i}`, ref: s.id, nguon: 'tra', huong: 'nhap', so: s.maPhieu || s.form?.soHD || '',
       kho: slipLoai(s) || 'C', who: s.khachHang || s.pdf.benMua?.ten || '', date: isoDay(s.createdAt), stage: slipStage(s.stage),
       ma: '', ten: it.ten || '', soLo: s.form?.items?.[i]?.soLo || it.soLo || '', soLuong: Number(it.soLuong) || 0, dvt: it.dvt || '',
-      extra: s.form?.xmTinhTrang || '', huyPhieu: '', // tình trạng hàng ghi ở BB xác minh của phiếu
+      extra: s.form?.xmTinhTrang || 'Nguyên vẹn', huyPhieu: '', // tình trạng hàng ghi ở BB xác minh của phiếu
     }))
   }
   // Đổi trả (quy trình mới): khách trả lỗi, một dòng cho tới khi xuất huỷ xong
@@ -90,7 +92,7 @@ export function filterLookup(rows, { kho = 'all', nguon = 'all', huong = 'all', 
   const needle = normText(q.trim())
   const stages = stage === 'all' ? null : STAGE_FILTER[stage][1]
   return rows.filter(r => (kho === 'all' || r.kho === kho)
-    && (nguon === 'all' || r.nguon === nguon)
+    && (nguon === 'all' || (nguon === 'khach' ? r.nguon !== 'kho' : r.nguon === nguon))
     && (huong === 'all' || r.huong === huong)
     && (month === 'all' || r.date.startsWith(month))
     && (!stages || stages.includes(r.stage))

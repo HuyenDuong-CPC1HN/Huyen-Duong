@@ -22,7 +22,7 @@ describe('HangLookup — tra cứu chung', () => {
     expect(screen.getByText('Progermila')).toBeInTheDocument()
     expect(screen.getByText('Laci-eye')).toBeInTheDocument()
     expect(screen.getByText('Actiso Viet')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Khách trả · lỗi' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Khách trả' }))
     expect(screen.queryByText('Progermila')).not.toBeInTheDocument()
     expect(screen.getByText('Laci-eye')).toBeInTheDocument()
   })

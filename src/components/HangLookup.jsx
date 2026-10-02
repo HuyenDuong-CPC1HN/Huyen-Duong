@@ -4,7 +4,7 @@ import { Search, FileDown, X } from 'lucide-react'
 import { opsStore } from '../data/workspace'
 import { readSlips } from '../data/returnSlipsStore'
 import { readHuyPhieus } from '../data/hangHuyStore'
-import { HUONG, NGUON, STAGE_FILTER, filterLookup, lookupRows, sameLot, stageLabel, summarizeLookup } from '../utils/hangLookup'
+import { HUONG, NGUON, NGUON_FILTER, STAGE_FILTER, filterLookup, lookupRows, sameLot, stageLabel, summarizeLookup } from '../utils/hangLookup'
 
 const fmtDate = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '—' }
 const readStored = (key) => {
@@ -87,7 +87,7 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <Seg label="Kho" value={kho} onChange={setKho} options={[['all', 'Tất cả'], ['C', 'Kho C'], ['DTP', 'Kho DTP']]} />
-              <Seg label="Nguồn" value={nguon} onChange={setNguon} options={[['all', 'Tất cả'], ...Object.entries(NGUON).map(([k, v]) => [k, v.label])]} />
+              <Seg label="Nguồn" value={nguon} onChange={setNguon} options={[['all', 'Tất cả'], ...NGUON_FILTER]} />
               <Seg label="Hướng xử lý" value={huong} onChange={setHuong} options={[['all', 'Tất cả'], ...Object.entries(HUONG)]} />
             </div>
           </div>
