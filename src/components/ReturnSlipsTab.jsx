@@ -372,10 +372,6 @@ export default function ReturnSlipsTab() {
   return (
     <div className="sheet-tab">
       <div className="sheet-tab-shell flex flex-col gap-4">
-        <header className="sheet-tab-context">
-          <span>Sales tạo phiếu → GĐ chi nhánh / ASM / SS duyệt trên website → kho làm bộ biên bản trên app → ký đủ, nhập kho</span>
-        </header>
-
         <ReminderPanel reminders={reminders} onApprove={approve} onSnooze={snooze} onOpen={setOpenId} onSigned={markSigned} onWaitSign={markWaitSign} />
 
         <div className="report-section">

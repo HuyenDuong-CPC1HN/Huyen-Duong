@@ -238,10 +238,6 @@ export default function HangHuyTab() {
   return (
     <div className="sheet-tab">
       <div className="sheet-tab-shell flex flex-col gap-4">
-        <header className="sheet-tab-context">
-          <span>Tải phiếu xuất kho (PDF) → app điền bộ biên bản → xuất Excel/Word hoặc in → ký đủ, huỷ xong · 1 phiếu = 1 bộ biên bản</span>
-        </header>
-
         <ReminderPanel reminders={reminders} onOpen={openPhieu} onSigned={markSigned} onWaitSign={markWaitSign} />
 
         <div className="report-section">
