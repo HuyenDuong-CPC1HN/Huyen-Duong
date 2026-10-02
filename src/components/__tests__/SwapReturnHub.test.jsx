@@ -94,7 +94,7 @@ describe('SwapReturnHub — quy trình đổi trả mới, gộp Đơn C và Đ�
     fireEvent.click(screen.getByRole('button', { name: 'Đơn DTP' }))
     expect(screen.queryByText('Khách C')).not.toBeInTheDocument()
     expect(screen.getByText('Khách D')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Đổi trả theo quy trình cũ/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Đợt cũ/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }))
     expect(within(document.body).getAllByText('Khách cũ').length).toBeGreaterThan(0)
   })

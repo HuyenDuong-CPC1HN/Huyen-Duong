@@ -318,7 +318,7 @@ export default function SwapReturnHub() {
         {/* Dữ liệu theo quy trình cũ */}
         <div className="report-section">
           <button type="button" onClick={() => setLegacy(o => !o)} className="report-section-trigger w-full text-left" aria-expanded={legacy}>
-            <span className="report-section-title">Đổi trả theo quy trình cũ (cùng lô / khác lô)</span>
+            <span className="report-section-title">Đợt cũ</span>
           </button>
           {legacy && (
             <div className="report-section-content flex flex-col gap-3">
