@@ -181,3 +181,11 @@ describe('ReturnReminderBell', () => {
 // Dữ liệu PDF đã đọc sẵn (giống sau khi tải file) cho các phiếu seed.
 import { parseReturnSlipLines } from '../../utils/returnSlips'
 function parseLike(name) { return { ...parseReturnSlipLines(fixtures[name]), fileName: `${name}.pdf` } }
+
+describe('ReturnSlipsTab — mở sẵn phiếu từ Tra cứu hàng', () => {
+  it('initialOpenId mở thẳng màn làm biên bản của phiếu', () => {
+    seed([{ id: 's1', maPhieu: 'DHC1', khachHang: 'Khách A', stage: 'doing', createdAt: '2026-09-29T08:00:00', approvedAt: '2026-09-29T09:00:00' }])
+    render(<ReturnSlipsTab initialOpenId="s1" />)
+    expect(screen.getByRole('button', { name: /Danh sách phiếu/ })).toBeInTheDocument()
+  })
+})

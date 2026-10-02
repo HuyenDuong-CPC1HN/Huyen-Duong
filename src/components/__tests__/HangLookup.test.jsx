@@ -16,9 +16,9 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('HangLookup', () => {
-  it('tra cứu nhập trả lại: tìm theo lô, mở ngăn chi tiết, mở phiếu; đổi sang hàng huỷ thì không mở được phiếu từ đây', () => {
+  it('tìm theo lô, mở ngăn chi tiết, mở phiếu (báo đúng loại); đổi sang hàng huỷ thì mở phiếu hàng huỷ', () => {
     const onOpen = vi.fn()
-    render(<HangLookup loai="tra" onBack={() => {}} onOpen={onOpen} />)
+    render(<HangLookup onOpen={onOpen} />)
     fireEvent.change(screen.getByLabelText('Tìm kiếm'), { target: { value: '010526' } })
     fireEvent.click(screen.getByText('Actiso Viet'))
     fireEvent.click(screen.getByRole('button', { name: /Mở phiếu/ }))
@@ -26,12 +26,12 @@ describe('HangLookup', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Hàng huỷ' }))
     fireEvent.click(screen.getByText('Progermila'))
-    expect(screen.queryByRole('button', { name: /Mở phiếu/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/Muốn mở phiếu, vào tab Theo dõi hàng huỷ/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Mở phiếu/ }))
+    expect(onOpen).toHaveBeenLastCalledWith('h1', 'huy')
   })
 
   it('lọc kho và tổng hợp theo hàng', () => {
-    render(<HangLookup loai="huy" onBack={() => {}} onOpen={() => {}} />)
+    render(<HangLookup loai="huy" onOpen={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Kho C' }))
     expect(screen.getByText('Không có hàng phù hợp. Thử bỏ bớt bộ lọc.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Kho DTP' }))

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
+import { Truck, Package, Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -8,6 +8,7 @@ import NhapHangTab from './components/NhapHangTab'
 import DoiSoatThucTeTab from './components/DoiSoatThucTeTab'
 import ReturnSlipsTab from './components/ReturnSlipsTab'
 import HangHuyTab from './components/HangHuyTab'
+import HangLookup from './components/HangLookup'
 import ReturnReminderBell from './components/ReturnReminderBell'
 import DamagedGoodsTrackingTab from './components/DamagedGoodsTrackingTab'
 import SwapReturnTab from './components/SwapReturnTab'
@@ -54,6 +55,7 @@ const NAV = [
     icon: RotateCcw,
     children: [
       { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
+      { id: 'traCuuHang', label: 'Tra cứu hàng', icon: Search },
       {
         id: 'hangHuy',
         label: 'Theo dõi hàng huỷ',
@@ -90,6 +92,7 @@ const BREADCRUMB = {
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
   traHang:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi nhập trả lại'],
+  traCuuHang: ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Tra cứu hàng'],
   hangHuyCD:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho C & Kho DTP'],
   hangHuyA:   ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ', 'Kho A'],
   doiTraC:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng', 'Đơn C'],
@@ -281,8 +284,11 @@ function AppContent({ user }) {
     () => typeof window === 'undefined' || window.innerWidth >= 900,
   )
   const [expanded, setExpanded] = useState({ baocao: true })
+  const [openTarget, setOpenTarget] = useState(null) // phiếu cần mở sẵn khi chuyển từ Tra cứu hàng sang tab phiếu
   const menuTriggerRef = useRef(null)
 
+  // Chuyển tab từ menu / chuông / Trang chủ: bỏ phiếu mở sẵn từ Tra cứu hàng (chỉ dùng khi bấm mở phiếu trong Tra cứu).
+  const selectTab = (id) => { setOpenTarget(null); setActive(id) }
   const closeSidebar = () => {
     setSidebarOpen(false)
     requestAnimationFrame(() => menuTriggerRef.current?.focus())
@@ -313,7 +319,7 @@ function AppContent({ user }) {
     if (hasChildren) {
       setExpanded(e => ({ ...e, [id]: !e[id] }))
     } else {
-      setActive(id)
+      selectTab(id)
     }
   }
 
@@ -382,7 +388,7 @@ function AppContent({ user }) {
                     {item.children.map(child => {
                       const ChildIcon = child.icon
                       const isChildActive = active === child.id
-                      const goTo = (id) => { setActive(id); if (window.innerWidth < 900) closeSidebar() }
+                      const goTo = (id) => { selectTab(id); if (window.innerWidth < 900) closeSidebar() }
                       if (child.children) {
                         const open = expanded[child.id]
                         return (
@@ -476,7 +482,7 @@ function AppContent({ user }) {
               </nav>
               <h1>{pageTitle}</h1>
             </div>
-            <ReturnReminderBell onOpen={setActive} />
+            <ReturnReminderBell onOpen={selectTab} />
           </div>
         </header>
 
@@ -485,21 +491,22 @@ function AppContent({ user }) {
           {active === 'home' && (
             <HomeBrief
               onNavigate={(id) => {
-                setActive(id)
+                selectTab(id)
                 if (id === 'tongdon') {
                   setExpanded((current) => ({ ...current, baocao: true }))
                 }
               }}
             />
           )}
-          {active === 'tongdon' && <Suspense fallback={tabLoadingState}><TongDonTab onNavigate={setActive} /></Suspense>}
+          {active === 'tongdon' && <Suspense fallback={tabLoadingState}><TongDonTab onNavigate={selectTab} /></Suspense>}
           {active === 'gopKenh' && <Suspense fallback={tabLoadingState}><UnifiedTrialTab /></Suspense>}
           {active === 'tonkhocandate' && <ExpiryStockTab key="canDate" mode="canDate" />}
           {active === 'hangchamluanchuyen' && <ExpiryStockTab key="clc" mode="clc" />}
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
-          {active === 'traHang' && <ReturnSlipsTab />}
-          {active === 'hangHuyCD'  && <HangHuyTab />}
+          {active === 'traCuuHang' && <HangLookup onOpen={(id, loai) => { setOpenTarget(id); setActive(loai === 'huy' ? 'hangHuyCD' : 'traHang') }} />}
+          {active === 'traHang' && <ReturnSlipsTab key={`tra-${openTarget}`} initialOpenId={openTarget} />}
+          {active === 'hangHuyCD'  && <HangHuyTab key={`huy-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab />}
           {active === 'doiTraC'    && <SwapReturnTab key="donC" type="donC" />}
           {active === 'doiTraDTP'  && <SwapReturnTab key="donDTP" type="donDTP" />}

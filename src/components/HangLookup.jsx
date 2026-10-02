@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { ArrowLeft, Search, FileDown, X } from 'lucide-react'
+import { Search, FileDown, X } from 'lucide-react'
 import { readSlips } from '../data/returnSlipsStore'
 import { readHuyPhieus } from '../data/hangHuyStore'
 import { LOOKUP_STAGE, filterLookup, lookupRows, summarizeLookup } from '../utils/hangLookup'
@@ -12,7 +12,7 @@ const STAGE_LABEL = { todo: 'Đang làm / chờ ký', doing: 'Đang làm / chờ
 const STAGE_CLS = { todo: 'bg-blue-50 text-blue-700', doing: 'bg-blue-50 text-blue-700', exported: 'bg-blue-50 text-blue-700', acct: 'bg-purple-50 text-purple-700', done: 'bg-green-50 text-green-700' }
 
 // Màn tra cứu hàng đã nhập trả lại / đã huỷ theo từng kho. loai: 'tra' | 'huy'. onOpen(phieuId) mở lại phiếu.
-export default function HangLookup({ loai: initial, onBack, onOpen }) {
+export default function HangLookup({ loai: initial = 'tra', onOpen }) {
   const [loai, setLoai] = useState(initial)
   const [kho, setKho] = useState('all')
   const [month, setMonth] = useState('all')
@@ -48,7 +48,6 @@ export default function HangLookup({ loai: initial, onBack, onOpen }) {
     <div className="sheet-tab">
       <div className="sheet-tab-shell flex flex-col gap-3">
         <header className="sheet-tab-context flex-wrap gap-2">
-          <button type="button" onClick={onBack} className="sheet-tab-action"><ArrowLeft size={13} /> Quay lại</button>
           <span className="font-semibold">Tra cứu hàng {huy ? 'đã huỷ' : 'đã nhập trả lại'}</span>
           <div className="flex gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1 ml-auto" role="group" aria-label="Loại">
             {[['tra', 'Nhập trả lại'], ['huy', 'Hàng huỷ']].map(([k, l]) => (
@@ -142,9 +141,7 @@ export default function HangLookup({ loai: initial, onBack, onOpen }) {
           <ul className="text-sm flex flex-col gap-1.5">
             {pickedLines.map(l => <li key={l.id} className={`rounded border px-2 py-1.5 ${l.id === pickedRow.id ? 'border-blue-300 bg-blue-50' : 'border-gray-100'}`}>{l.ma && <span className="font-mono text-gray-500">{l.ma} · </span>}{l.ten}<div className="text-xs text-gray-500">Lô {l.soLo || '—'} · {l.soLuong.toLocaleString('vi-VN')} {l.dvt}</div></li>)}
           </ul>
-          {loai === initial
-            ? <button type="button" onClick={() => onOpen(pickedRow.phieuId, loai)} className="sheet-tab-action is-primary self-start">Mở phiếu / in lại biên bản</button>
-            : <span className="text-xs text-gray-400">Muốn mở phiếu, vào tab {huy ? 'Theo dõi hàng huỷ' : 'Theo dõi nhập trả lại'} rồi bấm Tra cứu hàng.</span>}
+          <button type="button" onClick={() => onOpen(pickedRow.phieuId, loai)} className="sheet-tab-action is-primary self-start">Mở phiếu / in lại biên bản</button>
         </aside>
       )}
     </div>

@@ -7,7 +7,6 @@ import { parsePhieuXuatKhoHuyPdf } from '../utils/parsePhieuXuatKhoHangHuy'
 import { extractPdfText } from '../utils/parseGoodsReceipt'
 import { exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh } from '../utils/exportDamagedGoods'
 import HangHuyWorkspace from './HangHuyWorkspace'
-import HangLookup from './HangLookup'
 import { KhoTag, HuyStagePill } from './HangHuyBadges'
 import DamagedGoodsRecordView from './DamagedGoodsRecordView'
 
@@ -149,17 +148,16 @@ function LegacySection() {
   )
 }
 
-export default function HangHuyTab() {
+export default function HangHuyTab({ initialOpenId = null }) {
   const [phieus, setPhieus] = useState(() => readHuyPhieus())
   const [now, setNow] = useState(() => new Date())
-  const [openId, setOpenId] = useState(null)
+  const [openId, setOpenId] = useState(initialOpenId)
   const [khoFilter, setKhoFilter] = useState(() => readPref())
   const [stageFilter, setStageFilter] = useState('all')
   const [month, setMonth] = useState(() => monthKey(new Date().toISOString()))
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [lookup, setLookup] = useState(false)
   const pdfInputRef = useRef()
 
   // Thời gian trôi khi để app mở lâu: tính lại nhắc việc mỗi 10 phút.
@@ -232,10 +230,6 @@ export default function HangHuyTab() {
     }
   }
 
-  if (lookup) {
-    return <HangLookup loai="huy" onBack={() => setLookup(false)} onOpen={(id, loai) => { if (loai === 'huy') { setLookup(false); setOpenId(id) } }} />
-  }
-
   const openPhieuObj = phieus.find(p => p.id === openId)
   if (openPhieuObj) return <HangHuyWorkspace phieu={openPhieuObj} onChange={update} onBack={() => setOpenId(null)} />
 
@@ -265,7 +259,6 @@ export default function HangHuyTab() {
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm số phiếu, lý do, mã hàng…" className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-sm" />
             </div>
             <div className="flex flex-wrap gap-2 ml-auto">
-              <button type="button" onClick={() => setLookup(true)} className="sheet-tab-action" title="Tra cứu hàng đã huỷ"><Search size={13} /> Tra cứu hàng</button>
               <button type="button" onClick={() => pdfInputRef.current.click()} disabled={uploading} className="sheet-tab-action is-primary">
                 <FileUp size={13} /> {uploading ? 'Đang đọc file…' : 'Tải phiếu xuất kho (PDF)'}
               </button>
