@@ -54,8 +54,8 @@ const NAV = [
     label: 'Quản lý hàng trả, đổi, huỷ',
     icon: RotateCcw,
     children: [
-      { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
       { id: 'traCuuHang', label: 'Tra cứu hàng', icon: Search },
+      { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
       {
         id: 'hangHuy',
         label: 'Theo dõi hàng huỷ',
