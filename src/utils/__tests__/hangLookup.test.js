@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { filterLookup, lookupRows, sameLot, stageLabel, summarizeLookup } from '../hangLookup'
 
 const slips = [
-  { id: 's1', maPhieu: 'DHC1', khachHang: 'Khách A', createdAt: '2026-09-29T08:00:00', stage: 'acct', form: { items: [{ soLo: '010526' }] }, pdf: { mau: 'CPC1HN', items: [{ ten: 'Actiso Viet', dvt: 'ONG', soLuong: 40 }] } },
+  { id: 's1', maPhieu: 'DHC1', khachHang: 'Khách A', createdAt: '2026-09-29T08:00:00', stage: 'acct', form: { xmTinhTrang: 'Hàng nguyên vẹn', items: [{ soLo: '010526' }] }, pdf: { mau: 'CPC1HN', items: [{ ten: 'Actiso Viet', dvt: 'ONG', soLuong: 40 }] } },
   { id: 's2', maPhieu: 'DHC2', khachHang: 'Khách B', createdAt: '2026-08-12T08:00:00', stage: 'done', form: { items: [{ soLo: '010526' }] }, pdf: { mau: 'UPHARMA', items: [{ ten: 'Actiso Viet', dvt: 'ONG', soLuong: 10 }] } },
   { id: 's3', maPhieu: 'DHC3', khachHang: 'Chưa có file', createdAt: '2026-09-01T08:00:00', stage: 'wait' },
 ]
@@ -23,6 +23,10 @@ describe('lookupRows', () => {
     expect(rows.filter(r => r.nguon === 'doitra').map(r => r.ten)).toEqual(['Laci-eye', 'Hàng X', 'Hàng Y'])
     expect(rows.some(r => r.ten === 'Cũ')).toBe(false)
     expect(rows.find(r => r.ten === 'Falgankid')).toMatchObject({ nguon: 'kho', huong: 'huy', soLuong: 55, extra: 'Gãy' })
+  })
+  it('tình trạng: nhập trả lại lấy từ BB xác minh, đổi trả lấy từ lý do, hàng huỷ lấy từ ô tình trạng kho ghi', () => {
+    expect(rows.find(r => r.so === 'DHC1').extra).toBe('Hàng nguyên vẹn')
+    expect(rows.find(r => r.ten === 'Laci-eye').extra).toBe('Rách vỏ')
   })
   it('hàng khách trả lỗi đã xuất huỷ chỉ hiện 1 dòng: dòng trùng (cùng phiếu xuất huỷ + hàng + lô) trong Hàng huỷ bị ẩn, dòng khác vẫn hiện', () => {
     expect(rows.filter(r => r.ten === 'Laci-eye')).toHaveLength(1)

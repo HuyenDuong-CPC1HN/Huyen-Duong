@@ -47,7 +47,7 @@ export function lookupRows({ slips = [], phieus = [], swapRecords = [], swapBatc
       id: `tra:${s.id}#${i}`, ref: s.id, nguon: 'tra', huong: 'nhap', so: s.maPhieu || s.form?.soHD || '',
       kho: slipLoai(s) || 'C', who: s.khachHang || s.pdf.benMua?.ten || '', date: isoDay(s.createdAt), stage: slipStage(s.stage),
       ma: '', ten: it.ten || '', soLo: s.form?.items?.[i]?.soLo || it.soLo || '', soLuong: Number(it.soLuong) || 0, dvt: it.dvt || '',
-      extra: '', huyPhieu: '',
+      extra: s.form?.xmTinhTrang || '', huyPhieu: '', // tình trạng hàng ghi ở BB xác minh của phiếu
     }))
   }
   // Đổi trả (quy trình mới): khách trả lỗi, một dòng cho tới khi xuất huỷ xong
