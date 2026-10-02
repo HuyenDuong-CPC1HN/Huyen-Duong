@@ -210,7 +210,7 @@ describe('authenticated application shell', () => {
       auth.fire('SIGNED_OUT', null)
     })
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Chào mừng quay trở lại' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: "HUYEN DUONG'S INVENTORY MANAGEMENT" })).toBeInTheDocument()
   })
 
   it('uses official CPC1HN branding and exposes semantic navigation landmarks', async () => {

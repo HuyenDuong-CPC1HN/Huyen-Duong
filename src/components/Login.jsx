@@ -35,8 +35,7 @@ export default function Login() {
         <img className="login-logo" src={cpcLogo} alt="CPC1HN" width="100" height="100" />
 
         <div className="login-heading">
-          <h1>Chào mừng quay trở lại</h1>
-          <p>Đăng nhập để tiếp tục vào Huyền Dương's Inventory Management.</p>
+          <h1>HUYEN DUONG'S INVENTORY MANAGEMENT</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">

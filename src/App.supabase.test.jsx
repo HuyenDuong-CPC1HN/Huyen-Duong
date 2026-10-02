@@ -42,7 +42,7 @@ describe('Supabase application gate', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Chào mừng quay trở lại' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: "HUYEN DUONG'S INVENTORY MANAGEMENT" })).toBeInTheDocument()
   })
 
   it('blocks the workspace with a Vietnamese online-only message when cloud health fails', async () => {
