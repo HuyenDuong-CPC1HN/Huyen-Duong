@@ -99,8 +99,11 @@ export function ngoaiSanForWeekIdUnifiedTrial(donSOEntry) {
       autoPackingLookup = autoPackingLookup || buildAutoPackingLookup(rows)
     }
   }
+  const spxRows = getCarrierWeekRows(NGOAI_SAN_CARRIER_KEY_UNIFIED, spxWeekId)
   return {
-    data: computeFrozenNgoaiSan(NGOAI_SAN_CARRIER_KEY_UNIFIED, getCarrierWeekRows(NGOAI_SAN_CARRIER_KEY_UNIFIED, spxWeekId), { autoSalesLookup, autoPackingLookup }),
+    data: computeFrozenNgoaiSan(NGOAI_SAN_CARRIER_KEY_UNIFIED, spxRows, { autoSalesLookup, autoPackingLookup }),
+    // dòng SPX gốc (có Tỉnh gửi/nhận) cho mục D) Phân tích đơn giao trễ hạn 48h
+    spxRows,
     frozen: false,
   }
 }

@@ -141,7 +141,7 @@ describe('ngoaiSanForWeekIdUnifiedTrial', () => {
     // Mốc 1/Mốc 2 lấy từ bản đã chốt trong báo cáo Đơn SO, không phải từ file Sales Order/bốc đóng
     expect(opts.autoSalesLookup.get('SPX1')).toEqual(new Date('2026-09-20T03:00:00.000Z'))
     expect(opts.autoPackingLookup.get('SPX1')).toEqual(new Date('2026-09-20T04:00:00.000Z'))
-    expect(result).toEqual({ data: { rows: [], stats: { total: 1 } }, frozen: false })
+    expect(result).toEqual({ data: { rows: [], stats: { total: 1 } }, spxRows: [{ maDon: 'A1' }], frozen: false })
   })
 
   it('rows đã bị thay file mới (không còn) -> null, không crash', () => {

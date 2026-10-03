@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import LateDeliveryAnalysis from './LateDeliveryAnalysis'
 import { fmtInt, fmtPctSigned, timingSegments, PRIORITY_LABEL } from '../utils/tongDonReportFormat'
 import {
   TdrStack, TdrLegend, EditableText, KpiCard, InsightCard, VerdictBox, PlanItem,
@@ -145,6 +146,8 @@ const TongDonReportDonSan = forwardRef(function TongDonReportDonSan({
                 <ReconTile tone={reconStats.treHanGiao > 0 ? 'warn' : 'neutral'} value={reconStats.treHanGiao} label="Giao trễ hạn (>48h)" />
                 <ReconTile tone={reconStats.chuaGiaoQuaHan > 0 ? 'bad' : 'neutral'} value={reconStats.chuaGiaoQuaHan} label="Chưa giao — quá 48h" />
               </div>
+
+              {ngoaiSan?.spxRows && <LateDeliveryAnalysis rows={ngoaiSan.data.rows} spxRows={ngoaiSan.spxRows} />}
 
               <div className="tdr-recon-note"><b>Nhận xét:</b> <EditableText value={fields.reconNote} onChange={onFieldChange && ((v) => onFieldChange('reconNote', v))} className="tdr-recon-note-text" rows={4} /></div>
             </>
