@@ -7,6 +7,8 @@ const carrierMocks = vi.hoisted(() => ({
   computeFrozenNgoaiSan: vi.fn(),
 }))
 vi.mock('../carrierUtils', () => carrierMocks)
+const opsValues = vi.hoisted(() => new Map())
+vi.mock('../../data/workspace', () => ({ opsStore: { getItem: k => opsValues.get(k) ?? null, setItem: (k, v) => opsValues.set(k, String(v)), removeItem: k => opsValues.delete(k) } }))
 
 const { computeWeekReportFromUnifiedTrial, ngoaiSanForWeekIdUnifiedTrial } = await import('../tongDonUnifiedTrialAdapter')
 
@@ -129,16 +131,34 @@ describe('ngoaiSanForWeekIdUnifiedTrial', () => {
     carrierMocks.getCarrierWeekRows.mockReturnValue([{ maDon: 'A1' }])
     carrierMocks.computeFrozenNgoaiSan.mockReturnValue({ rows: [], stats: { total: 1 } })
 
-    const result = ngoaiSanForWeekIdUnifiedTrial('spx-week-1')
+    const result = ngoaiSanForWeekIdUnifiedTrial(makeDonSOEntry({
+      autoSalesLookup: { SPX1: '2026-09-20T03:00:00.000Z' }, autoPackingLookup: { SPX1: '2026-09-20T04:00:00.000Z' },
+    }))
 
     expect(carrierMocks.carrierWeekHasRows).toHaveBeenCalledWith('unifiedTrial_donSO_spx', 'spx-week-1')
-    expect(carrierMocks.computeFrozenNgoaiSan).toHaveBeenCalledWith('unifiedTrial_donSO_spx', [{ maDon: 'A1' }])
+    const [key, rows, opts] = carrierMocks.computeFrozenNgoaiSan.mock.calls.at(-1)
+    expect([key, rows]).toEqual(['unifiedTrial_donSO_spx', [{ maDon: 'A1' }]])
+    // Mốc 1/Mốc 2 lấy từ bản đã chốt trong báo cáo Đơn SO, không phải từ file Sales Order/bốc đóng
+    expect(opts.autoSalesLookup.get('SPX1')).toEqual(new Date('2026-09-20T03:00:00.000Z'))
+    expect(opts.autoPackingLookup.get('SPX1')).toEqual(new Date('2026-09-20T04:00:00.000Z'))
     expect(result).toEqual({ data: { rows: [], stats: { total: 1 } }, frozen: false })
   })
 
   it('rows đã bị thay file mới (không còn) -> null, không crash', () => {
     carrierMocks.carrierWeekHasRows.mockReturnValue(false)
-    expect(ngoaiSanForWeekIdUnifiedTrial('spx-week-old')).toBeNull()
+    expect(ngoaiSanForWeekIdUnifiedTrial(makeDonSOEntry({ spxWeekId: 'spx-week-old' }))).toBeNull()
+  })
+
+  it('báo cáo lưu trước khi chốt mốc -> lấy Mốc 1 từ file Đơn SO đang mở nếu đúng tuần đó', () => {
+    carrierMocks.carrierWeekHasRows.mockReturnValue(true)
+    carrierMocks.getCarrierWeekRows.mockReturnValue([])
+    const entry = makeDonSOEntry()
+    opsValues.set('unified_trial_donSO_meta', JSON.stringify({ uploadedAt: entry.id }))
+    opsValues.set('unified_trial_donSO_rows', JSON.stringify([{ 'Mã vận đơn': 'SPX2', 'Ngày tạo': '20/09/2026 10:00', 'TG Đóng hàng': '20/09/2026 11:00' }]))
+    ngoaiSanForWeekIdUnifiedTrial(entry)
+    const opts = carrierMocks.computeFrozenNgoaiSan.mock.calls.at(-1)[2]
+    expect(opts.autoSalesLookup.get('SPX2')).toEqual(new Date(2026, 8, 20, 10, 0))
+    expect(opts.autoPackingLookup.get('SPX2')).toEqual(new Date(2026, 8, 20, 11, 0))
   })
 
   it('không có spxWeekId -> null ngay, không gọi gì thêm', () => {

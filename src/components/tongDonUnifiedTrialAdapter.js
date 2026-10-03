@@ -2,6 +2,12 @@
 // thành ĐÚNG hình dạng computeWeekReport() mà TongDonTab.jsx/tongDonNarrative.js/2 component báo cáo đang
 // dùng — để tái dùng nguyên vẹn tầng trình bày/nhận định, không phải sửa gì ở đó khi đổi nguồn dữ liệu.
 import { getCarrierFileStats, carrierWeekHasRows, getCarrierWeekRows, computeFrozenNgoaiSan } from './carrierUtils'
+import { buildAutoSalesOrderLookup, buildAutoPackingLookup, lookupFromJson } from '../utils/reconcileNgoaiSan'
+import { opsStore } from '../data/workspace'
+
+function readJSON(key) {
+  try { return JSON.parse(opsStore.getItem(key) || 'null') } catch { return null }
+}
 
 export const NGOAI_SAN_CARRIER_KEY_UNIFIED = 'unifiedTrial_donSO_spx'
 
@@ -77,11 +83,24 @@ export function computeWeekReportFromUnifiedTrial({ donSOEntry, donTTEntry }) {
 // hệt ngoaiSanForWeekId trong TongDonTab.jsx đang làm cho nguồn cũ, chỉ khác carrier key). Gộp kênh chưa
 // lưu sẵn bản đóng băng (ngoaiSanFrozen) trong entry như nguồn cũ — nếu rows SPX gốc đã bị thay file mới
 // thì trả về null (2 báo cáo đã có sẵn màn hình "Chưa có dữ liệu đối soát" cho trường hợp này).
-export function ngoaiSanForWeekIdUnifiedTrial(spxWeekId) {
+// donSOEntry: báo cáo Đơn SO đã lưu — Mốc 1/Mốc 2 lấy từ bản đã chốt trong báo cáo; báo cáo lưu trước khi có
+// 2 trường này mà đúng là tuần của file Đơn SO đang mở thì lấy lại từ file đó.
+export function ngoaiSanForWeekIdUnifiedTrial(donSOEntry) {
+  const spxWeekId = donSOEntry?.spxWeekId
   if (!spxWeekId) return null
   if (!carrierWeekHasRows(NGOAI_SAN_CARRIER_KEY_UNIFIED, spxWeekId)) return null
+  let autoSalesLookup = lookupFromJson(donSOEntry.autoSalesLookup)
+  let autoPackingLookup = lookupFromJson(donSOEntry.autoPackingLookup)
+  if (!autoSalesLookup) {
+    const meta = readJSON('unified_trial_donSO_meta')
+    const rows = meta?.uploadedAt === donSOEntry.id ? readJSON('unified_trial_donSO_rows') : null
+    if (Array.isArray(rows)) {
+      autoSalesLookup = buildAutoSalesOrderLookup(rows)
+      autoPackingLookup = autoPackingLookup || buildAutoPackingLookup(rows)
+    }
+  }
   return {
-    data: computeFrozenNgoaiSan(NGOAI_SAN_CARRIER_KEY_UNIFIED, getCarrierWeekRows(NGOAI_SAN_CARRIER_KEY_UNIFIED, spxWeekId)),
+    data: computeFrozenNgoaiSan(NGOAI_SAN_CARRIER_KEY_UNIFIED, getCarrierWeekRows(NGOAI_SAN_CARRIER_KEY_UNIFIED, spxWeekId), { autoSalesLookup, autoPackingLookup }),
     frozen: false,
   }
 }

@@ -265,9 +265,11 @@ function readNgoaiSanExcluded(carrierKey) {
 }
 
 // Đóng băng kết quả đối soát "đơn ngoại sàn" tại thời điểm lưu báo cáo tuần
-export function computeFrozenNgoaiSan(carrierKey, spxRows) {
-  const salesLookup = buildSalesOrderLookup(readSalesOrderWeeks(carrierKey))
-  const packingLookup = buildPackingLookup(readPackingWeeks(carrierKey))
+// autoSalesLookup / autoPackingLookup: Mốc 1 / Mốc 2 lấy từ file Đơn SO (tab Gộp kênh) — có thì dùng thay cho
+// file Sales Order / file bốc đóng upload tay.
+export function computeFrozenNgoaiSan(carrierKey, spxRows, { autoSalesLookup = null, autoPackingLookup = null } = {}) {
+  const salesLookup = autoSalesLookup ? new Map() : buildSalesOrderLookup(readSalesOrderWeeks(carrierKey))
+  const packingLookup = autoPackingLookup || buildPackingLookup(readPackingWeeks(carrierKey))
   const excludedSet = new Set(readNgoaiSanExcluded(carrierKey))
-  return reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedSet)
+  return reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedSet, autoSalesLookup)
 }

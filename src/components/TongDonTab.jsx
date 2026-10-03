@@ -168,7 +168,7 @@ export default function TongDonTab({ onNavigate }) {
   const livePrevious = useMemo(() => computeWeekReportFromUnifiedTrial({
     donSOEntry: donSOEntryPrevious, donTTEntry: donTTEntryPrevious,
   }), [donSOEntryPrevious, donTTEntryPrevious])
-  const ngoaiSanCurrent = useMemo(() => ngoaiSanForWeekIdUnifiedTrial(donSOEntryCurrent?.spxWeekId), [donSOEntryCurrent])
+  const ngoaiSanCurrent = useMemo(() => ngoaiSanForWeekIdUnifiedTrial(donSOEntryCurrent), [donSOEntryCurrent])
 
   // Khóa "tuần" dùng để lưu các trường nhập tay (chưa giao, hàng gửi, nhân sự, kết luận, giải pháp...) —
   // giữ tiền tố "ut_" như trước để các nhận định đã sửa tay trước đây vẫn khớp đúng tuần.
