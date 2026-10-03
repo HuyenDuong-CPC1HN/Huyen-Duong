@@ -64,13 +64,13 @@ const TongDonReportDonSan = forwardRef(function TongDonReportDonSan({
             <h4>Đơn sàn TMĐT (Shopee, TikTok)</h4>
             <p>Tổng đơn — chưa có breakdown trạng thái giao trong nguồn dữ liệu hiện tại.</p>
             <div className="tdr-overview-big">{fmtInt(current.totalTMDT)} <span className="tdr-overview-vs">/ {fmtInt(previous.totalTMDT)} tuần trước</span></div>
-            <div className="tdr-overview-delta">{narrative.tmdtDeltaPct >= 0 ? '▲' : '▼'} {fmtInt(Math.abs(current.totalTMDT - previous.totalTMDT))} đơn ({fmtPctSigned(narrative.tmdtDeltaPct)})</div>
+            <div className={`tdr-overview-delta ${narrative.tmdtDeltaPct < 0 ? 'down' : ''}`}>{narrative.tmdtDeltaPct >= 0 ? '▲' : '▼'} {fmtInt(Math.abs(current.totalTMDT - previous.totalTMDT))} đơn ({fmtPctSigned(narrative.tmdtDeltaPct)})</div>
           </div>
           <div className="tdr-overview-card">
             <h4>Đơn ngoại sàn (Website — COD SPX)</h4>
             <p>Đơn từ website công ty, giao 100% qua SPX Express dạng COD.</p>
             <div className="tdr-overview-big">{fmtInt(narrative.ngoaiSanCurTotal)} <span className="tdr-overview-vs">/ {fmtInt(narrative.ngoaiSanPrevTotal)} tuần trước</span></div>
-            <div className="tdr-overview-delta">{narrative.ngoaiSanDeltaPct >= 0 ? '▲' : '▼'} {fmtInt(Math.abs(narrative.ngoaiSanCurTotal - narrative.ngoaiSanPrevTotal))} đơn ({fmtPctSigned(narrative.ngoaiSanDeltaPct)})</div>
+            <div className={`tdr-overview-delta ${narrative.ngoaiSanDeltaPct < 0 ? 'down' : ''}`}>{narrative.ngoaiSanDeltaPct >= 0 ? '▲' : '▼'} {fmtInt(Math.abs(narrative.ngoaiSanCurTotal - narrative.ngoaiSanPrevTotal))} đơn ({fmtPctSigned(narrative.ngoaiSanDeltaPct)})</div>
           </div>
         </div>
       </div>

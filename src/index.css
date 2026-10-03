@@ -954,6 +954,7 @@ body {
 .tdr-overview-big { font-size: 30px; font-weight: 800; }
 .tdr-overview-vs { font-size: 13px; color: var(--text-tertiary); font-weight: 500; }
 .tdr-overview-delta { font-size: 12.5px; font-weight: 700; color: var(--color-current-text); margin-top: 6px; }
+.tdr-overview-delta.down { color: var(--color-red); }
 
 /* week card với thanh ngang có tên (Đơn truyền thống) */
 .tdr-week-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px 22px; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05); }
