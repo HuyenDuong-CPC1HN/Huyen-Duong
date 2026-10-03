@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse } from 'lucide-react'
+import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
 import ExpiryStockTab from './components/ExpiryStockTab'
 import NhapHangTab from './components/NhapHangTab'
 import DoiSoatThucTeTab from './components/DoiSoatThucTeTab'
+import NhapHangHistoryTab from './components/NhapHangHistoryTab'
 import ReturnSlipsTab from './components/ReturnSlipsTab'
 import HangHuyTab from './components/HangHuyTab'
 import HangLookup from './components/HangLookup'
@@ -47,6 +48,7 @@ const NAV = [
     children: [
       { id: 'nhaphang', label: 'Nhập hàng', icon: PackagePlus },
       { id: 'doisoatthucte', label: 'Đối soát Thực tế ↔ Hoá đơn', icon: ListChecks },
+      { id: 'lichsunhaphang', label: 'Tra cứu lịch sử nhập hàng', icon: History },
     ],
   },
   {
@@ -77,6 +79,7 @@ const BREADCRUMB = {
   hangchamluanchuyen: ['Trang chủ', 'Quản lý tồn kho', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
+  lichsunhaphang: ['Trang chủ', 'Nhập hàng', 'Tra cứu lịch sử nhập hàng'],
   traHang:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi nhập trả lại'],
   traCuuHang: ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Tra cứu hàng'],
   hangHuyCD:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ'],
@@ -489,6 +492,7 @@ function AppContent({ user }) {
           {active === 'hangchamluanchuyen' && <ExpiryStockTab key="clc" mode="clc" />}
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
+          {active === 'lichsunhaphang' && <NhapHangHistoryTab />}
           {active === 'traCuuHang' && <HangLookup onOpen={(row) => { setOpenTarget(row.ref); setActive({ tra: 'traHang', doitra: 'doiTra', kho: 'hangHuyCD' }[row.nguon]) }} />}
           {active === 'traHang' && <ReturnSlipsTab key={`tra-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyCD'  && <HangHuyTab key={`huy-${openTarget}`} initialOpenId={openTarget} />}
