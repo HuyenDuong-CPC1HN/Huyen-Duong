@@ -144,7 +144,22 @@ const CARRIER_CONFIG = {
     isHoanHang: () => false,
     orderCounter: spxOrderCount,
     useHourPrecision: true, // SPX có giờ:phút chi tiết, tính chênh lệch theo giờ thay vì làm tròn ngày
+    // File SPX có 2 cột trùng tên "Tỉnh, thành" và "Quận, huyện (cũ) / Phường, xã (mới)": lần đầu là của người
+    // nhận, lần 2 là của người gửi — đọc theo thứ tự xuất hiện, đặt tên riêng để phân tích đơn giao trễ hạn.
+    extraColumns: [
+      { key: 'Tỉnh nhận', header: 'Tỉnh, thành', nth: 0 },
+      { key: 'Phường/Xã nhận', header: 'Quận, huyện (cũ) / Phường, xã (mới)', nth: 0 },
+      { key: 'Tỉnh gửi', header: 'Tỉnh, thành', nth: 1 },
+    ],
   },
+}
+
+function nthIndexOf(list, value, nth) {
+  let seen = -1
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] === value && ++seen === nth) return i
+  }
+  return -1
 }
 
 // Đọc file Excel xuất từ Viettel Post/SPX — tự tìm dòng tiêu đề thật (bỏ qua phần đầu là tên công ty)
@@ -161,9 +176,17 @@ export function parseCarrierFile(arrayBuffer, carrierType = 'viettel') {
   const headerLower = header.map(h => h.toLowerCase())
   const colIdx = Object.fromEntries(config.columns.map(c => [c, headerLower.indexOf(c.toLowerCase())]))
 
+  const extras = (config.extraColumns || [])
+    .map(e => ({ key: e.key, idx: nthIndexOf(headerLower, e.header.toLowerCase(), e.nth) }))
+    .filter(e => e.idx >= 0)
+
   const data = rows.slice(headerIdx + 1)
     .filter(r => r[colIdx[config.requiredHeaderCell]])
-    .map(r => Object.fromEntries(config.columns.map(c => [c, colIdx[c] >= 0 ? String(r[colIdx[c]] ?? '').trim() : ''])))
+    .map(r => {
+      const row = Object.fromEntries(config.columns.map(c => [c, colIdx[c] >= 0 ? String(r[colIdx[c]] ?? '').trim() : '']))
+      for (const e of extras) row[e.key] = String(r[e.idx] ?? '').trim()
+      return row
+    })
 
   return data
 }

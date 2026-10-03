@@ -339,6 +339,7 @@ function DonSanSnapshotView({ entry }) {
         carrierPanelProps={{
           carrierKey: NGOAI_SAN_CARRIER_KEY,
           label: 'SPX Express — Ngoại sàn',
+          showLateAnalysis: true,
           carrierType: 'spx',
           internalData: [],
           weekId: entry.spxWeekId,
@@ -472,6 +473,7 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
             carrierPanelProps={{
               carrierKey: NGOAI_SAN_CARRIER_KEY,
               label: 'SPX Express — Ngoại sàn',
+          showLateAnalysis: true,
               carrierType: 'spx',
               internalData: ngoaiSan,
               referenceDate: meta?.uploadedAt,

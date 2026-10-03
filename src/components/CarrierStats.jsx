@@ -6,6 +6,7 @@ import { reconcileNgoaiSan, buildSalesOrderLookup, buildPackingLookup } from '..
 import * as XLSX from 'xlsx'
 import { ColumnFilter, ResizeHandle } from './DataTable'
 import { StatCard } from './ReportCards'
+import LateDeliveryAnalysis from './LateDeliveryAnalysis'
 import {
   readCarrierWeeks,
   writeCarrierWeeks,
@@ -330,7 +331,7 @@ const DEFAULT_NGOAI_SAN_NOTE = (
   </>
 )
 
-function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE, liveSessionKey = null }) {
+function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE, liveSessionKey = null, showLateAnalysis = false }) {
   const salesInputRef = useRef()
   const packingInputRef = useRef()
   const [error, setError] = useState('')
@@ -530,6 +531,8 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSal
                 onClick={() => selectStatus(c.key)} active={statusFilter === c.key} />
             ))}
           </div>
+
+          {showLateAnalysis && <LateDeliveryAnalysis rows={rows} spxRows={spxRows} />}
 
           <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500 mb-3">
             <span>{stats.total} đơn khớp Mã đơn</span>
@@ -900,7 +903,7 @@ function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, 
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false, showLateAnalysis = false }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => carrierLookupMap(frozenLookup, internalData),
@@ -1166,7 +1169,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       {carrierType === 'spx' && (
         frozenNgoaiSan
           ? <FrozenNgoaiSanPanel frozen={frozenNgoaiSan} />
-          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} hideSalesUpload={hideSalesUpload} autoSalesLookup={autoSalesLookup} salesFileNoun={salesFileNoun} note={ngoaiSanNote} liveSessionKey={liveSessionKey} />
+          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} hideSalesUpload={hideSalesUpload} autoSalesLookup={autoSalesLookup} salesFileNoun={salesFileNoun} note={ngoaiSanNote} liveSessionKey={liveSessionKey} showLateAnalysis={showLateAnalysis} />
       )}
 
       {showNoteCol && (
