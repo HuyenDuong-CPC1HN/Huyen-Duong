@@ -10,7 +10,7 @@ import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifi
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
 import { buildAutoSalesOrderLookup } from '../utils/reconcileNgoaiSan'
-import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport } from '../utils/unifiedTrialReports'
+import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport, updateTrialReport } from '../utils/unifiedTrialReports'
 
 const NGOAI_SAN_CARRIER_KEY = 'unifiedTrial_donSO_spx'
 
@@ -331,7 +331,7 @@ function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanel
 
 // Mốc 1 của tuần đã lưu: lấy bản đã chốt trong entry (autoSalesLookup, {Mã vận đơn: ISO}); tuần lưu
 // trước khi có trường này thì dùng lại file Đơn SO hiện tại nếu đúng là file của tuần đó (fallbackLookup).
-function DonSanSnapshotView({ entry, fallbackLookup = null }) {
+function DonSanSnapshotView({ entry, fallbackLookup = null, onRelinkSpx = null }) {
   const autoSalesLookup = useMemo(() => {
     if (!entry.autoSalesLookup) return fallbackLookup
     return new Map(Object.entries(entry.autoSalesLookup).map(([code, iso]) => [code, new Date(iso)]))
@@ -354,6 +354,7 @@ function DonSanSnapshotView({ entry, fallbackLookup = null }) {
           hidePackingUpload: true,
           hideSalesUpload: true,
           autoSalesLookup,
+          onRelinkWeek: onRelinkSpx,
           ngoaiSanNote: NGOAI_SAN_NOTE,
         }}
       />
@@ -361,7 +362,7 @@ function DonSanSnapshotView({ entry, fallbackLookup = null }) {
   )
 }
 
-function DonTruyenThongSnapshotView({ entry }) {
+function DonTruyenThongSnapshotView({ entry, onRelink = null }) {
   const [channel, setChannel] = useState('donC')
   return (
     <div>
@@ -377,10 +378,12 @@ function DonTruyenThongSnapshotView({ entry }) {
       </div>
 
       {channel === 'donC' && (
-        <UnifiedTrialChannelDetail data={[]} channelKey="donC" showChanhXe showSpx={false} readOnly frozenSnapshot={entry.donC} />
+        <UnifiedTrialChannelDetail data={[]} channelKey="donC" showChanhXe showSpx={false} readOnly frozenSnapshot={entry.donC}
+          onRelinkWeek={onRelink && ((field, id) => onRelink('donC', field, id))} />
       )}
       {channel === 'donDTP' && (
-        <UnifiedTrialChannelDetail data={[]} channelKey="donDTP" showChanhXe={false} showSpx readOnly frozenSnapshot={entry.donDTP} />
+        <UnifiedTrialChannelDetail data={[]} channelKey="donDTP" showChanhXe={false} showSpx readOnly frozenSnapshot={entry.donDTP}
+          onRelinkWeek={onRelink && ((field, id) => onRelink('donDTP', field, id))} />
       )}
     </div>
   )
@@ -466,7 +469,11 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
       )}
 
       {viewingEntry ? (
-        <DonSanSnapshotView entry={viewingEntry} fallbackLookup={meta && viewingEntry.id === meta.uploadedAt ? autoSalesLookup : null} />
+        <DonSanSnapshotView
+          entry={viewingEntry}
+          fallbackLookup={meta && viewingEntry.id === meta.uploadedAt ? autoSalesLookup : null}
+          onRelinkSpx={id => setReports(updateTrialReport('donSO', viewingEntry.id, r => ({ ...r, spxWeekId: id })))}
+        />
       ) : !showLive ? (
         <div>{uploadNode}</div>
       ) : (
@@ -574,7 +581,10 @@ function DonTruyenThongView({ rosterSet, countMismatch, onCountMismatchChange, v
       )}
 
       {viewingEntry ? (
-        <DonTruyenThongSnapshotView entry={viewingEntry} />
+        <DonTruyenThongSnapshotView
+          entry={viewingEntry}
+          onRelink={(channelKey, field, id) => setReports(updateTrialReport('donTruyenThong', viewingEntry.id, r => ({ ...r, [channelKey]: { ...r[channelKey], [field]: id } })))}
+        />
       ) : !showLive ? (
         <div>{uploadNode}</div>
       ) : (

@@ -113,7 +113,7 @@ function ExpandableList({ rows, label }) {
 // thời điểm lưu, nên vẫn đầy đủ StatCard/bảng chi tiết y hệt bản sống.
 export default function UnifiedTrialChannelDetail({
   data, channelKey, referenceDate = null, showChanhXe = false, showSpx = false,
-  readOnly = false, frozenSnapshot = null,
+  readOnly = false, frozenSnapshot = null, onRelinkWeek = null,
 }) {
   const validData = useMemo(() => data.filter(row => String(row['Mã kiện hàng'] ?? '').trim()), [data])
 
@@ -165,10 +165,10 @@ export default function UnifiedTrialChannelDetail({
   // showLogisticsHold theo đúng channelKey (từng khiến upload "Chờ giao Logistics" biến mất ở tab Gộp kênh).
   const showLogisticsHold = channelKey === 'donDTP'
   const viettelPanelProps = readOnly
-    ? { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: [], weekId: viettelWeekId, frozenLookup: carrierLookup, strictWeekId: true, showLogisticsHold }
+    ? { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: [], weekId: viettelWeekId, frozenLookup: carrierLookup, strictWeekId: true, showLogisticsHold, onRelinkWeek: onRelinkWeek && (id => onRelinkWeek('viettelWeekId', id)) }
     : { carrierKey: viettelKey, label: 'Viettel Post', carrierType: 'viettel', internalData: validData, referenceDate, liveSessionKey: referenceDate, showLogisticsHold }
   const spxPanelProps = readOnly
-    ? { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: [], weekId: spxWeekId, frozenLookup: carrierLookup, strictWeekId: true }
+    ? { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: [], weekId: spxWeekId, frozenLookup: carrierLookup, strictWeekId: true, onRelinkWeek: onRelinkWeek && (id => onRelinkWeek('spxWeekId', id)) }
     : { carrierKey: spxKey, label: 'SPX Express', carrierType: 'spx', internalData: validData, referenceDate, liveSessionKey: referenceDate }
 
   const kpiCols = 3 + (showChanhXe ? 1 : 0)

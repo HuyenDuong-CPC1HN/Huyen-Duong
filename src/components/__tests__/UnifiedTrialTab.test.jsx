@@ -159,3 +159,37 @@ describe('UnifiedTrialTab — tuần Đơn SO đã lưu vẫn có mục D) Phân
     expect(screen.getByText(/1 đơn giao quá 48h\. Trong đó có/)).toBeInTheDocument()
   })
 })
+
+describe('UnifiedTrialTab — file SPX của tuần đã lưu không bị dọn mất, mất thì tải lại gắn đúng tuần', () => {
+  it('tải file vào tuần đã lưu đang thiếu file -> gắn vào báo cáo, không xoá file của tuần đã lưu khác', async () => {
+    const XLSX = await import('xlsx')
+    const many = Array.from({ length: 9 }, (_, i) => ({ id: `extra-${i}`, fileName: `x${i}.xlsx`, uploadedAt: `2026-09-0${i + 1}T00:00:00.000Z`, rows: [] }))
+    store.opsStore.setItem('carrier_weeks_unifiedTrial_donSO_spx', JSON.stringify([
+      ...many,
+      { id: 'kept-week', fileName: 'tuan-khac.xlsx', uploadedAt: '2026-08-01T00:00:00.000Z', rows: [] },
+    ]))
+    store.opsStore.setItem('unified_trial_reports_donSO', JSON.stringify([
+      { id: 'r-missing', label: 'Tuần 19/09', fileName: 'so-19.xlsx', createdAt: new Date().toISOString(), total: 1, tmdtCount: 0, ngoaiSanCount: 1, otherCount: 0, mismatchCount: 0, shops: [], spxWeekId: 'da-bi-xoa', carrierLookup: {} },
+      { id: 'r-other', label: 'Tuần khác', fileName: 'so-khac.xlsx', createdAt: new Date().toISOString(), total: 1, tmdtCount: 0, ngoaiSanCount: 1, otherCount: 0, mismatchCount: 0, shops: [], spxWeekId: 'kept-week', carrierLookup: {} },
+    ]))
+
+    render(<UnifiedTrialTab />)
+    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'r-missing' } })
+    expect(await screen.findByText(/đã gắn với tuần này không còn trên hệ thống/)).toBeInTheDocument()
+
+    const ws = XLSX.utils.aoa_to_sheet([['Mã vận đơn', 'Mã khách hàng', 'Trạng thái hiện tại'], ['SPXVN9', 'ORD9', 'Đã giao hàng']])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+    const file = new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], 'spx-19-25.xlsx')
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } })
+
+    await waitFor(() => {
+      const report = JSON.parse(store.opsStore.getItem('unified_trial_reports_donSO')).find(r => r.id === 'r-missing')
+      expect(report.spxWeekId).not.toBe('da-bi-xoa')
+      const weeks = JSON.parse(store.opsStore.getItem('carrier_weeks_unifiedTrial_donSO_spx'))
+      expect(weeks.some(w => w.id === report.spxWeekId)).toBe(true)
+      expect(weeks.some(w => w.id === 'kept-week')).toBe(true) // file của tuần đã lưu khác vẫn còn
+    })
+    expect(await screen.findByText('spx-19-25.xlsx')).toBeInTheDocument()
+  })
+})

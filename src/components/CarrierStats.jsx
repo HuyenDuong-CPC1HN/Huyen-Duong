@@ -11,6 +11,7 @@ import {
   readCarrierWeeks,
   writeCarrierWeeks,
   readHoldWeeks,
+  referencedCarrierWeekIds,
   belongsToSession,
   pickSessionWeek,
 } from './carrierUtils'
@@ -44,10 +45,16 @@ const MAX_CARRIER_WEEKS = 8 // tối đa số tuần giữ lại — mỗi tuầ
 
 // Thêm 1 tuần upload mới — KHÔNG ghi đè các tuần cũ. Giới hạn tối đa MAX_CARRIER_WEEKS tuần,
 // và tự động bớt tuần cũ nhất nếu localStorage đầy (báo cho người dùng biết nếu có tuần bị bớt).
+// Tải file mới: file đang được báo cáo tuần đã lưu ghim tới thì luôn giữ; file tải lại trong CÙNG phiên làm
+// việc (cùng sessionKey, chưa lưu báo cáo nào dùng) thì thay hẳn file cũ thay vì xếp chồng; số file còn lại
+// tối đa MAX_CARRIER_WEEKS. Trước đây chỉ cắt theo số lượng nên tải lại vài lần là đẩy mất file của tuần đã lưu.
 function addCarrierWeek(carrierKey, entry) {
+  const referenced = referencedCarrierWeekIds()
   const weeks = readCarrierWeeks(carrierKey)
+    .filter(w => !(entry.sessionKey && w.sessionKey === entry.sessionKey && !referenced.has(String(w.id))))
   const withId = { id: entry.uploadedAt || String(Date.now()), ...entry }
-  const next = [withId, ...weeks].slice(0, MAX_CARRIER_WEEKS)
+  let unreferenced = 0
+  const next = [withId, ...weeks].filter(w => w === withId || referenced.has(String(w.id)) || ++unreferenced < MAX_CARRIER_WEEKS)
   const saved = writeCarrierWeeks(carrierKey, next)
   localStorage.setItem(`carrier_active_${carrierKey}`, withId.id)
   return { entry: withId, droppedCount: next.length - saved.length }
@@ -906,7 +913,7 @@ function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, 
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false, showLateAnalysis = false }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false, showLateAnalysis = false, onRelinkWeek = null }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => carrierLookupMap(frozenLookup, internalData),
@@ -1027,8 +1034,10 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       }
       const newEntry = { fileName: file.name, uploadedAt: new Date().toISOString(), rows }
       if (isLiveSession) newEntry.sessionKey = liveSessionKey
-      const { droppedCount } = addCarrierWeek(carrierKey, newEntry)
+      const { entry: added, droppedCount } = addCarrierWeek(carrierKey, newEntry)
       setWeeks(readCarrierWeeks(carrierKey))
+      // Tuần đã lưu mà file cũ không còn: gắn file vừa tải vào đúng báo cáo tuần đó.
+      if (weekId && !state && onRelinkWeek) onRelinkWeek(added.id)
       if (droppedCount > 0) {
         setError(`Bộ nhớ trình duyệt gần đầy — đã tự động bỏ ${droppedCount} tuần cũ nhất để lưu được tuần này.`)
       }
@@ -1109,6 +1118,10 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
 
   if (!state) {
     return (
+      <>
+      {weekId && onRelinkWeek && (
+        <p className="mb-2 text-xs text-amber-700">File {label} đã gắn với tuần này không còn trên hệ thống. Tải lại file {label} của đúng tuần này để xem lại phần đối soát chi tiết.</p>
+      )}
       <CarrierEmptyDropZone
         label={label}
         dragging={dragging}
@@ -1118,6 +1131,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
         onFile={file => void parseFile(file)}
         error={error}
       />
+      </>
     )
   }
 

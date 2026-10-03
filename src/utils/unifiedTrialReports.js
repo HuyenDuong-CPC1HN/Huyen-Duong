@@ -42,3 +42,10 @@ export function renameTrialReport(kind, id, label) {
   localStorage.setItem(storageKey(kind), JSON.stringify(next))
   return next
 }
+
+// Sửa 1 phần báo cáo đã lưu (vd gắn lại file VTP/SPX của tuần đó khi file cũ không còn) — giữ nguyên createdAt.
+export function updateTrialReport(kind, id, patch) {
+  const next = readTrialReports(kind).map(r => (r.id === id ? patch(r) : r))
+  localStorage.setItem(storageKey(kind), JSON.stringify(next))
+  return next
+}

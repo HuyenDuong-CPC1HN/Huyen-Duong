@@ -141,6 +141,25 @@ export function pickSessionWeek(weeks, sessionKey) {
     || null
 }
 
+// Mã các file VTP/SPX đang được báo cáo tuần đã lưu ghim tới (spxWeekId/viettelWeekId) — không được tự dọn
+// các file này khi tải thêm file mới, nếu không tuần đã lưu sẽ mất phần đối soát chi tiết.
+const REPORT_STORAGE_KEYS = ['unified_trial_reports_donSO', 'unified_trial_reports_donTruyenThong', 'tongdon_reports']
+export function referencedCarrierWeekIds() {
+  const ids = new Set()
+  const walk = (node) => {
+    if (Array.isArray(node)) { node.forEach(walk); return }
+    if (!node || typeof node !== 'object') return
+    for (const [key, value] of Object.entries(node)) {
+      if (/WeekId$/.test(key) && (typeof value === 'string' || typeof value === 'number')) ids.add(String(value))
+      else if (value && typeof value === 'object') walk(value)
+    }
+  }
+  for (const key of REPORT_STORAGE_KEYS) {
+    try { walk(JSON.parse(localStorage.getItem(key) || 'null')) } catch { /* bỏ qua dữ liệu hỏng */ }
+  }
+  return ids
+}
+
 export function pickCarrierWeekIdByDate(carrierKey, referenceDate) {
   const weeks = readCarrierWeeks(carrierKey)
   return (pickSessionWeek(weeks, referenceDate) || closestByDate(weeks, referenceDate))?.id || null
