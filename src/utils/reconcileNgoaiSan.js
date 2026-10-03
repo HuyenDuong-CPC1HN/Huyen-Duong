@@ -108,15 +108,17 @@ export function getPackingTimeRaw(row) {
 
 // Mốc 1 tự động từ chính file Đơn SO (không cần upload riêng file Sales Order nữa) — khớp theo
 // "Mã vận đơn" (so với Mã vận đơn bên file SPX, khớp 1-1 tuyệt đối — ĐÃ xác nhận với người dùng,
-// KHÁC với buildSalesOrderLookup ở trên khớp theo "Mã đơn" cho luồng upload tay cũ). "Ngày tạo" ở
-// đây là thời gian duyệt đơn, dùng thay cho "Tạo lúc" của file Sales Order cũ.
+// KHÁC với buildSalesOrderLookup ở trên khớp theo "Mã đơn" cho luồng upload tay cũ). Mốc 1 = cột "Tạo lúc"
+// (thời gian duyệt đơn) của file Đơn SO — bỏ hẳn việc upload file Sales Order riêng ở tab Gộp kênh.
 export function buildAutoSalesOrderLookup(ngoaiSanRows) {
   const map = new Map()
   for (const row of ngoaiSanRows || []) {
     const code = clean(row['Mã vận đơn']).toUpperCase()
     if (!code) continue
-    const ngayTao = parseDonSoNgayTao(row['Ngày tạo'])
-    if (ngayTao) map.set(code, ngayTao)
+    // Ưu tiên cột "Tạo lúc" (thời gian duyệt đơn); file Đơn SO cũ không có thì dùng "Ngày tạo".
+    const raw = clean(row['Tạo lúc']) ? row['Tạo lúc'] : row['Ngày tạo']
+    const moc1 = parseDonSoNgayTao(raw) || parseTaoLuc({ 'Tạo lúc': raw })
+    if (moc1) map.set(code, moc1)
   }
   return map
 }

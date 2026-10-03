@@ -29,7 +29,7 @@ const SHOP_CLS = {
 const NGOAI_SAN_NOTE = (
   <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">
     <div className="space-y-0.5">
-      <div>Mốc 1: Ngày tạo đơn (file Đơn SO)</div>
+      <div>Mốc 1: Tạo lúc (file Đơn SO)</div>
       <div>Mốc 2: Kho đóng kiện</div>
       <div>Mốc 3: SPX lấy hàng</div>
       <div>Mốc 4: SPX giao hàng thành công.</div>
@@ -47,7 +47,7 @@ const NGOAI_SAN_NOTE = (
 // SO, khỏi cần upload riêng:
 //  - Mốc 2: cột "TG Đóng hàng" + "Mã vận đơn" — tự ghi thẳng vào đúng ô nhớ NgoaiSanPanel đọc
 //    (`carrier_packingweeks_<carrierKey>`) mỗi khi có file Đơn SO mới (xem seedNgoaiSanPackingWeek).
-//  - Mốc 1: cột "Ngày tạo" (thời gian duyệt đơn) + "Mã vận đơn" — truyền thẳng qua prop
+//  - Mốc 1: cột "Tạo lúc" (thời gian duyệt đơn; file cũ không có thì "Ngày tạo") + "Mã vận đơn" — truyền thẳng qua prop
 //    `autoSalesLookup` (buildAutoSalesOrderLookup, xem DonSanView), KHÔNG ghi qua storage như Mốc 2 vì
 //    khớp theo Mã vận đơn (khác khoá "Mã đơn" mà buildSalesOrderLookup/luồng upload tay cũ dùng).
 // Cả 2 nút "Upload Sales Order"/"Upload File bốc đóng" đều dư, đã ẩn qua prop `hideSalesUpload`/
@@ -319,8 +319,8 @@ function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanel
 
         <SectionCard title="ĐỐI SOÁT ĐƠN WEBSITE" total={ngoaiSanCount}>
           <p className="text-xs text-gray-400 mb-3">
-            Mốc "Đóng kiện" tự động lấy từ cột "TG Đóng hàng" trong file Đơn SO vừa upload — chỉ cần
-            upload thêm "Sales Order" (Mốc 1) và file SPX xuất (Mốc 3/4) ở khung bên dưới.
+            Mốc 1 lấy từ cột "Tạo lúc", mốc "Đóng kiện" lấy từ cột "TG Đóng hàng" trong file Đơn SO vừa upload —
+            chỉ cần upload thêm file SPX xuất (Mốc 3/4) ở khung bên dưới.
           </p>
           <CarrierPanel key={carrierPanelKey} {...carrierPanelProps} />
         </SectionCard>
@@ -329,7 +329,7 @@ function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanel
   )
 }
 
-// Mốc 1 (Sales order) của tuần đã lưu: lấy bản đã chốt trong entry (autoSalesLookup, {Mã vận đơn: ISO}); tuần lưu
+// Mốc 1 của tuần đã lưu: lấy bản đã chốt trong entry (autoSalesLookup, {Mã vận đơn: ISO}); tuần lưu
 // trước khi có trường này thì dùng lại file Đơn SO hiện tại nếu đúng là file của tuần đó (fallbackLookup).
 function DonSanSnapshotView({ entry, fallbackLookup = null }) {
   const autoSalesLookup = useMemo(() => {
@@ -352,9 +352,8 @@ function DonSanSnapshotView({ entry, fallbackLookup = null }) {
           frozenLookup: entry.carrierLookup,
           strictWeekId: true,
           hidePackingUpload: true,
-          hideSalesUpload: Boolean(autoSalesLookup),
+          hideSalesUpload: true,
           autoSalesLookup,
-          salesFileNoun: 'Sales Order',
           ngoaiSanNote: NGOAI_SAN_NOTE,
         }}
       />
@@ -412,7 +411,7 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
   const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(countedRows), [countedRows])
   const total = tmdt.length + ngoaiSan.length
   const { shops } = useMemo(() => splitTmdtByShop(tmdt), [tmdt])
-  // Mốc 1 (Sales order) tự động lấy từ chính file Đơn SO — cột "Ngày tạo" (thời gian duyệt đơn) khớp
+  // Mốc 1 tự động lấy từ chính file Đơn SO — cột "Tạo lúc" (thời gian duyệt đơn) khớp
   // với cột "Mã vận đơn" (so với Mã vận đơn bên file SPX, khớp 1-1 tuyệt đối — đã xác nhận với người
   // dùng). Giống hệt cơ chế Mốc 2 ở effect dưới, khỏi cần upload riêng file Sales Order nữa.
   const autoSalesLookup = useMemo(() => buildAutoSalesOrderLookup(ngoaiSan), [ngoaiSan])

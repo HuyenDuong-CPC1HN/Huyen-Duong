@@ -363,7 +363,8 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSal
     setExpanded(true)
   }
 
-  const salesLookup = useMemo(() => buildSalesOrderLookup(effectiveSalesWeeks), [effectiveSalesWeeks])
+  // hideSalesUpload (tab Gộp kênh): Mốc 1 chỉ lấy từ file Đơn SO (autoSalesLookup), bỏ hẳn file Sales Order upload tay.
+  const salesLookup = useMemo(() => (hideSalesUpload ? new Map() : buildSalesOrderLookup(effectiveSalesWeeks)), [effectiveSalesWeeks, hideSalesUpload])
   const packingLookup = useMemo(() => buildPackingLookup(packingWeeks), [packingWeeks])
   const excludedSet = useMemo(() => new Set(excluded), [excluded])
   const { rows, stats } = useMemo(
@@ -477,9 +478,9 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSal
       )}
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
 
-      {(effectiveSalesWeeks.length > 0 || packingWeeks.length > 0 || autoSalesLookup?.size > 0) && (
+      {((!hideSalesUpload && effectiveSalesWeeks.length > 0) || packingWeeks.length > 0 || autoSalesLookup?.size > 0) && (
         <>
-          {effectiveSalesWeeks.length > 0 && (
+          {!hideSalesUpload && effectiveSalesWeeks.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
               {effectiveSalesWeeks.map(w => (
                 <span key={w.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
