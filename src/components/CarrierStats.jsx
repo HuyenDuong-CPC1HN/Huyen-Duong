@@ -11,6 +11,8 @@ import {
   readCarrierWeeks,
   writeCarrierWeeks,
   readHoldWeeks,
+  belongsToSession,
+  pickSessionWeek,
 } from './carrierUtils'
 
 
@@ -346,7 +348,7 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSal
   // bọc ngoài là SectionCard thu gọn được, thu gọn lại là unmount hẳn NgoaiSanPanel, state tạm sẽ mất dù
   // dữ liệu vẫn còn trong storage.
   const isLiveSession = liveSessionKey !== null
-  const effectiveSalesWeeks = isLiveSession ? salesWeeks.filter(w => w.sessionKey === liveSessionKey) : salesWeeks
+  const effectiveSalesWeeks = isLiveSession ? salesWeeks.filter(w => belongsToSession(w, liveSessionKey)) : salesWeeks
   const [expanded, setExpanded] = useState(false)
   const [onlyProblem, setOnlyProblem] = useState(false)
   const [onlyKhongKhop, setOnlyKhongKhop] = useState(false)
@@ -933,7 +935,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   // đang trong phiên làm việc (liveSessionKey) thì chỉ lấy đúng file đã upload trong phiên này, không thì
   // trống — còn lại (nơi gọi cũ, không dùng liveSessionKey) lấy file có ngày upload gần nhất với referenceDate
   const state = isLiveSession
-    ? (weeks.find(w => w.sessionKey === liveSessionKey) || null)
+    ? pickSessionWeek(weeks, liveSessionKey)
     : selectActiveWeek(weeks, weekId, referenceDate, strictWeekId)
   const missingFrozenWeek = strictWeekId && !weekId && !state
 
@@ -944,7 +946,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   // carrier_holdweeks_<key> dùng chung, không tách theo tuần). Đánh dấu sessionKey thẳng vào entry (xem
   // comment ở "weeks" phía trên) để bền qua remount khi thu gọn/mở rộng khung.
   const [holdWeeks, setHoldWeeks] = useState(() => readHoldWeeks(carrierKey))
-  const effectiveHoldWeeks = isLiveSession ? holdWeeks.filter(w => w.sessionKey === liveSessionKey) : holdWeeks
+  const effectiveHoldWeeks = isLiveSession ? holdWeeks.filter(w => belongsToSession(w, liveSessionKey)) : holdWeeks
   const holdLookupSet = useMemo(() => buildHoldLookupSet(effectiveHoldWeeks), [effectiveHoldWeeks])
 
   const parseHoldFile = async (file) => {

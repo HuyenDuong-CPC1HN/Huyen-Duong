@@ -123,8 +123,27 @@ function closestByDate(weeks, referenceDate) {
 }
 
 // Trả về id của file VTP/SPX khớp gần nhất với referenceDate — dùng để "đóng băng" đúng file tương ứng
+// File (VTP/SPX/Chờ giao Logistics/Sales Order) thuộc phiên làm việc đang mở của tab Gộp kênh: có đúng
+// sessionKey, hoặc — file không còn sessionKey (vd nạp lại từ máy chủ) — được tải lên SAU file Đơn của phiên
+// này (sessionKey = thời điểm tải file Đơn). File của tuần trước luôn tải trước file Đơn tuần này nên không
+// bị nhận nhầm.
+export function belongsToSession(week, sessionKey) {
+  if (!week || !sessionKey) return false
+  if (week.sessionKey) return week.sessionKey === sessionKey
+  const at = new Date(week.uploadedAt).getTime()
+  const start = new Date(sessionKey).getTime()
+  return Number.isFinite(at) && Number.isFinite(start) && at >= start
+}
+export function pickSessionWeek(weeks, sessionKey) {
+  const own = (weeks || []).filter(w => belongsToSession(w, sessionKey))
+  return own.find(w => w.sessionKey === sessionKey)
+    || own.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))[0]
+    || null
+}
+
 export function pickCarrierWeekIdByDate(carrierKey, referenceDate) {
-  return closestByDate(readCarrierWeeks(carrierKey), referenceDate)?.id || null
+  const weeks = readCarrierWeeks(carrierKey)
+  return (pickSessionWeek(weeks, referenceDate) || closestByDate(weeks, referenceDate))?.id || null
 }
 
 // ---- Loại trừ theo TỪNG ĐƠN (Mã vận đơn) — áp dụng chung cho carrier (không riêng theo tuần)
@@ -198,7 +217,7 @@ export function snapshotCarrierLookup(internalData) {
 export function getCarrierFileTotal(carrierKey, carrierType, internalData, referenceDate = null, requireSessionKey = false) {
   const weeks = readCarrierWeeks(carrierKey)
   const entry = requireSessionKey
-    ? weeks.find(w => w.sessionKey === referenceDate) || null
+    ? pickSessionWeek(weeks, referenceDate)
     : closestByDate(weeks, referenceDate)
   return entry ? buildStatsForWeek(entry, carrierKey, carrierType, internalData) : null
 }
