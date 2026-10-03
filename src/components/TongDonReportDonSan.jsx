@@ -52,8 +52,13 @@ const TongDonReportDonSan = forwardRef(function TongDonReportDonSan({
             deltaText={`${narrative.tmdtDeltaPct >= 0 ? '▲' : '▼'} ${fmtInt(Math.abs(current.totalTMDT - previous.totalTMDT))} đơn (${fmtPctSigned(narrative.tmdtDeltaPct)})`} />
           <KpiCard label="Đơn ngoại sàn (Website)" cur={narrative.ngoaiSanCurTotal} prev={narrative.ngoaiSanPrevTotal} good={narrative.ngoaiSanDeltaPct >= 0}
             deltaText={`${narrative.ngoaiSanDeltaPct >= 0 ? '▲' : '▼'} ${fmtInt(Math.abs(narrative.ngoaiSanCurTotal - narrative.ngoaiSanPrevTotal))} đơn (${fmtPctSigned(narrative.ngoaiSanDeltaPct)})`} />
-          <KpiCard label='Tỷ lệ "Đang vận chuyển" (Ngoại sàn)' curFmt={`${narrative.dvcCurPct}%`} prevFmt={`${narrative.dvcPrevPct}%`} good={narrative.dvcImproved}
-            deltaText={`${narrative.dvcImproved ? '▼' : '▲'} ${Math.abs(narrative.dvcCurPct - narrative.dvcPrevPct).toFixed(1)} điểm %${narrative.dvcImproved ? ' — cải thiện rõ rệt' : ''}`} />
+          <KpiCard label='Tỷ lệ "Đang vận chuyển" (Ngoại sàn)'
+            curFmt={narrative.dvcCurPct === null ? '—' : `${narrative.dvcCurPct}%`}
+            prevFmt={narrative.dvcPrevPct === null ? '—' : `${narrative.dvcPrevPct}%`}
+            good={narrative.dvcComparable ? narrative.dvcImproved : null}
+            deltaText={narrative.dvcComparable
+              ? `${narrative.dvcImproved ? '▼' : '▲'} ${Math.abs(narrative.dvcCurPct - narrative.dvcPrevPct).toFixed(1)} điểm %${narrative.dvcImproved ? ' — cải thiện rõ rệt' : ''}`
+              : `${narrative.dvcPrevPct === null ? 'Tuần trước' : 'Tuần này'} chưa có file SPX đối soát`} />
         </div>
       </div>
 

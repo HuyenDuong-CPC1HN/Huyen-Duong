@@ -32,3 +32,17 @@ describe('buildDonSanNarrative — tổng "Đơn ngoại sàn" phải lấy đú
     expect(narrative.ngoaiSanPrevTotal).toBe(250)
   })
 })
+
+describe('buildDonSanNarrative — tỷ lệ "đang vận chuyển" khi tuần trước không có file SPX', () => {
+  it('không hiện 0% sai cho tuần trước, không so sánh, không ghi "null%"', () => {
+    const current = makeWeek({ spxC: { total: 582, stats: { dangVanChuyen: 167 } }, totalNgoaiSan: 582 })
+    const previous = makeWeek({ spxC: null, totalNgoaiSan: 626 })
+    const n = buildDonSanNarrative(current, previous, null)
+    expect(n.dvcCurPct).toBe(28.7)
+    expect(n.dvcPrevPct).toBeNull()
+    expect(n.dvcComparable).toBe(false)
+    expect(n.dvcImproved).toBe(false)
+    expect(n.ngoaiSanBody).toContain('tuần trước chưa có file SPX đối soát')
+    expect(`${n.ngoaiSanTitle} ${n.ngoaiSanBody} ${n.verdict}`).not.toMatch(/null|0% xuống|từ 0%/)
+  })
+})

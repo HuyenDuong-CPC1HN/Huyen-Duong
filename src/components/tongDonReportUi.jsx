@@ -39,7 +39,7 @@ export function KpiCard({ label, cur, prev, curFmt, prevFmt, deltaText, good }) 
         <span className="tdr-kpi-cur">{curFmt ?? fmtInt(cur)}</span>
         <span className="tdr-kpi-prev">/ {prevFmt ?? fmtInt(prev)}</span>
       </div>
-      <div className={`tdr-kpi-delta ${good ? 'up' : 'down'}`}>{deltaText}</div>
+      <div className={`tdr-kpi-delta ${good === null ? 'flat' : good ? 'up' : 'down'}`}>{deltaText}</div>
     </div>
   )
 }

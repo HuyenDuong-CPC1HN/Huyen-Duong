@@ -95,6 +95,7 @@ function donSanDvcVerdict(dvcImproved, dvcPrevPct, dvcCurPct) {
   if (dvcImproved) {
     return `Tín hiệu tích cực rõ rệt nhất là tại Ngoại sàn (SPX): tỷ lệ tồn "đang vận chuyển" giảm mạnh từ ${dvcPrevPct}% xuống chỉ còn ${dvcCurPct}% dù sản lượng tăng.`
   }
+  if (dvcCurPct === null) return ''
   return `Cần theo dõi sát tỷ lệ "đang vận chuyển" tại Ngoại sàn (SPX), hiện ở mức ${dvcCurPct}%.`
 }
 
@@ -177,7 +178,8 @@ function spxVolume(week) {
   // dvcPct (tỷ lệ "đang vận chuyển") vẫn phải lấy từ spxC vì cần đúng dữ liệu chi tiết, không có nguồn thay thế.
   const total = week.totalNgoaiSan ?? (week.spxC?.total || 0)
   const dvc = week.spxC?.stats?.dangVanChuyen || 0
-  return { total, dvcPct: pct(dvc, week.spxC?.total || 0) }
+  // Tuần không ghép được file SPX chi tiết (spxC thiếu) thì chưa có tỷ lệ — để null, KHÔNG coi là 0%.
+  return { total, dvcPct: week.spxC?.total ? pct(dvc, week.spxC.total) : null }
 }
 
 function viettelVolume(week) {
@@ -204,20 +206,25 @@ export function buildDonSanNarrative(current, previous, ngoaiSan) {
   const ngoaiSanDeltaPct = deltaPctOf(ngoaiSanPrevTotal, ngoaiSanCurTotal)
   const dvcCurPct = ngoaiSanCur.dvcPct
   const dvcPrevPct = ngoaiSanPrev.dvcPct
-  const dvcImproved = dvcCurPct < dvcPrevPct
-  const dvcUp = dvcCurPct > dvcPrevPct
+  const dvcComparable = dvcCurPct !== null && dvcPrevPct !== null
+  const dvcImproved = dvcComparable && dvcCurPct < dvcPrevPct
+  const dvcUp = dvcComparable && dvcCurPct > dvcPrevPct
 
   const tmdtTitle = tmdtDeltaPct >= 0
     ? `Sản lượng tăng trở lại ${absPct(tmdtDeltaPct)}`
     : `Sản lượng giảm ${absPct(tmdtDeltaPct)}`
   const tmdtBody = `Đơn sàn TMĐT ${tmdtTrend} từ ${fmtInt(previous.totalTMDT)} lên ${fmtInt(current.totalTMDT)} (${fmtPctSigned(tmdtDeltaPct)})${tmdtNgoaiSanLink(ngoaiSanDeltaPct)} — ${tmdtOutlook(tmdtDeltaPct)}.`
 
-  const ngoaiSanTitle = dvcImproved
+  const ngoaiSanTitle = !dvcComparable
+    ? `Tồn "đang vận chuyển" ${dvcCurPct ?? '—'}% khi sản lượng ${trendWord(ngoaiSanDeltaPct)} ${absPct(ngoaiSanDeltaPct)}`
+    : dvcImproved
     ? `Tồn "đang vận chuyển" giảm mạnh dù sản lượng ${trendWord(ngoaiSanDeltaPct)} ${absPct(ngoaiSanDeltaPct)}`
     : `Tồn "đang vận chuyển" ${dvcStockWord(dvcUp)} khi sản lượng ${trendWord(ngoaiSanDeltaPct)} ${absPct(ngoaiSanDeltaPct)}`
   const reconStats = ngoaiSan?.data?.stats
   const ngoaiSanBody = appendReconToNgoaiSanBody(
-    `Tỷ lệ "đang vận chuyển" ${trendWord(dvcCurPct - dvcPrevPct)} từ ${dvcPrevPct}% xuống còn ${dvcCurPct}%${dvcFollowUp(dvcImproved, dvcUp)}.`,
+    dvcComparable
+      ? `Tỷ lệ "đang vận chuyển" ${trendWord(dvcCurPct - dvcPrevPct)} từ ${dvcPrevPct}% xuống còn ${dvcCurPct}%${dvcFollowUp(dvcImproved, dvcUp)}.`
+      : `Tỷ lệ "đang vận chuyển" tuần này ${dvcCurPct ?? '—'}%; ${dvcPrevPct === null ? 'tuần trước' : 'tuần này'} chưa có file SPX đối soát nên chưa so sánh được.`,
     reconStats,
   )
 
@@ -252,7 +259,7 @@ export function buildDonSanNarrative(current, previous, ngoaiSan) {
     priority1: priorityOf(overdue > 0),
     tmdtDeltaPct,
     donSanTotalCur, donSanTotalPrev, donSanDeltaPct,
-    ngoaiSanCurTotal, ngoaiSanPrevTotal, ngoaiSanDeltaPct, dvcCurPct, dvcPrevPct, dvcImproved,
+    ngoaiSanCurTotal, ngoaiSanPrevTotal, ngoaiSanDeltaPct, dvcCurPct, dvcPrevPct, dvcImproved, dvcComparable,
   }
 }
 

@@ -945,6 +945,7 @@ body {
 .tdr-kpi-delta { font-size: 12.5px; font-weight: 700; }
 .tdr-kpi-delta.up { color: var(--color-current-text); }
 .tdr-kpi-delta.down { color: var(--color-red); }
+.tdr-kpi-delta.flat { color: var(--muted-foreground); font-weight: 600; }
 
 /* 2-up overview cards (Đơn sàn) */
 .tdr-two-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
