@@ -241,6 +241,40 @@ describe('CarrierStats — NgoaiSanPanel: Sales Order (Mốc 1) ở tuần mới
   })
 })
 
+// hideSalesUpload/autoSalesLookup mới thêm cho tab Gộp kênh (Thử nghiệm): Mốc 1 giờ tự lấy từ cột
+// "Ngày tạo" của chính file Đơn SO (khớp theo "Mã vận đơn"), khỏi cần nút "Upload Sales Order" nữa.
+describe('CarrierStats — NgoaiSanPanel: hideSalesUpload + autoSalesLookup (Mốc 1 tự động từ file Đơn SO)', () => {
+  it('hideSalesUpload -> ẩn hẳn nút "Upload Danh sách thống kê" và thông báo "Chưa có file..."', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_autosales1'
+    const newRefDate = '2026-09-21T08:00:00.000Z'
+    render(<CarrierPanel carrierKey={carrierKey} label="SPX Express" carrierType="spx" referenceDate={newRefDate} liveSessionKey={newRefDate} hidePackingUpload hideSalesUpload />)
+    await screen.findByText(/kéo & thả file xuất spx express/i)
+
+    expect(screen.queryByRole('button', { name: /Upload Danh sách thống kê/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Chưa có file Danh sách thống kê/i)).not.toBeInTheDocument()
+  })
+
+  it('autoSalesLookup khớp đúng Mốc 1 qua "Mã vận đơn" — không còn báo "Không khớp Mã đơn"', async () => {
+    const carrierKey = 'unifiedTrial_donSO_spx_autosales2'
+    const newRefDate = '2026-09-21T08:00:00.000Z'
+    const autoSalesLookup = new Map([['SPXC010', new Date(2026, 8, 20, 8, 0, 0)]])
+    render(
+      <CarrierPanel
+        carrierKey={carrierKey} label="SPX Express" carrierType="spx"
+        referenceDate={newRefDate} liveSessionKey={newRefDate}
+        hidePackingUpload hideSalesUpload autoSalesLookup={autoSalesLookup}
+      />
+    )
+    await screen.findByText(/kéo & thả file xuất spx express/i)
+
+    const spxInput = document.querySelector('input[type="file"][accept=".xlsx,.xls"]')
+    fireEvent.change(spxInput, { target: { files: [buildSpxFile('spx-auto.xlsx', 'SPXC010')] } })
+    await waitFor(() => expect(screen.getByText('spx-auto.xlsx')).toBeInTheDocument())
+
+    expect(screen.queryByText(/đơn spx không khớp mã đơn/i)).not.toBeInTheDocument()
+  })
+})
+
 function buildViettelFile(fileName, maVanDon) {
   const aoa = [
     ['Mã Vận Đơn', 'Mã đơn hàng', 'Trạng Thái', 'Ngày tạo', 'Ngày chuyển trạng thái', 'Tên hàng', 'Đơn chuyển hoàn'],

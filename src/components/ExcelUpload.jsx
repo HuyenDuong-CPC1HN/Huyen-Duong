@@ -7,7 +7,10 @@ import * as XLSX from 'xlsx'
 // thành 7 tháng 10 thay vì 10 tháng 7). Nên lấy trực tiếp từ Date object thay vì tin vào chuỗi hiển thị.
 // "Ngày tạo kiện" có giờ thật (dùng để hiển thị) — các cột còn lại chỉ có ngày, bỏ giờ để tránh sai số
 // làm tròn số thực khi Excel lưu ngày (vd 46209.00001 lệch vài phút so với nửa đêm).
-const DATETIME_COLUMNS = new Set(['Ngày tạo kiện'])
+// "Ngày tạo" (file Đơn SO) cũng cần giữ giờ thật — dùng làm Mốc 1 khi đối soát SPX ngoại sàn
+// (buildAutoSalesOrderLookup/parseDonSoNgayTao trong reconcileNgoaiSan.js); bỏ sẽ khiến KHÔNG đơn SPX
+// nào khớp được Mốc 1 (bug thật đã gặp: cả tuần báo "0 khớp Mã đơn" vì giờ bị cắt mất).
+const DATETIME_COLUMNS = new Set(['Ngày tạo kiện', 'Ngày tạo'])
 const DATE_ONLY_COLUMNS = new Set(['Ngày giao hàng', 'Ngày ghi sổ'])
 
 function pad2(n) { return String(n).padStart(2, '0') }

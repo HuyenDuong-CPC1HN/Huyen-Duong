@@ -9,6 +9,7 @@ import { KpiTile, SectionCard } from './ReportCards'
 import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
+import { buildAutoSalesOrderLookup } from '../utils/reconcileNgoaiSan'
 import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport } from '../utils/unifiedTrialReports'
 
 const NGOAI_SAN_CARRIER_KEY = 'unifiedTrial_donSO_spx'
@@ -22,12 +23,13 @@ const SHOP_CLS = {
   L00704: 'bg-purple-50 border-purple-200 text-purple-700',
 }
 
-// Note rút gọn cho panel Đối soát đơn ngoại sàn — bỏ nhắc "file bốc đóng" vì tab này đã tự động lấy
-// Mốc 2 từ file Đơn SO (không còn nút upload tay), khác với Đơn C production vẫn cần upload tay.
+// Note rút gọn cho panel Đối soát đơn ngoại sàn — bỏ nhắc "file bốc đóng"/"Sales Order" vì tab này đã
+// tự động lấy cả Mốc 1 lẫn Mốc 2 từ file Đơn SO (không còn nút upload tay nào), khác với Đơn C
+// production vẫn cần upload tay.
 const NGOAI_SAN_NOTE = (
   <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">
     <div className="space-y-0.5">
-      <div>Mốc 1: Sales order</div>
+      <div>Mốc 1: Ngày tạo đơn (file Đơn SO)</div>
       <div>Mốc 2: Kho đóng kiện</div>
       <div>Mốc 3: SPX lấy hàng</div>
       <div>Mốc 4: SPX giao hàng thành công.</div>
@@ -40,12 +42,15 @@ const NGOAI_SAN_NOTE = (
   </div>
 )
 
-// "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx")
-// cần 2 nguồn: "Sales Order" (Mốc 1, người dùng upload tay qua đúng nút có sẵn trong
-// NgoaiSanPanel) và "file bốc đóng" (Mốc 2). Mốc 2 với kênh Ngoại sàn thực ra đã có sẵn trong
-// chính file Đơn SO (cột "TG Đóng hàng" + "Mã vận đơn") — nên ở đây tự ghi thẳng vào đúng ô nhớ
-// NgoaiSanPanel đọc (`carrier_packingweeks_<carrierKey>`) mỗi khi có file Đơn SO mới, khỏi phải
-// upload thêm 1 file "bốc đóng" riêng. Nút "Upload File bốc đóng" bị dư nên đã ẩn qua prop
+// "Đối soát ngoại sàn (SPX COD)" (NgoaiSanPanel, lồng trong CarrierPanel khi carrierType="spx") cần
+// 2 nguồn: Mốc 1 (Sales order) và Mốc 2 (file bốc đóng) — CẢ HAI đều đã có sẵn trong chính file Đơn
+// SO, khỏi cần upload riêng:
+//  - Mốc 2: cột "TG Đóng hàng" + "Mã vận đơn" — tự ghi thẳng vào đúng ô nhớ NgoaiSanPanel đọc
+//    (`carrier_packingweeks_<carrierKey>`) mỗi khi có file Đơn SO mới (xem seedNgoaiSanPackingWeek).
+//  - Mốc 1: cột "Ngày tạo" (thời gian duyệt đơn) + "Mã vận đơn" — truyền thẳng qua prop
+//    `autoSalesLookup` (buildAutoSalesOrderLookup, xem DonSanView), KHÔNG ghi qua storage như Mốc 2 vì
+//    khớp theo Mã vận đơn (khác khoá "Mã đơn" mà buildSalesOrderLookup/luồng upload tay cũ dùng).
+// Cả 2 nút "Upload Sales Order"/"Upload File bốc đóng" đều dư, đã ẩn qua prop `hideSalesUpload`/
 // `hidePackingUpload` (thêm trong CarrierStats.jsx, mặc định tắt — Đơn C/DTP không bị ảnh hưởng).
 function seedNgoaiSanPackingWeek(carrierKey, ngoaiSanRows, uploadedAt) {
   const entry = { id: uploadedAt, fileName: 'Tự động lấy từ file Đơn SO (cột TG Đóng hàng)', uploadedAt, rows: ngoaiSanRows }
@@ -64,6 +69,7 @@ const SO_META_KEY = 'unified_trial_donSO_meta'
 const TT_ROWS_KEY = 'unified_trial_donTT_rows'
 const TT_META_KEY = 'unified_trial_donTT_meta'
 const STAFF_ROSTER_KEY = 'unified_trial_hcm_staff_roster'
+const STAFF_COUNT_MISMATCH_KEY = 'unified_trial_hcm_count_mismatch'
 
 function readJSON(key, fallback) {
   try {
@@ -119,7 +125,7 @@ function StaffRosterEditor({ rosterText, onChange }) {
   )
 }
 
-function MismatchWarning({ mismatchRows, otherCount }) {
+function MismatchWarning({ mismatchRows, otherCount, countMismatch, onCountMismatchChange }) {
   const [open, setOpen] = useState(false)
   if (mismatchRows.length === 0 && otherCount === 0) return null
   return (
@@ -133,9 +139,19 @@ function MismatchWarning({ mismatchRows, otherCount }) {
       </div>
       {mismatchRows.length > 0 && (
         <>
-          <button type="button" onClick={() => setOpen(o => !o)} className="text-xs text-blue-600 hover:underline mt-1">
-            {open ? 'Ẩn danh sách' : `Xem ${mismatchRows.length} đơn lệch kho`}
-          </button>
+          <div className="flex items-center justify-between mt-1">
+            <button type="button" onClick={() => setOpen(o => !o)} className="text-xs text-blue-600 hover:underline">
+              {open ? 'Ẩn danh sách' : `Xem ${mismatchRows.length} đơn lệch kho`}
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-amber-800 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={countMismatch}
+                onChange={e => onCountMismatchChange(e.target.checked)}
+              />
+              Tính cả đơn lệch kho
+            </label>
+          </div>
           {open && (
             <div className="mt-2 overflow-x-auto rounded-lg border border-amber-100 bg-white">
               <table className="w-full text-xs">
@@ -362,7 +378,7 @@ function DonTruyenThongSnapshotView({ entry }) {
   )
 }
 
-function DonSanView({ rosterSet, viewingId, setViewingId }) {
+function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId, setViewingId }) {
   const [meta, setMeta] = useState(() => readJSON(SO_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(SO_ROWS_KEY, null))
   const [reports, setReports] = useState(() => readTrialReports('donSO'))
@@ -380,9 +396,17 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
     () => splitByWarehouseStaff(rows || [], rosterSet),
     [rows, rosterSet],
   )
-  const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(hcmRows), [hcmRows])
+  const countedRows = useMemo(
+    () => (countMismatch ? hcmRows.concat(mismatchRows) : hcmRows),
+    [hcmRows, mismatchRows, countMismatch],
+  )
+  const { tmdt, ngoaiSan } = useMemo(() => splitDonSO(countedRows), [countedRows])
   const total = tmdt.length + ngoaiSan.length
   const { shops } = useMemo(() => splitTmdtByShop(tmdt), [tmdt])
+  // Mốc 1 (Sales order) tự động lấy từ chính file Đơn SO — cột "Ngày tạo" (thời gian duyệt đơn) khớp
+  // với cột "Mã vận đơn" (so với Mã vận đơn bên file SPX, khớp 1-1 tuyệt đối — đã xác nhận với người
+  // dùng). Giống hệt cơ chế Mốc 2 ở effect dưới, khỏi cần upload riêng file Sales Order nữa.
+  const autoSalesLookup = useMemo(() => buildAutoSalesOrderLookup(ngoaiSan), [ngoaiSan])
 
   useEffect(() => {
     if (!meta || ngoaiSan.length === 0) return
@@ -438,7 +462,10 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
         <div>{uploadNode}</div>
       ) : (
         <>
-          <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
+          <MismatchWarning
+            mismatchRows={mismatchRows} otherCount={otherRows.length}
+            countMismatch={countMismatch} onCountMismatchChange={onCountMismatchChange}
+          />
           <DonSanReportBody
             total={total} tmdtCount={tmdt.length} ngoaiSanCount={ngoaiSan.length} shops={shops}
             carrierPanelKey={meta?.uploadedAt}
@@ -450,7 +477,8 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
               referenceDate: meta?.uploadedAt,
               liveSessionKey: meta?.uploadedAt ?? null,
               hidePackingUpload: true,
-              salesFileNoun: 'Sales Order',
+              hideSalesUpload: true,
+              autoSalesLookup,
               ngoaiSanNote: NGOAI_SAN_NOTE,
             }}
           />
@@ -460,7 +488,7 @@ function DonSanView({ rosterSet, viewingId, setViewingId }) {
   )
 }
 
-function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setChannel }) {
+function DonTruyenThongView({ rosterSet, countMismatch, onCountMismatchChange, viewingId, setViewingId, channel, setChannel }) {
   const [meta, setMeta] = useState(() => readJSON(TT_META_KEY, null))
   const [rows, setRows] = useState(() => readJSON(TT_ROWS_KEY, null))
   const [reports, setReports] = useState(() => readTrialReports('donTruyenThong'))
@@ -478,7 +506,11 @@ function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setCh
     () => splitByWarehouseStaff(rows || [], rosterSet),
     [rows, rosterSet],
   )
-  const { donC, donDTP } = useMemo(() => splitDonTruyenThong(hcmRows), [hcmRows])
+  const countedRows = useMemo(
+    () => (countMismatch ? hcmRows.concat(mismatchRows) : hcmRows),
+    [hcmRows, mismatchRows, countMismatch],
+  )
+  const { donC, donDTP } = useMemo(() => splitDonTruyenThong(countedRows), [countedRows])
 
   const uploadNode = (
     <ExcelUpload onData={onData} fileName="" onClear={() => {}} />
@@ -537,7 +569,10 @@ function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setCh
         <div>{uploadNode}</div>
       ) : (
         <>
-          <MismatchWarning mismatchRows={mismatchRows} otherCount={otherRows.length} />
+          <MismatchWarning
+            mismatchRows={mismatchRows} otherCount={otherRows.length}
+            countMismatch={countMismatch} onCountMismatchChange={onCountMismatchChange}
+          />
 
           <div className="tdr-tabswitch" style={{ marginBottom: 16 }}>
             <button type="button" className={channel === 'donC' ? 'active' : ''} onClick={() => setChannel('donC')}>
@@ -564,6 +599,10 @@ function DonTruyenThongView({ rosterSet, viewingId, setViewingId, channel, setCh
 export default function UnifiedTrialTab() {
   const [activeTab, setActiveTab] = useState('donsan')
   const [rosterText, setRosterText] = useState(() => readJSON(STAFF_ROSTER_KEY, ''))
+  // Mặc định đơn LỆCH kho (chỉ 1 trong 2 khớp danh sách) bị loại khỏi thống kê, chỉ hiện cảnh báo —
+  // tick ô này để gộp luôn các đơn đó vào tổng. Đơn KHÔNG THUỘC kho HCM (cả 2 đều không khớp) thì
+  // luôn luôn bị loại, không có tuỳ chọn.
+  const [countMismatch, setCountMismatch] = useState(() => readJSON(STAFF_COUNT_MISMATCH_KEY, false))
   // Nâng lên đây (thay vì giữ trong DonSanView/DonTruyenThongView) để không bị reset về "Upload
   // tuần tiếp theo" mỗi khi chuyển qua lại 2 pill — 2 view bị unmount/remount theo activeTab.
   const [donSoViewingId, setDonSoViewingId] = useState(null)
@@ -573,6 +612,10 @@ export default function UnifiedTrialTab() {
   const onRosterChange = (text) => {
     setRosterText(text)
     localStorage.setItem(STAFF_ROSTER_KEY, JSON.stringify(text))
+  }
+  const onCountMismatchChange = (enabled) => {
+    setCountMismatch(enabled)
+    localStorage.setItem(STAFF_COUNT_MISMATCH_KEY, JSON.stringify(enabled))
   }
   const rosterSet = useMemo(() => parseStaffRoster(rosterText), [rosterText])
 
@@ -593,11 +636,15 @@ export default function UnifiedTrialTab() {
 
         <div className="sheet-tab-report">
           {activeTab === 'donsan' && (
-            <DonSanView rosterSet={rosterSet} viewingId={donSoViewingId} setViewingId={setDonSoViewingId} />
+            <DonSanView
+              rosterSet={rosterSet} countMismatch={countMismatch} onCountMismatchChange={onCountMismatchChange}
+              viewingId={donSoViewingId} setViewingId={setDonSoViewingId}
+            />
           )}
           {activeTab === 'truyenthong' && (
             <DonTruyenThongView
               rosterSet={rosterSet}
+              countMismatch={countMismatch} onCountMismatchChange={onCountMismatchChange}
               viewingId={donTTViewingId} setViewingId={setDonTTViewingId}
               channel={donTTChannel} setChannel={setDonTTChannel}
             />

@@ -330,7 +330,7 @@ const DEFAULT_NGOAI_SAN_NOTE = (
   </>
 )
 
-function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE, liveSessionKey = null }) {
+function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE, liveSessionKey = null }) {
   const salesInputRef = useRef()
   const packingInputRef = useRef()
   const [error, setError] = useState('')
@@ -366,8 +366,8 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
   const packingLookup = useMemo(() => buildPackingLookup(packingWeeks), [packingWeeks])
   const excludedSet = useMemo(() => new Set(excluded), [excluded])
   const { rows, stats } = useMemo(
-    () => reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedSet),
-    [spxRows, salesLookup, packingLookup, excludedSet]
+    () => reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedSet, autoSalesLookup),
+    [spxRows, salesLookup, packingLookup, excludedSet, autoSalesLookup]
   )
 
   const parseSalesFile = async (file) => {
@@ -443,14 +443,18 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
       <div className="text-xs text-gray-400 mb-3">{note}</div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <button
-          onClick={() => salesInputRef.current.click()}
-          className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors"
-        >
-          <Upload size={14} />
-          Upload {salesFileNoun}
-        </button>
-        <input ref={salesInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseSalesFile(e.target.files[0])} />
+        {!hideSalesUpload && (
+          <>
+            <button
+              onClick={() => salesInputRef.current.click()}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 text-gray-600 transition-colors"
+            >
+              <Upload size={14} />
+              Upload {salesFileNoun}
+            </button>
+            <input ref={salesInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => parseSalesFile(e.target.files[0])} />
+          </>
+        )}
         {!hidePackingUpload && (
           <>
             <button
@@ -464,9 +468,9 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, salesFi
           </>
         )}
       </div>
-      {(effectiveSalesWeeks.length === 0 || (!hidePackingUpload && packingWeeks.length === 0)) && (
+      {((!hideSalesUpload && effectiveSalesWeeks.length === 0) || (!hidePackingUpload && packingWeeks.length === 0)) && (
         <p className="mb-3 text-xs text-gray-400">
-          {effectiveSalesWeeks.length === 0 && `Chưa có file ${salesFileNoun}. `}
+          {!hideSalesUpload && effectiveSalesWeeks.length === 0 && `Chưa có file ${salesFileNoun}. `}
           {!hidePackingUpload && packingWeeks.length === 0 && 'Chưa có file bốc đóng (sẽ không tính được mốc Đóng kiện/SPX lấy hàng).'}
         </p>
       )}
@@ -896,7 +900,7 @@ function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, 
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => carrierLookupMap(frozenLookup, internalData),
@@ -1162,7 +1166,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       {carrierType === 'spx' && (
         frozenNgoaiSan
           ? <FrozenNgoaiSanPanel frozen={frozenNgoaiSan} />
-          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} salesFileNoun={salesFileNoun} note={ngoaiSanNote} liveSessionKey={liveSessionKey} />
+          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} hideSalesUpload={hideSalesUpload} autoSalesLookup={autoSalesLookup} salesFileNoun={salesFileNoun} note={ngoaiSanNote} liveSessionKey={liveSessionKey} />
       )}
 
       {showNoteCol && (
