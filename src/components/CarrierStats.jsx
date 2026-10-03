@@ -477,7 +477,7 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSal
       )}
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
 
-      {(effectiveSalesWeeks.length > 0 || packingWeeks.length > 0) && (
+      {(effectiveSalesWeeks.length > 0 || packingWeeks.length > 0 || autoSalesLookup?.size > 0) && (
         <>
           {effectiveSalesWeeks.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">

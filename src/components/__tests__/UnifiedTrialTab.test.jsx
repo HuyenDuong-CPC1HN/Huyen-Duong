@@ -133,3 +133,29 @@ describe('UnifiedTrialTab — ô tick "Tính cả đơn lệch kho" (trong khung
     expect(await screen.findByRole('button', { name: 'Đơn C (2)' })).toBeInTheDocument()
   })
 })
+
+// Tuần Đơn SO đã lưu phải giữ được Mốc 1 (Sales order lấy từ file Đơn SO) — nếu không, mở lại tuần đã lưu
+// thì mọi đơn SPX đều "không khớp Mã đơn" và mục D) Phân tích đơn giao trễ hạn 48h biến mất.
+describe('UnifiedTrialTab — tuần Đơn SO đã lưu vẫn có mục D) Phân tích đơn giao trễ hạn 48h', () => {
+  it('Mốc 1 lấy từ autoSalesLookup đã chốt trong báo cáo tuần', async () => {
+    store.opsStore.setItem('carrier_weeks_unifiedTrial_donSO_spx', JSON.stringify([{
+      id: 'spx-w1', fileName: 'spx.xlsx', uploadedAt: '2026-10-03T01:00:00.000Z',
+      rows: [{
+        'Mã vận đơn': 'SPXVN1', 'Mã khách hàng': 'ORD1', 'Trạng thái hiện tại': 'Đã giao hàng',
+        'Thời gian lấy hàng/gửi hàng': '2026-09-28 12:00', 'Thời gian giao hàng': '2026-10-01 10:00',
+        'Tỉnh nhận': 'Thành phố Hồ Chí Minh', 'Tỉnh gửi': 'Thành phố Hồ Chí Minh', 'Phường/Xã nhận': 'Phường Bến Thành',
+      }],
+    }]))
+    store.opsStore.setItem('unified_trial_reports_donSO', JSON.stringify([{
+      id: 'r-week', label: 'Tuần 28/09', fileName: 'so.xlsx', createdAt: new Date().toISOString(),
+      total: 1, tmdtCount: 0, ngoaiSanCount: 1, otherCount: 0, mismatchCount: 0,
+      shops: [], spxWeekId: 'spx-w1', carrierLookup: {},
+      autoSalesLookup: { SPXVN1: new Date(2026, 8, 28, 10, 0).toISOString() },
+    }]))
+
+    render(<UnifiedTrialTab />)
+    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'r-week' } })
+    expect(await screen.findByText('D) Phân tích đơn giao trễ hạn 48h')).toBeInTheDocument()
+    expect(screen.getByText(/1 đơn giao quá 48h\. Trong đó có/)).toBeInTheDocument()
+  })
+})

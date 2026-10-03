@@ -329,7 +329,13 @@ function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanel
   )
 }
 
-function DonSanSnapshotView({ entry }) {
+// Mốc 1 (Sales order) của tuần đã lưu: lấy bản đã chốt trong entry (autoSalesLookup, {Mã vận đơn: ISO}); tuần lưu
+// trước khi có trường này thì dùng lại file Đơn SO hiện tại nếu đúng là file của tuần đó (fallbackLookup).
+function DonSanSnapshotView({ entry, fallbackLookup = null }) {
+  const autoSalesLookup = useMemo(() => {
+    if (!entry.autoSalesLookup) return fallbackLookup
+    return new Map(Object.entries(entry.autoSalesLookup).map(([code, iso]) => [code, new Date(iso)]))
+  }, [entry.autoSalesLookup, fallbackLookup])
   return (
     <div>
       <SnapshotHeader fileName={entry.fileName} createdAt={entry.createdAt} otherCount={entry.otherCount} mismatchCount={entry.mismatchCount} />
@@ -346,6 +352,8 @@ function DonSanSnapshotView({ entry }) {
           frozenLookup: entry.carrierLookup,
           strictWeekId: true,
           hidePackingUpload: true,
+          hideSalesUpload: Boolean(autoSalesLookup),
+          autoSalesLookup,
           salesFileNoun: 'Sales Order',
           ngoaiSanNote: NGOAI_SAN_NOTE,
         }}
@@ -426,6 +434,7 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
       shops: shops.map(s => ({ code: s.code, label: s.label, count: s.count })),
       spxWeekId: pickCarrierWeekIdByDate(NGOAI_SAN_CARRIER_KEY, meta.uploadedAt),
       carrierLookup: snapshotCarrierLookup(ngoaiSan),
+      autoSalesLookup: Object.fromEntries([...autoSalesLookup].map(([code, date]) => [code, date.toISOString()])),
     }
     setReports(saveTrialReport('donSO', entry))
   }
@@ -458,7 +467,7 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
       )}
 
       {viewingEntry ? (
-        <DonSanSnapshotView entry={viewingEntry} />
+        <DonSanSnapshotView entry={viewingEntry} fallbackLookup={meta && viewingEntry.id === meta.uploadedAt ? autoSalesLookup : null} />
       ) : !showLive ? (
         <div>{uploadNode}</div>
       ) : (
