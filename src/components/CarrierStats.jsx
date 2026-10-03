@@ -340,7 +340,7 @@ const DEFAULT_NGOAI_SAN_NOTE = (
   </>
 )
 
-function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE, liveSessionKey = null, showLateAnalysis = false }) {
+function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', note = DEFAULT_NGOAI_SAN_NOTE, liveSessionKey = null, showLateAnalysis = false, autoPackingLookup = null }) {
   const salesInputRef = useRef()
   const packingInputRef = useRef()
   const [error, setError] = useState('')
@@ -374,7 +374,8 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSal
 
   // hideSalesUpload (tab Gộp kênh): Mốc 1 chỉ lấy từ file Đơn SO (autoSalesLookup), bỏ hẳn file Sales Order upload tay.
   const salesLookup = useMemo(() => (hideSalesUpload ? new Map() : buildSalesOrderLookup(effectiveSalesWeeks)), [effectiveSalesWeeks, hideSalesUpload])
-  const packingLookup = useMemo(() => buildPackingLookup(packingWeeks), [packingWeeks])
+  // autoPackingLookup: Mốc 2 đã chốt cùng báo cáo tuần đã lưu (ưu tiên hơn file bốc đóng dùng chung, vốn chỉ còn của tuần mới nhất).
+  const packingLookup = useMemo(() => autoPackingLookup || buildPackingLookup(packingWeeks), [packingWeeks, autoPackingLookup])
   const excludedSet = useMemo(() => new Set(excluded), [excluded])
   const { rows, stats } = useMemo(
     () => reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedSet, autoSalesLookup),
@@ -503,7 +504,7 @@ function NgoaiSanPanel({ carrierKey, spxRows, hidePackingUpload = false, hideSal
               ))}
             </div>
           )}
-          {packingWeeks.length > 0 && (
+          {packingWeeks.length > 0 && !autoPackingLookup && (
             <div className="flex flex-wrap gap-1.5 mb-4">
               {packingWeeks.map(w => (
                 <span key={w.id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-700">
@@ -913,7 +914,7 @@ function CarrierEmptyDropZone({ label, dragging, setDragging, onDrop, inputRef, 
 // frozenLookup: bảng đối chiếu "Mã vận đơn" nội bộ đã đóng băng sẵn (object {mã: số lượng}) — dùng khi xem
 // báo cáo Đơn C/DTP đã lưu (Excel gốc đã xoá, không còn internalData thật) để vẫn đếm đúng đơn CB gộp/SPX
 // lấy hàng-không-thành-công, thay vì tính theo internalData=[] (sẽ sai vì rơi về cách đếm phỏng đoán).
-export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false, showLateAnalysis = false, onRelinkWeek = null }) {
+export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', internalData = [], referenceDate = null, weekId = null, frozenLookup = null, frozenNgoaiSan = null, hidePackingUpload = false, hideSalesUpload = false, autoSalesLookup = null, salesFileNoun = 'Danh sách thống kê', ngoaiSanNote = DEFAULT_NGOAI_SAN_NOTE, showLogisticsHold = null, liveSessionKey = null, strictWeekId = false, showLateAnalysis = false, onRelinkWeek = null, autoPackingLookup = null }) {
   const TABLE_COLUMNS = getCarrierColumns(carrierType)
   const lookupMap = useMemo(
     () => carrierLookupMap(frozenLookup, internalData),
@@ -1186,7 +1187,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       {carrierType === 'spx' && (
         frozenNgoaiSan
           ? <FrozenNgoaiSanPanel frozen={frozenNgoaiSan} />
-          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} hideSalesUpload={hideSalesUpload} autoSalesLookup={autoSalesLookup} salesFileNoun={salesFileNoun} note={ngoaiSanNote} liveSessionKey={liveSessionKey} showLateAnalysis={showLateAnalysis} />
+          : <NgoaiSanPanel carrierKey={carrierKey} spxRows={effectiveRows} hidePackingUpload={hidePackingUpload} hideSalesUpload={hideSalesUpload} autoSalesLookup={autoSalesLookup} salesFileNoun={salesFileNoun} note={ngoaiSanNote} liveSessionKey={liveSessionKey} showLateAnalysis={showLateAnalysis} autoPackingLookup={autoPackingLookup} />
       )}
 
       {showNoteCol && (

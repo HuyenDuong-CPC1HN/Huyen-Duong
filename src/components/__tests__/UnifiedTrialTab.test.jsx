@@ -181,7 +181,7 @@ describe('UnifiedTrialTab — file SPX của tuần đã lưu không bị dọn 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
     const file = new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], 'spx-19-25.xlsx')
-    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } })
+    fireEvent.change([...document.querySelectorAll('input[type="file"]')].at(-1), { target: { files: [file] } })
 
     await waitFor(() => {
       const report = JSON.parse(store.opsStore.getItem('unified_trial_reports_donSO')).find(r => r.id === 'r-missing')
@@ -191,5 +191,18 @@ describe('UnifiedTrialTab — file SPX của tuần đã lưu không bị dọn 
       expect(weeks.some(w => w.id === 'kept-week')).toBe(true) // file của tuần đã lưu khác vẫn còn
     })
     expect(await screen.findByText('spx-19-25.xlsx')).toBeInTheDocument()
+
+    // Tuần lưu trước khi chốt Mốc 1/Mốc 2: tải lại file Đơn SO của tuần đó để đối soát chạy lại
+    const soWs = XLSX.utils.aoa_to_sheet([['Mã vận đơn', 'Ngày tạo', 'TG Đóng hàng'], ['SPXVN9', '20/09/2026 10:00', '20/09/2026 11:00']])
+    const soWb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(soWb, soWs, 'Sheet1')
+    const soFile = new File([XLSX.write(soWb, { type: 'array', bookType: 'xlsx' })], 'so-19-25.xlsx')
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [soFile] } })
+    await waitFor(() => {
+      const report = JSON.parse(store.opsStore.getItem('unified_trial_reports_donSO')).find(r => r.id === 'r-missing')
+      expect(Object.keys(report.autoSalesLookup)).toEqual(['SPXVN9'])
+      expect(Object.keys(report.autoPackingLookup)).toEqual(['SPXVN9'])
+    })
+    expect(await screen.findByText(/1 đơn khớp Mã đơn/)).toBeInTheDocument()
   })
 })

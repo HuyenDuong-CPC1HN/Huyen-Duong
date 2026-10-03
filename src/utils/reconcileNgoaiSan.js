@@ -268,3 +268,17 @@ export function reconcileNgoaiSan(spxRows, salesLookup, packingLookup, excludedC
   rows.sort((a, b) => (typeof b.gioGiaoTong === 'number' ? b.gioGiaoTong : -1) - (typeof a.gioGiaoTong === 'number' ? a.gioGiaoTong : -1))
   return { rows, stats }
 }
+
+// Lưu/đọc bảng mốc (Mã vận đơn → thời điểm) vào báo cáo tuần đã lưu dạng { mã: ISO } — file Đơn SO của tuần đó
+// sẽ bị thay bởi file tuần sau, nên Mốc 1 (Ngày tạo) và Mốc 2 (TG Đóng hàng) phải chốt cùng báo cáo.
+export function lookupToJson(map) {
+  return Object.fromEntries([...(map || new Map())].map(([code, date]) => [code, date.toISOString()]))
+}
+export function lookupFromJson(obj) {
+  if (!obj || typeof obj !== 'object') return null
+  return new Map(Object.entries(obj).map(([code, iso]) => [code, new Date(iso)]))
+}
+// Mốc 2 lấy thẳng từ các dòng file Đơn SO (cột TG Đóng hàng) — cùng cách đọc với file bốc đóng.
+export function buildAutoPackingLookup(ngoaiSanRows) {
+  return buildPackingLookup([{ rows: ngoaiSanRows || [] }])
+}

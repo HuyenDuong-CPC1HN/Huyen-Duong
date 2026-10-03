@@ -9,7 +9,7 @@ import { KpiTile, SectionCard } from './ReportCards'
 import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
-import { buildAutoSalesOrderLookup } from '../utils/reconcileNgoaiSan'
+import { buildAutoSalesOrderLookup, buildAutoPackingLookup, lookupToJson, lookupFromJson } from '../utils/reconcileNgoaiSan'
 import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport, updateTrialReport } from '../utils/unifiedTrialReports'
 
 const NGOAI_SAN_CARRIER_KEY = 'unifiedTrial_donSO_spx'
@@ -287,7 +287,7 @@ function SnapshotHeader({ fileName, createdAt, otherCount, mismatchCount }) {
 // Phần thân "Đơn SO" (KPI + shop + đối soát ngoại sàn) — dùng CHUNG cho cả xem trực tiếp lẫn xem
 // tuần đã lưu, chỉ khác đúng 1 chỗ: carrierPanelProps (trực tiếp dùng referenceDate+internalData,
 // đã lưu thì ghim đúng weekId+frozenLookup) — nhờ vậy 2 bản LUÔN giống hệt giao diện nhau.
-function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanelKey, carrierPanelProps }) {
+function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanelKey, carrierPanelProps, beforePanel = null }) {
   const shopCol1 = shops.slice(0, 2)
   const shopCol2 = shops.slice(2, 4)
   return (
@@ -322,6 +322,7 @@ function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanel
             Mốc 1 lấy từ cột "Ngày tạo", mốc "Đóng kiện" lấy từ cột "TG Đóng hàng" trong file Đơn SO vừa upload —
             chỉ cần upload thêm file SPX xuất (Mốc 3/4) ở khung bên dưới.
           </p>
+          {beforePanel}
           <CarrierPanel key={carrierPanelKey} {...carrierPanelProps} />
         </SectionCard>
       </div>
@@ -331,17 +332,38 @@ function DonSanReportBody({ total, tmdtCount, ngoaiSanCount, shops, carrierPanel
 
 // Mốc 1 của tuần đã lưu: lấy bản đã chốt trong entry (autoSalesLookup, {Mã vận đơn: ISO}); tuần lưu
 // trước khi có trường này thì dùng lại file Đơn SO hiện tại nếu đúng là file của tuần đó (fallbackLookup).
-function DonSanSnapshotView({ entry, fallbackLookup = null, onRelinkSpx = null }) {
-  const autoSalesLookup = useMemo(() => {
-    if (!entry.autoSalesLookup) return fallbackLookup
-    return new Map(Object.entries(entry.autoSalesLookup).map(([code, iso]) => [code, new Date(iso)]))
-  }, [entry.autoSalesLookup, fallbackLookup])
+function DonSanSnapshotView({ entry, fallbackLookup = null, fallbackPacking = null, onRelinkSpx = null, onRestoreMilestones = null }) {
+  const autoSalesLookup = useMemo(() => lookupFromJson(entry.autoSalesLookup) || fallbackLookup, [entry.autoSalesLookup, fallbackLookup])
+  const autoPackingLookup = useMemo(() => lookupFromJson(entry.autoPackingLookup) || fallbackPacking, [entry.autoPackingLookup, fallbackPacking])
+  const [restoreMsg, setRestoreMsg] = useState('')
+  // Tuần lưu trước khi app chốt Mốc 1/Mốc 2 cùng báo cáo: cho tải lại file Đơn SO của đúng tuần đó để lấy lại.
+  const restoreNode = !autoSalesLookup && onRestoreMilestones ? (
+    <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+      <p className="mb-2">
+        Tuần này lưu trước khi app chốt Mốc 1 (Ngày tạo) và Mốc 2 (TG Đóng hàng) cùng báo cáo, nên chưa đối soát được.
+        Tải lại <b>file Đơn SO của đúng tuần này</b> để app lấy lại 2 mốc (không thay đổi số tổng đã lưu).
+      </p>
+      <ExcelUpload
+        compact
+        fileName=""
+        onClear={() => {}}
+        onData={(data) => {
+          const sales = buildAutoSalesOrderLookup(data)
+          if (sales.size === 0) { setRestoreMsg('File không có cột "Mã vận đơn" và "Ngày tạo" — kiểm tra lại đúng file Đơn SO.'); return }
+          setRestoreMsg('')
+          onRestoreMilestones({ autoSalesLookup: lookupToJson(sales), autoPackingLookup: lookupToJson(buildAutoPackingLookup(data)) })
+        }}
+      />
+      {restoreMsg && <p className="mt-2 text-red-600">{restoreMsg}</p>}
+    </div>
+  ) : null
   return (
     <div>
       <SnapshotHeader fileName={entry.fileName} createdAt={entry.createdAt} otherCount={entry.otherCount} mismatchCount={entry.mismatchCount} />
       <DonSanReportBody
         total={entry.total} tmdtCount={entry.tmdtCount} ngoaiSanCount={entry.ngoaiSanCount} shops={entry.shops}
         carrierPanelKey={entry.id}
+        beforePanel={restoreNode}
         carrierPanelProps={{
           carrierKey: NGOAI_SAN_CARRIER_KEY,
           label: 'SPX Express — Ngoại sàn',
@@ -354,6 +376,7 @@ function DonSanSnapshotView({ entry, fallbackLookup = null, onRelinkSpx = null }
           hidePackingUpload: true,
           hideSalesUpload: true,
           autoSalesLookup,
+          autoPackingLookup,
           onRelinkWeek: onRelinkSpx,
           ngoaiSanNote: NGOAI_SAN_NOTE,
         }}
@@ -418,6 +441,7 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
   // với cột "Mã vận đơn" (so với Mã vận đơn bên file SPX, khớp 1-1 tuyệt đối — đã xác nhận với người
   // dùng). Giống hệt cơ chế Mốc 2 ở effect dưới, khỏi cần upload riêng file Sales Order nữa.
   const autoSalesLookup = useMemo(() => buildAutoSalesOrderLookup(ngoaiSan), [ngoaiSan])
+  const currentPacking = useMemo(() => buildAutoPackingLookup(ngoaiSan), [ngoaiSan])
 
   useEffect(() => {
     if (!meta || ngoaiSan.length === 0) return
@@ -436,7 +460,8 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
       shops: shops.map(s => ({ code: s.code, label: s.label, count: s.count })),
       spxWeekId: pickCarrierWeekIdByDate(NGOAI_SAN_CARRIER_KEY, meta.uploadedAt),
       carrierLookup: snapshotCarrierLookup(ngoaiSan),
-      autoSalesLookup: Object.fromEntries([...autoSalesLookup].map(([code, date]) => [code, date.toISOString()])),
+      autoSalesLookup: lookupToJson(autoSalesLookup),
+      autoPackingLookup: lookupToJson(buildAutoPackingLookup(ngoaiSan)),
     }
     setReports(saveTrialReport('donSO', entry))
   }
@@ -472,7 +497,9 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
         <DonSanSnapshotView
           entry={viewingEntry}
           fallbackLookup={meta && viewingEntry.id === meta.uploadedAt ? autoSalesLookup : null}
+          fallbackPacking={meta && viewingEntry.id === meta.uploadedAt ? currentPacking : null}
           onRelinkSpx={id => setReports(updateTrialReport('donSO', viewingEntry.id, r => ({ ...r, spxWeekId: id })))}
+          onRestoreMilestones={patch => setReports(updateTrialReport('donSO', viewingEntry.id, r => ({ ...r, ...patch })))}
         />
       ) : !showLive ? (
         <div>{uploadNode}</div>
