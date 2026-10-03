@@ -38,6 +38,45 @@ function notifyError(error) {
   window.dispatchEvent(new CustomEvent('ops-store-error', { detail: error.message || String(error) }))
 }
 
+// "Phiên làm việc" (sessionKey) của file đã tải ở tab Gộp kênh: các bảng carrier_*_weeks trên Supabase không có cột
+// này, nên trước đây reload xong file vẫn còn nhưng mất sessionKey → khung Đối soát coi như chưa tải file. Lưu riêng
+// vào ops_settings dạng { "<khoá kho>": { "<id file>": "<sessionKey>" } } rồi gắn lại sau khi nạp dữ liệu.
+const SESSION_KEYS_SETTING = 'carrier_session_keys'
+
+export function mergeSessionKeyMap(map, storeKey, weeks) {
+  const next = { ...(map && typeof map === 'object' ? map : {}) }
+  const own = {}
+  for (const week of Array.isArray(weeks) ? weeks : []) {
+    if (week && week.sessionKey) own[String(week.id)] = week.sessionKey
+  }
+  if (Object.keys(own).length > 0) next[storeKey] = own
+  else delete next[storeKey]
+  return next
+}
+
+export function applySessionKeys(weeks, keysById) {
+  if (!Array.isArray(weeks) || !keysById) return weeks
+  return weeks.map(week => (week && !week.sessionKey && keysById[String(week.id)] ? { ...week, sessionKey: keysById[String(week.id)] } : week))
+}
+
+async function saveSessionKeys(storeKey) {
+  const current = decode(values.get(SESSION_KEYS_SETTING) || '{}')
+  const next = mergeSessionKeyMap(current, storeKey, decode(values.get(storeKey) || '[]'))
+  if (JSON.stringify(next) === JSON.stringify(current)) return
+  put(SESSION_KEYS_SETTING, encode(next))
+  await createOpsSettingsRepository(supabase).set(SESSION_KEYS_SETTING, next)
+}
+
+function restoreSessionKeys() {
+  const map = decode(values.get(SESSION_KEYS_SETTING) || '{}')
+  if (!map || typeof map !== 'object') return
+  for (const [storeKey, keysById] of Object.entries(map)) {
+    const raw = values.get(storeKey)
+    if (!raw) continue
+    put(storeKey, encode(applySessionKeys(decode(raw), keysById)))
+  }
+}
+
 async function loadOptional(pattern, loadFn, fallback) {
   try {
     return await loadFn()
@@ -209,6 +248,7 @@ export async function loadWorkspace(client = supabase) {
     console.error('Không chuyển được dữ liệu tab Hàng chậm luân chuyển cũ:', error)
   }
   for (const setting of settingsResult.data || []) put(setting.key, encode(setting.value))
+  restoreSessionKeys()
 }
 
 async function syncReports(key, repo) {
@@ -373,10 +413,10 @@ async function syncReturnRecords(key) {
 
 async function persist(key) {
   if (key === 'tongdon_reports') return syncReports(key, createTongdonReportsRepository(supabase))
-  if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
-  if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
-  if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key)
-  if (key.startsWith('carrier_packingweeks_')) return syncPackingWeeks(key)
+  if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key).then(() => saveSessionKeys(key))
+  if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key).then(() => saveSessionKeys(key))
+  if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key).then(() => saveSessionKeys(key))
+  if (key.startsWith('carrier_packingweeks_')) return syncPackingWeeks(key).then(() => saveSessionKeys(key))
   if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
   if (key === 'expiry_stock_active') return createExpiryStockMonthsRepository(supabase).setActive(values.get(key) || '')
   if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
@@ -405,10 +445,10 @@ export const opsStore = {
     values.delete(key)
     writeChain = writeChain.then(async () => {
       if (key === 'tongdon_reports') return syncReports(key, createTongdonReportsRepository(supabase))
-      if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key)
-      if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key)
-      if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key)
-      if (key.startsWith('carrier_packingweeks_')) return syncPackingWeeks(key)
+      if (key.startsWith('carrier_weeks_')) return syncCarrierWeeks(key).then(() => saveSessionKeys(key))
+      if (key.startsWith('carrier_holdweeks_')) return syncHoldWeeks(key).then(() => saveSessionKeys(key))
+      if (key.startsWith('carrier_salesorderweeks_')) return syncSalesOrderWeeks(key).then(() => saveSessionKeys(key))
+      if (key.startsWith('carrier_packingweeks_')) return syncPackingWeeks(key).then(() => saveSessionKeys(key))
       if (key === 'expiry_stock_months') return syncExpiryStockMonths(key)
       if (key === 'goods_receipt_batches') return syncGoodsReceiptBatches(key)
       if (key === 'return_records') return syncReturnRecords(key)
