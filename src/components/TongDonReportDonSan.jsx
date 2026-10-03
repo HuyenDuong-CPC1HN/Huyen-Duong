@@ -104,7 +104,7 @@ const TongDonReportDonSan = forwardRef(function TongDonReportDonSan({
           </div>
         </div>
         {narrative.ngoaiSanCurTotal > 0 && (
-          <div className="tdr-callout-good">✓&nbsp;<span>{narrative.ngoaiSanBody}</span></div>
+          <div className="tdr-callout-good">✓&nbsp;<EditableText value={fields.ngoaiSanCallout ?? narrative.ngoaiSanBody} onChange={onFieldChange && ((v) => onFieldChange('ngoaiSanCallout', v))} className="tdr-callout-text" rows={3} /></div>
         )}
       </div>
 

@@ -198,6 +198,7 @@ export default function TongDonTab({ onNavigate }) {
   const [donSan_tmdtBodyLive, setDonSanTmdtBody] = useWeekField(weekKey, 'donsan_tmdtBody', donSanAuto.tmdtBody)
   const [donSan_ngoaiSanBodyLive, setDonSanNgoaiSanBody] = useWeekField(weekKey, 'donsan_ngoaiSanBody', donSanAuto.ngoaiSanBody)
   const [donSan_reconNoteLive, setDonSanReconNote] = useWeekField(weekKey, 'donsan_reconNote', donSanAuto.reconNote)
+  const [donSan_ngoaiSanCalloutLive, setDonSanNgoaiSanCallout] = useWeekField(weekKey, 'donsan_ngoaiSanCallout', donSanAuto.ngoaiSanBody)
   const [donSan_verdictLive, setDonSanVerdict] = useWeekField(weekKey, 'donsan_verdict', donSanAuto.verdict)
   const [donSan_sol1Live, setDonSanSol1] = useWeekField(weekKey, 'donsan_sol1', donSanAuto.sol1)
   const [donSan_sol2Live, setDonSanSol2] = useWeekField(weekKey, 'donsan_sol2', donSanAuto.sol2)
@@ -215,11 +216,11 @@ export default function TongDonTab({ onNavigate }) {
   const [tt_sol4Live, setTtSol4] = useWeekField(weekKey, 'truyenthong_sol4', truyenThongAuto.sol4)
 
   const donSanFieldsLive = {
-    tmdtBody: donSan_tmdtBodyLive, ngoaiSanBody: donSan_ngoaiSanBodyLive, reconNote: donSan_reconNoteLive, verdict: donSan_verdictLive,
+    tmdtBody: donSan_tmdtBodyLive, ngoaiSanBody: donSan_ngoaiSanBodyLive, ngoaiSanCallout: donSan_ngoaiSanCalloutLive, reconNote: donSan_reconNoteLive, verdict: donSan_verdictLive,
     sol1: donSan_sol1Live, sol2: donSan_sol2Live, sol3: donSan_sol3Live, sol4: donSan_sol4Live,
   }
   const donSanSetters = {
-    tmdtBody: setDonSanTmdtBody, ngoaiSanBody: setDonSanNgoaiSanBody, reconNote: setDonSanReconNote, verdict: setDonSanVerdict,
+    tmdtBody: setDonSanTmdtBody, ngoaiSanBody: setDonSanNgoaiSanBody, ngoaiSanCallout: setDonSanNgoaiSanCallout, reconNote: setDonSanReconNote, verdict: setDonSanVerdict,
     sol1: setDonSanSol1, sol2: setDonSanSol2, sol3: setDonSanSol3, sol4: setDonSanSol4,
   }
   const truyenThongFieldsLive = {
@@ -272,7 +273,16 @@ export default function TongDonTab({ onNavigate }) {
       id, weekKey, createdAt: new Date().toISOString(), label,
       current: liveCurrent, previous: livePrevious,
       title: 'Báo cáo giao hàng - CN HCM',
-      donSan: { ngoaiSan: ngoaiSanCurrent, ...donSanFieldsLive },
+      // Chỉ giữ 4 cột SPX cần cho mục D (mã vận đơn, tỉnh gửi/nhận, phường/xã) để báo cáo lưu không bị nặng.
+      donSan: {
+        ngoaiSan: ngoaiSanCurrent && {
+          ...ngoaiSanCurrent,
+          spxRows: (ngoaiSanCurrent.spxRows || []).map(r => ({
+            'Mã vận đơn': r['Mã vận đơn'], 'Tỉnh gửi': r['Tỉnh gửi'], 'Tỉnh nhận': r['Tỉnh nhận'], 'Phường/Xã nhận': r['Phường/Xã nhận'],
+          })),
+        },
+        ...donSanFieldsLive,
+      },
       truyenThong: { ...truyenThongFieldsLive },
     }
     const next = [entry]
