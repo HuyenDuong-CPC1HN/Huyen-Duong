@@ -177,15 +177,3 @@ describe('reconcileNgoaiSan — autoSalesLookup (Mốc 1 tự động, khớp M�
   })
 })
 
-describe('buildAutoSalesOrderLookup — Mốc 1 ưu tiên cột "Tạo lúc" của file Đơn SO', () => {
-  it('có "Tạo lúc" thì dùng "Tạo lúc", không có thì dùng "Ngày tạo"', () => {
-    const map = buildAutoSalesOrderLookup([
-      { 'Mã vận đơn': 'SPX1', 'Tạo lúc': '28/09/2026 10:15', 'Ngày tạo': '27/09/2026 08:00' },
-      { 'Mã vận đơn': 'SPX2', 'Tạo lúc': '17:44 04/09/2026' },
-      { 'Mã vận đơn': 'SPX3', 'Ngày tạo': '02/10/2026 16:22' },
-    ])
-    expect(map.get('SPX1')).toEqual(new Date(2026, 8, 28, 10, 15))
-    expect(map.get('SPX2')).toEqual(new Date(2026, 8, 4, 17, 44))
-    expect(map.get('SPX3')).toEqual(new Date(2026, 9, 2, 16, 22))
-  })
-})

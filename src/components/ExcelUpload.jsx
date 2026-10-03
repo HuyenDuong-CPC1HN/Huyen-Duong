@@ -10,7 +10,7 @@ import * as XLSX from 'xlsx'
 // "Ngày tạo" (file Đơn SO) cũng cần giữ giờ thật — dùng làm Mốc 1 khi đối soát SPX ngoại sàn
 // (buildAutoSalesOrderLookup/parseDonSoNgayTao trong reconcileNgoaiSan.js); bỏ sẽ khiến KHÔNG đơn SPX
 // nào khớp được Mốc 1 (bug thật đã gặp: cả tuần báo "0 khớp Mã đơn" vì giờ bị cắt mất).
-const DATETIME_COLUMNS = new Set(['Ngày tạo kiện', 'Ngày tạo', 'Tạo lúc'])
+const DATETIME_COLUMNS = new Set(['Ngày tạo kiện', 'Ngày tạo'])
 const DATE_ONLY_COLUMNS = new Set(['Ngày giao hàng', 'Ngày ghi sổ'])
 
 function pad2(n) { return String(n).padStart(2, '0') }
