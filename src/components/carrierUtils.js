@@ -1,7 +1,7 @@
 // Carrier utility functions extracted from CarrierStats.jsx for Fast Refresh compatibility.
 
 import { opsStore as localStorage } from '../data/workspace'
-import { buildInternalOrderLookup, buildTrackingSet, computeCarrierStats, getTrackingCode } from '../utils/parseCarrierExport'
+import { buildInternalOrderLookup, buildTrackingSet, computeCarrierStats, isDonCHoldAsChoLay, getTrackingCode } from '../utils/parseCarrierExport'
 import { reconcileNgoaiSan, buildSalesOrderLookup, buildPackingLookup } from '../utils/reconcileNgoaiSan'
 import { useState, useEffect } from 'react'
 
@@ -159,7 +159,9 @@ function buildStatsForWeek(entry, carrierKey, carrierType, internalData, frozenL
   const holdLookupSet = getHoldLookupSet(carrierKey)
   const holdNotes = readHoldNotesMap(carrierKey)
   const effectiveRows = filterExcludedRows(entry.rows, carrierKey, carrierType)
-  const stats = computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes)
+  const stats = computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes, {
+    holdAsChoLay: isDonCHoldAsChoLay(carrierKey, carrierType, entry.uploadedAt),
+  })
   return {
     weekId: entry.id,
     fileName: entry.fileName,

@@ -1,7 +1,7 @@
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
 import { Upload, FileUp, FileSpreadsheet, X, CheckCircle, Clock, RotateCcw, XCircle, Truck, Search, List, ChevronDown, ChevronUp, AlertTriangle, Package, Download } from 'lucide-react'
-import { parseCarrierFile, computeCarrierStats, getCarrierColumns, buildInternalOrderLookup, buildTrackingSet, reconcileViettelOrders, isHoldStatusRow, getTrackingCode } from '../utils/parseCarrierExport'
+import { parseCarrierFile, computeCarrierStats, isDonCHoldAsChoLay, getCarrierColumns, buildInternalOrderLookup, buildTrackingSet, reconcileViettelOrders, isHoldStatusRow, getTrackingCode } from '../utils/parseCarrierExport'
 import { reconcileNgoaiSan, buildSalesOrderLookup, buildPackingLookup } from '../utils/reconcileNgoaiSan'
 import * as XLSX from 'xlsx'
 import { ColumnFilter, ResizeHandle } from './DataTable'
@@ -1059,7 +1059,8 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
     return state.rows.filter(r => !excludedSet.has(getTrackingCode(r, carrierType)))
   }, [state, excludedCodes, hasTenHang, carrierType])
 
-  const stats = useMemo(() => state ? computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes) : null, [state, effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes])
+  const holdAsChoLay = !!state && isDonCHoldAsChoLay(carrierKey, carrierType, state.uploadedAt)
+  const stats = useMemo(() => state ? computeCarrierStats(effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes, { holdAsChoLay }) : null, [state, effectiveRows, carrierType, lookupMap, holdLookupSet, holdNotes, holdAsChoLay])
 
   // Đơn "Đang lấy hàng" chưa khớp file Chờ giao Logistics — cần kiểm tra tay
   const [onlyUnmatched, setOnlyUnmatched] = useState(false)

@@ -225,11 +225,22 @@ export function buildTrackingSet(rows, key) {
 // này thì vẫn tính vào "Đang vận chuyển" thay vì bị loại khỏi tổng (xem computeCarrierStats)
 export const HOLD_NOTE_TRANSIT_VALUES = ['Đang vận chuyển', 'Đã lấy hàng']
 
+// Đơn C (Viettel) không đối chiếu file "Chờ giao Logistics": đơn "Đang lấy hàng" là đơn VTP chưa lấy được hàng,
+// tính thẳng vào "Chờ lấy". Chỉ áp dụng cho file upload từ tuần 28/09/2026 trở đi — các tuần đã lưu trước đó
+// giữ nguyên số cũ (khi đó "Đang lấy hàng" nằm trong "Đang vận chuyển").
+export const DON_C_HOLD_AS_CHO_LAY_FROM = new Date(2026, 8, 28)
+export function isDonCHoldAsChoLay(carrierKey, carrierType, uploadedAt) {
+  if (carrierType !== 'viettel' || !/(^|_)donC_viettel$/.test(String(carrierKey || ''))) return false
+  const at = new Date(uploadedAt)
+  return !Number.isNaN(at.getTime()) && at >= DON_C_HOLD_AS_CHO_LAY_FROM
+}
+
 // Thống kê: 24h / 48h / 72h / Đang vận chuyển / Giao lại lần 2 / Hoàn hàng
 // lookupMap: bảng đối chiếu Mã vận đơn nội bộ (chỉ áp dụng cho Viettel) — xem buildInternalOrderLookup
 // holdLookupSet: tập Mã vận đơn từ file "Chờ giao Logistics" — dùng để đối chiếu trạng thái "Đang lấy hàng"
 // holdNotes: ghi chú tay theo mã vận đơn (object {mã: ghi chú}) cho đơn "Đang lấy hàng" chưa khớp holdLookupSet
-export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = null, holdLookupSet = null, holdNotes = null) {
+// options.holdAsChoLay: tính đơn "Đang lấy hàng" thẳng vào "Chờ lấy", không qua đối chiếu (Đơn C — xem isDonCHoldAsChoLay)
+export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = null, holdLookupSet = null, holdNotes = null, options = {}) {
   const config = CARRIER_CONFIG[carrierType]
   const result = { total: 0, '24h': 0, '48h': 0, '72h': 0, dangVanChuyen: 0, giaoLai: 0, hoanHang: 0, choLay: 0 }
 
@@ -240,6 +251,13 @@ export function computeCarrierStats(rows, carrierType = 'viettel', lookupMap = n
 
     // "Lấy hàng không thành công": luôn tính vào Chờ lấy, không cần khớp Mã vận đơn với dữ liệu nội bộ
     if (config.pickupFailStatuses?.includes(status)) {
+      const count = config.orderCounter(row, config, lookupMap)
+      result.total += count
+      result.choLay += count
+      continue
+    }
+
+    if (options.holdAsChoLay && config.holdStatuses?.includes(status)) {
       const count = config.orderCounter(row, config, lookupMap)
       result.total += count
       result.choLay += count
