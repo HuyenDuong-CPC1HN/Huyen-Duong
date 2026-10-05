@@ -138,21 +138,21 @@ describe('ExpiryStockTab', () => {
 
   })
 
-  // Trước đây chỉ có vài mốc màu rời rạc (đỏ/cam/vàng/xanh dương) theo bucket hạn dùng, hàng "an toàn"
-  // (từ 12 tháng) không có màu riêng (mặc định xám) — không phân biệt được hàng còn 13 tháng với hàng còn
-  // 23 tháng. Nay dùng dải màu liên tục theo đúng số tháng: càng gần hết hạn càng đỏ, càng xa càng xanh lá.
-  it('cột "Tuổi thuốc (Tháng)" tô màu liên tục: đỏ khi đã/sắp hết hạn, xanh lá dần khi còn hạn lâu', async () => {
+  // Trước đây chỉ đổi màu CHỮ theo vài mốc rời rạc — người dùng muốn kiểu "thang màu 3 mốc" (Conditional
+  // Formatting) của Excel: tô NỀN cả ô theo thang đỏ-vàng-xanh lá liên tục, càng gần hết hạn càng đỏ,
+  // càng xa càng xanh lá, để nhìn màu nền là đoán ngay mức độ gấp gáp, không cần đọc số.
+  it('cột "Tuổi thuốc (Tháng)" tô NỀN theo thang đỏ-vàng-xanh lá liên tục, càng gần hết hạn càng đỏ', async () => {
     render(<ExpiryStockTab />)
     fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [buildSampleFile()] } })
     await waitFor(() => expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument())
     fireEvent.click(screen.getByText('Tất cả tồn kho'))
 
     const ageCellOf = (label) => screen.getByText(label).closest('tr').querySelectorAll('td')[9]
-    const expiredColor = ageCellOf('Hàng đã hết hạn').style.color
-    const near3Color = ageCellOf('Hàng cận 3 tháng').style.color
-    const near6Color = ageCellOf('Hàng cận 6 tháng').style.color
-    const near12Color = ageCellOf('Hàng cận hạn 6-12 tháng').style.color
-    const safeColor = ageCellOf('Hàng còn an toàn').style.color
+    const expiredColor = ageCellOf('Hàng đã hết hạn').style.backgroundColor
+    const near3Color = ageCellOf('Hàng cận 3 tháng').style.backgroundColor
+    const near6Color = ageCellOf('Hàng cận 6 tháng').style.backgroundColor
+    const near12Color = ageCellOf('Hàng cận hạn 6-12 tháng').style.backgroundColor
+    const safeColor = ageCellOf('Hàng còn an toàn').style.backgroundColor
     const hue = (rgb) => {
       const [r, g, b] = rgb.match(/\d+/g).map(Number)
       const max = Math.max(r, g, b), min = Math.min(r, g, b)
