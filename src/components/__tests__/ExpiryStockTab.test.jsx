@@ -98,6 +98,11 @@ describe('ExpiryStockTab', () => {
     expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument()
     expect(screen.getByText('Hàng còn an toàn')).toBeInTheDocument()
     expect(screen.queryByText('Hàng có xuất')).not.toBeInTheDocument()
+    // Hàng đã nằm trong danh mục cận date (hết hạn / dưới 3 / dưới 6 tháng) không lặp lại ở tab CLC
+    expect(screen.queryByText('Hàng đã hết hạn')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hàng cận 3 tháng')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hàng cận 6 tháng')).not.toBeInTheDocument()
+    expect(screen.getByText('Hàng cận hạn 6-12 tháng')).toBeInTheDocument()
     expect([...document.querySelectorAll('th')].map(th => th.textContent)).toEqual([
       '', 'Stt', 'Loại', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)',
       'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối', 'Hướng xử lý',
@@ -199,11 +204,11 @@ describe('ExpiryStockTab', () => {
     expect(screen.getByRole('checkbox', { name: /X002/ })).toBeChecked()
     cleanup()
     render(<ExpiryStockTab mode="clc" />)
-    expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC · Kho C \(0\/6\)/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC · Kho C \(0\/3\)/ })).toBeDisabled()
 
     // Ô tích ở tiêu đề: tích tất cả hàng đủ tiêu chí đang hiện
     fireEvent.click(screen.getByRole('checkbox', { name: 'Tích tất cả hàng đang hiện để đưa vào báo cáo' }))
-    expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC · Kho C \(6\/6\)/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC · Kho C \(3\/3\)/ })).toBeEnabled()
   })
 
   it('tải thêm file Kho DTP: có nút Tất cả / Kho C / Kho DTP, cột Loại, lọc theo loại, báo cáo kèm Hướng xử lý', async () => {

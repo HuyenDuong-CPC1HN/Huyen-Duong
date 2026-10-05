@@ -330,12 +330,15 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
       if (!rows) continue
       for (const r of withRowKeys(filterByExpiryEntity(rows, ent), ent)) {
         if (!(r.tonCuoi > 0)) continue
+        const bucket = classifyExpiry(r.hanDung, today)
         out.push({
           ...r,
-          bucket: classifyExpiry(r.hanDung, today),
+          bucket,
           daysLeft: daysUntil(r.hanDung, today),
           tuoiThuoc: drugAgeMonths(r.hanDung, today),
-          slow: isSlowMoving(r),
+          // Hàng đã nằm trong danh mục cận date (hết hạn / dưới 3 tháng / dưới 6 tháng) thì chỉ theo dõi ở tab
+          // Hàng cận date, không lặp lại ở danh sách chậm luân chuyển.
+          slow: isSlowMoving(r) && !CAN_DATE_BUCKETS.includes(bucket),
         })
       }
     }
