@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterLookup, lookupRows, sameLot, stageLabel, summarizeLookup } from '../hangLookup'
+import { filterLookup, keToanShortener, lookupRows, sameLot, stageLabel, summarizeLookup } from '../hangLookup'
 
 const slips = [
   { id: 's1', maPhieu: 'DHC1', khachHang: 'Khách A', createdAt: '2026-09-29T08:00:00', stage: 'acct', form: { xmTinhTrang: 'Hàng nguyên vẹn', items: [{ soLo: '010526' }] }, pdf: { mau: 'CPC1HN', items: [{ ten: 'Actiso Viet', dvt: 'ONG', soLuong: 40 }] } },
@@ -62,5 +62,24 @@ describe('filterLookup / summarizeLookup / sameLot', () => {
     expect(lot).toHaveLength(1)
     expect(sameLot(rows, { ten: 'x', soLo: '' })).toEqual([])
     expect(sameLot(rows, rows.find(r => r.so === 'DHC1')).map(r => r.so)).toEqual(['DHC2', 'DHC1'])
+  })
+})
+
+describe('cột Kế toán', () => {
+  it('lấy kế toán theo nguồn: phiếu nhập trả lại (bên A), đợt huỷ đổi trả, hàng huỷ mặc định', () => {
+    const rows = lookupRows({
+      slips: [{ id: 's', maPhieu: 'X', createdAt: '2026-09-01', form: { benA: 'Võ Thị Ly' }, pdf: { items: [{ ten: 'A', soLuong: 1 }] } }],
+      phieus: [{ id: 'p', kho: 'C', soPhieu: 'P1', items: [{ tenHang: 'B', soLo: '1', soLuong: 1 }] }],
+    })
+    expect(rows.map(r => r.keToan)).toEqual(['Võ Thị Ly', 'Lưu Thị Thuỳ'])
+    expect(filterLookup(rows, { q: 'vo thi ly' })).toHaveLength(1)
+  })
+  it('viết tắt họ và tên đệm; hai người trùng tên thì ghi đầy đủ', () => {
+    const short = keToanShortener(['Phạm Thị Tuyết Trinh', 'Lưu Thị Thuỳ', 'Lưu Thị Thùy', 'Võ Thị Ly', 'Trần Văn Ly', ''])
+    expect(short('Phạm Thị Tuyết Trinh')).toBe('P.T.T. Trinh')
+    expect(short('Lưu Thị Thuỳ')).toBe('L.T. Thuỳ') // cùng một người, chỉ khác cách bỏ dấu
+    expect(short('Võ Thị Ly')).toBe('Võ Thị Ly')
+    expect(short('Trần Văn Ly')).toBe('Trần Văn Ly')
+    expect(short('')).toBe('')
   })
 })

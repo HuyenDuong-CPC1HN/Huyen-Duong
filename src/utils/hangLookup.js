@@ -25,6 +25,8 @@ export const stageLabel = row => STAGE_LABEL[row.stage] || ''
 export function normText(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase()
 }
+// Biên bản hàng huỷ Kho C / Kho DTP in sẵn kế toán này (HangHuyPapers), phiếu chưa lưu tên riêng.
+const HUY_KE_TOAN = 'Lưu Thị Thuỳ'
 const lotKey = (ten, lo) => `${normText(ten)}|${normText(lo)}`
 const isoDay = v => String(v || '').slice(0, 10)
 
@@ -50,6 +52,7 @@ export function lookupRows({ slips = [], phieus = [], swapRecords = [], swapBatc
       kho: slipLoai(s) || 'C', who: s.khachHang || s.pdf.benMua?.ten || '', date: isoDay(s.createdAt), stage: slipStage(s.stage),
       ma: '', ten: it.ten || '', soLo: s.form?.items?.[i]?.soLo || it.soLo || '', soLuong: Number(it.soLuong) || 0, dvt: it.dvt || '',
       extra: s.form?.xmTinhTrang || 'Nguyên vẹn', huyPhieu: '', // tình trạng hàng ghi ở BB xác minh của phiếu
+      keToan: s.form?.benA || '',
     }))
   }
   // Đổi trả (quy trình mới): khách trả lỗi, một dòng cho tới khi xuất huỷ xong
@@ -64,7 +67,7 @@ export function lookupRows({ slips = [], phieus = [], swapRecords = [], swapBatc
         id: `doitra:${r.id}#${i}`, ref: r.id, nguon: 'doitra', huong: 'huy', so: huyPhieu, kho: r.entity === 'donC' ? 'C' : 'DTP',
         who: r.customerName || '', date: isoDay(r.date), stage: recordStage(r, batch),
         ma: it.maHang || '', ten: it.tenHang || '', soLo: it.loLoi || '', soLuong: Number(it.soLuong) || 0, dvt: it.dvt || '',
-        extra: it.lyDo || '', huyPhieu,
+        extra: it.lyDo || '', huyPhieu, keToan: batch?.accountant || r.accountantNhapLai || '',
       })
       if (huyPhieu) {
         const keys = swapKeysByPhieu.get(huyPhieu) || new Set()
@@ -81,7 +84,7 @@ export function lookupRows({ slips = [], phieus = [], swapRecords = [], swapBatc
         id: `kho:${p.id}#${i}`, ref: p.id, nguon: 'kho', huong: 'huy', so: p.soPhieu || '', kho: p.kho, who: p.lyDo || '',
         date: p.ngayPhieu || isoDay(p.importedAt), stage: p.stage === 'done' ? 'done' : 'doing',
         ma: it.maHang || '', ten: it.tenHang || '', soLo: it.soLo || '', soLuong: Number(it.thucHuy ?? it.soLuong) || 0, dvt: it.dvt || '',
-        extra: it.tinhTrang || '', huyPhieu: '',
+        extra: it.tinhTrang || '', huyPhieu: '', keToan: p.keToan || HUY_KE_TOAN,
       })
     })
   }
@@ -96,7 +99,7 @@ export function filterLookup(rows, { kho = 'all', nguon = 'all', huong = 'all', 
     && (huong === 'all' || r.huong === huong)
     && (month === 'all' || r.date.startsWith(month))
     && (!stages || stages.includes(r.stage))
-    && (!needle || [r.ma, r.ten, r.soLo, r.so, r.who, r.huyPhieu].some(v => normText(v).includes(needle))))
+    && (!needle || [r.ma, r.ten, r.soLo, r.so, r.who, r.huyPhieu, r.keToan].some(v => normText(v).includes(needle))))
 }
 
 // Cộng số lượng theo hàng + lô (cùng tên và lô thì gộp), nhiều nhất trước.
@@ -116,4 +119,22 @@ export function sameLot(rows, row) {
   if (!row.soLo) return []
   const key = lotKey(row.ten, row.soLo)
   return rows.filter(r => lotKey(r.ten, r.soLo) === key).sort((a, b) => a.date.localeCompare(b.date))
+}
+
+// Tên kế toán gọn cho cột hẹp: viết tắt họ và tên đệm ("Phạm Thị Tuyết Trinh" → "P.T.T. Trinh"). Hai người khác nhau
+// trùng tên (cùng chữ cuối) thì giữ họ tên đầy đủ để không nhầm. Trả về hàm đổi tên đầy đủ → tên hiển thị.
+export function keToanShortener(names) {
+  const tenKey = n => normText(String(n).trim().split(/\s+/).pop())
+  const people = new Map()
+  for (const n of new Set(names.map(x => String(x || '').trim()).filter(Boolean))) {
+    const set = people.get(tenKey(n)) || new Set()
+    set.add(normText(n)); people.set(tenKey(n), set)
+  }
+  return (name) => {
+    const full = String(name || '').trim()
+    if (!full) return ''
+    const parts = full.split(/\s+/)
+    if (parts.length < 2 || (people.get(tenKey(full))?.size || 0) > 1) return full
+    return `${parts.slice(0, -1).map(w => `${w[0].toUpperCase()}.`).join('')} ${parts[parts.length - 1]}`
+  }
 }

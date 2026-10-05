@@ -4,7 +4,7 @@ import { Search, FileDown, X } from 'lucide-react'
 import { opsStore } from '../data/workspace'
 import { readSlips } from '../data/returnSlipsStore'
 import { readHuyPhieus } from '../data/hangHuyStore'
-import { HUONG, NGUON, NGUON_FILTER, STAGE_FILTER, filterLookup, lookupRows, sameLot, stageLabel, summarizeLookup } from '../utils/hangLookup'
+import { HUONG, NGUON, NGUON_FILTER, STAGE_FILTER, filterLookup, keToanShortener, lookupRows, sameLot, stageLabel, summarizeLookup } from '../utils/hangLookup'
 
 const fmtDate = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '—' }
 const readStored = (key) => {
@@ -49,6 +49,7 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
   const months = useMemo(() => [...new Set(all.map(r => r.date.slice(0, 7)).filter(Boolean))].sort().reverse(), [all])
   const rows = useMemo(() => filterLookup(all, { kho, nguon, huong, month, stage, q }), [all, kho, nguon, huong, month, stage, q])
   const summary = useMemo(() => summarizeLookup(rows), [rows])
+  const shortKeToan = useMemo(() => keToanShortener(all.map(r => r.keToan)), [all])
   const total = rows.reduce((s, r) => s + r.soLuong, 0)
   const pickedRow = picked ? all.find(r => r.id === picked) : null
   const lot = pickedRow ? sameLot(all, pickedRow) : []
@@ -56,8 +57,8 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
   const exportExcel = () => {
     const aoa = view === 'sum'
       ? [['Tên hàng', 'Số lô', 'ĐVT', 'Tổng số lượng', 'Số phiếu', 'Nguồn'], ...summary.map(e => [e.ten, e.soLo, e.dvt, e.soLuong, e.phieu.size, [...e.nguon].map(n => NGUON[n].label).join(', ')])]
-      : [['Mã hàng', 'Tên hàng', 'Số lô', 'Số lượng', 'ĐVT', 'Nguồn', 'Hướng xử lý', 'Tình trạng', 'Số phiếu xuất huỷ', 'Khách hàng / lý do', 'Ngày', 'Kho', 'Trạng thái'],
-        ...rows.map(r => [r.ma, r.ten, r.soLo, r.soLuong, r.dvt, NGUON[r.nguon].label, HUONG[r.huong], r.extra, r.so, r.who, fmtDate(r.date), r.kho === 'C' ? 'Kho C' : 'Kho DTP', stageLabel(r)])]
+      : [['Mã hàng', 'Tên hàng', 'Số lô', 'Số lượng', 'ĐVT', 'Nguồn', 'Hướng xử lý', 'Tình trạng', 'Số phiếu xuất huỷ', 'Khách hàng / lý do', 'Ngày', 'Kho', 'Kế toán', 'Trạng thái'],
+        ...rows.map(r => [r.ma, r.ten, r.soLo, r.soLuong, r.dvt, NGUON[r.nguon].label, HUONG[r.huong], r.extra, r.so, r.who, fmtDate(r.date), r.kho === 'C' ? 'Kho C' : 'Kho DTP', r.keToan, stageLabel(r)])]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'TraCuu')
     XLSX.writeFile(wb, `TraCuuHang_${view === 'sum' ? 'TongHop' : 'ChiTiet'}.xlsx`)
@@ -115,9 +116,9 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
                 </table>
               ) : (
                 <table className="w-full text-xs">
-                  <thead><tr className="bg-gray-50 border-b border-gray-100">{['Tên hàng', 'Số lô', 'Số lượng', 'Nguồn', 'Hướng xử lý', 'Tình trạng', 'Số phiếu / khách', 'Ngày', 'Kho', 'Trạng thái'].map(h => <th key={h} className="px-2 py-2 text-left text-gray-500 font-semibold">{h}</th>)}</tr></thead>
+                  <thead><tr className="bg-gray-50 border-b border-gray-100">{['Tên hàng', 'Số lô', 'Số lượng', 'Nguồn', 'Hướng xử lý', 'Tình trạng', 'Số phiếu / khách', 'Ngày', 'Kho', 'Kế toán', 'Trạng thái'].map(h => <th key={h} className="px-2 py-2 text-left text-gray-500 font-semibold">{h}</th>)}</tr></thead>
                   <tbody>
-                    {rows.length === 0 ? <tr><td colSpan={10} className="text-center py-10 text-gray-400 text-sm">Không có hàng phù hợp. Thử bỏ bớt bộ lọc.</td></tr> : rows.map(r => (
+                    {rows.length === 0 ? <tr><td colSpan={11} className="text-center py-10 text-gray-400 text-sm">Không có hàng phù hợp. Thử bỏ bớt bộ lọc.</td></tr> : rows.map(r => (
                       <tr key={r.id} onClick={() => setPicked(r.id)} className="border-b border-gray-50 align-top cursor-pointer hover:bg-blue-50/40">
                         <td className="px-2 py-2">{r.ma && <span className="font-mono text-gray-500">{r.ma} · </span>}{r.ten}</td>
                         <td className="px-2 py-2 font-mono">{r.soLo || '—'}</td>
@@ -128,6 +129,7 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
                         <td className="px-2 py-2 max-w-64"><div className="font-mono">{r.so || '—'}</div><div className="text-gray-400 line-clamp-2" title={r.who}>{r.who}</div></td>
                         <td className="px-2 py-2 whitespace-nowrap">{fmtDate(r.date)}</td>
                         <td className="px-2 py-2">{khoTag(r.kho)}</td>
+                        <td className="px-2 py-2 whitespace-nowrap text-gray-600" title={r.keToan}>{shortKeToan(r.keToan) || <span className="text-gray-400">—</span>}</td>
                         <td className="px-2 py-2">{stagePill(r)}</td>
                       </tr>
                     ))}
@@ -150,6 +152,7 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
             <dt className="text-gray-400">Hướng xử lý</dt><dd>{HUONG[pickedRow.huong]}</dd>
             <dt className="text-gray-400">Ngày</dt><dd>{fmtDate(pickedRow.date)}</dd>
             {pickedRow.huyPhieu && <><dt className="text-gray-400">Phiếu xuất huỷ</dt><dd className="font-mono">{pickedRow.huyPhieu}<div className="text-xs text-gray-400 font-sans">cùng dòng này, không hiện dòng riêng</div></dd></>}
+            <dt className="text-gray-400">Kế toán</dt><dd>{pickedRow.keToan || '—'}</dd>
             <dt className="text-gray-400">Khách / lý do</dt><dd>{pickedRow.who || '—'}</dd>
             <dt className="text-gray-400">Hàng</dt><dd>{pickedRow.ten}<div className="text-xs text-gray-400">Lô {pickedRow.soLo || '—'} · {pickedRow.soLuong} {pickedRow.dvt}</div></dd>
           </dl>
