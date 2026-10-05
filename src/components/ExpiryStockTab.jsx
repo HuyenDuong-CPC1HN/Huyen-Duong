@@ -164,11 +164,25 @@ function byExpiry(a, b) {
   return a.hanDung.localeCompare(b.hanDung)
 }
 
-const AGE_CLASS = {
-  expired: 'text-red-600 font-semibold',
-  near3: 'text-orange-600 font-semibold',
-  near6: 'text-amber-600 font-semibold',
-  near12: 'text-sky-700 font-medium',
+// Tô NỀN cả ô cột "Tuổi thuốc (Tháng)" theo thang màu 3 mốc kiểu Conditional Formatting "Đỏ-Vàng-Xanh lá"
+// của Excel (đúng 3 màu gốc Excel dùng: #F8696B / #FFEB84 / #63BE7B) — đỏ ở 0 tháng trở xuống (đã/sắp hết
+// hạn), vàng ở giữa thang, xanh lá từ AGE_GRADIENT_MONTHS tháng trở lên (an toàn). Chốt thang ở 12 tháng
+// (đúng mốc "an toàn" app đã dùng sẵn — classifyExpiry): hàng ở tab "Hàng cận date" đa số chỉ 0-6 tháng,
+// kéo thang quá dài khiến các mốc gần nhau nhìn gần như cùng 1 màu.
+const AGE_GRADIENT_MONTHS = 12
+const AGE_SCALE_RED = [248, 105, 107]
+const AGE_SCALE_YELLOW = [255, 235, 132]
+const AGE_SCALE_GREEN = [99, 190, 123]
+function mixRgb(a, b, t) {
+  return a.map((v, i) => Math.round(v + (b[i] - v) * t))
+}
+function ageBg(months) {
+  if (months === null || months === undefined) return undefined
+  const t = Math.max(0, Math.min(months, AGE_GRADIENT_MONTHS)) / AGE_GRADIENT_MONTHS
+  const [r, g, b] = t <= 0.5
+    ? mixRgb(AGE_SCALE_RED, AGE_SCALE_YELLOW, t / 0.5)
+    : mixRgb(AGE_SCALE_YELLOW, AGE_SCALE_GREEN, (t - 0.5) / 0.5)
+  return `rgb(${r}, ${g}, ${b})`
 }
 
 function ageTitle(daysLeft) {
@@ -810,12 +824,16 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                   const isAge = c === 'Tuổi thuốc (Tháng)'
                   const align = NUMERIC_COLUMNS.has(c) || c === 'Đvt' ? 'text-center' : ''
                   const mono = c === 'Mã vật tư' || c === 'Mã lô' || c === 'Tên lô' ? 'font-mono' : ''
-                  const emphasis = c === 'Tồn cuối' ? 'font-medium' : isAge ? AGE_CLASS[r.bucket] || 'text-gray-600' : ''
+                  const emphasis = c === 'Tồn cuối' ? 'font-medium' : isAge ? 'font-semibold' : ''
                   return (
                     <td
                       key={c}
                       className={`px-3 py-2 ${align} ${mono} ${emphasis}`}
-                      style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...stickyStyle(c, { rowBg }) }}
+                      style={{
+                        maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        ...stickyStyle(c, { rowBg }),
+                        ...(isAge ? { backgroundColor: ageBg(r.tuoiThuoc), color: '#1f2937' } : {}),
+                      }}
                       title={isAge ? ageTitle(r.daysLeft) : undefined}
                     >
                       {cellValue(c, r, i)}

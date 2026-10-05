@@ -198,7 +198,11 @@ function SaveWeekButton({ onSave, alreadySaved }) {
 
 // Đổi tên tuần đã lưu — mặc định label là "<tên file> · <ngày upload>", bấm bút chì để sửa lại
 // thành tên tuần báo cáo thật (vd "Tuần 12.09 - 18.09.2026") cho dễ nhận ra khi chọn lại sau này.
-function SavedWeekPicker({ reports, viewingId, onChange, onRename, onRemove, hasLiveData }) {
+// "Upload tuần mới" luôn là mục đầu tiên, cố định — tách riêng khỏi "Xem trực tiếp (tuần hiện tại)"
+// (trước đây gộp chung 1 chỗ, đổi nhãn theo hasLiveData — khiến không có cách nào bỏ dữ liệu đang xem
+// thử/chưa lưu để quay về màn hình upload trống, kể cả sau khi xoá 1 báo cáo test vừa lưu: dữ liệu thô
+// (rows/meta) không tự mất theo báo cáo, nên lại hiện ra như "tuần hiện tại" dù không còn báo cáo nào).
+function SavedWeekPicker({ reports, viewingId, onChange, onRename, onRemove, onUploadNew, hasLiveData }) {
   const [editing, setEditing] = useState(false)
   const [label, setLabel] = useState('')
   const viewingEntry = viewingId ? reports.find(r => r.id === viewingId) : null
@@ -238,14 +242,21 @@ function SavedWeekPicker({ reports, viewingId, onChange, onRename, onRemove, has
     )
   }
 
+  const selectValue = viewingId || (hasLiveData ? '' : '__new__')
+
   return (
     <div className="flex items-center gap-1">
       <select
-        value={viewingId || ''}
-        onChange={e => onChange(e.target.value || null)}
+        value={selectValue}
+        onChange={e => {
+          const v = e.target.value
+          if (v === '__new__') onUploadNew()
+          else onChange(v || null)
+        }}
         className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
       >
-        <option value="">{hasLiveData ? '— Xem trực tiếp (tuần hiện tại) —' : 'Upload tuần tiếp theo'}</option>
+        <option value="__new__">Upload tuần mới</option>
+        {hasLiveData && <option value="">— Xem trực tiếp (tuần hiện tại) —</option>}
         {reports.map(r => (
           <option key={r.id} value={r.id}>{r.label}</option>
         ))}
@@ -479,6 +490,19 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
   const showLive = Boolean(rows) && !viewingEntry && !(alreadySaved && !viewingId)
   const hasAnyState = rows !== null || reports.length > 0
 
+  // "Upload tuần mới" trong dropdown: bỏ hẳn rows/meta thô đang có (kể cả khi đã lưu, không còn gì
+  // để mất) để quay về khung upload trống thật sự — dùng khi test thử rồi muốn xoá sạch, thay vì chỉ
+  // xoá báo cáo đã lưu (xoá báo cáo không tự xoá rows/meta thô, nên trước đây lại hiện "xem trực tiếp").
+  const handleUploadNew = () => {
+    const hasUnsaved = Boolean(rows) && !alreadySaved
+    if (hasUnsaved && !window.confirm('Bỏ số liệu tuần đang xem (chưa lưu) để upload tuần mới? Không thể hoàn tác.')) return
+    localStorage.removeItem(SO_ROWS_KEY)
+    localStorage.removeItem(SO_META_KEY)
+    setRows(null)
+    setMeta(null)
+    setViewingId(null)
+  }
+
   return (
     <div>
       {hasAnyState && (
@@ -487,6 +511,7 @@ function DonSanView({ rosterSet, countMismatch, onCountMismatchChange, viewingId
             reports={reports} viewingId={viewingId} onChange={setViewingId}
             onRename={(id, label) => setReports(renameTrialReport('donSO', id, label))}
             onRemove={(id) => setReports(removeTrialReport('donSO', id))}
+            onUploadNew={handleUploadNew}
             hasLiveData={Boolean(rows) && !alreadySaved}
           />
           {showLive && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}
@@ -593,6 +618,16 @@ function DonTruyenThongView({ rosterSet, countMismatch, onCountMismatchChange, v
   const showLive = Boolean(rows) && !viewingEntry && !(alreadySaved && !viewingId)
   const hasAnyState = rows !== null || reports.length > 0
 
+  const handleUploadNew = () => {
+    const hasUnsaved = Boolean(rows) && !alreadySaved
+    if (hasUnsaved && !window.confirm('Bỏ số liệu tuần đang xem (chưa lưu) để upload tuần mới? Không thể hoàn tác.')) return
+    localStorage.removeItem(TT_ROWS_KEY)
+    localStorage.removeItem(TT_META_KEY)
+    setRows(null)
+    setMeta(null)
+    setViewingId(null)
+  }
+
   return (
     <div>
       {hasAnyState && (
@@ -601,6 +636,7 @@ function DonTruyenThongView({ rosterSet, countMismatch, onCountMismatchChange, v
             reports={reports} viewingId={viewingId} onChange={setViewingId}
             onRename={(id, label) => setReports(renameTrialReport('donTruyenThong', id, label))}
             onRemove={(id) => setReports(removeTrialReport('donTruyenThong', id))}
+            onUploadNew={handleUploadNew}
             hasLiveData={Boolean(rows) && !alreadySaved}
           />
           {showLive && <SaveWeekButton onSave={handleSave} alreadySaved={alreadySaved} />}

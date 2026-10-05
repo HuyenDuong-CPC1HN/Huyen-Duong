@@ -138,6 +138,35 @@ describe('ExpiryStockTab', () => {
 
   })
 
+  // Trước đây chỉ đổi màu CHỮ theo vài mốc rời rạc — người dùng muốn kiểu "thang màu 3 mốc" (Conditional
+  // Formatting) của Excel: tô NỀN cả ô theo thang đỏ-vàng-xanh lá liên tục, càng gần hết hạn càng đỏ,
+  // càng xa càng xanh lá, để nhìn màu nền là đoán ngay mức độ gấp gáp, không cần đọc số.
+  it('cột "Tuổi thuốc (Tháng)" tô NỀN theo thang đỏ-vàng-xanh lá liên tục, càng gần hết hạn càng đỏ', async () => {
+    render(<ExpiryStockTab />)
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [buildSampleFile()] } })
+    await waitFor(() => expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Tất cả tồn kho'))
+
+    const ageCellOf = (label) => screen.getByText(label).closest('tr').querySelectorAll('td')[9]
+    const expiredColor = ageCellOf('Hàng đã hết hạn').style.backgroundColor
+    const near3Color = ageCellOf('Hàng cận 3 tháng').style.backgroundColor
+    const near6Color = ageCellOf('Hàng cận 6 tháng').style.backgroundColor
+    const near12Color = ageCellOf('Hàng cận hạn 6-12 tháng').style.backgroundColor
+    const safeColor = ageCellOf('Hàng còn an toàn').style.backgroundColor
+    const hue = (rgb) => {
+      const [r, g, b] = rgb.match(/\d+/g).map(Number)
+      const max = Math.max(r, g, b), min = Math.min(r, g, b)
+      if (max === min) return 0
+      const d = max - min
+      return max === r ? (60 * (((g - b) / d) % 6)) : max === g ? (60 * ((b - r) / d + 2)) : (60 * ((r - g) / d + 4))
+    }
+    const hues = [expiredColor, near3Color, near6Color, near12Color, safeColor].map(hue)
+    // Hue tăng dần đều từ đỏ (~0) tới xanh lá (~120) đúng theo thứ tự tháng tăng dần.
+    for (let i = 1; i < hues.length; i++) expect(hues[i]).toBeGreaterThanOrEqual(hues[i - 1])
+    expect(hues[0]).toBeLessThanOrEqual(5)
+    expect(hues.at(-1)).toBeGreaterThan(90)
+  })
+
   it('cột Hướng xử lý nhập tay được và được nhớ theo tháng', async () => {
     render(<ExpiryStockTab />)
     const input = screen.getAllByPlaceholderText('Nhập hướng xử lý...')[0]
