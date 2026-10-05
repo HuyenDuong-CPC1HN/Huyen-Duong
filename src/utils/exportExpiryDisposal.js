@@ -224,7 +224,7 @@ export async function fillBienBanXuLy(templateBuffer, rows, { diaDiem = 'Kho CN 
   const workbookDoc = parseXml(zip.file(WORKBOOK_PATH).asText())
 
   const { ngay, thang, nam } = todayParts(date)
-  setCellString(sheetDoc, sstDoc, 4, 'A', `Số: ${soBB || '…..'}/${nam}/BC-CPC1HN`)
+  if (soBB) setCellString(sheetDoc, sstDoc, 4, 'A', `Số: ${soBB}/${nam}/BC-CPC1HN`)
   setCellString(sheetDoc, sstDoc, 5, 'H', `TP.Hồ Chí Minh ngày ${ngay} tháng ${thang} năm ${nam}`)
   appendAfterLabel(sheetDoc, sstDoc, 13, 'A', ngayGio || `Vào lúc 08h30’, ngày ${ngay} tháng ${thang} năm ${nam}`)
   appendAfterLabel(sheetDoc, sstDoc, 14, 'A', diaDiem)

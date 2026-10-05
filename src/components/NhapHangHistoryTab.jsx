@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { History, Search } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
+import { KhoTag } from './HangHuyBadges'
 
 // Tab con "Tra cứu lịch sử nhập hàng" (menu Nhập hàng) — tìm theo Mã hàng / Tên hàng trong các chuyến nhập đã
 // lưu (tìm ngay trên dữ liệu đã tải), bấm "Tìm trên Supabase" để tìm trên toàn bộ lịch sử ở máy chủ.
@@ -124,7 +125,7 @@ export default function NhapHangHistoryTab() {
                 {displayHistory.map((row, i) => (
                   <tr key={`${row.ma_hang}-${row.so_lo}-${i}`} className="border-t border-gray-50">
                     <td className="px-2 py-1.5">{formatDateVi(row.goods_receipt_batches?.processed_at?.slice(0, 10))}</td>
-                    <td className="px-2 py-1.5">{row.warehouse}</td>
+                    <td className="px-2 py-1.5"><KhoTag kho={row.warehouse === 'C' ? 'C' : 'DTP'} /></td>
                     <td className="px-2 py-1.5 font-medium">{row.ma_hang}</td>
                     <td className="px-2 py-1.5">{row.ten_hang}</td>
                     <td className="px-2 py-1.5">{row.so_lo}</td>
