@@ -121,6 +121,8 @@ const CAN_DATE_VIEWS = [
 const CAN_DATE_COLUMNS = ['Stt', 'Loại', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn cuối', 'Hướng xử lý']
 const CLC_COLUMNS = ['Stt', 'Loại', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô', 'Tên lô', 'Hạn dùng', 'Tuổi thuốc (Tháng)', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối', 'Hướng xử lý']
 const NUMERIC_COLUMNS = new Set(['Stt', 'Tuổi thuốc (Tháng)', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối'])
+// 5 cột đầu (giống nhau ở cả 2 sheet) cố định khi kéo ngang — luôn đúng 1 dải liên tục ngay sau cột tích chọn.
+const STICKY_COLUMNS = new Set(['Stt', 'Loại', 'Mã vật tư', 'Tên vật tư', 'Mã kho'])
 const DEFAULT_COL_WIDTH = {
   'Stt': 56, 'Loại': 90, 'Mã vật tư': 100, 'Tên vật tư': 280, 'Mã kho': 84, 'Đvt': 70, 'Mã lô': 100, 'Tên lô': 100,
   'Hạn dùng': 100, 'Tuổi thuốc (Tháng)': 120, 'Tồn đầu': 90, 'Sl nhập': 84, 'Sl xuất': 84, 'Tồn cuối': 90, 'Hướng xử lý': 220,
@@ -714,10 +716,27 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        {(() => {
+          // Offset trái tích luỹ cho từng cột cố định — luôn tính lại theo colWidths hiện tại (cột
+          // có thể bị kéo đổi độ rộng), dừng ngay khi gặp cột không nằm trong STICKY_COLUMNS.
+          let acc = CHECK_COL_WIDTH
+          const stickyLefts = {}
+          for (const c of columns) {
+            if (!STICKY_COLUMNS.has(c)) break
+            stickyLefts[c] = acc
+            acc += colWidths[c]
+          }
+          const lastSticky = Object.keys(stickyLefts).pop()
+          const stickyStyle = (c, extra) => STICKY_COLUMNS.has(c) ? {
+            position: 'sticky', left: stickyLefts[c], zIndex: extra?.th ? 20 : 10,
+            background: extra?.th ? '#1e3a5f' : (extra?.rowBg || '#fff'),
+            boxShadow: c === lastSticky ? '4px 0 6px -4px rgba(0,0,0,0.15)' : undefined,
+          } : {}
+          return (
         <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: CHECK_COL_WIDTH + columns.reduce((sum, c) => sum + colWidths[c], 0), minWidth: '100%' }}>
           <thead>
             <tr className="bg-[#1e3a5f] text-white text-xs">
-              <th className="px-2 py-2.5 text-center" style={{ width: CHECK_COL_WIDTH }}>
+              <th className="px-2 py-2.5 text-center" style={{ width: CHECK_COL_WIDTH, position: 'sticky', left: 0, zIndex: 20, background: '#1e3a5f' }}>
                 <input
                   type="checkbox"
                   aria-label="Tích tất cả hàng đang hiện để đưa vào báo cáo"
@@ -733,7 +752,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                 <th
                   key={c}
                   className={`px-3 py-2.5 font-semibold whitespace-nowrap relative ${NUMERIC_COLUMNS.has(c) || c === 'Đvt' ? 'text-center' : 'text-left'}`}
-                  style={{ width: colWidths[c] }}
+                  style={{ width: colWidths[c], ...stickyStyle(c, { th: true }) }}
                 >
                   {c}
                   <ResizeHandle colKey={c} setWidth={setColWidth} />
@@ -751,9 +770,11 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                   </div>
                 </td>
               </tr>
-            ) : filteredRows.map((r, i) => (
+            ) : filteredRows.map((r, i) => {
+              const rowBg = checkedKeys.has(r.rowKey) && isEligible(r) ? '#ecfdf5' : '#fff'
+              return (
               <tr key={r.rowKey} className={`border-b border-gray-100 text-[12px] hover:bg-blue-50/40 ${checkedKeys.has(r.rowKey) && isEligible(r) ? 'bg-emerald-50/60' : ''}`}>
-                <td className="px-2 py-2 text-center">
+                <td className="px-2 py-2 text-center" style={{ position: 'sticky', left: 0, zIndex: 10, background: rowBg }}>
                   {isEligible(r) && (
                     <input
                       type="checkbox"
@@ -767,7 +788,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                 {columns.map(c => {
                   if (c === 'Loại') {
                     return (
-                      <td key={c} className="px-2 py-2">
+                      <td key={c} className="px-2 py-2" style={stickyStyle(c, { rowBg })}>
                         <span className={`px-2 py-0.5 rounded border text-[11px] font-semibold ${ENTITY_BADGE[r.entity]}`}>{EXPIRY_ENTITIES[r.entity]?.label}</span>
                       </td>
                     )
@@ -794,7 +815,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                     <td
                       key={c}
                       className={`px-3 py-2 ${align} ${mono} ${emphasis}`}
-                      style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...stickyStyle(c, { rowBg }) }}
                       title={isAge ? ageTitle(r.daysLeft) : undefined}
                     >
                       {cellValue(c, r, i)}
@@ -802,9 +823,12 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                   )
                 })}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
+          )
+        })()}
       </div>
     </div>
   )
