@@ -76,6 +76,82 @@ describe('UnifiedTrialTab — SavedWeekPicker: nút "Xoá báo cáo tuần này"
   })
 })
 
+function seedDonSOLive(rows) {
+  store.opsStore.setItem('unified_trial_donSO_rows', JSON.stringify(rows))
+  store.opsStore.setItem('unified_trial_donSO_meta', JSON.stringify({ fileName: 'so.xlsx', uploadedAt: new Date().toISOString() }))
+}
+
+// Bug thật đã gặp: dropdown gộp chung "Xem trực tiếp (tuần hiện tại)" và "Upload tuần mới" vào 1 chỗ
+// (đổi nhãn theo hasLiveData) nên không có cách nào bỏ dữ liệu test/chưa lưu để quay về màn hình upload
+// trống — kể cả sau khi xoá báo cáo đã lưu: rows/meta thô không tự xoá theo report, nên lại hiện ra như
+// "tuần hiện tại" dù người dùng vừa chủ động xoá. "Upload tuần mới" giờ luôn là option đầu tiên, cố định,
+// và chọn nó sẽ xoá hẳn rows/meta thô để quay về khung upload trống thật sự.
+describe('UnifiedTrialTab — dropdown "Upload tuần mới" luôn là lựa chọn đầu tiên, cố định', () => {
+  it('đang có dữ liệu chưa lưu -> option đầu luôn là "Upload tuần mới", "Xem trực tiếp" là option thứ 2', async () => {
+    seedDonSOLive([])
+    render(<UnifiedTrialTab />)
+    const select = await screen.findByRole('combobox')
+    const options = [...select.querySelectorAll('option')].map(o => o.textContent)
+    expect(options[0]).toBe('Upload tuần mới')
+    expect(options[1]).toBe('— Xem trực tiếp (tuần hiện tại) —')
+  })
+
+  it('chọn "Upload tuần mới" khi đang có dữ liệu chưa lưu -> hỏi xác nhận, xác nhận thì xoá sạch, quay về màn hình upload trống', async () => {
+    seedDonSOLive([])
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<UnifiedTrialTab />)
+
+    const select = await screen.findByRole('combobox')
+    fireEvent.change(select, { target: { value: '__new__' } })
+    expect(window.confirm).toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(store.opsStore.getItem('unified_trial_donSO_rows')).toBeNull()
+      expect(store.opsStore.getItem('unified_trial_donSO_meta')).toBeNull()
+    })
+    // Không còn báo cáo nào đã lưu -> dropdown biến mất hẳn, chỉ còn khung upload trống.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('chọn "Upload tuần mới" nhưng huỷ xác nhận -> dữ liệu đang xem vẫn còn nguyên', async () => {
+    seedDonSOLive([])
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<UnifiedTrialTab />)
+
+    const select = await screen.findByRole('combobox')
+    fireEvent.change(select, { target: { value: '__new__' } })
+    expect(store.opsStore.getItem('unified_trial_donSO_rows')).not.toBeNull()
+  })
+
+  it('upload tuần test -> lưu -> xoá báo cáo vừa lưu -> dữ liệu thô cũ hiện lại như "tuần hiện tại", nhưng vẫn chọn được "Upload tuần mới" để dọn sạch hẳn', async () => {
+    const uploadedAt = new Date().toISOString()
+    store.opsStore.setItem('unified_trial_donSO_rows', JSON.stringify([]))
+    store.opsStore.setItem('unified_trial_donSO_meta', JSON.stringify({ fileName: 'so.xlsx', uploadedAt }))
+    store.opsStore.setItem('unified_trial_reports_donSO', JSON.stringify([{
+      id: uploadedAt, label: 'Tuần test', fileName: 'so.xlsx', createdAt: uploadedAt,
+      total: 0, tmdtCount: 0, ngoaiSanCount: 0, otherCount: 0, mismatchCount: 0, shops: [], spxWeekId: null, carrierLookup: {},
+    }]))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<UnifiedTrialTab />)
+    const select = await screen.findByRole('combobox')
+    fireEvent.change(select, { target: { value: uploadedAt } })
+    fireEvent.click(screen.getByTitle('Xoá báo cáo tuần này'))
+
+    await waitFor(() => {
+      const opts = [...select.querySelectorAll('option')].map(o => o.textContent)
+      expect(opts[0]).toBe('Upload tuần mới')
+      expect(opts).toContain('— Xem trực tiếp (tuần hiện tại) —')
+    })
+
+    fireEvent.change(select, { target: { value: '__new__' } })
+    await waitFor(() => {
+      expect(store.opsStore.getItem('unified_trial_donSO_rows')).toBeNull()
+      expect(store.opsStore.getItem('unified_trial_donSO_meta')).toBeNull()
+    })
+  })
+})
+
 function seedDonTruyenThong(rows) {
   store.opsStore.setItem('unified_trial_donTT_rows', JSON.stringify(rows))
   store.opsStore.setItem('unified_trial_donTT_meta', JSON.stringify({ fileName: 'tt.xlsx', uploadedAt: new Date().toISOString() }))
