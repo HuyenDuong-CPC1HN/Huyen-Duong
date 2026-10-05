@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Upload, FileUp, FileSpreadsheet, X, AlertTriangle, Clock, CircleAlert, Search, PackageSearch, Download, FileWarning, Hourglass, TriangleAlert, CalendarRange, FileDown } from 'lucide-react'
+import { Upload, FileUp, FileSpreadsheet, X, AlertTriangle, Clock, CircleAlert, Search, PackageSearch, Download, FileWarning, Hourglass, TriangleAlert, CalendarRange, FileDown, Plus } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { opsStore as localStorage } from '../data/workspace'
 import { ResizeHandle } from './DataTable'
@@ -30,6 +30,7 @@ const ACTIVE_KEY = 'expiry_stock_active'
 const ENTITY_KEYS = Object.keys(EXPIRY_ENTITIES)
 const entityOf = m => m.entity || 'donC'
 const MAX_MONTHS = 24 // tối đa số file giữ lại
+const NEW_MONTH = '__new__'
 
 // Tháng của file = tháng của ngày cuối kỳ báo cáo trong file ("đến ngày ..."), KHÔNG theo ngày tải lên — trước đây
 // tính theo ngày tải nên tải file nhiều tháng trong cùng 1 ngày thì các file đè lên nhau. File không đọc được kỳ
@@ -239,7 +240,10 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
   const [months, setMonths] = useState(() => readMonths())
   const periods = useMemo(() => [...new Set(months.map(periodOf))].sort().reverse(), [months])
   const [periodSel, setPeriodSel] = useState(() => localStorage.getItem(ACTIVE_KEY))
-  const period = periods.includes(periodSel) ? periodSel : (periods[0] || null)
+  // "Xử lý tháng mới": màn hình trống để tải 2 file của tháng mới, không hiện dữ liệu tháng cũ (tháng cũ vẫn
+  // giữ nguyên, bấm nút tháng để xem lại). Tải file xong tự chuyển sang đúng tháng của file.
+  const isNewMonth = periodSel === NEW_MONTH
+  const period = isNewMonth ? null : (periods.includes(periodSel) ? periodSel : (periods[0] || null))
   const [entSel, setEntSel] = useState('all') // all | donC | donDTP
   const entries = useMemo(() => {
     const out = {}
@@ -517,9 +521,44 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
     </p>
   )
 
-  if (periods.length === 0) {
+  const monthBar = (
+    <div className="flex flex-wrap items-center gap-1.5 mb-3">
+      {periods.length > 0 && <span className="text-xs text-gray-500 mr-1">Tháng:</span>}
+      {periods.map(p => (
+        <button
+          key={p}
+          onClick={() => selectPeriod(p)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+            p === period ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+          }`}
+        >
+          Tháng {periodLabel(p)}
+        </button>
+      ))}
+      {periods.length > 0 && (
+        <button
+          type="button"
+          onClick={() => { setPeriodSel(NEW_MONTH); setError(''); setKhoFilter('all') }}
+          aria-pressed={isNewMonth}
+          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+            isNewMonth ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+          }`}
+        >
+          <Plus size={13} /> Xử lý tháng mới
+        </button>
+      )}
+    </div>
+  )
+
+  if (periods.length === 0 || isNewMonth) {
     return (
       <div>
+        {periods.length > 0 && monthBar}
+        {isNewMonth && (
+          <p className="mb-3 text-sm text-emerald-700">
+            Đang xử lý tháng mới — tải file Kho C và Kho DTP của tháng này. Dữ liệu các tháng trước vẫn giữ nguyên, bấm nút tháng ở trên để xem lại.
+          </p>
+        )}
         {slots}
         {hint}
         {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
@@ -535,22 +574,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
 
   return (
     <div>
-      {periods.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <span className="text-xs text-gray-500 mr-1">Tháng:</span>
-          {periods.map(p => (
-            <button
-              key={p}
-              onClick={() => selectPeriod(p)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                p === period ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
-              }`}
-            >
-              Tháng {periodLabel(p)}
-            </button>
-          ))}
-        </div>
-      )}
+      {monthBar}
       {slots}
       {hint}
 

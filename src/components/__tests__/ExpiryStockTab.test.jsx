@@ -282,4 +282,21 @@ describe('ExpiryStockTab — mỗi tháng lưu riêng, không đè file', () => 
     expect(screen.getByText('dtp-cu.xlsx')).toBeInTheDocument()
     expect(screen.getByText('Chưa có file Kho C')).toBeInTheDocument()
   })
+
+  it('nút "Xử lý tháng mới": màn hình trống, tải file xong tự chuyển sang tháng của file, tháng cũ vẫn còn', async () => {
+    store.opsStore.removeItem('expiry_stock_months')
+    render(<ExpiryStockTab mode="clc" />)
+    fireEvent.change(screen.getByLabelText('Tải file Kho C'), { target: { files: [fileFor('thang9', ['01/07/2026', '30/09/2026'])] } })
+    await waitFor(() => expect(screen.getByText('thang9.xlsx')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Xử lý tháng mới/ }))
+    expect(screen.queryByText('thang9.xlsx')).not.toBeInTheDocument()
+    expect(screen.getByText('Chưa có file Kho C')).toBeInTheDocument()
+    expect(screen.getByText(/Đang xử lý tháng mới/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Tải file Kho C'), { target: { files: [fileFor('thang10', ['01/08/2026', '31/10/2026'])] } })
+    await waitFor(() => expect(screen.getByText('thang10.xlsx')).toBeInTheDocument())
+    expect(screen.queryByText(/Đang xử lý tháng mới/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Tháng 09/2026' }))
+    expect(screen.getByText('thang9.xlsx')).toBeInTheDocument()
+  })
 })
