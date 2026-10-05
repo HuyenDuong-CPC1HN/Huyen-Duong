@@ -58,7 +58,6 @@ export default function KhoAHuyWorkspace({ record, onChange, onBack }) {
     try {
       if (kind === 'xuLy') await exportDamagedGoodsKhoAXuLy(record)
       else await exportDamagedGoodsKhoAXacMinh(record)
-      if (record.status !== 'done') onChange({ ...record, status: 'exported' })
     } catch (err) {
       setError(err.message || 'Xuất file thất bại.')
     } finally {
