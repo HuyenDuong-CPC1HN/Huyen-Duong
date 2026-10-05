@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fixtures from '../../utils/__tests__/fixtures/returnSlipPdfLines.json'
+import invoiceFixtures from '../../utils/__tests__/fixtures/invoiceLines.json'
 import ReturnSlipsTab from '../ReturnSlipsTab'
 import ReturnReminderBell from '../ReturnReminderBell'
 
@@ -142,6 +143,18 @@ describe('ReturnSlipsTab — Theo dõi nhập trả lại', () => {
     fireEvent.click(rowOf('DHC160926/01227'))
     fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['%PDF'], 'bbth_2.pdf')] } })
     await waitFor(() => expect(screen.getByText(/khác phiếu đang chọn/)).toBeInTheDocument())
+  })
+
+  it('nút "Tải PDF phiếu / hoá đơn" nhận cả hoá đơn GTGT: tạo đơn thủ công điền sẵn từ hoá đơn', async () => {
+    pdfMock.lines = invoiceFixtures.dtp_chiet_khau
+    render(<ReturnSlipsTab />)
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['%PDF'], 'hoadon.pdf')] } })
+    await waitFor(() => expect(readSlipsFromStore()).toHaveLength(1))
+    const [slip] = readSlipsFromStore()
+    expect(slip).toMatchObject({ khachHang: 'Trần Thị C', stage: 'doing' })
+    expect(slip.form).toMatchObject({ soHD: '00753334', kyHieu: '1C26MNT', xmMau: 'U' })
+    expect(slip.pdf.items[0]).toMatchObject({ ten: 'Prafeno inhaler - Hộp 1 bình 200 liều xịt', soLuong: 13, donGia: 130200 })
+    expect(screen.queryByText(/Không nhận ra mẫu biên bản/)).not.toBeInTheDocument()
   })
 
   it('đơn nhập theo mẫu cũ vẫn xem được ở mục riêng', () => {

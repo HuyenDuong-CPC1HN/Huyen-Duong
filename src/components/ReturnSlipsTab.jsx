@@ -4,14 +4,22 @@ import { opsStore } from '../data/workspace'
 import { readSlips, writeSlips } from '../data/returnSlipsStore'
 import {
   REMINDER_RULES,
-  slipLoai, slipReminders, nextMorning, newSlipForm, toIsoDate, parseReturnSlipLines,
+  slipLoai, slipReminders, nextMorning, newSlipForm, toIsoDate, parseReturnSlipLines, manualPdfFromInvoice,
 } from '../utils/returnSlips'
 import { extractPdfLines } from '../utils/returnSlipPdf'
+import { parseInvoiceLines } from '../utils/parseInvoicePdf'
+
 import ReturnSlipWorkspace from './ReturnSlipWorkspace'
 import { LoaiTag, StagePill } from './ReturnSlipBadges'
 import ReturnRecordForm from './ReturnRecordForm'
 import ReturnRecordView from './ReturnRecordView'
 import { exportTraHang, exportXacMinh } from '../utils/exportReturnReport'
+
+// File tải lên là hoá đơn GTGT / phiếu xuất kho bán hàng (không phải biên bản trả lại in từ website).
+const looksLikeInvoice = lines => {
+  const text = lines.join('\n')
+  return /HÓA ĐƠN GIÁ TRỊ GIA TĂNG/i.test(text) || (/PHIẾU XUẤT KHO/i.test(text) && /Mã SP/.test(text) && !/BIÊN BẢN/i.test(text))
+}
 
 // Theo dõi nhập trả lại — 1 danh sách chung cho Đơn C và Đơn DTP (lọc được), theo quy trình: sales tạo phiếu
 // trên website → duyệt → kho làm bộ biên bản trên app → ký đủ, nhập kho. Phiếu lưu ở ops_settings
@@ -316,7 +324,21 @@ export default function ReturnSlipsTab({ initialOpenId = null }) {
     setError('')
     setUploading(true)
     try {
-      const pdf = parseReturnSlipLines(await extractPdfLines(await file.arrayBuffer()))
+      const lines = await extractPdfLines(await file.arrayBuffer())
+      // Không phải biên bản trả lại in từ website mà là hoá đơn GTGT / phiếu xuất kho bán hàng: tạo đơn thủ công và
+      // điền sẵn từ hoá đơn, giống nút "Đọc từ hoá đơn (PDF)" trong màn làm biên bản.
+      if (looksLikeInvoice(lines)) {
+        const inv = parseInvoiceLines(lines)
+        const nowIso = new Date().toISOString()
+        const base = { id: `slip_${Date.now()}`, maPhieu: '', donHang: '', khachHang: inv.benMua.ten || '', nhanVien: '', lyDo: '', createdAt: nowIso, approvedAt: nowIso, stage: 'doing' }
+        const { pdf, formPatch } = manualPdfFromInvoice(inv, base)
+        const slip = { ...base, form: { ...newSlipForm(0), ...formPatch }, pdf: { ...pdf, fileName: file.name } }
+        save([slip, ...slips])
+        setMonth(monthKey(nowIso))
+        setOpenId(slip.id)
+        return
+      }
+      const pdf = parseReturnSlipLines(lines)
       const nowIso = new Date().toISOString()
       const form = newSlipForm(pdf.items.length)
       if (pdf.benMua?.mst) form.mst = pdf.benMua.mst
@@ -394,7 +416,7 @@ export default function ReturnSlipsTab({ initialOpenId = null }) {
             </div>
             <div className="flex flex-wrap gap-2 ml-auto">
               <button type="button" onClick={() => pdfInputRef.current.click()} disabled={uploading} className="sheet-tab-action">
-                <FileUp size={13} /> {uploading ? 'Đang đọc file…' : 'Tải PDF phiếu đã duyệt'}
+                <FileUp size={13} /> {uploading ? 'Đang đọc file…' : 'Tải PDF phiếu / hoá đơn'}
               </button>
               <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden" onChange={e => { void createFromPdf(e.target.files[0]); e.target.value = '' }} />
               <button type="button" onClick={createManual} className="sheet-tab-action" title="Đơn không có phiếu/PDF từ website: nhập tay hoặc đọc từ hoá đơn">
