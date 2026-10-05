@@ -1,7 +1,7 @@
 // Trạng thái hồ sơ huỷ Kho A (dùng chung giữa danh sách và màn làm biên bản). Hồ sơ làm từ PXK kế toán đã xuất
-// nên mặc định là "Đã xuất hết"; trạng thái cũ (draft / exported) cũng hiện như vậy.
+// nên mặc định là "Đã xuất" (nhãn xanh lá); trạng thái cũ (draft / exported) cũng hiện như vậy.
 export const KHO_A_STATUS = {
-  draft: { label: 'Đã xuất hết', cls: 'bg-amber-50 text-amber-700' },
+  draft: { label: 'Đã xuất', cls: 'bg-green-50 text-green-700' },
   done: { label: 'Đã ký đủ', cls: 'bg-green-100 text-green-700' },
 }
 

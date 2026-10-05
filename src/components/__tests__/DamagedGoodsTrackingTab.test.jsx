@@ -20,7 +20,7 @@ describe('Hồ sơ huỷ Kho A — màn làm biên bản có xem trước để 
       items: [{ maHang: 'J00633', tenHang: 'Cjel Sleep - Hộp 20 gói 15g', soLo: '070924', hanDung: '2026-09-09', dvt: 'GOI', soLuong: 2355, quyCach: '' }],
     }]))
     render(<DamagedGoodsTrackingTab />)
-    expect(screen.getByText('Đã xuất hết')).toBeInTheDocument()
+    expect(screen.getByText('Đã xuất')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Mở \/ In/ }))
     expect(screen.getAllByText('BIÊN BẢN XỬ LÝ SẢN PHẨM').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Cjel Sleep - Hộp 20 gói 15g').length).toBeGreaterThan(0)
