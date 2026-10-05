@@ -157,6 +157,19 @@ describe('ReturnSlipsTab — Theo dõi nhập trả lại', () => {
     expect(screen.queryByText(/Không nhận ra mẫu biên bản/)).not.toBeInTheDocument()
   })
 
+  it('có cột "Kế toán xử lý" lấy theo đại diện Bên A trên biên bản, tìm được theo tên kế toán', () => {
+    seed([
+      { id: 'k1', maPhieu: 'DHC1', khachHang: 'Khách A', stage: 'doing', createdAt: '2026-09-28T08:00:00', approvedAt: '2026-09-28T09:00:00', form: { benA: 'Võ Thị Ly' } },
+      { id: 'k2', maPhieu: 'DHC2', khachHang: 'Khách B', stage: 'todo', createdAt: '2026-09-28T08:00:00', approvedAt: '2026-09-28T09:00:00' },
+    ])
+    render(<ReturnSlipsTab />)
+    expect(screen.getByRole('columnheader', { name: 'Kế toán xử lý' })).toBeInTheDocument()
+    expect(within(rowOf('DHC1')).getByText('Võ Thị Ly')).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText(/Tìm khách hàng/), { target: { value: 'võ thị ly' } })
+    expect(rowOf('DHC1')).toBeTruthy()
+    expect(rowOf('DHC2')).toBeUndefined()
+  })
+
   it('đơn nhập theo mẫu cũ vẫn xem được ở mục riêng', () => {
     store.values.set('return_records', JSON.stringify([{ id: 'old1', entity: 'donC', year: 2026, month: 8, customerName: 'Khách cũ', status: 'exported', invoices: [], products: [] }]))
     render(<ReturnSlipsTab />)

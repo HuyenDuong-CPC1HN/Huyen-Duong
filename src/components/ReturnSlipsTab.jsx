@@ -286,7 +286,7 @@ export default function ReturnSlipsTab({ initialOpenId = null }) {
     .filter(s => stageFilter === 'all' || s.stage === stageFilter || (stageFilter === 'doing' && s.stage === 'exported'))
     .filter(s => {
       const q = search.trim().toLowerCase()
-      return !q || [s.khachHang, s.maPhieu, s.donHang, s.nhanVien].some(v => String(v || '').toLowerCase().includes(q))
+      return !q || [s.khachHang, s.maPhieu, s.donHang, s.nhanVien, s.form?.benA].some(v => String(v || '').toLowerCase().includes(q))
     })
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
 
@@ -448,6 +448,7 @@ export default function ReturnSlipsTab({ initialOpenId = null }) {
                     <th className="px-2 py-2 text-left text-gray-500 font-semibold">Mã phiếu / Đơn hàng</th>
                     <th className="px-2 py-2 text-left text-gray-500 font-semibold">Khách hàng</th>
                     <th className="px-2 py-2 text-left text-gray-500 font-semibold">Nhân viên</th>
+                    <th className="px-2 py-2 text-left text-gray-500 font-semibold">Kế toán xử lý</th>
                     <th className="px-2 py-2 text-left text-gray-500 font-semibold">Duyệt</th>
                     <th className="px-2 py-2 text-left text-gray-500 font-semibold">Loại đơn</th>
                     <th className="px-2 py-2 text-left text-gray-500 font-semibold">Lý do</th>
@@ -457,13 +458,15 @@ export default function ReturnSlipsTab({ initialOpenId = null }) {
                 </thead>
                 <tbody>
                   {visible.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">Chưa có phiếu trả hàng phù hợp</td></tr>
+                    <tr><td colSpan={9} className="text-center py-10 text-gray-400 text-sm">Chưa có phiếu trả hàng phù hợp</td></tr>
                   ) : visible.map(s => (
                     <tr key={s.id} onClick={() => { if (s.stage !== 'wait') setOpenId(s.id) }}
                       className={`border-b border-gray-50 align-top ${s.stage === 'wait' ? '' : 'cursor-pointer hover:bg-blue-50/40'}`}>
                       <td className="px-2 py-2 font-mono">{s.maPhieu || '—'}<div className="text-gray-400">{s.donHang}</div></td>
                       <td className="px-2 py-2 font-medium text-gray-800">{s.khachHang || '—'}</td>
                       <td className="px-2 py-2 text-gray-600">{s.nhanVien || '—'}</td>
+                      {/* Kế toán = đại diện Bên A trên biên bản trả lại (chọn ở màn làm biên bản) */}
+                      <td className="px-2 py-2 text-gray-600">{s.form?.benA || '—'}</td>
                       <td className="px-2 py-2 text-gray-600">
                         {s.stage === 'wait' ? (
                           <div className="flex flex-col gap-1">
