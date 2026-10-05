@@ -16,6 +16,10 @@ function undouble(s) {
 
 const ROW_RE = /^(\d{1,3})\s+(?:\S+\s+)??(\S+)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\S+)\s+([\d.,]+)\s+([\d.,]+)\s+[\d.,]+\s+[\d.,]+\s+\d+(?:[.,]\d+)?%\s+[\d.,]+\s+([\d.,]+)$/
 const NUMERIC_ONLY_RE = /^[\d.,%\s]+$/
+// Dòng "Chiết khấu thương mại theo chương trình bán hàng" của hoá đơn (không lô/hạn dùng, ĐVT "VND", vd
+// "2 VND 0 372,000 5% 18,600 390,600"): bỏ qua, không trừ vào giá hàng trả lại — chỉ dùng làm ranh giới để tên
+// dòng chiết khấu không bị ghép vào tên hàng phía trên.
+const DISCOUNT_ROW_RE = /^(\d{1,3})\s+(?:\S+\s+)?VND\s+[\d.,]+\s+[\d.,]+\s+\d+(?:[.,]\d+)?%\s+[\d.,]+\s+([\d.,]+)$/
 
 // Số theo kiểu Việt Nam: "5.509,259" → 5509.259 · "220.370" → 220370 · "40,000" → 40 · "(21.296)" → -21296
 const viNum = s => {
@@ -110,7 +114,10 @@ export function parseInvoiceLines(rawLines) {
   const donVi = undouble(find(/Đơn vị mua hàng:\s*(.*?)\s*Hình thức/)?.[1] || '')
   const person = clean((find(/Họ tên người mua hàng:\s*(.*?)\s*(?:Kho:|$)/m)?.[1] || '')
     .replace(/^Bán cho người tiêu dùng\s*-\s*/i, '').replace(/\s0\d{9,10}$/, ''))
-  const diaChi = clean(text.split('\n').find(l => /^Địa chỉ:\s*-/.test(l)) || '')
+  // Địa chỉ người mua: dòng "Địa chỉ:" nằm sau dòng người mua (dòng "Địa chỉ:" đầu tiên là của bên bán).
+  const buyerAt = lines.findIndex(l => /^(Họ tên người mua hàng|Đơn vị mua hàng):/.test(l))
+  const diaChi = clean((buyerAt === -1 ? [] : lines.slice(buyerAt)).find(l => /^Địa chỉ:/.test(l)) || '')
+    .replace(/\s*Đồng tiền thanh toán:.*$/, '')
   const mstBuyer = /^Mã số thuế:\s*(\d[\d-]*)/m.exec(text.split('\n').filter(l => /^Mã số thuế:/.test(l)).join('\n'))?.[1] || ''
 
   const result = {
@@ -119,21 +126,25 @@ export function parseInvoiceLines(rawLines) {
     ngayHD: dm ? `${dm[3]}-${dm[2].padStart(2, '0')}-${dm[1].padStart(2, '0')}` : '',
     mau: /UPHARMA/i.test(seller) ? 'UPHARMA' : /CPC1/i.test(seller) ? 'CPC1HN' : null,
     benBan: seller,
-    benMua: { ten: donVi || person, diaChi: diaChi.replace(/^Địa chỉ:\s*-?\s*(Đồng tiền.*)?$/, ''), mst: mstBuyer },
+    benMua: { ten: donVi || person, diaChi: diaChi.replace(/^Địa chỉ:\s*-?\s*/, ''), mst: mstBuyer },
     items: [],
     tongTien: 0,
   }
 
   // Bảng hàng: bắt đầu sau dòng đánh số cột "1 1 2 2 …", kết thúc ở "Tổng cộng tiền thanh toán". Tên hàng dài xuống
   // dòng nằm quanh dòng số liệu (căn giữa ô): dòng liền trên là đầu tên, dòng liền dưới là phần đuôi.
+  let hasDiscount = false
   const start = lines.findIndex(l => /^1\s+1\s+2\s+2\s+3\s+3/.test(l))
   const end = lines.findIndex(l => /^Tổng cộng tiền thanh toán/i.test(l))
   if (start !== -1 && end !== -1) {
     const body = lines.slice(start + 1, end)
+    // Ranh giới từng dòng hàng gồm cả dòng chiết khấu, để tên dòng chiết khấu không bị ghép vào tên hàng.
     const rows = []
-    body.forEach((l, i) => { if (ROW_RE.test(l)) rows.push(i) })
+    body.forEach((l, i) => { if (ROW_RE.test(l) || DISCOUNT_ROW_RE.test(l)) rows.push(i) })
+    if (rows.some(i => DISCOUNT_ROW_RE.test(body[i]))) hasDiscount = true
     rows.forEach((at, k) => {
       const m = ROW_RE.exec(body[at])
+      if (!m) return
       const nextAt = k + 1 < rows.length ? rows[k + 1] : body.length
       const between = body.slice(at + 1, nextAt).filter(l => !NUMERIC_ONLY_RE.test(l))
       const prevAt = k > 0 ? rows[k - 1] : -1
@@ -153,7 +164,9 @@ export function parseInvoiceLines(rawLines) {
       })
     })
   }
-  result.tongTien = num(find(/Tổng cộng tiền thanh toán:?\s*(?:Tổng cộng tiền thanh toán:?\s*)?([\d.,]+)/)?.[1]) || result.items.reduce((s, it) => s + it.thanhTien, 0)
+  const itemsTotal = result.items.reduce((sum, it) => sum + it.thanhTien, 0)
+  // Có dòng chiết khấu (đã bỏ qua): tổng tiền = tổng các dòng hàng, không lấy "Tổng cộng tiền thanh toán" đã trừ chiết khấu.
+  result.tongTien = hasDiscount ? itemsTotal : (num(find(/Tổng cộng tiền thanh toán:?\s*(?:Tổng cộng tiền thanh toán:?\s*)?([\d.,]+)/)?.[1]) || itemsTotal)
   if (result.items.length === 0) throw new Error('Không đọc được bảng hàng hoá trong hoá đơn. Kiểm tra lại file PDF.')
   return result
 }

@@ -33,4 +33,13 @@ describe('parseInvoiceLines', () => {
   it('không phải hoá đơn → báo lỗi', () => {
     expect(() => parseInvoiceLines(['Biên bản trả lại hàng'])).toThrow(/Không nhận ra file/)
   })
+
+  it('hoá đơn DTP có dòng chiết khấu thương mại: bỏ qua dòng chiết khấu, giữ đơn giá gốc gồm VAT, tên hàng không dính chữ chiết khấu, lấy địa chỉ người mua', () => {
+    const r = parseInvoiceLines(fixtures.dtp_chiet_khau)
+    expect(r).toMatchObject({ soHD: '00753334', mau: 'UPHARMA', benMua: { ten: 'Trần Thị C', diaChi: '12 Đường A, Phường B, Tỉnh D' }, tongTien: 1692600 })
+    expect(r.items).toEqual([{
+      stt: 1, ten: 'Prafeno inhaler - Hộp 1 bình 200 liều xịt', soLo: '23626I01', hanDung: '2028-09-11', dvt: 'Bình',
+      soLuong: 13, donGia: 130200, thanhTien: 1692600,
+    }])
+  })
 })
