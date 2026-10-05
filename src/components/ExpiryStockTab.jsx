@@ -166,8 +166,10 @@ function byExpiry(a, b) {
 
 // Dãy màu liên tục cho cột "Tuổi thuốc (Tháng)": đỏ (0 tháng trở xuống — đã/sắp hết hạn) chuyển dần sang
 // xanh lá (từ AGE_GRADIENT_MONTHS tháng trở lên — còn hạn rất lâu), để nhìn màu là đoán ngay mức độ gấp
-// gáp mà không cần đọc số. Số âm (đã hết hạn) vẫn kẹp về cùng mức đỏ đậm nhất, không đỏ hơn nữa.
-const AGE_GRADIENT_MONTHS = 24
+// gáp mà không cần đọc số. Số âm (đã hết hạn) vẫn kẹp về cùng mức đỏ đậm nhất, không đỏ hơn nữa. Chốt ở
+// 12 tháng (đúng mốc "an toàn" app đã dùng sẵn — classifyExpiry) thay vì kéo dài tới 24: hàng ở tab
+// "Hàng cận date" đa số chỉ 0-6 tháng, kéo thang quá dài khiến các mốc gần nhau nhìn gần như cùng 1 màu.
+const AGE_GRADIENT_MONTHS = 12
 function ageColor(months) {
   if (months === null || months === undefined) return undefined
   const t = Math.max(0, Math.min(months, AGE_GRADIENT_MONTHS)) / AGE_GRADIENT_MONTHS
