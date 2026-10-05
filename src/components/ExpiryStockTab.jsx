@@ -164,11 +164,15 @@ function byExpiry(a, b) {
   return a.hanDung.localeCompare(b.hanDung)
 }
 
-const AGE_CLASS = {
-  expired: 'text-red-600 font-semibold',
-  near3: 'text-orange-600 font-semibold',
-  near6: 'text-amber-600 font-semibold',
-  near12: 'text-sky-700 font-medium',
+// Dãy màu liên tục cho cột "Tuổi thuốc (Tháng)": đỏ (0 tháng trở xuống — đã/sắp hết hạn) chuyển dần sang
+// xanh lá (từ AGE_GRADIENT_MONTHS tháng trở lên — còn hạn rất lâu), để nhìn màu là đoán ngay mức độ gấp
+// gáp mà không cần đọc số. Số âm (đã hết hạn) vẫn kẹp về cùng mức đỏ đậm nhất, không đỏ hơn nữa.
+const AGE_GRADIENT_MONTHS = 24
+function ageColor(months) {
+  if (months === null || months === undefined) return undefined
+  const t = Math.max(0, Math.min(months, AGE_GRADIENT_MONTHS)) / AGE_GRADIENT_MONTHS
+  const hue = Math.round(t * 120) // 0 = đỏ, 120 = xanh lá
+  return `hsl(${hue}, 72%, 38%)`
 }
 
 function ageTitle(daysLeft) {
@@ -810,12 +814,16 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                   const isAge = c === 'Tuổi thuốc (Tháng)'
                   const align = NUMERIC_COLUMNS.has(c) || c === 'Đvt' ? 'text-center' : ''
                   const mono = c === 'Mã vật tư' || c === 'Mã lô' || c === 'Tên lô' ? 'font-mono' : ''
-                  const emphasis = c === 'Tồn cuối' ? 'font-medium' : isAge ? AGE_CLASS[r.bucket] || 'text-gray-600' : ''
+                  const emphasis = c === 'Tồn cuối' ? 'font-medium' : isAge ? 'font-semibold' : ''
                   return (
                     <td
                       key={c}
                       className={`px-3 py-2 ${align} ${mono} ${emphasis}`}
-                      style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...stickyStyle(c, { rowBg }) }}
+                      style={{
+                        maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        ...stickyStyle(c, { rowBg }),
+                        ...(isAge ? { color: ageColor(r.tuoiThuoc) } : {}),
+                      }}
                       title={isAge ? ageTitle(r.daysLeft) : undefined}
                     >
                       {cellValue(c, r, i)}

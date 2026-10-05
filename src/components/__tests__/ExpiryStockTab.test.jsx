@@ -138,6 +138,35 @@ describe('ExpiryStockTab', () => {
 
   })
 
+  // Trước đây chỉ có vài mốc màu rời rạc (đỏ/cam/vàng/xanh dương) theo bucket hạn dùng, hàng "an toàn"
+  // (từ 12 tháng) không có màu riêng (mặc định xám) — không phân biệt được hàng còn 13 tháng với hàng còn
+  // 23 tháng. Nay dùng dải màu liên tục theo đúng số tháng: càng gần hết hạn càng đỏ, càng xa càng xanh lá.
+  it('cột "Tuổi thuốc (Tháng)" tô màu liên tục: đỏ khi đã/sắp hết hạn, xanh lá dần khi còn hạn lâu', async () => {
+    render(<ExpiryStockTab />)
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [buildSampleFile()] } })
+    await waitFor(() => expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Tất cả tồn kho'))
+
+    const ageCellOf = (label) => screen.getByText(label).closest('tr').querySelectorAll('td')[9]
+    const expiredColor = ageCellOf('Hàng đã hết hạn').style.color
+    const near3Color = ageCellOf('Hàng cận 3 tháng').style.color
+    const near6Color = ageCellOf('Hàng cận 6 tháng').style.color
+    const near12Color = ageCellOf('Hàng cận hạn 6-12 tháng').style.color
+    const safeColor = ageCellOf('Hàng còn an toàn').style.color
+    const hue = (rgb) => {
+      const [r, g, b] = rgb.match(/\d+/g).map(Number)
+      const max = Math.max(r, g, b), min = Math.min(r, g, b)
+      if (max === min) return 0
+      const d = max - min
+      return max === r ? (60 * (((g - b) / d) % 6)) : max === g ? (60 * ((b - r) / d + 2)) : (60 * ((r - g) / d + 4))
+    }
+    const hues = [expiredColor, near3Color, near6Color, near12Color, safeColor].map(hue)
+    // Hue tăng dần đều từ đỏ (~0) tới xanh lá (~120) đúng theo thứ tự tháng tăng dần.
+    for (let i = 1; i < hues.length; i++) expect(hues[i]).toBeGreaterThanOrEqual(hues[i - 1])
+    expect(hues[0]).toBeLessThanOrEqual(5)
+    expect(hues.at(-1)).toBeGreaterThan(90)
+  })
+
   it('cột Hướng xử lý nhập tay được và được nhớ theo tháng', async () => {
     render(<ExpiryStockTab />)
     const input = screen.getAllByPlaceholderText('Nhập hướng xử lý...')[0]
