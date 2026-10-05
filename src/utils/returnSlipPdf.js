@@ -1,8 +1,9 @@
+import { importFresh, isStaleChunkError } from './staleChunk'
 // Đọc PDF "Biên bản trả lại hàng" in từ website thành các dòng chữ (gom theo toạ độ dọc, trái sang phải) để
 // parseReturnSlipLines (returnSlips.js) tách thông tin.
 export async function extractPdfLines(arrayBuffer) {
   try {
-    const pdfjs = await import('pdfjs-dist/build/pdf.mjs')
+    const pdfjs = await importFresh(() => import('pdfjs-dist/build/pdf.mjs'))
     pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
     const data = arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer)
     const doc = await pdfjs.getDocument({ data }).promise
@@ -25,6 +26,7 @@ export async function extractPdfLines(arrayBuffer) {
     }
     return lines
   } catch (err) {
+    if (isStaleChunkError(err?.cause)) throw err
     throw new Error(`Không đọc được nội dung file PDF (${err?.message || err}).`, { cause: err })
   }
 }

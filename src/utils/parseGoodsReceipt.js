@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { importFresh, isStaleChunkError } from './staleChunk'
 
 const COLUMN_ALIASES = {
   maHang: ['Mã hàng', 'Mã', 'Mã vật tư'],
@@ -983,7 +984,7 @@ export function joinPdfTextItems(items) {
 
 export async function extractPdfText(arrayBuffer) {
   try {
-    const pdfjs = await import('pdfjs-dist/build/pdf.mjs')
+    const pdfjs = await importFresh(() => import('pdfjs-dist/build/pdf.mjs'))
     pdfjs.GlobalWorkerOptions.workerSrc = new URL(
       'pdfjs-dist/build/pdf.worker.min.mjs',
       import.meta.url,
@@ -1001,6 +1002,7 @@ export async function extractPdfText(arrayBuffer) {
     // Dùng chung cho mọi loại PDF (phiếu xuất kho lẫn biên bản giao nhận) — thông báo lỗi không được
     // hardcode riêng "biên bản giao nhận"; kèm luôn lý do gốc (err.message) thay vì nuốt mất, để còn biết
     // đường sửa khi 1 loạt file cùng lỗi (vd worker PDF.js không tải được, không phải do từng file hỏng).
+    if (isStaleChunkError(err?.cause)) throw err
     const reason = err?.message || String(err)
     throw new Error(`Không đọc được nội dung file PDF (${reason}).`, { cause: err })
   }
