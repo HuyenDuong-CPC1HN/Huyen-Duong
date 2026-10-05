@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react'
 import { opsStore as localStorage } from '../data/workspace'
-import { ChevronDown, ChevronRight, Plus, Trash2, FileDown, Pencil, FolderOpen, Eye } from 'lucide-react'
-import DamagedGoodsKhoAForm from './DamagedGoodsKhoAForm'
-import DamagedGoodsRecordView from './DamagedGoodsRecordView'
-import { exportDamagedGoodsKhoAXuLy, exportDamagedGoodsKhoAXacMinh } from '../utils/exportDamagedGoods'
+import { ChevronDown, ChevronRight, Plus, Trash2, FolderOpen, Eye } from 'lucide-react'
+import KhoAHuyWorkspace from './KhoAHuyWorkspace'
+import { KHO_A_STATUS, withKhoAForm } from './khoAHuyStatus'
 
 const STORAGE_KEY = 'damaged_goods_records'
 
@@ -21,10 +20,8 @@ const ENTITY = 'khoA'
 const MONTH_LABELS = ['', 'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12']
 
 function formatDateVi(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('vi-VN')
+  const [y, m, d] = String(iso || '').slice(0, 10).split('-')
+  return d ? `${d}/${m}/${y}` : '—'
 }
 
 function groupByYearMonth(records) {
@@ -39,15 +36,14 @@ function groupByYearMonth(records) {
   return byYear
 }
 
-// Tab Kho A (hàng huỷ tạo từ phiếu xuất kho PDF). Kho C / Kho DTP đã chuyển sang HangHuyTab.jsx.
+// Tab Kho A (hàng huỷ tạo từ phiếu xuất kho PDF): danh sách theo Năm > Tháng; bấm 1 hồ sơ để mở màn làm biên bản
+// (điền, xem trước, in; xuất file Excel/Word khi cần). Kho C / Kho DTP đã chuyển sang HangHuyTab.jsx.
 export default function DamagedGoodsTrackingTab() {
   const [allRecords, setAllRecords] = useState(() => readAllRecords())
   const [now] = useState(() => new Date())
   const [openYears, setOpenYears] = useState(() => new Set([now.getFullYear()]))
   const [selected, setSelected] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 })
-  const [formState, setFormState] = useState(null) // null | 'new' | record object (editing)
-  const [viewingId, setViewingId] = useState(null)
-  const [exportingId, setExportingId] = useState(null)
+  const [openId, setOpenId] = useState(null)
 
   const entityRecords = useMemo(() => allRecords.filter(r => r.entity === ENTITY), [allRecords])
   const byYearMonth = useMemo(() => groupByYearMonth(entityRecords), [entityRecords])
@@ -74,61 +70,42 @@ export default function DamagedGoodsTrackingTab() {
     setAllRecords(records)
   }
 
-  const handleSave = (record) => {
-    const others = allRecords.filter(r => r.id !== record.id)
-    persist([...others, record])
-    setSelected({ year: record.year, month: record.month })
-    setOpenYears(prev => new Set(prev).add(record.year))
-    setFormState(null)
+  // Mở / tạo hồ sơ: làm trực tiếp trên màn biên bản (xem trước + in), lưu ngay mỗi lần sửa.
+  const createRecord = () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const record = withKhoAForm({
+      id: `damaged_khoA_${Date.now()}`, entity: ENTITY, year: selected.year, month: selected.month,
+      processedAt: new Date().toISOString(), sourceFileName: '', status: 'draft', createdAt: new Date().toISOString(), items: [],
+    })
+    record.form = { ...record.form, ngayLap: today, xlNgay: today, xmNgay: today }
+    persist([...allRecords, record])
+    setOpenId(record.id)
+  }
+
+  // Ngày lập quyết định tháng của hồ sơ trong cây Năm > Tháng.
+  const updateRecord = (record) => {
+    const ngayLap = record.form?.ngayLap
+    const [y, m] = String(ngayLap || '').split('-').map(Number)
+    const next = y && m ? { ...record, year: y, month: m, processedAt: new Date(`${ngayLap}T08:00:00`).toISOString() } : record
+    persist(allRecords.map(r => (r.id === next.id ? next : r)))
+  }
+
+  const closeRecord = () => {
+    const rec = allRecords.find(r => r.id === openId)
+    // Hồ sơ mới mở ra rồi đóng mà chưa có hàng nào thì bỏ luôn, không để lại hồ sơ rỗng.
+    if (rec && (rec.items || []).length === 0 && !rec.sourceFileName) persist(allRecords.filter(r => r.id !== rec.id))
+    else if (rec) { setSelected({ year: rec.year, month: rec.month }); setOpenYears(prev => new Set(prev).add(rec.year)) }
+    setOpenId(null)
   }
 
   const handleRemove = (id) => {
-    if (!window.confirm('Xoá biên bản hàng huỷ này? Không thể hoàn tác.')) return
+    if (!window.confirm('Xoá hồ sơ hàng huỷ này? Không thể hoàn tác.')) return
     persist(allRecords.filter(r => r.id !== id))
   }
 
-  const handleExport = async (record, kind) => {
-    setExportingId(`${record.id}_${kind}`)
-    try {
-      if (kind === 'xuLy') await exportDamagedGoodsKhoAXuLy(record)
-      else await exportDamagedGoodsKhoAXacMinh(record)
-      if (record.status !== 'exported') {
-        persist(allRecords.map(r => (r.id === record.id ? { ...r, status: 'exported' } : r)))
-      }
-    } catch (error) {
-      window.alert(error.message || 'Xuất file thất bại.')
-    } finally {
-      setExportingId(null)
-    }
-  }
-
-  const viewingRecord = viewingId ? allRecords.find(r => r.id === viewingId) : null
-
-  if (formState) {
-    const record = formState === 'new' ? null : formState
-    return (
-      <div className="sheet-tab">
-        <DamagedGoodsKhoAForm
-          year={selected.year}
-          month={selected.month}
-          record={record}
-          onSave={handleSave}
-          onCancel={() => setFormState(null)}
-        />
-      </div>
-    )
-  }
-
-  if (viewingRecord) {
-    return (
-      <DamagedGoodsRecordView
-        record={viewingRecord}
-        onClose={() => setViewingId(null)}
-        onEdit={() => { setViewingId(null); setFormState(viewingRecord) }}
-        onExport={handleExport}
-        exportingId={exportingId}
-      />
-    )
+  const openRecord = openId ? allRecords.find(r => r.id === openId) : null
+  if (openRecord) {
+    return <KhoAHuyWorkspace record={withKhoAForm(openRecord)} onChange={updateRecord} onBack={closeRecord} />
   }
 
   return (
@@ -137,7 +114,7 @@ export default function DamagedGoodsTrackingTab() {
         <header className="sheet-tab-context">
           <span>Hồ sơ huỷ Kho A cho kế toán</span>
           <div className="flex items-center gap-2 ml-auto">
-            <button type="button" onClick={() => setFormState('new')} className="sheet-tab-action is-primary">
+            <button type="button" onClick={createRecord} className="sheet-tab-action is-primary">
               <Plus size={13} /> Thêm biên bản hàng huỷ
             </button>
           </div>
@@ -212,38 +189,29 @@ export default function DamagedGoodsTrackingTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {monthRecords.map(r => (
-                        <tr key={r.id} className="border-b border-gray-50 hover:bg-blue-50/30">
-                          <td className="px-2 py-2 font-medium text-gray-800">{formatDateVi(r.processedAt)}</td>
-                          <td className="px-2 py-2 text-gray-600">{(r.items || []).length}</td>
-                          <td className="px-2 py-2">
-                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${r.status === 'exported' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                              {r.status === 'exported' ? 'Đã xuất' : 'Nháp'}
-                            </span>
-                          </td>
-                          <td className="px-2 py-2">
-                            <div className="flex items-center gap-1 flex-wrap">
-                              <button type="button" onClick={() => setViewingId(r.id)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700" title="Xem">
-                                <Eye size={13} />
-                              </button>
-                              <button type="button" onClick={() => handleExport(r, 'xuLy')} disabled={exportingId === `${r.id}_xuLy`}
-                                className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Xuất Biên bản Xử lý">
-                                <FileDown size={12} /> Xử lý
-                              </button>
-                              <button type="button" onClick={() => handleExport(r, 'xacMinh')} disabled={exportingId === `${r.id}_xacMinh`}
-                                className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Xuất Biên bản Xác minh">
-                                <FileDown size={12} /> Xác minh
-                              </button>
-                              <button type="button" onClick={() => setFormState(r)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700" title="Sửa">
-                                <Pencil size={13} />
-                              </button>
-                              <button type="button" onClick={() => handleRemove(r.id)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá">
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {monthRecords.map(r => {
+                        const st = KHO_A_STATUS[r.status] || KHO_A_STATUS.draft
+                        const ngayLap = r.form?.ngayLap || String(r.processedAt || '').slice(0, 10)
+                        return (
+                          <tr key={r.id} className="border-b border-gray-50 hover:bg-blue-50/30 cursor-pointer" onClick={() => setOpenId(r.id)}>
+                            <td className="px-2 py-2 font-medium text-gray-800">{formatDateVi(ngayLap)}</td>
+                            <td className="px-2 py-2 text-gray-600">{(r.items || []).length}</td>
+                            <td className="px-2 py-2">
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${st.cls}`}>{st.label}</span>
+                            </td>
+                            <td className="px-2 py-2">
+                              <div className="flex items-center gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
+                                <button type="button" onClick={() => setOpenId(r.id)} className="sheet-tab-action" style={{ minHeight: 26, padding: '0 8px', fontSize: 11 }} title="Mở để sửa, xem trước và in">
+                                  <Eye size={12} /> Mở / In
+                                </button>
+                                <button type="button" onClick={() => handleRemove(r.id)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Xoá">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 )}

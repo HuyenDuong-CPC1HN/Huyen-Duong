@@ -303,6 +303,10 @@ export async function exportDamagedGoodsXuLy(record) {
 
 // ---------- Kho A (hàng huỷ tạo từ phiếu xuất kho PDF) ----------
 
+const dmyVi = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '' }
+const gioVi = gio => (gio ? `${gio.replace(':', 'h')}’` : '')
+const dateAt = iso => (iso ? new Date(`${iso}T08:00:00`) : new Date())
+
 // Kho A dùng CHUNG mẫu + hàm điền với "hàng cận date" (exportExpiryDisposal.js): file mẫu thật do người
 // dùng gửi cho Kho A có đúng bố cục 10 cột (không có cột "Kho" riêng như 2 kho trên), cùng định dạng ngày
 // "TP.Hồ Chí Minh ngày..." và cùng dòng "Xuất xử lý" mặc định - nên không cần thêm file mẫu .xlsx mới.
@@ -322,7 +326,15 @@ export async function exportDamagedGoodsKhoAXuLy(record) {
   const items = record.items || []
   if (items.length === 0) throw new Error('Chưa có mặt hàng nào trong biên bản.')
   const templateBuffer = await loadKhoABbxlTemplateBuffer()
-  const bytes = await fillBienBanXuLyCanDate(templateBuffer, items, { diaDiem: 'Kho 020110' })
+  const f = record.form || {}
+  const ngayLap = f.ngayLap || String(record.processedAt || '').slice(0, 10)
+  const xl = todayParts(dateAt(f.xlNgay || ngayLap))
+  const bytes = await fillBienBanXuLyCanDate(templateBuffer, items, {
+    diaDiem: 'Kho 020110',
+    ngayGio: `Vào lúc ${gioVi(f.xlGio) || '08h30’'}, ngày ${xl.ngay} tháng ${xl.thang} năm ${xl.nam}`,
+    date: dateAt(ngayLap),
+    soBB: f.soBB || '',
+  })
   const label = new Date(record.processedAt || Date.now()).toLocaleDateString('vi-VN').replaceAll('/', '-')
   triggerDownloadBytes(bytes, `BBXL_HangHuy_KhoA_${label}.xlsx`)
 }
@@ -337,9 +349,11 @@ const KHO_A_XACMINH_TEMPLATE_URL = '/templates/BIEN_BAN_XAC_MINH_CAN_DATE.docx'
 export async function exportDamagedGoodsKhoAXacMinh(record) {
   const items = record.items || []
   if (items.length === 0) throw new Error('Chưa có mặt hàng nào trong biên bản.')
-  const { ngay, thang, nam } = todayParts(record.processedAt ? new Date(record.processedAt) : new Date())
+  const f = record.form || {}
+  const xmDate = f.xmNgay || f.ngayLap
+  const { ngay, thang, nam } = todayParts(xmDate ? dateAt(xmDate) : (record.processedAt ? new Date(record.processedAt) : new Date()))
   const data = {
-    ngay, thang, nam, gio: '08h30’',
+    ngay, thang, nam, gio: gioVi(f.xmGio) || '08h30’',
     items: items.map((it, i) => ({
       stt: i + 1,
       maSanPham: it.maHang || '',
@@ -350,7 +364,7 @@ export async function exportDamagedGoodsKhoAXacMinh(record) {
       dvt: it.dvt || '',
       soLuong: it.soLuong ?? '',
       quyCach: it.quyCach || '',
-      tinhTrang: 'Hàng cận date',
+      tinhTrang: it.ghiChu ?? 'Hàng cận date',
     })),
   }
   const blob = await fillXacMinhTemplate(KHO_A_XACMINH_TEMPLATE_URL, data)
@@ -360,9 +374,6 @@ export async function exportDamagedGoodsKhoAXacMinh(record) {
 
 // ---------- Phiếu xuất kho hàng huỷ Kho C / Kho DTP (xem utils/hangHuy.js) ----------
 
-const dmyVi = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '' }
-const gioVi = gio => (gio ? `${gio.replace(':', 'h')}’` : '')
-const dateAt = iso => (iso ? new Date(`${iso}T08:00:00`) : new Date())
 
 // Excel Biên bản xử lý: hàng, số lượng thực huỷ, quy cách, Ghi chú = "Tình trạng" kho tự điền (để trống được).
 export async function buildHuyXuLyBytes(phieu, templateBuffer) {

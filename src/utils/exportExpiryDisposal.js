@@ -211,18 +211,20 @@ function fillDataRows(doc, sstDoc, rows) {
     setCellNumberForce(doc, row, 'G', r.soLuong ?? 0)
     setCellNumberForce(doc, row, 'H', r.soLuong ?? 0)
     setCellStringForce(doc, sstDoc, row, 'I', r.quyCach || '')
-    setCellStringForce(doc, sstDoc, row, 'J', 'Hàng cận date')
+    setCellStringForce(doc, sstDoc, row, 'J', r.ghiChu ?? 'Hàng cận date')
   })
 }
 
 // Điền dữ liệu vào file mẫu Biên bản Xử lý, trả về Uint8Array của file .xlsx hoàn chỉnh.
-export async function fillBienBanXuLy(templateBuffer, rows, { diaDiem = 'Kho CN Hồ Chí Minh', ngayGio = '' } = {}) {
+// date: ngày lập biên bản (mặc định hôm nay); soBB: số biên bản (để trống thì giữ "….." như mẫu).
+export async function fillBienBanXuLy(templateBuffer, rows, { diaDiem = 'Kho CN Hồ Chí Minh', ngayGio = '', date = new Date(), soBB = '' } = {}) {
   const zip = new PizZip(templateBuffer.slice(0))
   const sstDoc = parseXml(zip.file(STRINGS_PATH).asText())
   const sheetDoc = parseXml(zip.file(SHEET_PATH).asText())
   const workbookDoc = parseXml(zip.file(WORKBOOK_PATH).asText())
 
-  const { ngay, thang, nam } = todayParts()
+  const { ngay, thang, nam } = todayParts(date)
+  setCellString(sheetDoc, sstDoc, 4, 'A', `Số: ${soBB || '…..'}/${nam}/BC-CPC1HN`)
   setCellString(sheetDoc, sstDoc, 5, 'H', `TP.Hồ Chí Minh ngày ${ngay} tháng ${thang} năm ${nam}`)
   appendAfterLabel(sheetDoc, sstDoc, 13, 'A', ngayGio || `Vào lúc 08h30’, ngày ${ngay} tháng ${thang} năm ${nam}`)
   appendAfterLabel(sheetDoc, sstDoc, 14, 'A', diaDiem)
