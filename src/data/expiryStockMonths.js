@@ -10,11 +10,11 @@ export function createExpiryStockMonthsRepository(client) {
       fail(error)
       return data || []
     },
-    // Blob JSON = { rows, dateRange } (dateRange: khoảng "Từ ngày ... đến ngày ..." của file gốc, dùng cho
+    // Blob JSON = { rows, dateRange, entity } (dateRange: khoảng "Từ ngày ... đến ngày ..." của file gốc, dùng cho
     // phần hàng chậm luân chuyển và dòng 2 của báo cáo xuất ra). Tháng lưu trước đây chỉ có mảng rows.
-    async save({ id, fileName = null, uploadedAt = new Date().toISOString(), rows, dateRange = null, isActive = true }) {
+    async save({ id, fileName = null, uploadedAt = new Date().toISOString(), rows, dateRange = null, entity = null, isActive = true }) {
       const storagePath = `expiry-stock/${id}.json`
-      await files.writeJson(storagePath, { rows, dateRange })
+      await files.writeJson(storagePath, { rows, dateRange, entity })
       if (isActive) fail((await table().update({ is_active: false }).eq('is_active', true)).error)
       const record = { id, file_name: fileName, uploaded_at: uploadedAt, storage_path: storagePath, is_active: isActive }
       const { error } = await table().upsert(record)
@@ -24,7 +24,8 @@ export function createExpiryStockMonthsRepository(client) {
     async loadMonth(month) {
       const payload = await files.readJson(month.storage_path)
       if (Array.isArray(payload)) return { rows: payload, dateRange: null }
-      return { rows: payload?.rows || [], dateRange: payload?.dateRange || null }
+      // entity: loại kho (donC / donDTP) — file lưu trước đây không có, app tự nhận lại theo mã vật tư.
+      return { rows: payload?.rows || [], dateRange: payload?.dateRange || null, ...(payload?.entity ? { entity: payload.entity } : {}) }
     },
     async remove(month) { fail((await table().delete().eq('id', month.id)).error); await files.remove(month.storage_path) },
     async setActive(id) {

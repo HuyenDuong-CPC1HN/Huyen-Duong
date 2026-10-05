@@ -246,3 +246,40 @@ describe('ExpiryStockTab', () => {
     expect(rows).toEqual([expect.objectContaining({ maVatTu: 'TH00893', huongXuLy: 'Xuất huỷ' })])
   })
 })
+
+describe('ExpiryStockTab — mỗi tháng lưu riêng, không đè file', () => {
+  function fileFor(name, range, code = 'X100') {
+    const aoa = [
+      [`Từ ngày ${range[0]} đến ngày ${range[1]}`],
+      ['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối'],
+      [1, code, `Hàng ${name}`, '020101', 'HOP', 'L1', new Date(2030, 0, 1), 5, 0, 0, 5],
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1')
+    return new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], `${name}.xlsx`)
+  }
+
+  it('tải file Kho C của 2 tháng khác nhau cùng 1 ngày -> 2 tháng riêng, file tháng trước vẫn còn', async () => {
+    store.opsStore.removeItem('expiry_stock_months')
+    render(<ExpiryStockTab mode="clc" />)
+    fireEvent.change(screen.getByLabelText('Tải file Kho C'), { target: { files: [fileFor('thang8', ['01/06/2026', '31/08/2026'])] } })
+    await waitFor(() => expect(screen.getByText('thang8.xlsx')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Tải file Kho C'), { target: { files: [fileFor('thang9', ['01/07/2026', '30/09/2026'])] } })
+    await waitFor(() => expect(screen.getByText('thang9.xlsx')).toBeInTheDocument())
+
+    const months = JSON.parse(store.opsStore.getItem('expiry_stock_months'))
+    expect(months.map(m => m.fileName).sort()).toEqual(['thang8.xlsx', 'thang9.xlsx'])
+    fireEvent.click(screen.getByRole('button', { name: 'Tháng 08/2026' }))
+    expect(screen.getByText('thang8.xlsx')).toBeInTheDocument()
+  })
+
+  it('file cũ chưa ghi loại kho: tự nhận Kho DTP theo mã vật tư, không bị coi là Kho C', () => {
+    store.opsStore.setItem('expiry_stock_months', JSON.stringify([
+      { id: 'dtp-old', fileName: 'dtp-cu.xlsx', uploadedAt: '2026-09-30T00:00:00.000Z', dateRange: { tuNgay: '2026-07-01', denNgay: '2026-09-30', soNgay: 91 },
+        rows: [{ maVatTu: 'TH00893', tenVatTu: 'Thuốc DTP cũ', maKho: '020105', maLo: 'D1', hanDung: '2030-01-01', tonDau: 1, slNhap: 0, slXuat: 0, tonCuoi: 1 }] },
+    ]))
+    render(<ExpiryStockTab mode="clc" />)
+    expect(screen.getByText('dtp-cu.xlsx')).toBeInTheDocument()
+    expect(screen.getByText('Chưa có file Kho C')).toBeInTheDocument()
+  })
+})

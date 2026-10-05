@@ -31,16 +31,25 @@ const ENTITY_KEYS = Object.keys(EXPIRY_ENTITIES)
 const entityOf = m => m.entity || 'donC'
 const MAX_MONTHS = 24 // tối đa số file giữ lại
 
+// Tháng của file = tháng của ngày cuối kỳ báo cáo trong file ("đến ngày ..."), KHÔNG theo ngày tải lên — trước đây
+// tính theo ngày tải nên tải file nhiều tháng trong cùng 1 ngày thì các file đè lên nhau. File không đọc được kỳ
+// báo cáo thì mới dùng ngày tải lên.
 function periodOf(m) {
+  const end = m.dateRange?.denNgay
+  if (/^\d{4}-\d{2}/.test(end || '')) return end.slice(0, 7)
   const d = new Date(m.uploadedAt)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 function periodLabel(p) { const [y, mo] = p.split('-'); return `${mo}/${y}` }
 
+// File lưu trước khi ghi loại kho (hoặc nạp lại từ máy chủ bản cũ không có loại kho) thì tự nhận lại theo mã
+// vật tư — trước đây coi hết là Kho C nên file Kho DTP bị xếp nhầm và đè lên file Kho C cùng tháng.
 function readMonths() {
   try {
     const months = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    return Array.isArray(months) ? months : []
+    return Array.isArray(months)
+      ? months.map(m => (m.entity ? m : { ...m, entity: detectExpiryEntity(m.rows || []) }))
+      : []
   } catch { return [] }
 }
 function writeMonths(months) { localStorage.setItem(STORAGE_KEY, JSON.stringify(months)) }
@@ -282,7 +291,12 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
         return
       }
       if (filterByExpiryEntity(rows, fileEntity).length === 0) { setError(`File không có dữ liệu của các kho ${EXPIRY_ENTITIES[fileEntity].kho.join(', ')} (${EXPIRY_ENTITIES[fileEntity].label}).`); return }
-      const entry = addMonth({ fileName: file.name, uploadedAt: new Date().toISOString(), rows, dateRange, entity: fileEntity })
+      const draft = { fileName: file.name, uploadedAt: new Date().toISOString(), rows, dateRange, entity: fileEntity }
+      // Mỗi tháng xử lý riêng: tháng lấy theo kỳ báo cáo trong file. Tháng đó đã có file cùng kho thì hỏi lại,
+      // không tự thay.
+      const existing = readMonths().find(m => periodOf(m) === periodOf(draft) && entityOf(m) === fileEntity)
+      if (existing && !window.confirm(`Tháng ${periodLabel(periodOf(draft))} đã có file ${EXPIRY_ENTITIES[fileEntity].label} "${existing.fileName}". Thay bằng file "${file.name}"?`)) return
+      const entry = addMonth(draft)
       setMonths(readMonths())
       setPeriodSel(periodOf(entry))
       setKhoFilter('all')
@@ -499,7 +513,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
 
   const hint = (
     <p className="text-xs text-gray-400 mb-3">
-      Mỗi tháng tải 2 file "Báo cáo tổng hợp nhập xuất tồn theo kho" (.xlsx / .xml): 1 file Kho C, 1 file Kho DTP. App tự nhận file của kho nào và tự tìm hàng cận date lẫn hàng chậm luân chuyển, dùng chung cho cả 2 tab; nên xuất báo cáo với khoảng thời gian từ {MIN_SLOW_DAYS} ngày trở lên để lọc đúng hàng chậm luân chuyển.
+      Mỗi tháng tải 2 file "Báo cáo tổng hợp nhập xuất tồn theo kho" (.xlsx / .xml): 1 file Kho C, 1 file Kho DTP. Mỗi tháng lưu riêng, tháng lấy theo ngày cuối kỳ báo cáo trong file ("đến ngày ..."), file tháng khác không đè lên nhau. App tự nhận file của kho nào và tự tìm hàng cận date lẫn hàng chậm luân chuyển, dùng chung cho cả 2 tab; nên xuất báo cáo với khoảng thời gian từ {MIN_SLOW_DAYS} ngày trở lên để lọc đúng hàng chậm luân chuyển.
     </p>
   )
 
@@ -521,8 +535,9 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
 
   return (
     <div>
-      {periods.length > 1 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
+      {periods.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <span className="text-xs text-gray-500 mr-1">Tháng:</span>
           {periods.map(p => (
             <button
               key={p}
@@ -531,7 +546,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                 p === period ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
               }`}
             >
-              {periodLabel(p)}
+              Tháng {periodLabel(p)}
             </button>
           ))}
         </div>

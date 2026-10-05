@@ -366,6 +366,7 @@ async function syncExpiryStockMonths(key) {
       uploadedAt: month.uploadedAt,
       rows: month.rows || [],
       dateRange: month.dateRange || null,
+      entity: month.entity || null,
       isActive: values.get('expiry_stock_active') === month.id,
     })
   }
