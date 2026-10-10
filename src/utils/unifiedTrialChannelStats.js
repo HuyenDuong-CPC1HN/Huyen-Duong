@@ -17,6 +17,15 @@ export function calcTrucTiepStats(rows, options = {}) {
   return result
 }
 
+// Ô nhập tay của Gộp kênh (chưa giao theo khách hàng / chưa gửi chành) lưu dạng { sessionKey, value } gắn với
+// đúng phiên tải file (referenceDate = meta.uploadedAt) — xem useSessionScopedValue ở UnifiedTrialChannelDetail.
+// Đọc ra giá trị của đúng phiên đó; khác phiên / định dạng cũ thì trả fallback.
+export function unwrapSessionValue(stored, referenceDate, fallback) {
+  return stored && typeof stored === 'object' && 'sessionKey' in stored && stored.sessionKey === referenceDate
+    ? stored.value ?? fallback
+    : fallback
+}
+
 // Quy tắc riêng theo kênh: đối tác Tân Thịnh = Giao trực tiếp chỉ áp cho Đơn C, Đơn DTP giữ nguyên.
 export function channelPartnerOptions(channelKey) {
   return { tanThinh: channelKey === 'donC' }

@@ -8,7 +8,7 @@ import { pickCarrierWeekIdByDate, snapshotCarrierLookup } from './carrierUtils'
 import { KpiTile, SectionCard } from './ReportCards'
 import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifiedTrialSplit'
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
-import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
+import { computeChannelSnapshot, unwrapSessionValue } from '../utils/unifiedTrialChannelStats'
 import { buildAutoSalesOrderLookup, buildAutoPackingLookup, lookupToJson, lookupFromJson } from '../utils/reconcileNgoaiSan'
 import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport, updateTrialReport } from '../utils/unifiedTrialReports'
 
@@ -591,14 +591,14 @@ function DonTruyenThongView({ rosterSet, countMismatch, onCountMismatchChange, v
     if (!meta) return
     const donCSnapshot = computeChannelSnapshot({
       data: donC, channelKey: 'donC',
-      khValues: readJSON('unifiedTrial_chuagiao_kh_donC', {}),
-      chuaGuiChanh: readJSON('unifiedTrial_chuagiao_chuagui_donC', ''),
+      khValues: unwrapSessionValue(readJSON('unifiedTrial_chuagiao_kh_donC', null), referenceDate, {}),
+      chuaGuiChanh: unwrapSessionValue(readJSON('unifiedTrial_chuagiao_chuagui_donC', null), referenceDate, ''),
       showChanhXe: true, showSpx: false, referenceDate,
     })
     const donDTPSnapshot = computeChannelSnapshot({
       data: donDTP, channelKey: 'donDTP',
-      khValues: readJSON('unifiedTrial_chuagiao_kh_donDTP', {}),
-      chuaGuiChanh: readJSON('unifiedTrial_chuagiao_chuagui_donDTP', ''),
+      khValues: unwrapSessionValue(readJSON('unifiedTrial_chuagiao_kh_donDTP', null), referenceDate, {}),
+      chuaGuiChanh: unwrapSessionValue(readJSON('unifiedTrial_chuagiao_chuagui_donDTP', null), referenceDate, ''),
       showChanhXe: false, showSpx: true, referenceDate,
     })
     const entry = {

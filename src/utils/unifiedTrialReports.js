@@ -11,12 +11,38 @@
 // cần cơ chế dọn bớt) — upload tuần mới vẫn ghi đè rows thô như trước giờ, không ảnh hưởng bản đã lưu.
 import { opsStore as localStorage } from '../data/workspace'
 
+// Tuần đã lưu bị hỏng do lỗi cũ: lúc lưu đọc nhầm nguyên khối { sessionKey, value } của ô nhập tay → số chưa
+// giao theo khách hàng thành 0, số chưa gửi chành thành NaN (lưu ra null) kéo theo Chành xe / Tổng đơn = null.
+// Dựng lại các số tổng từ phần còn lại (số chưa gửi chành đã mất thì tính 0).
+export function repairChannelSnapshot(snap) {
+  if (!snap || typeof snap !== 'object') return snap
+  const kh = snap.khValues
+  const wrapped = kh && typeof kh === 'object' && 'sessionKey' in kh && 'value' in kh
+  const broken = wrapped || !Number.isFinite(snap.total) || !Number.isFinite(snap.chanhXeBadge)
+  if (!broken) return snap
+  const khValues = wrapped ? (kh.value && typeof kh.value === 'object' ? kh.value : {}) : (kh || {})
+  const khBreakdownSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
+  const oldKhSum = Number.isFinite(snap.khBreakdownSum) ? snap.khBreakdownSum : 0
+  const trucTiepBadge = (Number(snap.trucTiepBadge) || 0) - (wrapped ? oldKhSum : 0) + (wrapped ? khBreakdownSum : 0)
+  const chuaGuiChanh = Number.isFinite(snap.chuaGuiChanh) ? snap.chuaGuiChanh : 0
+  const chanhXeBadge = Number.isFinite(snap.chanhXeBadge) ? snap.chanhXeBadge : (Number(snap.chanhXeCount) || 0) + chuaGuiChanh
+  const doitacTotal = Number(snap.doitacTotal) || 0
+  return {
+    ...snap, khValues, khBreakdownSum: wrapped ? khBreakdownSum : oldKhSum, trucTiepBadge, chuaGuiChanh, chanhXeBadge,
+    total: trucTiepBadge + chanhXeBadge + doitacTotal,
+  }
+}
+
 function storageKey(kind) { return `unified_trial_reports_${kind}` }
 
 export function readTrialReports(kind) {
   try {
     const list = JSON.parse(localStorage.getItem(storageKey(kind)) || '[]')
-    return Array.isArray(list) ? list : []
+    if (!Array.isArray(list)) return []
+    // Tuần Đơn truyền thống lưu bằng bản lỗi (số tổng null) — dựng lại số khi đọc, xem repairChannelSnapshot.
+    return kind === 'donTruyenThong'
+      ? list.map(r => (r && (r.donC || r.donDTP) ? { ...r, donC: repairChannelSnapshot(r.donC), donDTP: repairChannelSnapshot(r.donDTP) } : r))
+      : list
   } catch {
     return []
   }
