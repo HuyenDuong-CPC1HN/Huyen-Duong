@@ -100,6 +100,25 @@ function addHoldWeek(carrierKey, entry) {
   }
   throw new Error('Không thể lưu — dữ liệu quá lớn ngay cả với 1 tuần.')
 }
+// Xem báo cáo đã lưu (weekId): chỉ lấy file Chờ giao Logistics của ĐÚNG tuần đó (cùng sessionKey với file
+// VTP đang ghim), không hiện cả kho file của mọi tuần. File cũ chưa đánh dấu sessionKey thì lấy 1 file có ngày
+// upload gần nhất với file VTP của tuần.
+function frozenHoldWeeks(holdWeeks, carrierWeek) {
+  if (!carrierWeek) return []
+  if (carrierWeek.sessionKey) {
+    const own = holdWeeks.filter(w => w.sessionKey === carrierWeek.sessionKey)
+    if (own.length > 0) return own
+  }
+  const at = new Date(carrierWeek.uploadedAt).getTime()
+  if (!Number.isFinite(at)) return []
+  let best = null
+  for (const w of holdWeeks) {
+    if (carrierWeek.sessionKey && w.sessionKey && w.sessionKey !== carrierWeek.sessionKey) continue
+    const d = Math.abs(new Date(w.uploadedAt).getTime() - at)
+    if (Number.isFinite(d) && (!best || d < best.d)) best = { w, d }
+  }
+  return best ? [best.w] : []
+}
 function removeHoldWeek(carrierKey, weekId) {
   const next = readHoldWeeks(carrierKey).filter(w => w.id !== weekId)
   localStorage.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify(next))
@@ -954,7 +973,9 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
   // carrier_holdweeks_<key> dùng chung, không tách theo tuần). Đánh dấu sessionKey thẳng vào entry (xem
   // comment ở "weeks" phía trên) để bền qua remount khi thu gọn/mở rộng khung.
   const [holdWeeks, setHoldWeeks] = useState(() => readHoldWeeks(carrierKey))
-  const effectiveHoldWeeks = isLiveSession ? holdWeeks.filter(w => belongsToSession(w, liveSessionKey)) : holdWeeks
+  const effectiveHoldWeeks = isLiveSession
+    ? holdWeeks.filter(w => belongsToSession(w, liveSessionKey))
+    : weekId ? frozenHoldWeeks(holdWeeks, state) : holdWeeks
   const holdLookupSet = useMemo(() => buildHoldLookupSet(effectiveHoldWeeks), [effectiveHoldWeeks])
 
   const parseHoldFile = async (file) => {
@@ -965,6 +986,7 @@ export function CarrierPanel({ carrierKey, label, carrierType = 'viettel', inter
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
       const newEntry = { fileName: file.name, uploadedAt: new Date().toISOString(), rows }
       if (isLiveSession) newEntry.sessionKey = liveSessionKey
+      else if (weekId && state?.sessionKey) newEntry.sessionKey = state.sessionKey // tải bổ sung cho đúng tuần đã lưu
       addHoldWeek(carrierKey, newEntry)
       setHoldWeeks(readHoldWeeks(carrierKey))
     } catch {

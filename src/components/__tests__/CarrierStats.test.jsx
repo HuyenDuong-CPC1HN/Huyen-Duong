@@ -402,3 +402,38 @@ describe('CarrierStats — upload "Chờ giao Logistics" cho Viettel Post Đơn 
     expect(screen.getByText(/Chưa có file "Chờ giao Logistics"/i)).toBeInTheDocument()
   })
 })
+
+describe('CarrierStats — xem tuần đã lưu: chỉ hiện file Chờ giao Logistics của đúng tuần đó', () => {
+  const vtpRows = [{ 'Mã Vận Đơn': 'VTP001', 'Mã đơn hàng': 'DH001', 'Trạng Thái': 'Đang vận chuyển', 'Ngày tạo': '', 'Ngày chuyển trạng thái': '', 'Tên hàng': '', 'Đơn chuyển hoàn': '' }]
+  it('cùng sessionKey thì chỉ lấy file của tuần; file cũ không đánh dấu thì lấy 1 file gần ngày nhất', async () => {
+    const carrierKey = 'unifiedTrial_donDTP_viettel_frozenhold'
+    const s1 = '2026-10-03T08:00:00.000Z'
+    const s2 = '2026-10-10T02:00:00.000Z'
+    store.opsStore.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify([
+      { id: 'w2', fileName: 'vtp-10-10.xlsx', uploadedAt: '2026-10-10T02:30:00.000Z', sessionKey: s2, rows: vtpRows },
+      { id: 'w1', fileName: 'vtp-03-10.xlsx', uploadedAt: '2026-10-03T08:30:00.000Z', sessionKey: s1, rows: vtpRows },
+    ]))
+    store.opsStore.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify([
+      { id: 'h3', fileName: 'hold-10-10.xlsx', uploadedAt: '2026-10-10T02:40:00.000Z', sessionKey: s2, rows: [] },
+      { id: 'h2', fileName: 'hold-03-10.xlsx', uploadedAt: '2026-10-03T08:40:00.000Z', sessionKey: s1, rows: [] },
+      { id: 'h1', fileName: 'hold-26-09.xlsx', uploadedAt: '2026-09-26T08:40:00.000Z', rows: [] },
+    ]))
+    render(<CarrierPanel carrierKey={carrierKey} label="Viettel Post" carrierType="viettel" weekId="w1" strictWeekId showLogisticsHold />)
+    await screen.findByText('hold-03-10.xlsx')
+    expect(screen.queryByText('hold-10-10.xlsx')).not.toBeInTheDocument()
+    expect(screen.queryByText('hold-26-09.xlsx')).not.toBeInTheDocument()
+  })
+  it('tuần cũ chưa đánh dấu sessionKey: lấy 1 file Chờ giao Logistics có ngày gần file VTP nhất', async () => {
+    const carrierKey = 'unifiedTrial_donDTP_viettel_frozenhold_old'
+    store.opsStore.setItem(`carrier_weeks_${carrierKey}`, JSON.stringify([
+      { id: 'w1', fileName: 'vtp-26-09.xlsx', uploadedAt: '2026-09-26T08:30:00.000Z', rows: vtpRows },
+    ]))
+    store.opsStore.setItem(`carrier_holdweeks_${carrierKey}`, JSON.stringify([
+      { id: 'h2', fileName: 'hold-03-10.xlsx', uploadedAt: '2026-10-03T08:40:00.000Z', rows: [] },
+      { id: 'h1', fileName: 'hold-26-09.xlsx', uploadedAt: '2026-09-26T08:40:00.000Z', rows: [] },
+    ]))
+    render(<CarrierPanel carrierKey={carrierKey} label="Viettel Post" carrierType="viettel" weekId="w1" strictWeekId showLogisticsHold />)
+    await screen.findByText('hold-26-09.xlsx')
+    expect(screen.queryByText('hold-03-10.xlsx')).not.toBeInTheDocument()
+  })
+})
