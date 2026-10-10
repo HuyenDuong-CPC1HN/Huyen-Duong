@@ -59,3 +59,30 @@ describe('UnifiedTrialChannelDetail — ô "chưa giao theo khách hàng" phải
     expect(bvInput().value).toBe('7')
   })
 })
+
+describe('UnifiedTrialChannelDetail — bấm ô mốc giờ để lọc đơn giao trực tiếp', () => {
+  const mk = (ma, tao, giao, doiTac = 'Giao trực tiếp') => ({ 'Mã kiện hàng': ma, 'Ngày tạo kiện': tao, 'Ngày giao hàng': giao, 'Đối tác vận chuyển': doiTac })
+  const data = [
+    mk('K24', '06/10/2026', '07/10/2026'),
+    mk('K48', '06/10/2026', '08/10/2026'),
+    mk('K72', '05/10/2026', '09/10/2026'),
+    mk('KTT', '05/10/2026', '09/10/2026', 'Tân Thịnh'), // Đơn C: Tân Thịnh luôn ≤ 24 giờ
+  ]
+  it('bấm ≤ 24 giờ chỉ hiện đúng đơn ≤ 24 giờ; bấm ô khác đổi lọc; bấm lại thì ẩn', () => {
+    render(<UnifiedTrialChannelDetail data={data} channelKey="donC" showChanhXe showSpx={false} />)
+    openTrucTiep()
+    fireEvent.click(screen.getByRole('button', { name: /≤ 24 giờ/ }))
+    expect(screen.getByText(/Đơn giao ≤ 24 giờ · 2 đơn/)).toBeInTheDocument()
+    expect(screen.getByText('K24')).toBeInTheDocument()
+    expect(screen.getByText('KTT')).toBeInTheDocument()
+    expect(screen.queryByText('K72')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /≤ 72 giờ/ }))
+    expect(screen.getByText(/Đơn giao ≤ 72 giờ · 1 đơn/)).toBeInTheDocument()
+    expect(screen.getByText('K72')).toBeInTheDocument()
+    expect(screen.queryByText('K24')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /≤ 72 giờ/ }))
+    expect(screen.queryByText(/Đơn giao ≤ 72 giờ/)).toBeNull()
+  })
+})

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, Users } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import { partnerType } from '../utils/partnerType'
+import { deliveryBucket } from '../utils/deliveryDays'
 import { channelPartnerOptions, computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
 import { CarrierPanel } from './CarrierStats'
 import { DetailTable } from './ThongKeDoiTac'
@@ -136,6 +137,15 @@ export default function UnifiedTrialChannelDetail({
     return { tructiepRows, chanhxeRows }
   }, [validData, channelKey])
 
+  // Bấm ô ≤ 24 / 48 / 72 giờ: lọc đúng các đơn giao trực tiếp theo mốc giờ đó (bấm lại để bỏ lọc).
+  const [bucketFilter, setBucketFilter] = useState(null)
+  const bucketRows = useMemo(() => {
+    if (!bucketFilter) return []
+    const opts = channelPartnerOptions(channelKey)
+    return tructiepRows.filter(row => `${deliveryBucket(row, opts)}h` === bucketFilter)
+  }, [bucketFilter, tructiepRows, channelKey])
+  const bucketCol = STAT_COLS.find(c => c.key === bucketFilter)
+
   const viettelKey = `unifiedTrial_${channelKey}_viettel`
   const spxKey = `unifiedTrial_${channelKey}_spx`
 
@@ -202,10 +212,23 @@ export default function UnifiedTrialChannelDetail({
         <SectionCard title="Giao hàng trực tiếp" total={trucTiepBadge} icon={CheckCircle} defaultOpen={readOnly}>
           <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
             {STAT_COLS.map(col => (
-              <StatCard key={col.key} icon={col.icon} value={trucTiepStats[col.key]} label={col.label} cls={col.cls} />
+              <StatCard key={col.key} icon={col.icon} value={trucTiepStats[col.key]} label={col.label} cls={col.cls}
+                onClick={readOnly ? undefined : () => setBucketFilter(f => (f === col.key ? null : col.key))}
+                active={!readOnly && bucketFilter === col.key} />
             ))}
             <StatCard icon={AlertCircle} value={khBreakdownSum} label="Chưa giao" cls="text-yellow-600" />
           </div>
+
+          {!readOnly && bucketCol && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-sm font-semibold text-gray-800">Đơn giao {bucketCol.label} · {bucketRows.length} đơn</span>
+                <button type="button" onClick={() => setBucketFilter(null)}
+                  className="ml-auto px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 hover:border-blue-400 hover:text-blue-600">Thu gọn</button>
+              </div>
+              {bucketRows.length > 0 ? <DetailTable rows={bucketRows} /> : <p className="text-xs text-gray-400">Không có đơn nào.</p>}
+            </div>
+          )}
 
           <ChuaGiaoBreakdown channelKey={channelKey} values={khValues} onChange={onKhChange} readOnly={readOnly} />
 
