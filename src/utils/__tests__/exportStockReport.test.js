@@ -53,7 +53,9 @@ describe('fillStockReport — điền đúng file mẫu Báo cáo hàng cận da
   it('sheet Cận date: 9 cột + Hướng xử lý như mẫu, dữ liệu từ dòng 5, hạn dùng là ngày thật, tuổi thuốc là công thức', () => {
     const ws = canDateWb.Sheets['Cận date']
     const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
-    expect(grid[3]).toEqual(['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tuổi thuốc\r\n(Tháng)', 'Tồn cuối', 'Hướng xử lý'])
+    // Mẫu ghi xuống dòng kiểu Windows (\r\n); tuỳ bản thư viện xlsx đọc ra \r\n hoặc \n (chuẩn XML) — so không phân biệt.
+    expect(grid[3].map(v => (typeof v === 'string' ? v.replace(/\r\n/g, '\n') : v)))
+      .toEqual(['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tuổi thuốc\n(Tháng)', 'Tồn cuối', 'Hướng xử lý'])
     expect(grid[4].slice(0, 6)).toEqual([1, 'B01767', 'Bupi-BFS heavy - Hộp 10 lọ 2ml', '020101', 'LO', '010924'])
     expect(grid[5][1]).toBe('J00643')
     expect(grid).toHaveLength(6)
