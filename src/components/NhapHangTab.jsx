@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Upload, FileUp, FileSpreadsheet, X, Download, PackagePlus,
   Pencil, Save, FileText, Plus, Trash2, RefreshCw,
-  ArrowUp, ArrowDown, ArrowUpDown, Check,
+  ArrowUp, ArrowDown, ArrowUpDown, Check, Search,
 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import {
@@ -401,7 +401,21 @@ function FactoryReconciliationTable({ rows, tone }) {
   )
 }
 
-function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onInsertRow, sortKey, sortDir, onToggleSort, checkedRowIds, onToggleChecked }) {
+const normText = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase()
+// Ô tìm nhanh trên bảng Kho C / Kho LGT: khớp Mã hàng, Tên hàng, Số lô (không phân biệt dấu, hoa/thường).
+const rowMatches = (row, needle) => [row.maHang, row.tenHang, row.soLo].some(v => normText(v).includes(needle))
+
+function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onInsertRow, sortKey, sortDir, onToggleSort, checkedRowIds, onToggleChecked, query = '' }) {
+  // Kết quả tìm được "chốt" theo rowId lúc gõ từ khoá — đang Chỉnh sửa mà sửa Mã/Tên/Số lô của dòng vừa tìm
+  // thì dòng đó KHÔNG tự biến mất; dòng mới chèn thêm (rowId chưa có lúc tìm) cũng vẫn hiện để sửa tiếp.
+  const needle = normText(query.trim())
+  const [found, setFound] = useState({ needle: '', matched: null, known: null })
+  if (found.needle !== needle) {
+    setFound(needle
+      ? { needle, matched: new Set(rows.filter(r => rowMatches(r, needle)).map(r => r.rowId)), known: new Set(rows.map(r => r.rowId)) }
+      : { needle: '', matched: null, known: null })
+  }
+
   // Sắp xếp CHỈ áp dụng khi KHÔNG Chỉnh sửa — nếu sắp cả lúc đang gõ Mã hàng/Tên hàng, mỗi ký tự gõ vào
   // sẽ đổi thứ tự ngay, dòng đang gõ nhảy vị trí liên tục ngay dưới con trỏ, trải nghiệm rất khó chịu dù
   // key={row.rowId} vẫn giữ đúng danh tính từng dòng. originalIndex giữ nguyên vị trí thật trong mảng dữ
@@ -409,19 +423,20 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onInsert
   // sortKey/sortDir được nhấc lên component cha (NhapHangTab) để "Tải Excel" xuất đúng theo thứ tự đang
   // xem trên bảng — xem sortRowsBy.
   const ordered = useMemo(() => {
-    const indexed = rows.map((row, originalIndex) => ({ row, originalIndex }))
+    const all = rows.map((row, originalIndex) => ({ row, originalIndex }))
+    const indexed = found.matched ? all.filter(({ row }) => found.matched.has(row.rowId) || !found.known.has(row.rowId)) : all
     if (editing || !sortKey) return indexed
     const dir = sortDir === 'asc' ? 1 : -1
     return [...indexed].sort((a, b) =>
       dir * String(a.row[sortKey] || '').localeCompare(String(b.row[sortKey] || ''), 'vi', { sensitivity: 'base', numeric: true })
     )
-  }, [rows, editing, sortKey, sortDir])
+  }, [rows, editing, sortKey, sortDir, found])
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <h3 className="font-semibold text-sm text-gray-800">{title}</h3>
-        <span className="text-xs text-gray-400">{rows.length} dòng</span>
+        <span className="text-xs text-gray-400">{found.matched ? `${ordered.length} / ${rows.length} dòng khớp` : `${rows.length} dòng`}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -446,6 +461,9 @@ function ReceiptTable({ title, rows, editing, onRowChange, onRemoveRow, onInsert
             </tr>
           </thead>
           <tbody>
+            {found.matched && ordered.length === 0 && (
+              <tr><td colSpan={editing ? 13 : 12} className="px-2 py-4 text-center text-gray-400">Không có dòng nào khớp “{query.trim()}”</td></tr>
+            )}
             {ordered.map(({ row, originalIndex }, rank) => (
               <ReceiptTableRow
                 key={row.rowId}
@@ -563,6 +581,7 @@ export default function NhapHangTab() {
   const [error, setError] = useState('')
   const [processing, setProcessing] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [tableQuery, setTableQuery] = useState('')
   const [exporting, setExporting] = useState(false)
   const [batches, setBatches] = useState(() => readBatches())
   const [uploadingBienBan, setUploadingBienBan] = useState(false)
@@ -1232,6 +1251,22 @@ export default function NhapHangTab() {
         </label>
       </div>
 
+      <div className="sticky top-0 z-10 bg-white rounded-xl border border-gray-200 px-3 py-2 flex items-center gap-2 shadow-sm">
+        <Search size={14} className="text-gray-400 shrink-0" />
+        <input
+          value={tableQuery}
+          onChange={e => setTableQuery(e.target.value)}
+          aria-label="Tìm trong bảng Kho C / Kho LGT"
+          placeholder="Tìm nhanh theo mã hàng, tên hàng hoặc số lô trong bảng Kho C và Kho LGT…"
+          className="flex-1 min-w-0 text-sm outline-none bg-transparent"
+        />
+        {tableQuery && (
+          <button type="button" onClick={() => setTableQuery('')} className="p-1 rounded hover:bg-gray-100 text-gray-400" title="Xoá tìm kiếm" aria-label="Xoá tìm kiếm">
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
       <ReceiptTable
         title="Kho C"
         rows={active.khoC || []}
@@ -1244,6 +1279,7 @@ export default function NhapHangTab() {
         onToggleSort={toggleKhoCSort}
         checkedRowIds={checkedRowIds}
         onToggleChecked={toggleChecked}
+        query={tableQuery}
       />
       <ReceiptTable
         title="Kho LGT"
@@ -1257,6 +1293,7 @@ export default function NhapHangTab() {
         onToggleSort={toggleKhoLgtSort}
         checkedRowIds={checkedRowIds}
         onToggleChecked={toggleChecked}
+        query={tableQuery}
       />
 
       {error && <p className="text-sm text-red-500">{error}</p>}
