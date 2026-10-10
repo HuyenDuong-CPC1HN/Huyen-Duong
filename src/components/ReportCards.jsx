@@ -1,6 +1,9 @@
 import { useState, useId } from 'react'
 import { Truck, ChevronDown, ChevronUp } from 'lucide-react'
 
+// Số liệu trống (null / không phải số — vd tuần đã lưu thiếu trường) hiện "—" thay vì làm sập cả trang.
+const fmtNum = v => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('vi-VN') : '—')
+
 export function KpiTile({ icon: Icon, value, label, sub, pctOfTotal, cls }) {
   return (
     <div className="report-kpi">
@@ -9,7 +12,7 @@ export function KpiTile({ icon: Icon, value, label, sub, pctOfTotal, cls }) {
         <div className="min-w-0">
           <div className="report-kpi-label">{label}</div>
           <div className={`report-kpi-value ${cls}`}>
-            {value.toLocaleString('vi-VN')}
+            {fmtNum(value)}
             {pctOfTotal !== undefined && <span>({pctOfTotal}%)</span>}
           </div>
         </div>
@@ -19,7 +22,7 @@ export function KpiTile({ icon: Icon, value, label, sub, pctOfTotal, cls }) {
           {sub.map(s => (
             <div key={s.label}>
               <span>{s.label}</span>
-              <strong>{s.value.toLocaleString('vi-VN')} <small>({s.pct}%)</small></strong>
+              <strong>{fmtNum(s.value)} <small>({s.pct}%)</small></strong>
             </div>
           ))}
         </div>
@@ -41,7 +44,7 @@ export function StatCard({ icon: Icon, value, label, cls, pctOfTotal, onClick, a
     >
       <Icon size={16} className={cls} aria-hidden="true" />
       <div className={`report-stat-value ${cls}`}>
-        {value.toLocaleString('vi-VN')}
+        {fmtNum(value)}
         {pctOfTotal !== undefined && <span>({pctOfTotal}%)</span>}
       </div>
       <div className="report-stat-label">{label}</div>
@@ -52,7 +55,7 @@ export function StatCard({ icon: Icon, value, label, cls, pctOfTotal, onClick, a
 function OrderBadge({ value }) {
   return (
     <span className="report-section-count">
-      {value.toLocaleString('vi-VN')} đơn
+      {fmtNum(value)} đơn
     </span>
   )
 }
