@@ -10,6 +10,53 @@ import { handCls, presetCls, grid, wrapStyle } from './workspaceStyles'
 
 const fmtDate = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '' }
 
+// "22/08/2029", "22-08-2029", "22.08.29", "2029-08-22" → "2029-08-22"; không hiểu được thì null.
+function parseDateText(text) {
+  const t = String(text || '').trim()
+  let m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(t)
+  let y, mo, d
+  if (m) [, y, mo, d] = m
+  else {
+    m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/.exec(t)
+    if (!m) return null
+    ;[, d, mo, y] = m
+    if (y.length === 2) y = `20${y}`
+  }
+  const dt = new Date(Number(y), Number(mo) - 1, Number(d))
+  if (dt.getMonth() !== Number(mo) - 1 || dt.getDate() !== Number(d)) return null
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+// Ô ngày dạng chữ (dd/mm/yyyy) — gõ hoặc dán (copy) chuỗi ngày được, ô date của trình duyệt không cho dán.
+// Lưu ISO khi đọc được ngày hợp lệ; gõ dở / sai thì ô viền đỏ, chưa lưu.
+function DateTextInput({ value, onChange, className, ...rest }) {
+  const [text, setText] = useState(() => fmtDate(value))
+  const [lastValue, setLastValue] = useState(value)
+  if (value !== lastValue) {
+    setLastValue(value)
+    if (parseDateText(text) !== value) setText(fmtDate(value))
+  }
+  const invalid = text.trim() !== '' && !parseDateText(text)
+  return (
+    <input
+      {...rest}
+      value={text}
+      placeholder="dd/mm/yyyy"
+      onChange={e => {
+        const t = e.target.value
+        setText(t)
+        if (t.trim() === '') onChange('')
+        else {
+          const iso = parseDateText(t)
+          if (iso) onChange(iso)
+        }
+      }}
+      onBlur={() => { const iso = parseDateText(text); if (iso) setText(fmtDate(iso)) }}
+      className={invalid ? `${className} !border-red-400 !bg-red-50` : className}
+    />
+  )
+}
+
 // Màn làm bộ biên bản cho 1 phiếu xuất kho hàng huỷ: kiểm tra dữ liệu đọc từ phiếu, điền phần kho tự điền
 // (Tình trạng để trống cho kho diễn giải), xem trước + in, xuất Excel (xử lý) + Word (xác minh).
 export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
@@ -107,7 +154,7 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
                   <thead><tr className="text-gray-500">{['Hàng hoá', 'Lô · Hạn dùng', manual ? 'SL · ĐVT' : 'SL phiếu', 'Thực huỷ', 'Quy cách', 'Tình trạng', ''].map(h => <th key={h} className="px-1.5 py-1.5 text-left font-semibold">{h}</th>)}</tr></thead>
                   <tbody>
                     {items.map((it, i) => (
-                      <tr key={`${it.maHang}-${it.soLo}-${i}`} className="border-t border-gray-100 align-top">
+                      <tr key={it.rowId || `${i}`} className="border-t border-gray-100 align-top">
                         {manual ? (<>
                           <td className="px-1.5 py-1.5" style={{ minWidth: 170 }}>
                             <input value={it.maHang} onChange={e => setItem(i, 'maHang', e.target.value)} className={handCls} placeholder="Mã hàng" aria-label={`Mã hàng dòng ${i + 1}`} />
@@ -115,7 +162,7 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
                           </td>
                           <td className="px-1.5 py-1.5" style={{ minWidth: 130 }}>
                             <input value={it.soLo} onChange={e => setItem(i, 'soLo', e.target.value)} className={handCls} placeholder="Số lô" aria-label={`Số lô dòng ${i + 1}`} />
-                            <input type="date" value={it.hanDung || ''} onChange={e => setItem(i, 'hanDung', e.target.value)} className={`${handCls} mt-1`} aria-label={`Hạn dùng dòng ${i + 1}`} />
+                            <DateTextInput value={it.hanDung} onChange={v => setItem(i, 'hanDung', v)} className={`${handCls} mt-1`} aria-label={`Hạn dùng dòng ${i + 1}`} />
                           </td>
                           <td className="px-1.5 py-1.5" style={{ minWidth: 90 }}>
                             <input type="number" min="0" value={it.soLuong ?? ''} onChange={e => setSoLuong(i, e.target.value)} className={handCls} placeholder="SL" aria-label={`Số lượng dòng ${i + 1}`} />

@@ -67,7 +67,9 @@ export function newHuyPhieu(parsed, fileName, existing = [], now = new Date()) {
 export const HUY_KHO_XUAT_MAC_DINH = { C: '020102', DTP: '020105' }
 
 export function newHuyItem() {
-  return { maHang: '', tenHang: '', soLo: '', hanDung: '', dvt: '', soLuong: null, thucHuy: null, quyCach: '', tinhTrang: '' }
+  // rowId cố định làm key của dòng trên màn biên bản — không dùng mã hàng/số lô (đang gõ đổi liên tục, dòng bị
+  // dựng lại và mất con trỏ sau mỗi ký tự).
+  return { rowId: `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, maHang: '', tenHang: '', soLo: '', hanDung: '', dvt: '', soLuong: null, thucHuy: null, quyCach: '', tinhTrang: '' }
 }
 
 // Phiếu thêm tay (không có PDF phiếu xuất kho): kho tự gõ số phiếu, ngày, lý do và từng dòng hàng.

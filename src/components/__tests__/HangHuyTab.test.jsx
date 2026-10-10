@@ -132,13 +132,21 @@ describe('HangHuyTab — Thêm tay phiếu Kho C / Kho DTP (không có PDF)', ()
     expect(p).toMatchObject({ manual: true, kho: 'DTP', khoXuat: '020105', stage: 'doing' })
 
     fireEvent.change(screen.getByLabelText('Số phiếu xuất kho'), { target: { value: 'XK2621/00200' } })
-    fireEvent.change(screen.getByLabelText('Mã hàng dòng 1'), { target: { value: 'G00898' } })
+    // Gõ từng ký tự: ô nhập phải giữ nguyên (không bị dựng lại → không mất con trỏ sau mỗi ký tự).
+    const maInput = screen.getByLabelText('Mã hàng dòng 1')
+    fireEvent.change(maInput, { target: { value: 'G' } })
+    expect(screen.getByLabelText('Mã hàng dòng 1')).toBe(maInput)
+    fireEvent.change(screen.getByLabelText('Số lô dòng 1'), { target: { value: '2' } })
+    expect(screen.getByLabelText('Mã hàng dòng 1')).toBe(maInput)
+    fireEvent.change(maInput, { target: { value: 'G00898' } })
     fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Guacanyl - Hộp 4 vỉ' } })
+    fireEvent.change(screen.getByLabelText('Hạn dùng dòng 1'), { target: { value: '22/08/2029' } }) // dán chuỗi ngày
     fireEvent.change(screen.getByLabelText('Số lượng dòng 1'), { target: { value: '12' } })
     fireEvent.click(screen.getByRole('button', { name: /Thêm dòng/ }))
     p = readPhieus()[0]
     expect(p.soPhieu).toBe('XK2621/00200')
-    expect(p.items[0]).toMatchObject({ maHang: 'G00898', tenHang: 'Guacanyl - Hộp 4 vỉ', soLuong: 12, thucHuy: 12 })
+    expect(p.items[0]).toMatchObject({ maHang: 'G00898', tenHang: 'Guacanyl - Hộp 4 vỉ', hanDung: '2029-08-22', soLuong: 12, thucHuy: 12 })
+    expect(screen.getByLabelText('Hạn dùng dòng 1').value).toBe('22/08/2029')
     expect(p.items).toHaveLength(2)
     expect(screen.getAllByText('Guacanyl - Hộp 4 vỉ').length).toBeGreaterThan(0) // bản xem trước
 
