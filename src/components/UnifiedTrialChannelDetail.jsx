@@ -45,18 +45,25 @@ const KH_TYPES = {
   ],
 }
 
-function useStoredValue(storageKey, fallback) {
-  const [value, setValue] = useState(() => {
+// Giá trị nhập tay gắn theo ĐÚNG phiên tải file (referenceDate = meta.uploadedAt) — storage key dùng
+// chung cho mọi tuần của 1 kênh (không tách theo tuần), nên nếu đọc thẳng ra sẽ tự hiện lại số đã
+// nhập của tuần TRƯỚC ngay khi upload file tuần mới (bug thật đã gặp). Đánh dấu sessionKey ngay
+// trong giá trị lưu, so khớp với referenceDate hiện tại lúc đọc ra — cùng cơ chế liveSessionKey đã
+// dùng cho Sales Order/Chờ giao Logistics (xem CarrierStats.jsx).
+function useSessionScopedValue(storageKey, referenceDate, fallback) {
+  const [entry, setEntry] = useState(() => {
     try {
       const raw = localStorage.getItem(storageKey)
-      return raw === null ? fallback : JSON.parse(raw)
+      return raw === null ? null : JSON.parse(raw)
     } catch {
-      return fallback
+      return null
     }
   })
+  const value = entry && entry.sessionKey === referenceDate ? entry.value : fallback
   const commit = (v) => {
-    setValue(v)
-    localStorage.setItem(storageKey, JSON.stringify(v))
+    const next = { sessionKey: referenceDate, value: v }
+    setEntry(next)
+    localStorage.setItem(storageKey, JSON.stringify(next))
   }
   return [value, commit]
 }
@@ -133,12 +140,12 @@ export default function UnifiedTrialChannelDetail({
 
   // Ô nhập tay: phân loại "chưa giao" theo khách hàng — tổng các ô này CHÍNH LÀ số "Chưa giao"
   const khStorageKey = `unifiedTrial_chuagiao_kh_${channelKey}`
-  const [liveKhValues, commitKhValues] = useStoredValue(khStorageKey, {})
+  const [liveKhValues, commitKhValues] = useSessionScopedValue(khStorageKey, referenceDate, {})
   const onKhChange = (key, val) => commitKhValues({ ...liveKhValues, [key]: val })
 
   // Ô nhập tay: "Số đơn chưa gửi chành" (chỉ khi có nhóm Chành xe)
   const chuaGuiKey = `unifiedTrial_chuagiao_chuagui_${channelKey}`
-  const [liveChuaGuiChanh, commitChuaGuiChanh] = useStoredValue(chuaGuiKey, '')
+  const [liveChuaGuiChanh, commitChuaGuiChanh] = useSessionScopedValue(chuaGuiKey, referenceDate, '')
 
   // Số liệu tổng hợp — dùng chung với lúc "Lưu số liệu tuần này" để không lệch số giữa hiển thị
   // trực tiếp và bản đóng băng (xem unifiedTrialChannelStats.js).

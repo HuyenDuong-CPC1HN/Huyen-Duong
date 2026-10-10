@@ -92,6 +92,32 @@ describe('ExpiryStockTab', () => {
     expect(screen.queryByText('Chậm luân chuyển (CLC)')).not.toBeInTheDocument()
   })
 
+  // Cố định 5 cột đầu (Stt → Mã kho, cộng cột tích chọn) khi kéo ngang — mỗi cột "dính" đúng vị trí
+  // cộng dồn độ rộng các cột trước nó (vì độ rộng cột có thể bị kéo đổi), cột thứ 6 trở đi không dính.
+  it('5 cột đầu (Stt → Mã kho) cố định đúng offset trái khi kéo ngang, "Đvt" trở đi không cố định', async () => {
+    render(<ExpiryStockTab />)
+    const input = document.querySelector('input[type="file"]')
+    fireEvent.change(input, { target: { files: [buildSampleFile()] } })
+    await waitFor(() => expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument())
+
+    const headers = [...document.querySelectorAll('th')]
+    const byLeft = (th) => th.style.left
+    // checkbox(44) Stt(56) Loại(90) Mã vật tư(100) Tên vật tư(280) Mã kho(84) — mặc định DEFAULT_COL_WIDTH
+    expect(headers[0].style.position).toBe('sticky') // cột tích chọn
+    expect(byLeft(headers[0])).toBe('0px')
+    expect(headers[1].style.position).toBe('sticky') // Stt
+    expect(byLeft(headers[1])).toBe('44px')
+    expect(headers[2].style.position).toBe('sticky') // Loại
+    expect(byLeft(headers[2])).toBe('100px')
+    expect(headers[3].style.position).toBe('sticky') // Mã vật tư
+    expect(byLeft(headers[3])).toBe('190px')
+    expect(headers[4].style.position).toBe('sticky') // Tên vật tư
+    expect(byLeft(headers[4])).toBe('290px')
+    expect(headers[5].style.position).toBe('sticky') // Mã kho
+    expect(byLeft(headers[5])).toBe('570px')
+    expect(headers[6].style.position).not.toBe('sticky') // Đvt — cột đầu tiên KHÔNG cố định
+  })
+
   it('tab Hàng chậm luân chuyển dùng chung file đã tải ở tab Hàng cận date, chỉ hiện hàng CLC với 13 cột như sheet "CLC"', async () => {
     // Dữ liệu đã tải ở lần render trước (test phía trên) vẫn nằm trong kho dùng chung
     render(<ExpiryStockTab mode="clc" />)
@@ -110,6 +136,35 @@ describe('ExpiryStockTab', () => {
     expect(screen.getByRole('button', { name: /Xuất báo cáo hàng CLC/ })).toBeInTheDocument()
     expect(screen.queryByText(/Xuất biên bản hàng cận date/)).not.toBeInTheDocument()
 
+  })
+
+  // Trước đây chỉ đổi màu CHỮ theo vài mốc rời rạc — người dùng muốn kiểu "thang màu 3 mốc" (Conditional
+  // Formatting) của Excel: tô NỀN cả ô theo thang đỏ-vàng-xanh lá liên tục, càng gần hết hạn càng đỏ,
+  // càng xa càng xanh lá, để nhìn màu nền là đoán ngay mức độ gấp gáp, không cần đọc số.
+  it('cột "Tuổi thuốc (Tháng)" tô NỀN theo thang đỏ-vàng-xanh lá liên tục, càng gần hết hạn càng đỏ', async () => {
+    render(<ExpiryStockTab />)
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [buildSampleFile()] } })
+    await waitFor(() => expect(screen.getByText('ton-kho-thang-8.xlsx')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Tất cả tồn kho'))
+
+    const ageCellOf = (label) => screen.getByText(label).closest('tr').querySelectorAll('td')[9]
+    const expiredColor = ageCellOf('Hàng đã hết hạn').style.backgroundColor
+    const near3Color = ageCellOf('Hàng cận 3 tháng').style.backgroundColor
+    const near6Color = ageCellOf('Hàng cận 6 tháng').style.backgroundColor
+    const near12Color = ageCellOf('Hàng cận hạn 6-12 tháng').style.backgroundColor
+    const safeColor = ageCellOf('Hàng còn an toàn').style.backgroundColor
+    const hue = (rgb) => {
+      const [r, g, b] = rgb.match(/\d+/g).map(Number)
+      const max = Math.max(r, g, b), min = Math.min(r, g, b)
+      if (max === min) return 0
+      const d = max - min
+      return max === r ? (60 * (((g - b) / d) % 6)) : max === g ? (60 * ((b - r) / d + 2)) : (60 * ((r - g) / d + 4))
+    }
+    const hues = [expiredColor, near3Color, near6Color, near12Color, safeColor].map(hue)
+    // Hue tăng dần đều từ đỏ (~0) tới xanh lá (~120) đúng theo thứ tự tháng tăng dần.
+    for (let i = 1; i < hues.length; i++) expect(hues[i]).toBeGreaterThanOrEqual(hues[i - 1])
+    expect(hues[0]).toBeLessThanOrEqual(5)
+    expect(hues.at(-1)).toBeGreaterThan(90)
   })
 
   it('cột Hướng xử lý nhập tay được và được nhớ theo tháng', async () => {
