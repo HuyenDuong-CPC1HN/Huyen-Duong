@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, FileDown, Check, AlertTriangle, CheckCircle, Printer, Trash2 } from 'lucide-react'
-import { missingHuyFields } from '../utils/hangHuy'
+import { ArrowLeft, FileDown, Check, AlertTriangle, CheckCircle, Printer, Trash2, Plus, PencilLine } from 'lucide-react'
+import { missingHuyFields, newHuyItem } from '../utils/hangHuy'
 import { exportHangHuyPhieu } from '../utils/exportDamagedGoods'
 import { KhoTag, HuyStagePill } from './HangHuyBadges'
 import { XuLyPaper, XacMinhPaper } from './HangHuyPapers'
@@ -22,8 +22,18 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
   const setForm = (k, v) => onChange({ ...phieu, form: { ...f, [k]: v } })
   const setItem = (i, k, v) => onChange({ ...phieu, items: items.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)) })
   const setQty = (i, raw) => setItem(i, 'thucHuy', raw === '' ? null : Number(raw))
+  const manual = Boolean(phieu.manual)
+  const setPhieu = (k, v) => onChange({ ...phieu, [k]: v })
+  // Thêm tay: "SL phiếu" gõ trực tiếp, Thực huỷ đi theo cho tới khi kho sửa riêng.
+  const setSoLuong = (i, raw) => {
+    const n = raw === '' ? null : Number(raw)
+    onChange({ ...phieu, items: items.map((it, idx) => (idx === i ? { ...it, soLuong: n, thucHuy: it.thucHuy === it.soLuong ? n : it.thucHuy } : it)) })
+  }
+  const addItem = () => onChange({ ...phieu, items: [...items, newHuyItem()] })
   const removeItem = (i) => {
-    if (!window.confirm(`Bỏ dòng "${items[i].tenHang}" khỏi bộ biên bản? Phiếu xuất kho gốc không bị ảnh hưởng.`)) return
+    const it = items[i]
+    const blank = !it.maHang && !it.tenHang && !it.soLo
+    if (!blank && !window.confirm(`Bỏ dòng "${it.tenHang || it.maHang}" khỏi bộ biên bản?${manual ? '' : ' Phiếu xuất kho gốc không bị ảnh hưởng.'}`)) return
     onChange({ ...phieu, items: items.filter((_, idx) => idx !== i) })
   }
 
@@ -49,7 +59,7 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
       <div className="sheet-tab-shell flex flex-col gap-3">
         <header className="sheet-tab-context flex-wrap gap-2">
           <button type="button" onClick={onBack} className="sheet-tab-action"><ArrowLeft size={13} /> Danh sách phiếu</button>
-          <span className="font-mono text-xs">{phieu.soPhieu}</span>
+          <span className="font-mono text-xs">{phieu.soPhieu || (manual ? 'Phiếu thêm tay' : '')}</span>
           <HuyStagePill stage={phieu.stage} />
           <KhoTag kho={phieu.kho} />
         </header>
@@ -57,7 +67,21 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
 
         <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))' }}>
           <div className="rounded-xl border border-gray-200 bg-white">
-            <Step n={1} title="Phiếu xuất kho đã tải lên">
+            <Step n={1} title={manual ? 'Thông tin phiếu xuất kho (thêm tay)' : 'Phiếu xuất kho đã tải lên'}>
+              {manual ? (
+                <>
+                  <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-sm bg-blue-50 text-blue-800">
+                    <PencilLine size={16} className="shrink-0 mt-0.5" />
+                    <span>Phiếu {phieu.kho === 'C' ? 'Kho C (CPC1HN)' : 'Kho DTP (UPHARMA)'} thêm tay, không có file PDF. Gõ thông tin phiếu và từng dòng hàng ở bước 2.</span>
+                  </div>
+                  <div style={grid(170)}>
+                    <Field label="Số phiếu xuất kho" kind="hand"><input value={phieu.soPhieu} onChange={e => setPhieu('soPhieu', e.target.value)} className={handCls} placeholder={phieu.kho === 'C' ? 'VD: XT2621/00810' : 'VD: XK2621/00104'} aria-label="Số phiếu xuất kho" /></Field>
+                    <Field label="Ngày phiếu" kind="hand"><input type="date" value={phieu.ngayPhieu || ''} onChange={e => setPhieu('ngayPhieu', e.target.value)} className={handCls} aria-label="Ngày phiếu" /></Field>
+                    <Field label="Kho xuất" kind="preset"><input value={phieu.khoXuat} onChange={e => setPhieu('khoXuat', e.target.value)} className={presetCls} aria-label="Kho xuất" /></Field>
+                    <Field label="Lý do xuất kho" kind="hand"><input value={phieu.lyDo} onChange={e => setPhieu('lyDo', e.target.value)} className={handCls} placeholder="VD: Xuất huỷ hàng lỗi" aria-label="Lý do xuất kho" /></Field>
+                  </div>
+                </>
+              ) : (<>
               <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-sm bg-green-50 text-green-800">
                 <CheckCircle size={16} className="shrink-0 mt-0.5" />
                 <span>
@@ -71,21 +95,39 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
                   <span>Không đọc được số lượng của <b>{noQty.map(it => it.tenHang).join(', ')}</b> trên phiếu. Nhập tay ở ô "Thực huỷ" bên dưới (ô đỏ).</span>
                 </div>
               )}
+              </>)}
             </Step>
 
             <Step n={2} title="Hàng huỷ">
-              <span className="text-xs text-gray-400">Chữ xám lấy từ phiếu. Ô vàng là phần kho điền. <b>Tình trạng</b> để trống cho anh diễn giải hàng thực tế, dùng cho cả cột Ghi chú (biên bản xử lý) lẫn cột Tình trạng (biên bản xác minh).</span>
+              {manual
+                ? <span className="text-xs text-gray-400">Gõ mã hàng, tên hàng, số lô, hạn dùng, ĐVT và số lượng cho từng dòng; bấm <b>Thêm dòng</b> để thêm hàng. <b>Tình trạng</b> dùng cho cả cột Ghi chú (biên bản xử lý) lẫn cột Tình trạng (biên bản xác minh).</span>
+                : <span className="text-xs text-gray-400">Chữ xám lấy từ phiếu. Ô vàng là phần kho điền. <b>Tình trạng</b> để trống cho anh diễn giải hàng thực tế, dùng cho cả cột Ghi chú (biên bản xử lý) lẫn cột Tình trạng (biên bản xác minh).</span>}
               <div style={{ overflowX: 'auto' }}>
                 <table className="w-full text-xs">
-                  <thead><tr className="text-gray-500">{['Hàng hoá', 'Lô · Hạn dùng', 'SL phiếu', 'Thực huỷ', 'Quy cách', 'Tình trạng', ''].map(h => <th key={h} className="px-1.5 py-1.5 text-left font-semibold">{h}</th>)}</tr></thead>
+                  <thead><tr className="text-gray-500">{['Hàng hoá', 'Lô · Hạn dùng', manual ? 'SL · ĐVT' : 'SL phiếu', 'Thực huỷ', 'Quy cách', 'Tình trạng', ''].map(h => <th key={h} className="px-1.5 py-1.5 text-left font-semibold">{h}</th>)}</tr></thead>
                   <tbody>
                     {items.map((it, i) => (
                       <tr key={`${it.maHang}-${it.soLo}-${i}`} className="border-t border-gray-100 align-top">
+                        {manual ? (<>
+                          <td className="px-1.5 py-1.5" style={{ minWidth: 170 }}>
+                            <input value={it.maHang} onChange={e => setItem(i, 'maHang', e.target.value)} className={handCls} placeholder="Mã hàng" aria-label={`Mã hàng dòng ${i + 1}`} />
+                            <textarea rows={2} value={it.tenHang} onChange={e => setItem(i, 'tenHang', e.target.value)} className={`${handCls} mt-1`} style={wrapStyle} placeholder="Tên hàng" aria-label={`Tên hàng dòng ${i + 1}`} />
+                          </td>
+                          <td className="px-1.5 py-1.5" style={{ minWidth: 130 }}>
+                            <input value={it.soLo} onChange={e => setItem(i, 'soLo', e.target.value)} className={handCls} placeholder="Số lô" aria-label={`Số lô dòng ${i + 1}`} />
+                            <input type="date" value={it.hanDung || ''} onChange={e => setItem(i, 'hanDung', e.target.value)} className={`${handCls} mt-1`} aria-label={`Hạn dùng dòng ${i + 1}`} />
+                          </td>
+                          <td className="px-1.5 py-1.5" style={{ minWidth: 90 }}>
+                            <input type="number" min="0" value={it.soLuong ?? ''} onChange={e => setSoLuong(i, e.target.value)} className={handCls} placeholder="SL" aria-label={`Số lượng dòng ${i + 1}`} />
+                            <input value={it.dvt} onChange={e => setItem(i, 'dvt', e.target.value)} className={`${handCls} mt-1`} placeholder="ĐVT" aria-label={`ĐVT dòng ${i + 1}`} />
+                          </td>
+                        </>) : (<>
                         <td className="px-1.5 py-1.5"><span className="font-mono">{it.maHang}</span><br />{it.tenHang}</td>
                         <td className="px-1.5 py-1.5 whitespace-nowrap">{it.soLo}<br /><span className="text-gray-400">{fmtDate(it.hanDung)}</span></td>
                         <td className="px-1.5 py-1.5 whitespace-nowrap">{it.soLuong === null ? <span className="px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 font-semibold">không có</span> : `${it.soLuong} ${it.dvt}`}</td>
+                        </>)}
                         <td className="px-1.5 py-1.5" style={{ minWidth: 76 }}>
-                          <input type="number" min="0" value={it.thucHuy ?? ''} onChange={e => setQty(i, e.target.value)} aria-label={`Thực huỷ ${it.maHang}`}
+                          <input type="number" min="0" value={it.thucHuy ?? ''} onChange={e => setQty(i, e.target.value)} aria-label={`Thực huỷ ${it.maHang || `dòng ${i + 1}`}`}
                             className={it.thucHuy === null || it.thucHuy === '' ? 'w-full px-2 py-1.5 border rounded-lg text-sm bg-red-50 border-red-400 text-red-800' : handCls} />
                         </td>
                         <td className="px-1.5 py-1.5" style={{ minWidth: 110 }}><textarea rows={2} value={it.quyCach} onChange={e => setItem(i, 'quyCach', e.target.value)} className={handCls} style={wrapStyle} placeholder="VD: Hộp 20 ống" aria-label={`Quy cách ${it.maHang}`} /></td>
@@ -95,10 +137,13 @@ export default function HangHuyWorkspace({ phieu, onChange, onBack }) {
                         </td>
                       </tr>
                     ))}
-                    {items.length === 0 && <tr><td colSpan={7} className="text-center py-6 text-gray-400">Đã xoá hết dòng hàng, không còn gì để lập biên bản.</td></tr>}
+                    {items.length === 0 && <tr><td colSpan={7} className="text-center py-6 text-gray-400">{manual ? 'Chưa có dòng hàng nào. Bấm "Thêm dòng" để thêm.' : 'Đã xoá hết dòng hàng, không còn gì để lập biên bản.'}</td></tr>}
                   </tbody>
                 </table>
               </div>
+              {manual && (
+                <button type="button" onClick={addItem} className="sheet-tab-action self-start"><Plus size={13} /> Thêm dòng</button>
+              )}
             </Step>
 
             <Step n={3} title="Biên bản xử lý sản phẩm (Excel)">

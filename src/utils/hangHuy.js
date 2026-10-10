@@ -63,6 +63,29 @@ export function newHuyPhieu(parsed, fileName, existing = [], now = new Date()) {
   }
 }
 
+// Kho xuất mặc định khi thêm tay (giống trên phiếu xuất kho hàng huỷ của từng kho), sửa được trên màn biên bản.
+export const HUY_KHO_XUAT_MAC_DINH = { C: '020102', DTP: '020105' }
+
+export function newHuyItem() {
+  return { maHang: '', tenHang: '', soLo: '', hanDung: '', dvt: '', soLuong: null, thucHuy: null, quyCach: '', tinhTrang: '' }
+}
+
+// Phiếu thêm tay (không có PDF phiếu xuất kho): kho tự gõ số phiếu, ngày, lý do và từng dòng hàng.
+export function newManualHuyPhieu(kho, existing = [], now = new Date()) {
+  return {
+    id: `huy_${now.getTime()}`, manual: true,
+    kho, soPhieu: '', ngayPhieu: toIsoDate(now), khoXuat: HUY_KHO_XUAT_MAC_DINH[kho] || '', lyDo: '',
+    fileName: '', importedAt: now.toISOString(), stage: 'doing',
+    items: [newHuyItem()],
+    form: newHuyForm(existing, now),
+  }
+}
+
+// Phiếu thêm tay mà chưa gõ gì (không số phiếu, không dòng hàng nào có mã/tên) — đóng lại thì bỏ luôn.
+export function isEmptyManualHuy(phieu) {
+  return Boolean(phieu?.manual) && !phieu.soPhieu && !(phieu.items || []).some(it => it.maHang || it.tenHang)
+}
+
 // Các chỗ còn thiếu — vẫn cho xuất (Excel/Word để trống chỗ đó), chỉ để nhắc.
 export function missingHuyFields(phieu) {
   const f = phieu.form || {}

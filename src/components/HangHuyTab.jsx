@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, FileUp, Search, ChevronDown, ChevronRight, Eye, FileDown, Trash2, Check } from 'lucide-react'
+import { Bell, FileUp, Search, ChevronDown, ChevronRight, Eye, FileDown, Trash2, Check, Plus } from 'lucide-react'
 import { readHuyPhieus, writeHuyPhieus } from '../data/hangHuyStore'
 import { opsStore } from '../data/workspace'
-import { HUY_REMINDER_RULES, HUY_KHO, huyReminders, newHuyPhieu } from '../utils/hangHuy'
+import { HUY_REMINDER_RULES, HUY_KHO, huyReminders, isEmptyManualHuy, newHuyPhieu, newManualHuyPhieu } from '../utils/hangHuy'
 import { parsePhieuXuatKhoHuyPdf } from '../utils/parsePhieuXuatKhoHangHuy'
 import { extractPdfText } from '../utils/parseGoodsReceipt'
 import { exportDamagedGoodsXuLy, exportDamagedGoodsXacMinh } from '../utils/exportDamagedGoods'
@@ -158,6 +158,7 @@ export default function HangHuyTab({ initialOpenId = null }) {
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [manualMenu, setManualMenu] = useState(false)
   const pdfInputRef = useRef()
 
   // Thời gian trôi khi để app mở lâu: tính lại nhắc việc mỗi 10 phút.
@@ -230,8 +231,22 @@ export default function HangHuyTab({ initialOpenId = null }) {
     }
   }
 
+  const createManual = (kho) => {
+    setError('')
+    setManualMenu(false)
+    const phieu = newManualHuyPhieu(kho, phieus, new Date())
+    save([phieu, ...phieus])
+    setMonth(monthKey(phieu.importedAt))
+    setOpenId(phieu.id)
+  }
+  const closePhieu = () => {
+    const cur = phieus.find(p => p.id === openId)
+    if (isEmptyManualHuy(cur)) save(phieus.filter(p => p.id !== cur.id))
+    setOpenId(null)
+  }
+
   const openPhieuObj = phieus.find(p => p.id === openId)
-  if (openPhieuObj) return <HangHuyWorkspace phieu={openPhieuObj} onChange={update} onBack={() => setOpenId(null)} />
+  if (openPhieuObj) return <HangHuyWorkspace phieu={openPhieuObj} onChange={update} onBack={closePhieu} />
 
   const tiles = [['todo', 'Chưa làm biên bản'], ['doing', 'Đang điền / chờ ký'], ['done', 'Đã ký, huỷ xong']]
 
@@ -263,6 +278,20 @@ export default function HangHuyTab({ initialOpenId = null }) {
                 <FileUp size={13} /> {uploading ? 'Đang đọc file…' : 'Tải phiếu xuất kho (PDF)'}
               </button>
               <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden" onChange={e => { void createFromPdf(e.target.files[0]); e.target.value = '' }} />
+              <div className="relative">
+                <button type="button" onClick={() => setManualMenu(v => !v)} aria-expanded={manualMenu} className="sheet-tab-action">
+                  <Plus size={13} /> Thêm tay (không có PDF)
+                </button>
+                {manualMenu && (
+                  <div className="absolute right-0 mt-1 z-20 w-48 rounded-lg border border-gray-200 bg-white shadow-lg p-1 flex flex-col">
+                    {['C', 'DTP'].map(k => (
+                      <button key={k} type="button" onClick={() => createManual(k)} className="flex items-center gap-2 px-2.5 py-2 rounded-md text-sm text-left hover:bg-gray-50">
+                        <KhoTag kho={k} /> Thêm tay {HUY_KHO[k].label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="report-section-content flex flex-col gap-3">
@@ -290,7 +319,7 @@ export default function HangHuyTab({ initialOpenId = null }) {
                     <tr><td colSpan={7} className="text-center py-10 text-gray-400 text-sm">Chưa có phiếu xuất kho hàng huỷ phù hợp</td></tr>
                   ) : visible.map(p => (
                     <tr key={p.id} onClick={() => openPhieu(p.id)} className="border-b border-gray-50 align-top cursor-pointer hover:bg-blue-50/40">
-                      <td className="px-2 py-2 font-mono">{p.soPhieu}</td>
+                      <td className="px-2 py-2 font-mono">{p.soPhieu || '—'}{p.manual && <div className="font-sans text-[11px] text-gray-400">thêm tay</div>}</td>
                       <td className="px-2 py-2 text-gray-600">{fmtDate(p.ngayPhieu)}</td>
                       <td className="px-2 py-2"><KhoTag kho={p.kho} /><div className="text-[11px] text-gray-400 mt-1">kho {p.khoXuat}</div></td>
                       <td className="px-2 py-2 text-gray-500 max-w-72"><div className="line-clamp-2" title={p.lyDo}>{p.lyDo || '—'}</div></td>

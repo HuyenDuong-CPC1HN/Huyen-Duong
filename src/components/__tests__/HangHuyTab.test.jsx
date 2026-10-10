@@ -120,3 +120,40 @@ describe('HangHuyTab — Kho C & Kho DTP theo phiếu xuất kho', () => {
     expect(screen.getAllByTitle('Xem')).toHaveLength(1) // đúng 1 biên bản Kho C, Kho A không lẫn vào
   })
 })
+
+describe('HangHuyTab — Thêm tay phiếu Kho C / Kho DTP (không có PDF)', () => {
+  it('chọn Thêm tay Kho DTP → gõ số phiếu, dòng hàng, thêm dòng; bản xem trước và danh sách nhận đúng', async () => {
+    render(<HangHuyTab />)
+    fireEvent.click(screen.getByRole('button', { name: /Thêm tay \(không có PDF\)/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Thêm tay Kho DTP/ }))
+
+    await screen.findByText('Thông tin phiếu xuất kho (thêm tay)')
+    let p = readPhieus()[0]
+    expect(p).toMatchObject({ manual: true, kho: 'DTP', khoXuat: '020105', stage: 'doing' })
+
+    fireEvent.change(screen.getByLabelText('Số phiếu xuất kho'), { target: { value: 'XK2621/00200' } })
+    fireEvent.change(screen.getByLabelText('Mã hàng dòng 1'), { target: { value: 'G00898' } })
+    fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Guacanyl - Hộp 4 vỉ' } })
+    fireEvent.change(screen.getByLabelText('Số lượng dòng 1'), { target: { value: '12' } })
+    fireEvent.click(screen.getByRole('button', { name: /Thêm dòng/ }))
+    p = readPhieus()[0]
+    expect(p.soPhieu).toBe('XK2621/00200')
+    expect(p.items[0]).toMatchObject({ maHang: 'G00898', tenHang: 'Guacanyl - Hộp 4 vỉ', soLuong: 12, thucHuy: 12 })
+    expect(p.items).toHaveLength(2)
+    expect(screen.getAllByText('Guacanyl - Hộp 4 vỉ').length).toBeGreaterThan(0) // bản xem trước
+
+    fireEvent.click(screen.getByRole('button', { name: /Danh sách phiếu/ }))
+    expect(await screen.findByText('XK2621/00200')).toBeInTheDocument()
+    expect(screen.getByText('thêm tay')).toBeInTheDocument()
+  })
+
+  it('mở phiếu thêm tay rồi đóng lại khi chưa gõ gì thì không để lại phiếu rỗng', async () => {
+    render(<HangHuyTab />)
+    fireEvent.click(screen.getByRole('button', { name: /Thêm tay \(không có PDF\)/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Thêm tay Kho C/ }))
+    await screen.findByText('Thông tin phiếu xuất kho (thêm tay)')
+    expect(readPhieus()).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: /Danh sách phiếu/ }))
+    await waitFor(() => expect(readPhieus()).toHaveLength(0))
+  })
+})
