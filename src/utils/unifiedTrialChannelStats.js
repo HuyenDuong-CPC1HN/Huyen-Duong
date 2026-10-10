@@ -5,10 +5,10 @@ import { partnerType } from './partnerType'
 import { deliveryBucket } from './deliveryDays'
 import { getCarrierFileTotal, pickCarrierWeekIdByDate, snapshotCarrierLookup } from '../components/carrierUtils'
 
-export function calcTrucTiepStats(rows) {
+export function calcTrucTiepStats(rows, options = {}) {
   const result = { '24h': 0, '48h': 0, '72h': 0, khac: 0 }
   for (const row of rows) {
-    const bucket = deliveryBucket(row)
+    const bucket = deliveryBucket(row, options)
     if (bucket === '24') result['24h']++
     else if (bucket === '48') result['48h']++
     else if (bucket === '72') result['72h']++
@@ -17,15 +17,21 @@ export function calcTrucTiepStats(rows) {
   return result
 }
 
+// Quy tắc riêng theo kênh: đối tác Tân Thịnh = Giao trực tiếp chỉ áp cho Đơn C, Đơn DTP giữ nguyên.
+export function channelPartnerOptions(channelKey) {
+  return { tanThinh: channelKey === 'donC' }
+}
+
 export function computeChannelSnapshot({ data, channelKey, khValues, chuaGuiChanh, showChanhXe, showSpx, referenceDate }) {
   const validData = data.filter(row => String(row['Mã kiện hàng'] ?? '').trim())
+  const partnerOpts = channelPartnerOptions(channelKey)
 
   const tructiepRows = []
   const chanhxeRows = []
   const viettelRows = []
   const spxRows = []
   for (const row of validData) {
-    const t = partnerType(row)
+    const t = partnerType(row, partnerOpts)
     if (t === 'tructiep') tructiepRows.push(row)
     else if (t === 'viettel') viettelRows.push(row)
     else if (t === 'spx') spxRows.push(row)
@@ -49,7 +55,7 @@ export function computeChannelSnapshot({ data, channelKey, khValues, chuaGuiChan
   const khBreakdownSum = Object.values(khValues).reduce((s, v) => s + (Number(v) || 0), 0)
   const chuaGuiVal = chuaGuiChanh !== '' ? Number(chuaGuiChanh) : 0
 
-  const trucTiepStats = calcTrucTiepStats(tructiepRows)
+  const trucTiepStats = calcTrucTiepStats(tructiepRows, partnerOpts)
   const trucTiepDelivered = trucTiepStats['24h'] + trucTiepStats['48h'] + trucTiepStats['72h']
   const trucTiepBadge = tructiepRows.length + khBreakdownSum
 

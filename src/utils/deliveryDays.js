@@ -18,8 +18,8 @@ function diffDays(row) {
 
 const hasTanThinh = v => /t(â|a)n th(ị|i)nh/.test(String(v || '').normalize('NFC').toLowerCase())
 
-// Đối tác vận chuyển "Tân Thịnh" là đơn Giao hàng trực tiếp, luôn tính ≤ 24 giờ. Chỉ áp dụng cho đơn có Ngày tạo
-// kiện từ tuần 05/10/2026 trở đi — các tuần trước giữ nguyên cách tính cũ (khi đó đơn Tân Thịnh nằm trong Chành xe).
+// Đối tác vận chuyển "Tân Thịnh" là đơn Giao hàng trực tiếp, luôn tính ≤ 24 giờ. CHỈ áp dụng cho Đơn C (nơi gọi
+// truyền { tanThinh: true }), không đụng Đơn DTP; và chỉ đơn có Ngày tạo kiện từ tuần 05/10/2026 trở đi — các tuần trước giữ nguyên cách tính cũ (khi đó đơn Tân Thịnh nằm trong Chành xe).
 export const TAN_THINH_DOI_TAC_FROM = new Date(2026, 9, 5)
 export function isTanThinhDoiTac(row) {
   if (!hasTanThinh(row['Đối tác vận chuyển'])) return false
@@ -28,13 +28,14 @@ export function isTanThinhDoiTac(row) {
 }
 
 // Người đặt hàng chứa "Tân Thịnh" (hoặc đối tác Tân Thịnh, xem trên) luôn tính là giao 24 giờ, bất kể chênh lệch ngày thực tế
-function isTanThinh(row) {
-  return hasTanThinh(row['Người đặt hàng']) || isTanThinhDoiTac(row)
+function isTanThinh(row, tanThinhDoiTac) {
+  return hasTanThinh(row['Người đặt hàng']) || (tanThinhDoiTac && isTanThinhDoiTac(row))
 }
 
 // Phân loại mốc giao hàng trực tiếp: '24' | '48' | '72' | 'khac'
-export function deliveryBucket(row) {
-  if (isTanThinh(row)) return '24'
+// options.tanThinh: bật quy tắc đối tác Tân Thịnh (chỉ Đơn C).
+export function deliveryBucket(row, { tanThinh = false } = {}) {
+  if (isTanThinh(row, tanThinh)) return '24'
 
   const diff = diffDays(row)
   if (diff === 0 || diff === 1) return '24'

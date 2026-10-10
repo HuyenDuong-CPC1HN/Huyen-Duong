@@ -4,11 +4,12 @@ import { isTanThinhDoiTac } from './deliveryDays'
 const CHANHXE_EXCEPTIONS = ['GIAO TRỰC TIẾP - TÂY NGUYÊN', 'GIAO HÀNG TRỰC TIẾP TN']
 
 // Phân loại đối tác vận chuyển: 'tructiep' | 'viettel' | 'spx' | 'chanhxe'
-export function partnerType(row) {
+// options.tanThinh: bật quy tắc đối tác Tân Thịnh = Giao trực tiếp (chỉ Đơn C, không áp cho Đơn DTP).
+export function partnerType(row, { tanThinh = false } = {}) {
   const raw = (row['Đối tác vận chuyển'] || '').trim().toUpperCase()
   if (CHANHXE_EXCEPTIONS.some(ex => raw === ex.toUpperCase())) return 'chanhxe'
-  // Đối tác "Tân Thịnh" là đơn Giao hàng trực tiếp từ tuần 05/10/2026 (luôn tính ≤ 24 giờ, xem deliveryDays.js)
-  if (isTanThinhDoiTac(row)) return 'tructiep'
+  // Đơn C: đối tác "Tân Thịnh" là đơn Giao hàng trực tiếp từ tuần 05/10/2026 (luôn tính ≤ 24 giờ, xem deliveryDays.js)
+  if (tanThinh && isTanThinhDoiTac(row)) return 'tructiep'
   if (raw.includes('TRỰC TIẾP') || raw.includes('TRUC TIEP') || raw.includes('GIAO THẲNG')) return 'tructiep'
   if (raw.includes('VIETTEL')) return 'viettel'
   if (raw.includes('SPX')) return 'spx'

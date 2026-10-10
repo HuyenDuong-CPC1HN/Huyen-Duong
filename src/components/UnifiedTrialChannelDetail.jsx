@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { CheckCircle, Clock, AlertCircle, Package, TrendingUp, Truck, Users } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import { partnerType } from '../utils/partnerType'
-import { computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
+import { channelPartnerOptions, computeChannelSnapshot } from '../utils/unifiedTrialChannelStats'
 import { CarrierPanel } from './CarrierStats'
 import { DetailTable } from './ThongKeDoiTac'
 import { StatCard, SectionCard, KpiTile } from './ReportCards'
@@ -127,13 +127,14 @@ export default function UnifiedTrialChannelDetail({
   const { tructiepRows, chanhxeRows } = useMemo(() => {
     const tructiepRows = []
     const chanhxeRows = []
+    const partnerOpts = channelPartnerOptions(channelKey)
     for (const row of validData) {
-      const t = partnerType(row)
+      const t = partnerType(row, partnerOpts)
       if (t === 'tructiep') tructiepRows.push(row)
       else if (t !== 'viettel' && t !== 'spx') chanhxeRows.push(row)
     }
     return { tructiepRows, chanhxeRows }
-  }, [validData])
+  }, [validData, channelKey])
 
   const viettelKey = `unifiedTrial_${channelKey}_viettel`
   const spxKey = `unifiedTrial_${channelKey}_spx`
