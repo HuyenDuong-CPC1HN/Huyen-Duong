@@ -727,6 +727,10 @@ const ACTUAL_SCAN_ALIASES = {
   tenHang: ['Sản phẩm', 'Tên sản phẩm', 'Tên Sản phẩm', 'Tên Sản Phẩm'],
   soLo: ['Số lô'],
   soLuong: ['Số lượng'],
+  // Chỉ dùng để cảnh báo trùng mã tem giữa các file quét (findDuplicateTems), không ảnh hưởng đối soát số lượng.
+  maTem: ['Mã tem'],
+  stt: ['STT'],
+  kho: ['Kho'],
 }
 
 function resolveActualScanField(header) {
@@ -772,6 +776,7 @@ export function readActualScanRows(arrayBuffer) {
       const raw = line[colIndex]
       if (field === 'soLo') row[field] = joinSplitNumericLot(raw)
       else if (field === 'soLuong') row[field] = toOptionalNumber(raw)
+      else if (field === 'stt') row[field] = raw === null || raw === undefined ? '' : String(raw).trim()
       else row[field] = raw === null || raw === undefined ? '' : String(raw).trim()
     })
     if (!row.maHang || !PRODUCT_CODE.test(row.maHang)) continue
@@ -779,6 +784,24 @@ export function readActualScanRows(arrayBuffer) {
     rows.push(row)
   }
   return rows
+}
+
+// Mã tem là duy nhất cho từng thùng/kiện đã quét — cùng 1 mã tem xuất hiện ở 2 dòng (2 file, 2 kho, hoặc
+// lặp trong 1 file) là hàng bị quét/nhập 2 lần, số lượng đang bị cộng trùng. sources: [{ zone, fileName,
+// rows }] (rows từ readActualScanRows). Trả về [{ maTem, maHang, tenHang, soLo, soLuong, hits: [{ zone,
+// fileName, stt, kho }] }] — chỉ các mã tem xuất hiện từ 2 lần trở lên, sắp theo mã tem.
+export function findDuplicateTems(sources) {
+  const byTem = new Map()
+  for (const src of sources || []) {
+    for (const row of src.rows || []) {
+      const tem = String(row.maTem ?? '').trim()
+      if (!tem) continue
+      const entry = byTem.get(tem) || { maTem: tem, maHang: row.maHang, tenHang: row.tenHang || '', soLo: row.soLo || '', soLuong: row.soLuong ?? 0, hits: [] }
+      entry.hits.push({ zone: src.zone, fileName: src.fileName, stt: row.stt || '', kho: row.kho || '' })
+      byTem.set(tem, entry)
+    }
+  }
+  return [...byTem.values()].filter(e => e.hits.length > 1).sort((a, b) => a.maTem.localeCompare(b.maTem))
 }
 
 // Website xuất mỗi lần quét/xác nhận thành 1 dòng riêng — cùng 1 lô có thể xuất hiện hàng chục dòng nếu

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getDoiSoatSessionCache, setDoiSoatSessionCache } from './doiSoatSessionCache'
-import { FileUp, FileSpreadsheet, X, RefreshCw, ListChecks, PackageSearch } from 'lucide-react'
+import { FileUp, FileSpreadsheet, X, RefreshCw, ListChecks, PackageSearch, AlertTriangle } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import {
   readActualScanRows,
+  findDuplicateTems,
   mergeActualScanRows,
   splitSoRows,
   reconcileActualVsInvoice,
@@ -284,6 +285,50 @@ function Tile({ label, count, className, active, onClick }) {
   )
 }
 
+const ZONE_LABEL = { khoC: 'Kho C', khoLgt: 'Kho LGT', khoSo: 'Kho SO' }
+
+// Cảnh báo mã tem trùng giữa các file quét thực tế (cùng 1 thùng bị quét/nhập 2 lần → số lượng cộng trùng).
+function DuplicateTemWarning({ list }) {
+  if (list.length === 0) return null
+  const extra = list.reduce((s, e) => s + (Number(e.soLuong) || 0) * (e.hits.length - 1), 0)
+  return (
+    <div style={padCard} className="flex flex-col gap-3 bg-red-50 border border-red-200 rounded-2xl" role="alert">
+      <div className="flex items-start gap-2 text-red-800">
+        <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+        <div className="text-sm">
+          <b>Cảnh báo: {list.length} mã tem bị trùng</b> giữa các file quét thực tế — mỗi mã tem chỉ được nhập 1 lần,
+          số lượng đang bị cộng trùng khoảng <b>{extra.toLocaleString('vi-VN')}</b>. Kiểm tra thực tế mã tem thuộc kho nào rồi huỷ nhập ở chỗ còn lại.
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto' }} className="bg-white rounded-xl border border-red-100">
+        <table className="w-full text-xs">
+          <thead className="bg-red-50/60 text-gray-600">
+            <tr>{['Mã tem', 'Mã hàng', 'Tên hàng', 'Số lô', 'SL / tem', 'Xuất hiện ở'].map(h => <th key={h} className="px-2 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {list.map(e => (
+              <tr key={e.maTem} className="border-t border-red-50 align-top">
+                <td className="px-2 py-1.5 font-mono font-semibold text-red-700 whitespace-nowrap">{e.maTem}</td>
+                <td className="px-2 py-1.5 font-mono">{e.maHang}</td>
+                <td className="px-2 py-1.5">{e.tenHang}</td>
+                <td className="px-2 py-1.5 font-mono">{e.soLo}</td>
+                <td className="px-2 py-1.5 tabular-nums">{Number(e.soLuong || 0).toLocaleString('vi-VN')}</td>
+                <td className="px-2 py-1.5">
+                  {e.hits.map((h, i) => (
+                    <div key={i} className="whitespace-nowrap">
+                      <b>{ZONE_LABEL[h.zone] || h.zone}</b>{h.kho && <span className="text-gray-500"> (kho {h.kho})</span>} · {h.fileName}{h.stt && <> · STT {h.stt}</>}
+                    </div>
+                  ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function DoiSoatThucTeTab() {
   const [batches] = useState(() => readBatches())
   // Chuyển tab rồi quay lại: khôi phục trạng thái đã giữ trong phiên (xem doiSoatSessionCache.js).
@@ -327,11 +372,15 @@ export default function DoiSoatThucTeTab() {
     setPendingFiles(current => ({ ...current, [kho]: current[kho].filter((_, i) => i !== index) }))
   }
 
-  const readActualRowsFromFiles = async (files, fileErrors) => {
+  // sources: gom theo từng file (kèm khung kho + tên file) để cảnh báo trùng mã tem giữa các file.
+  const readActualRowsFromFiles = async (files, fileErrors, zone, sources) => {
     const settled = await Promise.allSettled(files.map(async file => readActualScanRows(await file.arrayBuffer())))
     const rows = []
     settled.forEach((res, i) => {
-      if (res.status === 'fulfilled') rows.push(...res.value)
+      if (res.status === 'fulfilled') {
+        rows.push(...res.value)
+        sources.push({ zone, fileName: files[i].name, rows: res.value })
+      }
       else fileErrors.push(`${files[i].name}: ${res.reason?.message || 'không đọc được file'}`)
     })
     return rows
@@ -346,10 +395,11 @@ export default function DoiSoatThucTeTab() {
     setError('')
     try {
       const fileErrors = []
+      const sources = []
       const [rawC, rawLgt, rawSo] = await Promise.all([
-        readActualRowsFromFiles(pendingFiles.khoC, fileErrors),
-        readActualRowsFromFiles(pendingFiles.khoLgt, fileErrors),
-        readActualRowsFromFiles(pendingFiles.khoSo, fileErrors),
+        readActualRowsFromFiles(pendingFiles.khoC, fileErrors, 'khoC', sources),
+        readActualRowsFromFiles(pendingFiles.khoLgt, fileErrors, 'khoLgt', sources),
+        readActualRowsFromFiles(pendingFiles.khoSo, fileErrors, 'khoSo', sources),
       ])
 
       const { soRows: invoiceKhoSo, nonSoRows: invoiceKhoC } = splitSoRows(batch.khoC)
@@ -362,6 +412,7 @@ export default function DoiSoatThucTeTab() {
         khoC: pendingFiles.khoC.length > 0 ? reconcileActualVsInvoice(invoiceKhoC, mergeActualScanRows(rawC)) : null,
         khoLgt: pendingFiles.khoLgt.length > 0 ? reconcileActualVsInvoice(invoiceKhoLgt, mergeActualScanRows(rawLgt)) : null,
         khoSo: pendingFiles.khoSo.length > 0 ? reconcileActualVsInvoice(invoiceKhoSo, mergeActualScanRows(rawSo)) : null,
+        duplicateTems: findDuplicateTems(sources),
       })
       setStatusFilter(null)
       if (fileErrors.length > 0) setError(`Không đọc được: ${fileErrors.join('; ')}`)
@@ -449,6 +500,7 @@ export default function DoiSoatThucTeTab() {
 
       {results && (
         <div className="flex flex-col gap-5">
+          <DuplicateTemWarning list={results.duplicateTems || []} />
           <div className="flex flex-col gap-2">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {tiles.map(tile => (

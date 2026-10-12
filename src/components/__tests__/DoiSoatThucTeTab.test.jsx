@@ -151,3 +151,40 @@ describe('DoiSoatThucTeTab — bấm vào thẻ tổng hợp để lọc bảng 
     expect(within(chuaQuetTile).getByText('0')).toBeInTheDocument()
   })
 })
+
+describe('DoiSoatThucTeTab — cảnh báo mã tem trùng giữa các file quét', () => {
+  function temFile(name, kho, rows) {
+    const aoa = [
+      ['STT', 'Trạng thái', 'Mã tem', 'Mã sản phẩm', 'Tên sản phẩm', 'Số lô', 'Số lượng', 'Vị trí', 'Kho'],
+      ...rows.map(([stt, tem]) => [stt, 'Đã nhập kho', tem, 'A00001', 'Hàng khớp', 'L1', 5, 'L2.02', kho]),
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1')
+    return new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], name)
+  }
+
+  it('cùng mã tem ở file Kho C và file Kho LGT → hiện cảnh báo, ghi rõ kho, file, STT', async () => {
+    seedBatch()
+    render(<DoiSoatThucTeTab />)
+    const inputs = document.querySelectorAll('input[type="file"]')
+    fireEvent.change(inputs[0], { target: { files: [temFile('nhap-kho-C.xlsx', '020101', [[1, '260700691186'], [2, '260700691999']])] } })
+    fireEvent.change(inputs[1], { target: { files: [temFile('nhap-kho-DTP.xlsx', '020105', [[17, '260700691186'], [18, '260700691777']])] } })
+    fireEvent.click(await screen.findByRole('button', { name: /chạy đối soát/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText(/1 mã tem bị trùng/)).toBeInTheDocument()
+    expect(within(alert).getByText('260700691186')).toBeInTheDocument()
+    expect(within(alert).queryByText('260700691999')).toBeNull()
+    expect(within(alert).getByText(/nhap-kho-C\.xlsx · STT 1/)).toBeInTheDocument()
+    expect(within(alert).getByText(/nhap-kho-DTP\.xlsx · STT 17/)).toBeInTheDocument()
+  })
+
+  it('không trùng mã tem thì không hiện cảnh báo', async () => {
+    seedBatch()
+    render(<DoiSoatThucTeTab />)
+    fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [temFile('a.xlsx', '020101', [[1, 'T1'], [2, 'T2']])] } })
+    fireEvent.click(await screen.findByRole('button', { name: /chạy đối soát/i }))
+    await waitFor(() => expect(screen.getAllByText(/dòng/).length).toBeGreaterThan(0))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
