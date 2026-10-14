@@ -108,6 +108,13 @@ export function newCase({ kind, sub = 'tuChoi', kho = 'C', khachHang = '', soDon
   return c
 }
 
+// Hồ sơ tạo từ file đã đọc được dòng hàng thì vào thẳng bước BB xác minh (bước tiếp nhận coi như xong).
+export function startAtVerify(c, now = new Date()) {
+  const iso = now.toISOString()
+  const step = stepIndex(c.kind, 'xmNhap')
+  return { ...c, step, stepAt: iso, history: [...(c.history || []), { step, at: iso }] }
+}
+
 // Hồ sơ hàng lỗi vừa xong bước "đổi hàng" → tạo mục Chờ huỷ từ dòng hàng của hồ sơ.
 export function poolEntryFromCase(c, now = new Date()) {
   return {

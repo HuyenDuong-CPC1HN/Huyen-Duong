@@ -106,6 +106,11 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
         <>
           <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-3">
             <div className="font-semibold text-sm text-gray-800">BB xác minh tình trạng hàng hoá (nhập lại)</div>
+            <div style={grid(200)}>
+              <Field label="Khách hàng" kind="hand"><input value={c.khachHang} onChange={e => set({ khachHang: e.target.value })} className={handCls} aria-label="Khách hàng" /></Field>
+              <Field label="Số đơn / số phiếu" kind="hand"><input value={c.soDon} onChange={e => set({ soDon: e.target.value })} className={handCls} aria-label="Số đơn" /></Field>
+            </div>
+            {(c.files || []).length > 0 && <div className="text-xs text-gray-500">File đã tải: {c.files.map(f => f.name).join(', ')}</div>}
             <div style={grid(160)}>
               <Field label="Ngày xác minh" kind="hand"><input type="date" value={c.form.xmNgay} onChange={e => setForm('xmNgay', e.target.value)} className={handCls} /></Field>
               <Field label="Giờ" kind="hand"><input type="time" value={c.form.xmGio} onChange={e => setForm('xmGio', e.target.value)} className={handCls} /></Field>
@@ -113,7 +118,10 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
                 <select value={c.form.keToan} onChange={e => set({ form: { ...c.form, keToan: e.target.value }, keToan: e.target.value })} className={handCls} aria-label="Kế toán tham gia">{KE_TOAN_LIST.map(n => <option key={n}>{n}</option>)}</select>
               </Field>
             </div>
-            <ItemsEditor items={c.items} onChange={items => set({ items })} cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'quyCach', 'tinhTrang']} readOnlyCols={['maHang', 'soLuong']} />
+            <ItemsEditor items={c.items} onChange={items => set({ items })}
+              cols={th ? ['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', 'donGia', 'quyCach', 'tinhTrang'] : ['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', 'quyCach', 'tinhTrang']}
+              onAdd={() => set({ items: [...c.items, newItem({ tinhTrang: c.kind === 'tra' ? 'Hàng nguyên vẹn' : (c.loiLyDo || 'Hàng lỗi') })] })}
+              onRemove={i => set({ items: c.items.length > 1 ? c.items.filter((_, idx) => idx !== i) : [newItem()] })} />
           </div>
           {th && (
             <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-3">
@@ -142,7 +150,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
                 )}
                 <Field label="Lý do xuất trả" kind="preset" full><textarea rows={2} value={th.pdf.lyDo || ''} onChange={e => setThPdf({ lyDo: e.target.value })} className={presetCls} aria-label="Lý do xuất trả" /></Field>
               </div>
-              <div className="text-[11px] text-gray-400">Đơn giá sửa ở bước Tiếp nhận (Lùi 1 bước). Hàng hoá, số lô lấy chung với BB xác minh.</div>
+              <div className="text-[11px] text-gray-400">Hàng hoá, số lô, đơn giá lấy chung với bảng hàng ở trên.</div>
             </div>
           )}
           {next('In xong → Chờ ký')}

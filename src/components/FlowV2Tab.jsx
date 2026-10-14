@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, X } from 'lucide-react'
 import {
   BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, backBatch, backCase, daysSince,
-  dissolveBatch, fmtDateVi, KIND_BORDER, makeBatch, newCase, newItem, newPsEntry, stepOfCase,
+  dissolveBatch, fmtDateVi, KIND_BORDER, makeBatch, newCase, newItem, newPsEntry, startAtVerify, stepOfCase,
 } from '../utils/flowV2'
 import { readFlowV2, writeFlowV2 } from '../data/flowV2Store'
 import { uploadFlowFiles } from '../data/flowV2Files'
@@ -58,7 +58,9 @@ function NewCaseModal({ onClose, onCreate }) {
       let stored = []
       if (files.length) { try { stored = await uploadFlowFiles(files) } catch { stored = files.map(f => ({ name: f.name, storagePath: '', type: f.type })) } }
       const daNhanPhotos = kind === 'tra' && sub === 'daNhan'
-      onCreate(newCase({ kind, sub, kho, khachHang: parsed?.khachHang || '', items: parsed?.items?.length ? parsed.items : [], files: daNhanPhotos ? [] : stored, traHang: kind === 'tra' && sub === 'tuChoi' ? parsed?.traHang : null }), daNhanPhotos ? stored : [])
+      const created = newCase({ kind, sub, kho, khachHang: parsed?.khachHang || '', items: parsed?.items?.length ? parsed.items : [], files: daNhanPhotos ? [] : stored, traHang: kind === 'tra' && sub === 'tuChoi' ? parsed?.traHang : null })
+      // Đọc được dòng hàng từ file → vào thẳng bước 2 (BB xác minh), sửa thông tin ngay ở đó.
+      onCreate(parsed?.items?.some(it => it.tenHang) ? startAtVerify(created) : created, daNhanPhotos ? stored : [])
     } catch (err) {
       setError(err.message || 'Không tạo được hồ sơ.')
     } finally { setBusy(false) }
