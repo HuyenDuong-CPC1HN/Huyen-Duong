@@ -102,3 +102,40 @@ describe('Hàng trả & huỷ (Demo)', () => {
     expect(read('flowv2_cases')[0].step).toBe(7) // Huỷ xong
   })
 })
+
+describe('Hàng trả & huỷ (Demo) — khách từ chối nhận có Biên bản trả hàng nội bộ', () => {
+  it('bước BB xác minh có thêm Biên bản trả lại hàng (nội bộ) xem trước, điền số hoá đơn / bên C, xuất Word được', async () => {
+    render(<FlowV2Tab />)
+    createCase('tra', /Khách từ chối nhận/)
+    await screen.findByLabelText('Khách hàng')
+    fireEvent.change(screen.getByLabelText('Khách hàng'), { target: { value: 'Công ty CP Bệnh viện Vạn Phúc City' } })
+    fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Zencombi - Hộp 10 lọ 2.5ml' } })
+    fireEvent.change(screen.getByLabelText('SL dòng 1'), { target: { value: '100' } })
+    fireEvent.change(screen.getByLabelText('Đơn giá (gồm VAT) dòng 1'), { target: { value: '12000' } })
+    fireEvent.click(screen.getByRole('button', { name: /Đã nhận hàng/ }))
+
+    fireEvent.change(screen.getByLabelText('Số hoá đơn'), { target: { value: '00038621' } })
+    fireEvent.change(screen.getByLabelText('Bên C'), { target: { value: 'Nguyễn Văn A' } })
+    fireEvent.click(screen.getByRole('button', { name: 'BB trả hàng nội bộ' }))
+    expect(screen.getAllByText('BIÊN BẢN TRẢ LẠI HÀNG (NỘI BỘ)').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('00038621').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1,200,000 đ').length).toBeGreaterThan(0)
+    const c = read('flowv2_cases')[0]
+    expect(c.traHang.form.soHD).toBe('00038621')
+    expect(c.traHang.pdf.benC.daiDien).toBe('Nguyễn Văn A')
+  })
+})
+
+describe('Hàng trả & huỷ (Demo) — hồ sơ cũ chưa có phần biên bản trả hàng', () => {
+  it('mở hồ sơ khách từ chối nhận tạo trước đó vẫn thấy BB trả hàng nội bộ', async () => {
+    const { newCase: mk, newItem: it, advanceCase } = await import('../../utils/flowV2')
+    const c = mk({ kind: 'tra', sub: 'tuChoi', kho: 'C', khachHang: 'Công ty CP Bệnh viện Vạn Phúc City', items: [it({ tenHang: 'Zencombi', soLuong: 100, dvt: 'ONG' })] })
+    delete c.traHang
+    const s = advanceCase({ cases: [c], pool: [] }, c.id)
+    store.values.set('flowv2_cases', JSON.stringify(s.cases))
+    render(<FlowV2Tab />)
+    fireEvent.click(screen.getByText('Công ty CP Bệnh viện Vạn Phúc City'))
+    fireEvent.click(await screen.findByRole('button', { name: 'BB trả hàng nội bộ' }))
+    expect(screen.getAllByText('BIÊN BẢN TRẢ LẠI HÀNG (NỘI BỘ)').length).toBeGreaterThan(0)
+  })
+})

@@ -131,10 +131,10 @@ export function Dots({ total, current, color }) {
 // liên tục không mất con trỏ.
 const COL_DEF = {
   maHang: ['Mã hàng', 84], tenHang: ['Tên hàng', 180], soLo: ['Số lô', 90], hanDung: ['Hạn dùng', 100],
-  soLuong: ['SL', 64], dvt: ['ĐVT', 60], quyCach: ['Quy cách', 110], tinhTrang: ['Tình trạng', 130], loDoi: ['Lô xuất đổi', 100],
+  soLuong: ['SL', 64], dvt: ['ĐVT', 60], donGia: ['Đơn giá (gồm VAT)', 110], quyCach: ['Quy cách', 110], tinhTrang: ['Tình trạng', 130], loDoi: ['Lô xuất đổi', 100],
 }
 export function ItemsEditor({ items, onChange, cols = ['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt'], onAdd, onRemove, readOnlyCols = [] }) {
-  const setCell = (i, k, v) => onChange(items.map((it, idx) => (idx === i ? { ...it, [k]: k === 'soLuong' ? (v === '' ? null : Number(v)) : v } : it)))
+  const setCell = (i, k, v) => onChange(items.map((it, idx) => (idx === i ? { ...it, [k]: k === 'soLuong' || k === 'donGia' ? (v === '' ? null : Number(v)) : v } : it)))
   return (
     <div className="flex flex-col gap-2">
       <div style={{ overflowX: 'auto' }}>
@@ -151,7 +151,7 @@ export function ItemsEditor({ items, onChange, cols = ['maHang', 'tenHang', 'soL
                         ? <DateTextInput value={it.hanDung} onChange={v => setCell(i, 'hanDung', v)} aria-label={`Hạn dùng dòng ${i + 1}`} />
                         : k === 'tenHang'
                           ? <textarea rows={2} value={it.tenHang ?? ''} onChange={e => setCell(i, k, e.target.value)} className={handCls} style={wrapStyle} aria-label={`${COL_DEF[k][0]} dòng ${i + 1}`} />
-                          : <input value={it[k] ?? ''} type={k === 'soLuong' ? 'number' : 'text'} min={k === 'soLuong' ? 0 : undefined}
+                          : <input value={it[k] ?? ''} type={k === 'soLuong' || k === 'donGia' ? 'number' : 'text'} min={k === 'soLuong' || k === 'donGia' ? 0 : undefined}
                               onChange={e => setCell(i, k, e.target.value)} className={handCls} aria-label={`${COL_DEF[k][0]} dòng ${i + 1}`} />}
                   </td>
                 ))}

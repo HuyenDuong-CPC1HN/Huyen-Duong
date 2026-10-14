@@ -4,6 +4,7 @@
 // - Khu Huỷ hàng: Chờ huỷ (pool) gồm hàng lỗi khách trả + hàng phát sinh trong kho (cận date / lỗi, kho thêm thủ công)
 //   → tick chọn → Tạo đợt huỷ (batch, 1 kho / đợt) → 1 bộ BB xác minh huỷ + BB xử lý → ký → kế toán xuất huỷ → xong.
 // Dữ liệu riêng của tab này (khoá flowv2_*), không đụng dữ liệu các tab cũ.
+import { NOIBO_LY_DO, THU_KHO, newManualPdf, recalcManualPdf } from './returnSlips'
 
 export const FLOWV2_CASES_KEY = 'flowv2_cases'
 export const FLOWV2_POOL_KEY = 'flowv2_pool'
@@ -76,8 +77,23 @@ export function defaultTinhTrang(c) {
   return c.kind === 'tra' ? 'Hàng nguyên vẹn' : (c.loiLyDo || 'Hàng lỗi')
 }
 
+// Phần "Biên bản trả lại hàng" của hồ sơ khách từ chối nhận: pdf = thông tin mẫu (NOIBO mặc định, hoặc mẫu đọc từ
+// biên bản website), form = chỗ kho điền (ngày lập, số / ký hiệu / ngày hoá đơn, bên A / B). Dòng hàng lấy từ hồ sơ.
+export function newTraHang({ khachHang = '', keToan = DEFAULT_KE_TOAN, pdf = null, form = {} } = {}, now = new Date()) {
+  const base = pdf || newManualPdf('NOIBO', { khachHang })
+  const meta = { ...base }
+  delete meta.items
+  return {
+    pdf: { ...meta, lyDo: meta.lyDo || (meta.mau === 'NOIBO' ? NOIBO_LY_DO : '') },
+    form: {
+      ngayLap: toIsoDate(now), mst: '', soHD: '', kyHieu: '', ngayHD: '',
+      benA: keToan, benAChucVu: 'Kế toán đơn hàng', benB: THU_KHO, benBChucVu: 'Thủ kho', ...form,
+    },
+  }
+}
+
 // kind: tra | loi · sub (chỉ tra): tuChoi = khách từ chối nhận (BB trả hàng nội bộ) · daNhan = khách đã nhận rồi trả
-export function newCase({ kind, sub = 'tuChoi', kho = 'C', khachHang = '', soDon = '', items = [], files = [] }, now = new Date()) {
+export function newCase({ kind, sub = 'tuChoi', kho = 'C', khachHang = '', soDon = '', items = [], files = [], traHang = null }, now = new Date()) {
   const iso = now.toISOString()
   const day = toIsoDate(now)
   const c = {
@@ -88,6 +104,7 @@ export function newCase({ kind, sub = 'tuChoi', kho = 'C', khachHang = '', soDon
     step: 0, stepAt: iso, createdAt: iso, history: [{ step: 0, at: iso }],
   }
   c.items = c.items.map(it => ({ ...it, tinhTrang: it.tinhTrang || defaultTinhTrang(c) }))
+  if (kind === 'tra' && c.sub === 'tuChoi') c.traHang = traHang || newTraHang({ khachHang }, now)
   return c
 }
 
@@ -228,14 +245,29 @@ export function batchAsHuyPhieu(b) {
 // Đối tượng "slip" đúng dạng XacMinhPaper của tab Nhập trả lại cần, dựng từ 1 hồ sơ khách trả.
 export function caseAsReturnSlip(c) {
   const f = c.form || {}
+  const rows = c.items.filter(it => it.maHang || it.tenHang)
   return {
     khachHang: c.khachHang,
-    pdf: { mau: c.kho === 'DTP' ? 'UPHARMA' : 'CPC1HN', benMua: { ten: c.khachHang }, items: c.items.map(it => ({ ten: it.tenHang, dvt: it.dvt, soLuong: it.soLuong ?? '' })) },
+    pdf: { mau: c.kho === 'DTP' ? 'UPHARMA' : 'CPC1HN', benMua: { ten: c.khachHang }, items: rows.map(it => ({ ten: it.tenHang, dvt: it.dvt, soLuong: it.soLuong ?? '' })) },
     form: {
       xmNgay: f.xmNgay, xmGio: f.xmGio, xmKeToan: f.keToan, xmDiaDiem: 'CN.Hồ Chí Minh',
       xmTinhTrang: defaultTinhTrang(c), xmKetQua: 'Kiểm tra hàng đúng lô, đúng hạn dùng, đúng số lượng.',
-      items: c.items.map(it => ({ soLo: it.soLo, hanDung: it.hanDung, quyCach: it.quyCach, tinhTrang: it.tinhTrang })),
+      items: rows.map(it => ({ soLo: it.soLo, hanDung: it.hanDung, quyCach: it.quyCach, tinhTrang: it.tinhTrang })),
     },
+  }
+}
+
+// Phiếu đầy đủ (Biên bản trả lại hàng + BB xác minh) đúng dạng tab Nhập trả lại — dùng cho bản xem trước biên bản
+// trả hàng và nút xuất Word (exportReturnSlipDocs). Chỉ hồ sơ khách từ chối nhận (có traHang).
+export function caseReturnSlip(c) {
+  if (!c.traHang) return null
+  const xm = caseAsReturnSlip(c)
+  const src = { ...c.traHang.pdf, benMua: { ...(c.traHang.pdf.benMua || {}), ten: c.khachHang || c.traHang.pdf.benMua?.ten || '' } }
+  const priced = recalcManualPdf({ ...src, items: c.items.filter(it => it.maHang || it.tenHang).map(it => ({ ten: it.tenHang, dvt: it.dvt, soLuong: it.soLuong ?? 0, soLo: it.soLo, donGia: it.donGia ?? 0 })) })
+  return {
+    maPhieu: c.soDon, khachHang: c.khachHang,
+    pdf: { ...priced, bangChu: src.manual ? priced.bangChu : (src.bangChu || priced.bangChu) },
+    form: { ...c.traHang.form, ...xm.form, xmMau: c.kho === 'DTP' ? 'U' : 'C' },
   }
 }
 

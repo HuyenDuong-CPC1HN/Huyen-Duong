@@ -106,3 +106,17 @@ describe('Hàng trả & huỷ — dựng dữ liệu cho mẫu biên bản cũ',
     expect(parseDateText('31/02/2029')).toBeNull()
   })
 })
+
+describe('Hàng trả & huỷ — Biên bản trả lại hàng của hồ sơ khách từ chối nhận', () => {
+  it('mặc định mẫu nội bộ, lý do mặc định, dòng hàng + thành tiền lấy từ hồ sơ; mẫu xác minh theo kho', async () => {
+    const { caseReturnSlip } = await import('../flowV2')
+    const c = newCase({ kind: 'tra', sub: 'tuChoi', kho: 'DTP', khachHang: 'BV A', items: [newItem({ tenHang: 'Zencombi', dvt: 'ONG', soLuong: 100, donGia: 12000, soLo: '010226' }), newItem()] }, now)
+    const slip = caseReturnSlip(c)
+    expect(slip.pdf.mau).toBe('NOIBO')
+    expect(slip.pdf.lyDo).toMatch(/phát hiện sai sót/)
+    expect(slip.pdf.items).toHaveLength(1) // dòng trống bị bỏ
+    expect(slip.pdf.tongTien).toBe(1200000)
+    expect(slip.form).toMatchObject({ benA: 'Lưu Thị Thuỳ', benB: 'Dương Thị Ngọc Huyền', xmMau: 'U' })
+    expect(newCase({ kind: 'tra', sub: 'daNhan' }, now).traHang).toBeUndefined()
+  })
+})

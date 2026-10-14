@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, X } from 'lucide-react'
 import {
   BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, backBatch, backCase, daysSince,
-  dissolveBatch, fmtDateVi, KIND_BORDER, makeBatch, newCase, newItem, newPsEntry, stepOfCase,
+  dissolveBatch, fmtDateVi, KIND_BORDER, makeBatch, newCase, newItem, newPsEntry, newTraHang, stepOfCase,
 } from '../utils/flowV2'
 import { readFlowV2, writeFlowV2 } from '../data/flowV2Store'
 import { uploadFlowFiles } from '../data/flowV2Files'
-import { parseReturnSlipLines } from '../utils/returnSlips'
+import { manualPdfFromInvoice, parseReturnSlipLines } from '../utils/returnSlips'
 import { extractPdfLines } from '../utils/returnSlipPdf'
 import { parseInvoiceLines } from '../utils/parseInvoicePdf'
 import { parsePhieuXuatKhoHuyPdf } from '../utils/parsePhieuXuatKhoHangHuy'
@@ -22,12 +22,25 @@ const looksLikeInvoice = lines => lines.some(l => /HÓA ĐƠN GIÁ TRỊ GIA TĂ
 // Đọc PDF khách trả (biên bản trả hàng in từ website, hoặc hoá đơn) → khách hàng + dòng hàng. Không đọc được thì trả null.
 async function readReturnPdf(file) {
   const lines = await extractPdfLines(await file.arrayBuffer())
+  // Hoá đơn → dựng Biên bản trả lại hàng mẫu nội bộ (giống tab Nhập trả lại); biên bản in từ website → giữ đúng mẫu đó.
   if (looksLikeInvoice(lines)) {
     const inv = parseInvoiceLines(lines)
-    return { khachHang: inv.benMua?.ten || '', items: (inv.items || []).map(it => newItem({ tenHang: it.ten || '', dvt: it.dvt || '', soLuong: it.soLuong ?? null, soLo: it.soLo || '' })) }
+    const khachHang = inv.benMua?.ten || ''
+    const { pdf, formPatch } = manualPdfFromInvoice(inv, { khachHang })
+    const form = { ...formPatch }
+    delete form.items
+    delete form.xmMau
+    return {
+      khachHang, traHang: newTraHang({ khachHang, pdf, form }),
+      items: (inv.items || []).map(it => newItem({ tenHang: it.ten || '', dvt: it.dvt || '', soLuong: it.soLuong ?? null, soLo: it.soLo || '', hanDung: it.hanDung || '', donGia: it.donGia ?? null })),
+    }
   }
   const pdf = parseReturnSlipLines(lines)
-  return { khachHang: pdf.benMua?.ten || '', items: (pdf.items || []).map(it => newItem({ tenHang: it.ten || '', dvt: it.dvt || '', soLuong: it.soLuong ?? null, soLo: it.soLo || '' })) }
+  const khachHang = pdf.benMua?.ten || ''
+  return {
+    khachHang, traHang: newTraHang({ khachHang, pdf, form: { mst: pdf.benMua?.mst || '' } }),
+    items: (pdf.items || []).map(it => newItem({ tenHang: it.ten || '', dvt: it.dvt || '', soLuong: it.soLuong ?? null, soLo: it.soLo || '', donGia: it.donGia ?? null })),
+  }
 }
 
 function Modal({ title, onClose, children }) {
@@ -73,7 +86,7 @@ function NewCaseModal({ onClose, onCreate }) {
       let stored = []
       if (files.length) { try { stored = await uploadFlowFiles(files) } catch { stored = files.map(f => ({ name: f.name, storagePath: '', type: f.type })) } }
       const daNhanPhotos = kind === 'tra' && sub === 'daNhan'
-      onCreate(newCase({ kind, sub, kho, khachHang: parsed?.khachHang || '', items: parsed?.items?.length ? parsed.items : [], files: daNhanPhotos ? [] : stored }), daNhanPhotos ? stored : [])
+      onCreate(newCase({ kind, sub, kho, khachHang: parsed?.khachHang || '', items: parsed?.items?.length ? parsed.items : [], files: daNhanPhotos ? [] : stored, traHang: kind === 'tra' && sub === 'tuChoi' ? parsed?.traHang : null }), daNhanPhotos ? stored : [])
     } catch (err) {
       setError(err.message || 'Không tạo được hồ sơ.')
     } finally { setBusy(false) }

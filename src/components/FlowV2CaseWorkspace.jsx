@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { ArrowLeft, Undo2 } from 'lucide-react'
+import { ArrowLeft, FileDown, Undo2 } from 'lucide-react'
 import { KE_TOAN_LIST } from '../utils/returnSlips'
-import { CASE_FLOWS, BATCH_STEPS, caseAsReturnSlip, daysSince, fmtDateTimeVi, newItem, stepOfCase } from '../utils/flowV2'
+import { CASE_FLOWS, BATCH_STEPS, caseAsReturnSlip, caseReturnSlip, daysSince, fmtDateTimeVi, newItem, newTraHang, stepOfCase } from '../utils/flowV2'
+import { exportReturnSlipDocs } from '../utils/exportReturnSlip'
 import { uploadFlowFiles, getFlowFileUrl } from '../data/flowV2Files'
 import { KhoTag } from './HangHuyBadges'
 import { XacMinhPaper } from './ReturnSlipWorkspace'
 import PreviewPrintPanel from './PreviewPrintPanel'
+import FlowV2TraHangPaper from './FlowV2TraHangPaper'
 import { Field } from './WorkspaceParts'
 import { handCls, presetCls, grid } from './workspaceStyles'
 import { ItemsEditor, KindTag, PhotoBox, StepList } from './FlowV2Parts'
@@ -22,6 +24,16 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
   const set = patch => onSave({ ...c, ...patch })
   const setForm = (k, v) => set({ form: { ...c.form, [k]: v } })
   const hasItems = c.items.some(it => it.maHang || it.tenHang)
+  // Chỉ hồ sơ khách từ chối nhận: Biên bản trả lại hàng (nội bộ / mẫu website). Hồ sơ tạo trước khi có phần này thì
+  // dựng mặc định mẫu nội bộ (lưu lại khi kho sửa ô đầu tiên).
+  const th = c.traHang || (c.kind === 'tra' && c.sub === 'tuChoi' ? newTraHang({ khachHang: c.khachHang, keToan: c.form?.keToan }) : null)
+  const setTh = (k, v) => set({ traHang: { ...th, form: { ...th.form, [k]: v } } })
+  const setThPdf = patch => set({ traHang: { ...th, pdf: { ...th.pdf, ...patch } } })
+  const fullSlip = th ? caseReturnSlip({ ...c, traHang: th }) : null
+  const exportWord = async () => {
+    setError(''); setBusy('export')
+    try { await exportReturnSlipDocs(fullSlip) } catch (err) { setError(err.message || 'Xuất file thất bại.') } finally { setBusy('') }
+  }
 
   const upload = key => async (files) => {
     setError(''); setBusy(key)
@@ -58,6 +70,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
           <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-2">
             <div className="font-semibold text-sm text-gray-800">{c.kind === 'loi' ? 'Hàng lỗi' : 'Hàng trả về'}</div>
             <ItemsEditor items={c.items} onChange={items => set({ items })}
+              cols={th ? ['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', 'donGia'] : undefined}
               onAdd={() => set({ items: [...c.items, newItem({ tinhTrang: c.kind === 'tra' ? 'Hàng nguyên vẹn' : (c.loiLyDo || 'Hàng lỗi') })] })}
               onRemove={i => set({ items: c.items.length > 1 ? c.items.filter((_, idx) => idx !== i) : [newItem()] })} />
           </div>
@@ -80,7 +93,30 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
             </div>
             <ItemsEditor items={c.items} onChange={items => set({ items })} cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'quyCach', 'tinhTrang']} readOnlyCols={['maHang', 'soLuong']} />
           </div>
+          {th && (
+            <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-3">
+              <div className="font-semibold text-sm text-gray-800">Biên bản trả lại hàng{th.pdf.mau === 'NOIBO' ? ' (nội bộ)' : ''}</div>
+              <div style={grid(160)}>
+                <Field label="Ngày lập" kind="hand"><input type="date" value={th.form.ngayLap} onChange={e => setTh('ngayLap', e.target.value)} className={handCls} aria-label="Ngày lập BB trả hàng" /></Field>
+                <Field label="Số hoá đơn" kind="hand"><input value={th.form.soHD} onChange={e => setTh('soHD', e.target.value)} className={handCls} aria-label="Số hoá đơn" /></Field>
+                <Field label="Ký hiệu" kind="hand"><input value={th.form.kyHieu} onChange={e => setTh('kyHieu', e.target.value)} className={handCls} aria-label="Ký hiệu hoá đơn" /></Field>
+                <Field label="Ngày hoá đơn" kind="hand"><input type="date" value={th.form.ngayHD} onChange={e => setTh('ngayHD', e.target.value)} className={handCls} aria-label="Ngày hoá đơn" /></Field>
+                {th.pdf.mau === 'NOIBO' ? (
+                  <>
+                    <Field label="Bên A · Kế toán" kind="hand"><select value={th.form.benA} onChange={e => setTh('benA', e.target.value)} className={handCls} aria-label="Bên A">{KE_TOAN_LIST.map(n => <option key={n}>{n}</option>)}</select></Field>
+                    <Field label="Bên B · Kho vận" kind="preset"><input value={th.form.benB} onChange={e => setTh('benB', e.target.value)} className={presetCls} aria-label="Bên B" /></Field>
+                    <Field label="Bên C · NV kinh doanh" kind="hand"><input value={th.pdf.benC?.daiDien || ''} onChange={e => setThPdf({ benC: { ...(th.pdf.benC || {}), daiDien: e.target.value, chucVu: th.pdf.benC?.chucVu || 'Nhân viên kinh doanh' } })} className={handCls} aria-label="Bên C" /></Field>
+                  </>
+                ) : (
+                  <Field label="Mã số thuế bên mua" kind="hand"><input value={th.form.mst} onChange={e => setTh('mst', e.target.value)} className={handCls} aria-label="Mã số thuế" /></Field>
+                )}
+                <Field label="Lý do xuất trả" kind="preset" full><textarea rows={2} value={th.pdf.lyDo || ''} onChange={e => setThPdf({ lyDo: e.target.value })} className={presetCls} aria-label="Lý do xuất trả" /></Field>
+              </div>
+              <div className="text-[11px] text-gray-400">Đơn giá sửa ở bước Tiếp nhận (Lùi 1 bước). Hàng hoá, số lô lấy chung với BB xác minh.</div>
+            </div>
+          )}
           {next('In xong → Chờ ký')}
+          {th && <button type="button" onClick={() => void exportWord()} disabled={busy === 'export'} className="sheet-tab-action self-start"><FileDown size={13} /> {busy === 'export' ? 'Đang tạo file…' : 'Xuất Word BB trả hàng + BB xác minh (khi cần)'}</button>}
         </>
       )
       break
@@ -184,7 +220,10 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
               {work}
               {readOnlyPhotos.map(([k, label]) => <PhotoBox key={k} title={label} files={c[k]} getUrl={getFlowFileUrl} readOnly />)}
             </div>
-            {showPaper && <PreviewPrintPanel docs={[{ key: 'xm', label: 'BB xác minh (nhập lại)', landscape: true, node: <XacMinhPaper slip={caseAsReturnSlip(c)} /> }]} />}
+            {showPaper && <PreviewPrintPanel docs={[
+              ...(fullSlip ? [{ key: 'th', label: fullSlip.pdf.mau === 'NOIBO' ? 'BB trả hàng nội bộ' : 'BB trả lại hàng', landscape: false, node: <FlowV2TraHangPaper slip={fullSlip} /> }] : []),
+              { key: 'xm', label: 'BB xác minh (nhập lại)', landscape: true, node: <XacMinhPaper slip={caseAsReturnSlip(c)} /> },
+            ]} />}
           </div>
         </div>
       </div>
