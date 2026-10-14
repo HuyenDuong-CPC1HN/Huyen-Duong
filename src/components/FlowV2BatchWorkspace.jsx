@@ -62,7 +62,7 @@ export default function FlowV2BatchWorkspace({ b, onSave, onAdvance, onBackStep,
             <Field label="Kế toán tham gia" kind="hand"><select value={b.form.keToan} onChange={e => setForm('keToan', e.target.value)} className={handCls} aria-label="Kế toán tham gia">{KE_TOAN_LIST.map(n => <option key={n}>{n}</option>)}</select></Field>
             <Field label="Kho xuất" kind="preset"><input value={b.khoXuat} onChange={e => set({ khoXuat: e.target.value })} className={presetCls} aria-label="Kho xuất" /></Field>
           </div>
-          <ItemsEditor items={b.items} onChange={items => set({ items })} cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'quyCach', 'tinhTrang']} readOnlyCols={['maHang', 'tenHang', 'soLuong']} />
+          <ItemsEditor items={b.items} onChange={items => set({ items })} cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'quyCach', 'tinhTrang']} readOnlyCols={['maHang', 'soLuong']} />
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => onAdvance()} className="sheet-tab-action is-primary">In xong → Chờ ký</button>

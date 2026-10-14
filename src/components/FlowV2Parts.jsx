@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Camera, Check, FileUp, Loader2, Trash2 } from 'lucide-react'
 import { fmtDateVi, parseDateText } from '../utils/flowV2'
-import { handCls } from './workspaceStyles'
+import { handCls, wrapStyle } from './workspaceStyles'
 
 // Các mảnh giao diện dùng chung của tab "Hàng trả & huỷ (Demo)".
 
@@ -130,7 +130,7 @@ export function Dots({ total, current, color }) {
 // Bảng dòng hàng sửa trực tiếp. cols: các cột hiện ra (mặc định đủ thông tin hàng). rowId cố định làm key → gõ
 // liên tục không mất con trỏ.
 const COL_DEF = {
-  maHang: ['Mã hàng', 84], tenHang: ['Tên hàng', 150], soLo: ['Số lô', 90], hanDung: ['Hạn dùng', 100],
+  maHang: ['Mã hàng', 84], tenHang: ['Tên hàng', 180], soLo: ['Số lô', 90], hanDung: ['Hạn dùng', 100],
   soLuong: ['SL', 64], dvt: ['ĐVT', 60], quyCach: ['Quy cách', 110], tinhTrang: ['Tình trạng', 130], loDoi: ['Lô xuất đổi', 100],
 }
 export function ItemsEditor({ items, onChange, cols = ['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt'], onAdd, onRemove, readOnlyCols = [] }) {
@@ -149,8 +149,10 @@ export function ItemsEditor({ items, onChange, cols = ['maHang', 'tenHang', 'soL
                       ? <span className="block py-1.5">{k === 'hanDung' ? fmtDateVi(it[k]) : (it[k] ?? '')}</span>
                       : k === 'hanDung'
                         ? <DateTextInput value={it.hanDung} onChange={v => setCell(i, 'hanDung', v)} aria-label={`Hạn dùng dòng ${i + 1}`} />
-                        : <input value={it[k] ?? ''} type={k === 'soLuong' ? 'number' : 'text'} min={k === 'soLuong' ? 0 : undefined}
-                            onChange={e => setCell(i, k, e.target.value)} className={handCls} aria-label={`${COL_DEF[k][0]} dòng ${i + 1}`} />}
+                        : k === 'tenHang'
+                          ? <textarea rows={2} value={it.tenHang ?? ''} onChange={e => setCell(i, k, e.target.value)} className={handCls} style={wrapStyle} aria-label={`${COL_DEF[k][0]} dòng ${i + 1}`} />
+                          : <input value={it[k] ?? ''} type={k === 'soLuong' ? 'number' : 'text'} min={k === 'soLuong' ? 0 : undefined}
+                              onChange={e => setCell(i, k, e.target.value)} className={handCls} aria-label={`${COL_DEF[k][0]} dòng ${i + 1}`} />}
                   </td>
                 ))}
                 {onRemove && (

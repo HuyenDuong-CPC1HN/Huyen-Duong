@@ -45,13 +45,16 @@ describe('Hàng trả & huỷ (Demo)', () => {
 
     expect(screen.getAllByText('BIÊN BẢN XÁC MINH TÌNH TRẠNG HÀNG HOÁ').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Nhà thuốc Phước Thiện/).length).toBeGreaterThan(0)
+    // Bước BB xác minh vẫn sửa được tên hàng (vd bỏ chữ "(Afghanistan)")
+    fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Zensalbu nebules 2.5 - Hộp 2 vỉ' } })
+    expect(screen.getAllByText('Zensalbu nebules 2.5 - Hộp 2 vỉ').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: /In xong → Chờ ký/ }))
     fireEvent.click(screen.getByRole('button', { name: /Đã ký đủ → chuyển kế toán/ }))
     fireEvent.change(screen.getByLabelText('Kế toán phụ trách'), { target: { value: 'Võ Thị Ly' } })
     fireEvent.click(screen.getByRole('button', { name: /Kế toán đã xong/ }))
     const c = read('flowv2_cases')[0]
     expect(c).toMatchObject({ kind: 'tra', sub: 'daNhan', kho: 'C', khachHang: 'Nhà thuốc Phước Thiện', keToan: 'Võ Thị Ly', step: 4 })
-    expect(c.items[0]).toMatchObject({ maHang: 'Z00330', hanDung: '2029-07-05', soLuong: 13, tinhTrang: 'Hàng nguyên vẹn' })
+    expect(c.items[0]).toMatchObject({ tenHang: 'Zensalbu nebules 2.5 - Hộp 2 vỉ', maHang: 'Z00330', hanDung: '2029-07-05', soLuong: 13, tinhTrang: 'Hàng nguyên vẹn' })
     expect(c.ktDone.by).toBe('Kho xác nhận (Võ Thị Ly báo)')
     expect(screen.getAllByText(/Đã nhập kho — bán tiếp/).length).toBeGreaterThan(0)
   })

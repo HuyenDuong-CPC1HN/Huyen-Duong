@@ -78,7 +78,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
                 <select value={c.form.keToan} onChange={e => set({ form: { ...c.form, keToan: e.target.value }, keToan: e.target.value })} className={handCls} aria-label="Kế toán tham gia">{KE_TOAN_LIST.map(n => <option key={n}>{n}</option>)}</select>
               </Field>
             </div>
-            <ItemsEditor items={c.items} onChange={items => set({ items })} cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'quyCach', 'tinhTrang']} readOnlyCols={['maHang', 'tenHang', 'soLuong']} />
+            <ItemsEditor items={c.items} onChange={items => set({ items })} cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'quyCach', 'tinhTrang']} readOnlyCols={['maHang', 'soLuong']} />
           </div>
           {next('In xong → Chờ ký')}
         </>
