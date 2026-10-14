@@ -27,12 +27,13 @@ function createCase(kind, sub) {
 }
 
 describe('Hàng trả & huỷ (Demo)', () => {
-  it('hồ sơ trả nguyên vẹn: tiếp nhận → BB xác minh (có xem trước) → ký → kế toán xong → Hoàn thành', async () => {
+  it('hồ sơ trả nguyên vẹn: vào thẳng Lập BB xác minh (có xem trước) → ký → kế toán xong → Hoàn thành', async () => {
     render(<FlowV2Tab />)
     createCase('tra', /Khách đã nhận rồi trả/)
-    await screen.findByText('Tiếp nhận + BB trả hàng', { selector: 'div' })
+    await screen.findByText('Lập BB xác minh (+ BB trả hàng)', { selector: 'div' })
+    expect(screen.queryByText(/Tiếp nhận/)).not.toBeInTheDocument()
     expect(screen.getByText(/BB trả hàng có chữ ký khách — không bắt buộc/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Đã nhận hàng/ })).toBeDisabled() // chưa có dòng hàng
+    expect(screen.getByRole('button', { name: /In xong → Chờ ký/ })).toBeDisabled() // chưa có dòng hàng
     fireEvent.change(screen.getByLabelText('Khách hàng'), { target: { value: 'Nhà thuốc Phước Thiện' } })
     const ma = screen.getByLabelText('Mã hàng dòng 1')
     fireEvent.change(ma, { target: { value: 'Z' } })
@@ -41,7 +42,6 @@ describe('Hàng trả & huỷ (Demo)', () => {
     fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Zensalbu nebules 2.5' } })
     fireEvent.change(screen.getByLabelText('Hạn dùng dòng 1'), { target: { value: '05/07/2029' } })
     fireEvent.change(screen.getByLabelText('SL dòng 1'), { target: { value: '13' } })
-    fireEvent.click(screen.getByRole('button', { name: /Đã nhận hàng/ }))
 
     expect(screen.getAllByText('BIÊN BẢN XÁC MINH TÌNH TRẠNG HÀNG HOÁ').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Nhà thuốc Phước Thiện/).length).toBeGreaterThan(0)
@@ -53,7 +53,7 @@ describe('Hàng trả & huỷ (Demo)', () => {
     fireEvent.change(screen.getByLabelText('Kế toán phụ trách'), { target: { value: 'Võ Thị Ly' } })
     fireEvent.click(screen.getByRole('button', { name: /Kế toán đã xong/ }))
     const c = read('flowv2_cases')[0]
-    expect(c).toMatchObject({ kind: 'tra', sub: 'daNhan', kho: 'C', khachHang: 'Nhà thuốc Phước Thiện', keToan: 'Võ Thị Ly', step: 4 })
+    expect(c).toMatchObject({ kind: 'tra', sub: 'daNhan', kho: 'C', khachHang: 'Nhà thuốc Phước Thiện', keToan: 'Võ Thị Ly', step: 3 })
     expect(c.items[0]).toMatchObject({ tenHang: 'Zensalbu nebules 2.5 - Hộp 2 vỉ', maHang: 'Z00330', hanDung: '2029-07-05', soLuong: 13, tinhTrang: 'Hàng nguyên vẹn' })
     expect(c.ktDone.by).toBe('Kho xác nhận (Võ Thị Ly báo)')
     expect(screen.getAllByText(/Đã nhập kho — bán tiếp/).length).toBeGreaterThan(0)
@@ -67,8 +67,7 @@ describe('Hàng trả & huỷ (Demo)', () => {
     fireEvent.change(screen.getByLabelText('Lý do lỗi'), { target: { value: 'Có cặn' } })
     fireEvent.change(screen.getByLabelText('Mã hàng dòng 1'), { target: { value: 'A01264' } })
     fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Ambroxen' } })
-    fireEvent.change(screen.getByLabelText('Quy cách dòng 1'), { target: { value: 'Hộp 20 ống' } }) // có ngay ở bước tiếp nhận
-    fireEvent.click(screen.getByRole('button', { name: /Đã nhận hàng/ }))
+    fireEvent.change(screen.getByLabelText('Quy cách dòng 1'), { target: { value: 'Hộp 20 ống' } })
     fireEvent.click(screen.getByRole('button', { name: /In xong → Chờ ký/ }))
     fireEvent.click(screen.getByRole('button', { name: /Đã ký đủ → nhập lại kho/ }))
     fireEvent.change(screen.getByLabelText('Số phiếu nhập lại'), { target: { value: 'NL2621/00038' } })
@@ -100,7 +99,7 @@ describe('Hàng trả & huỷ (Demo)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Đã ký đủ → kế toán xuất huỷ/ }))
     fireEvent.click(screen.getByRole('button', { name: /Kế toán đã xong → Huỷ xong/ }))
     expect(read('flowv2_batches')[0].step).toBe(3)
-    expect(read('flowv2_cases')[0].step).toBe(7) // Huỷ xong
+    expect(read('flowv2_cases')[0].step).toBe(6) // Huỷ xong
   })
 })
 
@@ -113,7 +112,6 @@ describe('Hàng trả & huỷ (Demo) — khách từ chối nhận có Biên b�
     fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Zencombi - Hộp 10 lọ 2.5ml' } })
     fireEvent.change(screen.getByLabelText('SL dòng 1'), { target: { value: '100' } })
     fireEvent.change(screen.getByLabelText('Đơn giá (gồm VAT) dòng 1'), { target: { value: '12000' } })
-    fireEvent.click(screen.getByRole('button', { name: /Đã nhận hàng/ }))
 
     fireEvent.change(screen.getByLabelText('Số hoá đơn'), { target: { value: '00038621' } })
     fireEvent.change(screen.getByLabelText('Bên C'), { target: { value: 'Nguyễn Văn A' } })

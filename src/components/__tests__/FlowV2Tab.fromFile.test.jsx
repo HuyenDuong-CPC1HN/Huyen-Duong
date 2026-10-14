@@ -38,7 +38,7 @@ describe('Hàng trả & huỷ (Demo) — tạo hồ sơ từ file biên bản', 
     expect(screen.getByLabelText('Đơn giá (gồm VAT) dòng 1').value).toBe('12600')
     fireEvent.change(screen.getByLabelText('Khách hàng'), { target: { value: 'Công ty CP Bệnh viện Vạn Phúc City' } })
     const c = JSON.parse(store.values.get('flowv2_cases'))[0]
-    expect(c.step).toBe(1)
+    expect(c.step).toBe(0)
     expect(c.khachHang).toBe('Công ty CP Bệnh viện Vạn Phúc City')
     expect(c.files[0].name).toBe('Nhóm - CPC1HN.pdf')
   })

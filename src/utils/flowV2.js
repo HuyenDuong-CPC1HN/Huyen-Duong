@@ -11,13 +11,12 @@ export const FLOWV2_POOL_KEY = 'flowv2_pool'
 export const FLOWV2_BATCHES_KEY = 'flowv2_batches'
 export const FLOWV2_EVENT = 'flowv2-changed'
 
-// col: cột trên bảng việc (0 Tiếp nhận · 1 Lập biên bản · 2 Chờ ký · 3 Nhập / đổi / chờ · 4 Hoàn thành)
+// col: cột trên bảng việc (1 Lập biên bản · 2 Chờ ký · 3 Nhập / đổi / chờ · 4 Hoàn thành)
 export const CASE_FLOWS = {
   tra: {
     label: 'Khách trả — hàng nguyên vẹn', short: 'Trả nguyên vẹn',
     steps: [
-      { k: 'tiepNhan', t: 'Tiếp nhận + BB trả hàng', col: 0, who: 'Kho', phase: 'Nhập lại kho' },
-      { k: 'xmNhap', t: 'BB xác minh tình trạng (nhập lại)', col: 1, who: 'Kho' },
+      { k: 'xmNhap', t: 'Lập BB xác minh (+ BB trả hàng)', col: 1, who: 'Kho', phase: 'Nhập lại kho' },
       { k: 'kyNhap', t: 'Ký đủ biên bản', col: 2, who: 'Kho · GĐ chi nhánh' },
       { k: 'ktNhap', t: 'Kế toán nhập trả lại (phiếu + hoá đơn)', col: 3, who: 'Kế toán', kt: true },
       { k: 'banTiep', t: 'Đã nhập kho — bán tiếp', col: 4, who: 'Kho' },
@@ -26,8 +25,7 @@ export const CASE_FLOWS = {
   loi: {
     label: 'Khách trả — hàng lỗi (đổi hàng)', short: 'Trả lỗi · đổi hàng',
     steps: [
-      { k: 'tiepNhan', t: 'Tiếp nhận hàng lỗi', col: 0, who: 'Kho', phase: 'Nhập lại + đổi hàng' },
-      { k: 'xmNhap', t: 'BB xác minh tình trạng (nhập lại)', col: 1, who: 'Kho' },
+      { k: 'xmNhap', t: 'Lập BB xác minh (nhập lại)', col: 1, who: 'Kho', phase: 'Nhập lại + đổi hàng' },
       { k: 'kyNhap', t: 'Ký đủ biên bản', col: 2, who: 'Kho · GĐ chi nhánh' },
       { k: 'phieuNhap', t: 'Nhập lại kho (phiếu nhập lại)', col: 3, who: 'Kho · Kế toán' },
       { k: 'doiHang', t: 'Xuất lô khác đổi cho khách', col: 3, who: 'Kho' },
@@ -45,12 +43,12 @@ export const BATCH_STEPS = [
   { k: 'xong', t: 'Huỷ xong', who: '' },
 ]
 
+// [col, tiêu đề, gợi ý] — col khớp field col của từng bước.
 export const BOARD_COLS = [
-  ['Tiếp nhận', 'nhận hàng / file, chưa làm giấy tờ'],
-  ['Lập biên bản', 'điền, xem trước, in'],
-  ['Chờ ký', 'đã in, chờ ký đủ'],
-  ['Nhập / đổi / chờ', 'nhập lại, đổi hàng, chờ kế toán, chờ huỷ'],
-  ['Hoàn thành', 'đã xong'],
+  [1, 'Lập biên bản', 'điền, xem trước, in'],
+  [2, 'Chờ ký', 'đã in, chờ ký đủ'],
+  [3, 'Nhập / đổi / chờ', 'nhập lại, đổi hàng, chờ kế toán, chờ huỷ'],
+  [4, 'Hoàn thành', 'đã xong'],
 ]
 
 // Màu viền thẻ theo loại trên bảng việc / khu Huỷ hàng.
@@ -100,7 +98,7 @@ export function newCase({ kind, sub = 'tuChoi', kho = 'C', khachHang = '', soDon
     id: rid('case'), kind, sub: kind === 'tra' ? sub : null, kho, khachHang, soDon, loiLyDo: '',
     items: items.length ? items : [newItem()], files, photos: [], signedNhap: [],
     form: { xmNgay: day, xmGio: '08:30', keToan: DEFAULT_KE_TOAN },
-    phieuNhapLai: '', keToan: DEFAULT_KE_TOAN, ktDone: null, batchId: null,
+    phieuNhapLai: '', keToan: DEFAULT_KE_TOAN, ktDone: null, batchId: null, flowVer: 2,
     step: 0, stepAt: iso, createdAt: iso, history: [{ step: 0, at: iso }],
   }
   c.items = c.items.map(it => ({ ...it, tinhTrang: it.tinhTrang || defaultTinhTrang(c) }))
@@ -108,11 +106,11 @@ export function newCase({ kind, sub = 'tuChoi', kho = 'C', khachHang = '', soDon
   return c
 }
 
-// Hồ sơ tạo từ file đã đọc được dòng hàng thì vào thẳng bước BB xác minh (bước tiếp nhận coi như xong).
-export function startAtVerify(c, now = new Date()) {
-  const iso = now.toISOString()
-  const step = stepIndex(c.kind, 'xmNhap')
-  return { ...c, step, stepAt: iso, history: [...(c.history || []), { step, at: iso }] }
+// Bản đầu của tab có bước "Tiếp nhận" đứng trước BB xác minh; đã bỏ (vào thẳng Lập BB xác minh). Hồ sơ lưu từ bản
+// đầu (chưa có flowVer) lùi chỉ số bước đi 1 cho khớp danh sách bước mới — hồ sơ đang ở Tiếp nhận về Lập BB xác minh.
+export function migrateCase(c) {
+  if (!c || c.flowVer >= 2) return c
+  return { ...c, step: Math.max(0, (c.step || 0) - 1), flowVer: 2 }
 }
 
 // Hồ sơ hàng lỗi vừa xong bước "đổi hàng" → tạo mục Chờ huỷ từ dòng hàng của hồ sơ.

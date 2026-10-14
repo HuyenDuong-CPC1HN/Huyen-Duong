@@ -1,5 +1,5 @@
 import { opsStore } from './workspace'
-import { FLOWV2_BATCHES_KEY, FLOWV2_CASES_KEY, FLOWV2_EVENT, FLOWV2_POOL_KEY } from '../utils/flowV2'
+import { FLOWV2_BATCHES_KEY, FLOWV2_CASES_KEY, FLOWV2_EVENT, FLOWV2_POOL_KEY, migrateCase } from '../utils/flowV2'
 
 // Dữ liệu tab "Hàng trả & huỷ (Demo)" — lưu ở ops_settings (khoá flowv2_*), tách hẳn khỏi dữ liệu các tab cũ.
 function readList(key) {
@@ -10,7 +10,7 @@ function readList(key) {
 }
 
 export function readFlowV2() {
-  return { cases: readList(FLOWV2_CASES_KEY), pool: readList(FLOWV2_POOL_KEY), batches: readList(FLOWV2_BATCHES_KEY) }
+  return { cases: readList(FLOWV2_CASES_KEY).map(migrateCase), pool: readList(FLOWV2_POOL_KEY), batches: readList(FLOWV2_BATCHES_KEY) }
 }
 
 // Chỉ ghi phần thay đổi (cases / pool / batches có mặt trong patch).

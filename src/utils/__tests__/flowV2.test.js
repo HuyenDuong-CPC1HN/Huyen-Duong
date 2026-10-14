@@ -120,3 +120,15 @@ describe('Hàng trả & huỷ — Biên bản trả lại hàng của hồ sơ k
     expect(newCase({ kind: 'tra', sub: 'daNhan' }, now).traHang).toBeUndefined()
   })
 })
+
+describe('Hàng trả & huỷ — bỏ bước Tiếp nhận', () => {
+  it('hồ sơ mới vào thẳng Lập BB xác minh; hồ sơ lưu từ bản cũ lùi chỉ số bước cho khớp', async () => {
+    const { migrateCase } = await import('../flowV2')
+    const c = newCase({ kind: 'loi', kho: 'C' })
+    expect(stepOfCase(c).k).toBe('xmNhap')
+    expect(migrateCase(c)).toBe(c)
+    const old = { ...c, flowVer: undefined }
+    expect(migrateCase({ ...old, step: 0 })).toMatchObject({ step: 0, flowVer: 2 }) // đang Tiếp nhận → Lập BB xác minh
+    expect(stepOfCase(migrateCase({ ...old, step: 3 })).k).toBe('phieuNhap') // bản cũ: 3 = Nhập lại kho
+  })
+})

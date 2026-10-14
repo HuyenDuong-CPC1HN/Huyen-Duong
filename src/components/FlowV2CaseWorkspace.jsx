@@ -74,33 +74,6 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
 
   let work
   switch (s.k) {
-    case 'tiepNhan':
-      work = (
-        <>
-          <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-3">
-            <div style={grid(200)}>
-              <Field label="Khách hàng" kind="hand"><input value={c.khachHang} onChange={e => set({ khachHang: e.target.value })} className={handCls} aria-label="Khách hàng" /></Field>
-              <Field label="Số đơn / số phiếu" kind="hand"><input value={c.soDon} onChange={e => set({ soDon: e.target.value })} className={handCls} aria-label="Số đơn" /></Field>
-              {c.kind === 'loi' && <Field label="Lý do lỗi" kind="hand"><input value={c.loiLyDo} onChange={e => set({ loiLyDo: e.target.value, items: c.items.map(it => (!it.tinhTrang || it.tinhTrang === c.loiLyDo || it.tinhTrang === 'Hàng lỗi' ? { ...it, tinhTrang: e.target.value } : it)) })} className={handCls} placeholder="VD: Gãy, vỡ ống" aria-label="Lý do lỗi" /></Field>}
-            </div>
-            {(c.files || []).length > 0 && <div className="text-xs text-gray-500">File đã tải khi tạo hồ sơ: {c.files.map(f => f.name).join(', ')}</div>}
-          </div>
-          {c.kind === 'tra' && c.sub === 'daNhan' && (
-            <PhotoBox title="BB trả hàng có chữ ký khách — không bắt buộc" hint="Bản cứng gửi về công ty. Muốn lưu bản mềm thì chụp ảnh hoặc tải file lên, không có cũng làm tiếp được." {...photoProps('photos')} />
-          )}
-          {c.kind === 'loi' && <PhotoBox title="Ảnh hàng lỗi — không bắt buộc" hint="Chụp hàng lỗi để lưu kèm hồ sơ." {...photoProps('photos')} />}
-          <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-2">
-            <div className="font-semibold text-sm text-gray-800">{c.kind === 'loi' ? 'Hàng lỗi' : 'Hàng trả về'}</div>
-            <ItemsEditor items={c.items} onChange={items => set({ items })}
-              cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', ...(th ? ['donGia'] : []), 'quyCach', ...(c.kind === 'loi' ? ['tinhTrang'] : [])]}
-              onAdd={() => set({ items: [...c.items, newItem({ tinhTrang: c.kind === 'tra' ? 'Hàng nguyên vẹn' : (c.loiLyDo || 'Hàng lỗi') })] })}
-              onRemove={i => set({ items: c.items.length > 1 ? c.items.filter((_, idx) => idx !== i) : [newItem()] })} />
-          </div>
-          {!hasItems && <div className="text-xs text-amber-700">Gõ ít nhất 1 dòng hàng (mã hoặc tên) để làm biên bản.</div>}
-          {next('Đã nhận hàng → Lập BB xác minh', {}, !hasItems)}
-        </>
-      )
-      break
     case 'xmNhap':
       work = (
         <>
@@ -109,6 +82,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
             <div style={grid(200)}>
               <Field label="Khách hàng" kind="hand"><input value={c.khachHang} onChange={e => set({ khachHang: e.target.value })} className={handCls} aria-label="Khách hàng" /></Field>
               <Field label="Số đơn / số phiếu" kind="hand"><input value={c.soDon} onChange={e => set({ soDon: e.target.value })} className={handCls} aria-label="Số đơn" /></Field>
+              {c.kind === 'loi' && <Field label="Lý do lỗi" kind="hand"><input value={c.loiLyDo} onChange={e => set({ loiLyDo: e.target.value, items: c.items.map(it => (!it.tinhTrang || it.tinhTrang === c.loiLyDo || it.tinhTrang === 'Hàng lỗi' ? { ...it, tinhTrang: e.target.value } : it)) })} className={handCls} placeholder="VD: Gãy, vỡ ống" aria-label="Lý do lỗi" /></Field>}
             </div>
             {(c.files || []).length > 0 && <div className="text-xs text-gray-500">File đã tải: {c.files.map(f => f.name).join(', ')}</div>}
             <div style={grid(160)}>
@@ -122,7 +96,12 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
               cols={th ? ['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', 'donGia', 'quyCach', 'tinhTrang'] : ['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', 'quyCach', 'tinhTrang']}
               onAdd={() => set({ items: [...c.items, newItem({ tinhTrang: c.kind === 'tra' ? 'Hàng nguyên vẹn' : (c.loiLyDo || 'Hàng lỗi') })] })}
               onRemove={i => set({ items: c.items.length > 1 ? c.items.filter((_, idx) => idx !== i) : [newItem()] })} />
+            {!hasItems && <div className="text-xs text-amber-700">Gõ ít nhất 1 dòng hàng (mã hoặc tên) để làm biên bản.</div>}
           </div>
+          {c.kind === 'tra' && c.sub === 'daNhan' && (
+            <PhotoBox title="BB trả hàng có chữ ký khách — không bắt buộc" hint="Bản cứng gửi về công ty. Muốn lưu bản mềm thì chụp ảnh hoặc tải file lên, không có cũng làm tiếp được." {...photoProps('photos')} />
+          )}
+          {c.kind === 'loi' && <PhotoBox title="Ảnh hàng lỗi — không bắt buộc" hint="Chụp hàng lỗi để lưu kèm hồ sơ." {...photoProps('photos')} />}
           {th && (
             <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -153,7 +132,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
               <div className="text-[11px] text-gray-400">Hàng hoá, số lô, đơn giá lấy chung với bảng hàng ở trên.</div>
             </div>
           )}
-          {next('In xong → Chờ ký')}
+          {next('In xong → Chờ ký', {}, !hasItems)}
           {th && <button type="button" onClick={() => void exportWord()} disabled={busy === 'export'} className="sheet-tab-action self-start"><FileDown size={13} /> {busy === 'export' ? 'Đang tạo file…' : 'Xuất Word BB trả hàng + BB xác minh (khi cần)'}</button>}
         </>
       )
@@ -236,7 +215,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
   }
 
   const readOnlyPhotos = [['photos', c.kind === 'tra' ? 'BB trả hàng có chữ ký khách' : 'Ảnh hàng lỗi'], ['signedNhap', 'BB xác minh đã ký']]
-    .filter(([k]) => (c[k] || []).length && !(s.k === 'tiepNhan' && k === 'photos') && !(s.k === 'kyNhap' && k === 'signedNhap'))
+    .filter(([k]) => (c[k] || []).length && !(s.k === 'xmNhap' && k === 'photos') && !(s.k === 'kyNhap' && k === 'signedNhap'))
 
   return (
     <div className="sheet-tab">
