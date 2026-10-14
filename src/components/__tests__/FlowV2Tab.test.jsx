@@ -67,6 +67,7 @@ describe('Hàng trả & huỷ (Demo)', () => {
     fireEvent.change(screen.getByLabelText('Lý do lỗi'), { target: { value: 'Có cặn' } })
     fireEvent.change(screen.getByLabelText('Mã hàng dòng 1'), { target: { value: 'A01264' } })
     fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Ambroxen' } })
+    fireEvent.change(screen.getByLabelText('Quy cách dòng 1'), { target: { value: 'Hộp 20 ống' } }) // có ngay ở bước tiếp nhận
     fireEvent.click(screen.getByRole('button', { name: /Đã nhận hàng/ }))
     fireEvent.click(screen.getByRole('button', { name: /In xong → Chờ ký/ }))
     fireEvent.click(screen.getByRole('button', { name: /Đã ký đủ → nhập lại kho/ }))

@@ -92,7 +92,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
           <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-2">
             <div className="font-semibold text-sm text-gray-800">{c.kind === 'loi' ? 'Hàng lỗi' : 'Hàng trả về'}</div>
             <ItemsEditor items={c.items} onChange={items => set({ items })}
-              cols={th ? ['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', 'donGia'] : undefined}
+              cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', ...(th ? ['donGia'] : []), 'quyCach', ...(c.kind === 'loi' ? ['tinhTrang'] : [])]}
               onAdd={() => set({ items: [...c.items, newItem({ tinhTrang: c.kind === 'tra' ? 'Hàng nguyên vẹn' : (c.loiLyDo || 'Hàng lỗi') })] })}
               onRemove={i => set({ items: c.items.length > 1 ? c.items.filter((_, idx) => idx !== i) : [newItem()] })} />
           </div>
