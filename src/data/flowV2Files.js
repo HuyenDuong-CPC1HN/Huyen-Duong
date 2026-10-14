@@ -21,3 +21,7 @@ export async function uploadFlowFiles(fileList, now = new Date()) {
 export async function getFlowFileUrl(path) {
   return (await repo()).getSignedUrl(path)
 }
+
+export async function downloadFlowFile(path) {
+  return (await repo()).downloadFile(path)
+}

@@ -257,6 +257,20 @@ export function caseAsReturnSlip(c) {
   }
 }
 
+// Gắn kết quả đọc file biên bản / hoá đơn (readReturnPdf) vào hồ sơ đã có: Biên bản trả lại hàng lấy theo file (Bên
+// A / B / C, lý do, mẫu…), nhưng giữ các ô kho đã tự điền (số / ký hiệu / ngày hoá đơn); khách hàng chỉ điền khi đang
+// trống; đơn giá điền vào dòng hàng cùng vị trí khi dòng đó chưa có đơn giá.
+export function applyParsedReturn(c, parsed) {
+  const old = c.traHang?.form || {}
+  const keep = Object.fromEntries(['soHD', 'kyHieu', 'ngayHD', 'mst'].filter(k => old[k]).map(k => [k, old[k]]))
+  const traHang = { ...parsed.traHang, form: { ...parsed.traHang.form, ...keep } }
+  const items = c.items.map((it, i) => {
+    const p = parsed.items?.[i]
+    return p && (it.donGia === null || it.donGia === undefined || it.donGia === '') && p.donGia != null ? { ...it, donGia: p.donGia } : it
+  })
+  return { ...c, khachHang: c.khachHang || parsed.khachHang || '', traHang, items }
+}
+
 // Phiếu đầy đủ (Biên bản trả lại hàng + BB xác minh) đúng dạng tab Nhập trả lại — dùng cho bản xem trước biên bản
 // trả hàng và nút xuất Word (exportReturnSlipDocs). Chỉ hồ sơ khách từ chối nhận (có traHang).
 export function caseReturnSlip(c) {

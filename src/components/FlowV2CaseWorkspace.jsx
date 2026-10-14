@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { ArrowLeft, FileDown, Undo2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, FileDown, RefreshCw, Undo2 } from 'lucide-react'
 import { KE_TOAN_LIST } from '../utils/returnSlips'
-import { CASE_FLOWS, BATCH_STEPS, caseAsReturnSlip, caseReturnSlip, daysSince, fmtDateTimeVi, newItem, newTraHang, stepOfCase } from '../utils/flowV2'
+import { CASE_FLOWS, BATCH_STEPS, caseAsReturnSlip, applyParsedReturn, caseReturnSlip, daysSince, fmtDateTimeVi, newItem, newTraHang, stepOfCase } from '../utils/flowV2'
 import { exportReturnSlipDocs } from '../utils/exportReturnSlip'
-import { uploadFlowFiles, getFlowFileUrl } from '../data/flowV2Files'
+import { uploadFlowFiles, getFlowFileUrl, downloadFlowFile } from '../data/flowV2Files'
+import { readReturnPdf } from '../utils/flowV2Pdf'
 import { KhoTag } from './HangHuyBadges'
 import { XacMinhPaper } from './ReturnSlipWorkspace'
 import PreviewPrintPanel from './PreviewPrintPanel'
@@ -30,6 +31,27 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
   const setTh = (k, v) => set({ traHang: { ...th, form: { ...th.form, [k]: v } } })
   const setThPdf = patch => set({ traHang: { ...th, pdf: { ...th.pdf, ...patch } } })
   const fullSlip = th ? caseReturnSlip({ ...c, traHang: th }) : null
+  // Đọc lại file biên bản / hoá đơn đã tải khi tạo hồ sơ → điền Bên A / B / C, lý do, đơn giá… (không bắt gõ tay).
+  // fileList: chọn file mới thay vì file đã lưu. Hồ sơ cũ chưa có phần biên bản trả hàng thì tự đọc 1 lần khi mở.
+  const storedPdf = (c.files || []).find(f => /\.pdf$/i.test(f.name) && f.storagePath)
+  const [readMsg, setReadMsg] = useState('')
+  const rereadFile = async (file = null) => {
+    setError(''); setReadMsg(''); setBusy('reread')
+    try {
+      const buf = file ? await file.arrayBuffer() : await downloadFlowFile(storedPdf.storagePath)
+      onSave(applyParsedReturn(c, await readReturnPdf(buf)))
+      setReadMsg(`Đã đọc ${file ? file.name : storedPdf.name}: điền Bên A / B / C, lý do, đơn giá theo file.`)
+    } catch (err) {
+      setError(`Không đọc được file biên bản: ${err.message || 'lỗi không rõ'}. Anh điền tay giúp em các ô còn trống.`)
+    } finally { setBusy('') }
+  }
+  const autoRead = useRef(false)
+  useEffect(() => {
+    if (autoRead.current || c.traHang || !(c.kind === 'tra' && c.sub === 'tuChoi') || !storedPdf) return
+    autoRead.current = true
+    void rereadFile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c.id])
   const exportWord = async () => {
     setError(''); setBusy('export')
     try { await exportReturnSlipDocs(fullSlip) } catch (err) { setError(err.message || 'Xuất file thất bại.') } finally { setBusy('') }
@@ -95,7 +117,15 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
           </div>
           {th && (
             <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-3">
-              <div className="font-semibold text-sm text-gray-800">Biên bản trả lại hàng{th.pdf.mau === 'NOIBO' ? ' (nội bộ)' : ''}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="font-semibold text-sm text-gray-800">Biên bản trả lại hàng{th.pdf.mau === 'NOIBO' ? ' (nội bộ)' : ''}</div>
+                <div className="ml-auto flex flex-wrap gap-2">
+                  {storedPdf && <button type="button" onClick={() => void rereadFile()} disabled={busy === 'reread'} className="sheet-tab-action"><RefreshCw size={13} className={busy === 'reread' ? 'animate-spin' : ''} /> Đọc lại từ file đã tải</button>}
+                  <label className={`sheet-tab-action cursor-pointer ${busy === 'reread' ? 'opacity-60 pointer-events-none' : ''}`}>Đọc từ file khác (PDF)
+                    <input type="file" accept=".pdf" hidden aria-label="Đọc biên bản từ file PDF" onChange={e => { const f = e.target.files[0]; e.target.value = ''; if (f) void rereadFile(f) }} /></label>
+                </div>
+              </div>
+              {readMsg && <div className="text-xs text-green-700">{readMsg}</div>}
               <div style={grid(160)}>
                 <Field label="Ngày lập" kind="hand"><input type="date" value={th.form.ngayLap} onChange={e => setTh('ngayLap', e.target.value)} className={handCls} aria-label="Ngày lập BB trả hàng" /></Field>
                 <Field label="Số hoá đơn" kind="hand"><input value={th.form.soHD} onChange={e => setTh('soHD', e.target.value)} className={handCls} aria-label="Số hoá đơn" /></Field>
@@ -105,7 +135,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
                   <>
                     <Field label="Bên A · Kế toán" kind="hand"><select value={th.form.benA} onChange={e => setTh('benA', e.target.value)} className={handCls} aria-label="Bên A">{KE_TOAN_LIST.map(n => <option key={n}>{n}</option>)}</select></Field>
                     <Field label="Bên B · Kho vận" kind="preset"><input value={th.form.benB} onChange={e => setTh('benB', e.target.value)} className={presetCls} aria-label="Bên B" /></Field>
-                    <Field label="Bên C · NV kinh doanh" kind="hand"><input value={th.pdf.benC?.daiDien || ''} onChange={e => setThPdf({ benC: { ...(th.pdf.benC || {}), daiDien: e.target.value, chucVu: th.pdf.benC?.chucVu || 'Nhân viên kinh doanh' } })} className={handCls} aria-label="Bên C" /></Field>
+                    <Field label="Bên C · NV kinh doanh" kind={th.pdf.benC?.daiDien ? 'preset' : 'hand'}><input value={th.pdf.benC?.daiDien || ''} onChange={e => setThPdf({ benC: { ...(th.pdf.benC || {}), daiDien: e.target.value, chucVu: th.pdf.benC?.chucVu || 'Nhân viên kinh doanh' } })} className={handCls} aria-label="Bên C" /></Field>
                   </>
                 ) : (
                   <Field label="Mã số thuế bên mua" kind="hand"><input value={th.form.mst} onChange={e => setTh('mst', e.target.value)} className={handCls} aria-label="Mã số thuế" /></Field>
