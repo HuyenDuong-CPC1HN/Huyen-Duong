@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History } from 'lucide-react'
+import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History, Workflow } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -20,6 +20,7 @@ import { loginExpired } from './utils/dailyLogin'
 
 const TongDonTab = lazy(() => import('./components/TongDonTab'))
 const UnifiedTrialTab = lazy(() => import('./components/UnifiedTrialTab'))
+const FlowV2Tab = lazy(() => import('./components/FlowV2Tab'))
 
 const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
@@ -60,6 +61,7 @@ const NAV = [
       { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
       { id: 'hangHuyCD', label: 'Theo dõi hàng huỷ', icon: PackageX },
       { id: 'doiTra', label: 'Đổi trả hàng', icon: ArrowLeftRight },
+      { id: 'flowV2', label: 'Hàng trả & huỷ (Demo)', icon: Workflow },
     ],
   },
   // Kho A không phải kho theo dõi hàng: mỗi tháng chỉ hoàn thiện hồ sơ huỷ cho kế toán, nên tách riêng khỏi nhóm trên.
@@ -85,6 +87,7 @@ const BREADCRUMB = {
   hangHuyCD:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ'],
   hangHuyA:   ['Trang chủ', 'Hồ sơ huỷ Kho A'],
   doiTra:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng'],
+  flowV2:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Hàng trả & huỷ (Demo)'],
 }
 
 export default function App() {
@@ -498,6 +501,7 @@ function AppContent({ user }) {
           {active === 'hangHuyCD'  && <HangHuyTab key={`huy-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab />}
           {active === 'doiTra'     && <SwapReturnHub key={`swap-${openTarget}`} initialOpenRecordId={openTarget} />}
+          {active === 'flowV2'     && <Suspense fallback={tabLoadingState}><FlowV2Tab /></Suspense>}
         </main>
       </div>
     </div>
