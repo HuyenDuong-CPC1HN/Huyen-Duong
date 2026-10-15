@@ -1410,6 +1410,16 @@ body {
   .rsw-print-root .rsw-paper .rsw-xm-sign .rsw-sign-gap { height: 46px; }
 }
 
+/* Tab "Hàng trả & huỷ (Demo)": biên bản xác minh dùng 1 cỡ chữ cho cả đoạn văn và các bảng (mẫu cũ để bảng nhỏ hơn). */
+.flowv2-paper .rsw-paper table,
+.flowv2-paper .rsw-paper th,
+.flowv2-paper .rsw-paper td { font-size: 12.5px; }
+@media print {
+  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc table,
+  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc th,
+  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc td { font-size: 10.5pt !important; }
+}
+
 /* Không khai báo @page size/margin ở đây: để hộp thoại in của trình duyệt hiện đủ mục Layout (dọc/ngang),
    Margins, Scale cho người dùng tự chọn. Biên bản trả lại hàng in DỌC, biên bản xác minh in NGANG (đúng
    mẫu Word gốc) — ReturnSlipWorkspace nhắc chọn đúng ngay cạnh nút In. */

@@ -239,7 +239,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
             </div>
             {showPaper && <PreviewPrintPanel docs={[
               ...(fullSlip ? [{ key: 'th', label: fullSlip.pdf.mau === 'NOIBO' ? 'BB trả hàng nội bộ' : 'BB trả lại hàng', landscape: false, node: <FlowV2TraHangPaper slip={fullSlip} /> }] : []),
-              { key: 'xm', label: 'BB xác minh (nhập lại)', landscape: true, node: <XacMinhPaper slip={caseAsReturnSlip(c)} /> },
+              { key: 'xm', label: 'BB xác minh (nhập lại)', landscape: true, node: <div className="flowv2-paper"><XacMinhPaper slip={caseAsReturnSlip(c)} /></div> },
             ]} />}
           </div>
         </div>
