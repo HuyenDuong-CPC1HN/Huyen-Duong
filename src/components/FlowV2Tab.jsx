@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, X } from 'lucide-react'
 import {
   BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, backBatch, backCase, daysSince,
-  dissolveBatch, fmtDateVi, KIND_BORDER, makeBatch, newCase, newItem, newPsEntry, stepOfCase,
+  dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, monthKey, makeBatch, newCase, newItem, newPsEntry, stepOfCase,
 } from '../utils/flowV2'
 import { readFlowV2, writeFlowV2 } from '../data/flowV2Store'
 import { uploadFlowFiles } from '../data/flowV2Files'
@@ -164,6 +164,7 @@ export default function FlowV2Tab() {
   const [khoFilter, setKhoFilter] = useState('all')
   const [kindFilter, setKindFilter] = useState('all')
   const [q, setQ] = useState('')
+  const [doneMon, setDoneMon] = useState(() => monthKey())
   const [openCase, setOpenCase] = useState(null)
   const [openBatch, setOpenBatch] = useState(null)
   const [modal, setModal] = useState(null) // 'new' | { ps: 'C' | 'DTP' }
@@ -254,11 +255,18 @@ export default function FlowV2Tab() {
             )}
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, minmax(230px, 1fr))', overflowX: 'auto' }}>
               {BOARD_COLS.map(([ci, title, hint]) => {
-                const list = visible.filter(c => stepOfCase(c).col === ci)
+                const isDone = ci === 4
+                // Cột Hoàn thành chỉ hiện tháng đang chọn; đang tìm kiếm thì tìm trên mọi tháng. Các cột việc luôn hiện hết.
+                const list = visible.filter(c => stepOfCase(c).col === ci && (!isDone || q.trim() || doneMonth(c) === doneMon))
                 return (
                   <div key={title} className="bg-slate-100 rounded-2xl p-2.5 flex flex-col gap-2 min-h-60">
                     <div><div className="flex items-center justify-between text-sm font-semibold">{title}<span className="text-xs bg-white rounded-full px-2 text-gray-500">{list.length}</span></div>
-                      <div className="text-[11px] text-gray-500">{hint}</div></div>
+                      <div className="text-[11px] text-gray-500">{isDone && q.trim() ? 'đang tìm trên mọi tháng' : hint}</div>
+                      {isDone && !q.trim() && (
+                        <select value={doneMon} onChange={e => setDoneMon(e.target.value)} aria-label="Tháng hoàn thành" className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs">
+                          {doneMonthOptions(data.cases).map(m => <option key={m} value={m}>{fmtMonthVi(m)}{m === monthKey() ? ' (tháng này)' : ''} · {data.cases.filter(c => doneMonth(c) === m).length} hồ sơ</option>)}
+                        </select>
+                      )}</div>
                     {list.map(c => <CaseCard key={c.id} c={c} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)} />)}
                   </div>
                 )

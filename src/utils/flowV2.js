@@ -67,6 +67,19 @@ export const stepIndex = (kind, k) => CASE_FLOWS[kind].steps.findIndex(s => s.k 
 export const daysSince = (iso, now = new Date()) => (iso ? Math.max(0, Math.floor((now - new Date(iso)) / DAY)) : 0)
 export const isCaseDone = c => stepOfCase(c).col === 4
 
+// Tháng (giờ máy, dạng "2026-10") hồ sơ vào cột Hoàn thành — stepAt là lúc chuyển sang bước hiện tại.
+export function monthKey(iso) {
+  const d = iso ? new Date(iso) : new Date()
+  return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+export const doneMonth = c => (isCaseDone(c) ? monthKey(c.stepAt) : '')
+// Các tháng có hồ sơ hoàn thành (mới nhất trước), luôn có tháng hiện tại.
+export function doneMonthOptions(cases, now = new Date()) {
+  const set = new Set([monthKey(now.toISOString()), ...cases.map(doneMonth).filter(Boolean)])
+  return [...set].sort().reverse()
+}
+export const fmtMonthVi = key => { const [y, m] = key.split('-'); return `Tháng ${Number(m)}/${y}` }
+
 export function newItem(extra = {}) {
   return { rowId: rid('r'), maHang: '', tenHang: '', soLo: '', hanDung: '', dvt: '', soLuong: null, quyCach: '', tinhTrang: '', ...extra }
 }

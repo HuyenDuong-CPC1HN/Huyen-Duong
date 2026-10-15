@@ -132,3 +132,15 @@ describe('Hàng trả & huỷ — bỏ bước Tiếp nhận', () => {
     expect(stepOfCase(migrateCase({ ...old, step: 3 })).k).toBe('phieuNhap') // bản cũ: 3 = Nhập lại kho
   })
 })
+
+describe('Hàng trả & huỷ — cột Hoàn thành theo tháng', () => {
+  it('lấy tháng hoàn thành từ lúc vào bước cuối, danh sách tháng luôn có tháng hiện tại', async () => {
+    const { CASE_FLOWS, doneMonth, doneMonthOptions, fmtMonthVi } = await import('../flowV2')
+    const c = newCase({ kind: 'tra', sub: 'daNhan', kho: 'C' })
+    const done = { ...c, step: CASE_FLOWS.tra.steps.length - 1, stepAt: new Date(2026, 8, 20, 10).toISOString() }
+    expect(doneMonth(c)).toBe('')
+    expect(doneMonth(done)).toBe('2026-09')
+    expect(doneMonthOptions([c, done], new Date(2026, 9, 15))).toEqual(['2026-10', '2026-09'])
+    expect(fmtMonthVi('2026-09')).toBe('Tháng 9/2026')
+  })
+})
