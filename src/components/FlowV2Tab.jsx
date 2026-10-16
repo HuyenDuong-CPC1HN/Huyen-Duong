@@ -4,7 +4,8 @@ import {
   BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, backBatch, backCase, daysSince,
   dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, monthKey, makeBatch, newCase, newItem, newPsEntry, stepOfCase,
 } from '../utils/flowV2'
-import { readFlowV2, writeFlowV2 } from '../data/flowV2Store'
+import { readFlowV2, readLegacySources, writeFlowV2 } from '../data/flowV2Store'
+import { importLegacy } from '../utils/flowV2Legacy'
 import { uploadFlowFiles } from '../data/flowV2Files'
 import { readReturnPdf } from '../utils/flowV2Pdf'
 import { parsePhieuXuatKhoHuyPdf } from '../utils/parsePhieuXuatKhoHangHuy'
@@ -165,6 +166,7 @@ export default function FlowV2Tab() {
   const [kindFilter, setKindFilter] = useState('all')
   const [q, setQ] = useState('')
   const [doneMon, setDoneMon] = useState(() => monthKey())
+  const [legacyMsg, setLegacyMsg] = useState('')
   const [openCase, setOpenCase] = useState(null)
   const [openBatch, setOpenBatch] = useState(null)
   const [modal, setModal] = useState(null) // 'new' | { ps: 'C' | 'DTP' }
@@ -217,6 +219,13 @@ export default function FlowV2Tab() {
     setSel(s => ({ ...s, [kho]: [] }))
     setOpenBatch(r.batchId)
   }
+  const pullLegacy = () => {
+    const r = importLegacy(data, readLegacySources())
+    if (r.added.cases || r.added.batches) save({ cases: r.cases, batches: r.batches })
+    setLegacyMsg(r.added.cases || r.added.batches
+      ? `Đã lấy ${r.added.cases} hồ sơ khách trả và ${r.added.batches} đợt huỷ từ tab cũ, xếp vào Hoàn thành / Huỷ xong.`
+      : 'Không có phiếu mới ở tab cũ — đã lấy hết từ trước.')
+  }
   const late = visible.filter(c => daysSince(c.stepAt) >= 3 && stepOfCase(c).col < 4).length
   const atKt = visible.filter(c => stepOfCase(c).kt).length
   const openBatches = data.batches.filter(b => b.step < BATCH_STEPS.length - 1).length
@@ -227,8 +236,10 @@ export default function FlowV2Tab() {
         <header className="sheet-tab-context flex-wrap gap-2">
           <span className="font-semibold">Hàng trả &amp; huỷ (Demo)</span>
           <span className="text-xs text-gray-500">Bản dùng thử song song — dữ liệu riêng, không ảnh hưởng các tab cũ.</span>
-          {view === 'board' && <button type="button" onClick={() => setModal('new')} className="sheet-tab-action is-primary ml-auto"><Plus size={13} /> Tạo hồ sơ khách trả</button>}
+          <button type="button" onClick={pullLegacy} className="sheet-tab-action ml-auto">Lấy dữ liệu từ tab cũ</button>
+          {view === 'board' && <button type="button" onClick={() => setModal('new')} className="sheet-tab-action is-primary"><Plus size={13} /> Tạo hồ sơ khách trả</button>}
         </header>
+        {legacyMsg && <div className="text-xs text-green-700">{legacyMsg}</div>}
 
         <div className="flex flex-wrap gap-2" role="tablist">
           {[['board', 'Bảng việc khách trả'], ['huy', `Huỷ hàng · ${data.pool.length} chờ huỷ · ${openBatches} đợt đang làm`]].map(([k, l]) => (

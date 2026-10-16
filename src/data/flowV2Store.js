@@ -13,6 +13,16 @@ export function readFlowV2() {
   return { cases: readList(FLOWV2_CASES_KEY).map(migrateCase), pool: readList(FLOWV2_POOL_KEY), batches: readList(FLOWV2_BATCHES_KEY) }
 }
 
+// Dữ liệu 3 tab cũ (chỉ đọc) để lấy sang tab Demo — xem utils/flowV2Legacy.js.
+export function readLegacySources() {
+  return {
+    returnSlips: readList('return_slips'),
+    swapRecords: readList('swap_return_records'),
+    swapBatches: readList('swap_huy_batches'),
+    huySlips: readList('huy_slips'),
+  }
+}
+
 // Chỉ ghi phần thay đổi (cases / pool / batches có mặt trong patch).
 export function writeFlowV2(patch) {
   if (patch.cases) opsStore.setItem(FLOWV2_CASES_KEY, JSON.stringify(patch.cases))

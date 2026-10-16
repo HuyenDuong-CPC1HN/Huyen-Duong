@@ -138,3 +138,22 @@ describe('Hàng trả & huỷ (Demo) — hồ sơ cũ chưa có phần biên b�
     expect(screen.getAllByText('BIÊN BẢN TRẢ LẠI HÀNG (NỘI BỘ)').length).toBeGreaterThan(0)
   })
 })
+
+describe('Hàng trả & huỷ (Demo) — lấy dữ liệu từ tab cũ', () => {
+  it('bấm nút thì phiếu tab cũ vào cột Hoàn thành đúng tháng, tab cũ giữ nguyên', async () => {
+    const oldSlips = JSON.stringify([{ id: 'slip_1', khachHang: 'Nhà thuốc Cũ', stage: 'done', createdAt: '2026-08-02T03:00:00.000Z', doneAt: '2026-08-10T03:00:00.000Z', pdf: { mau: 'CPC1HN', items: [{ ten: 'Zensalbu', dvt: 'ONG', soLuong: 5 }] }, form: { items: [{}] } }])
+    store.values.set('return_slips', oldSlips)
+    store.values.set('huy_slips', JSON.stringify([{ id: 'huy_1', kho: 'C', soPhieu: 'XH01', importedAt: '2026-08-01T03:00:00.000Z', doneAt: '2026-08-03T03:00:00.000Z', items: [{ maHang: 'B1', tenHang: 'Bupi', soLuong: 2 }], form: {} }]))
+    render(<FlowV2Tab />)
+    fireEvent.click(screen.getByRole('button', { name: 'Lấy dữ liệu từ tab cũ' }))
+    expect(screen.getByText(/Đã lấy 1 hồ sơ khách trả và 1 đợt huỷ/)).toBeInTheDocument()
+    expect(store.values.get('return_slips')).toBe(oldSlips)
+    expect(screen.queryByText('Nhà thuốc Cũ')).not.toBeInTheDocument() // tháng 8, cột Hoàn thành đang xem tháng này
+    fireEvent.change(screen.getByLabelText('Tháng hoàn thành'), { target: { value: '2026-08' } })
+    expect(screen.getByText('Nhà thuốc Cũ')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Lấy dữ liệu từ tab cũ' }))
+    expect(screen.getByText(/Không có phiếu mới ở tab cũ/)).toBeInTheDocument()
+    expect(read('flowv2_cases')).toHaveLength(1)
+    expect(read('flowv2_batches')).toHaveLength(1)
+  })
+})
