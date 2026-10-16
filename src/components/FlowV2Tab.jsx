@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, X } from 'lucide-react'
 import {
   BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, backBatch, backCase, daysSince,
-  dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, monthKey, makeBatch, newCase, newItem, newPsEntry, stepOfCase,
+  dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, monthKey, makeBatch, toIsoDate, newCase, newItem, newPsEntry, stepOfCase,
 } from '../utils/flowV2'
 import { readFlowV2, readLegacySources, writeFlowV2 } from '../data/flowV2Store'
 import { importLegacy } from '../utils/flowV2Legacy'
@@ -158,6 +158,16 @@ function CaseCard({ c, batch, onOpen }) {
   )
 }
 
+// Cột Hoàn thành: mỗi hồ sơ 1 dòng gọn (khách hàng · kho / loại · số đơn · ngày xong) cho cột không dài ra.
+function DoneRow({ c, onOpen }) {
+  return (
+    <button type="button" onClick={onOpen} className="w-full text-left bg-white rounded-lg border border-gray-200 px-2.5 py-1.5 hover:shadow-sm" style={{ borderLeft: `3px solid ${KIND_BORDER[c.kind]}` }}>
+      <div className="text-[13px] font-semibold truncate" title={c.khachHang}>{c.khachHang || 'Khách hàng chưa ghi'}</div>
+      <div className="text-[11px] text-gray-500 truncate">{CASE_FLOWS[c.kind].short} · Kho {c.kho}{c.soDon ? ` · ${c.soDon}` : ''} · xong {c.stepAt ? fmtDateVi(toIsoDate(new Date(c.stepAt))) : ''}</div>
+    </button>
+  )
+}
+
 // Tab "Hàng trả & huỷ (Demo)": bảng việc hồ sơ khách trả + khu Huỷ hàng (Chờ huỷ, đợt huỷ) cho Kho C / Kho DTP.
 export default function FlowV2Tab() {
   const [data, setData] = useState(() => readFlowV2())
@@ -278,7 +288,11 @@ export default function FlowV2Tab() {
                           {doneMonthOptions(data.cases).map(m => <option key={m} value={m}>{fmtMonthVi(m)}{m === monthKey() ? ' (tháng này)' : ''} · {data.cases.filter(c => doneMonth(c) === m).length} hồ sơ</option>)}
                         </select>
                       )}</div>
-                    {list.map(c => <CaseCard key={c.id} c={c} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)} />)}
+                    {isDone ? (
+                      <div className="flex flex-col gap-1.5 overflow-y-auto pr-0.5" style={{ maxHeight: '70vh' }}>
+                        {[...list].sort((x, y) => String(y.stepAt).localeCompare(String(x.stepAt))).map(c => <DoneRow key={c.id} c={c} onOpen={() => setOpenCase(c.id)} />)}
+                      </div>
+                    ) : list.map(c => <CaseCard key={c.id} c={c} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)} />)}
                   </div>
                 )
               })}
