@@ -6,6 +6,7 @@ import {
 } from '../utils/pxkReconcile'
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
+import { extractPdfText, findDuplicateTems, mergeActualScanRows, parsePdfItems, readActualScanRows } from '../utils/parseGoodsReceipt'
 
 // Mục "Đối chiếu sổ sách": Phiếu xuất kho nhà máy (sổ sách) ↔ BB thực nhận (chuyến đã lưu ở tab Nhập hàng) ↔ file
 // quét nhập web nội bộ. Chỉ đọc chuyến nhập hàng, không sửa gì ở tab Nhập hàng / Đối soát.
@@ -143,6 +144,36 @@ function PhieuEditor({ phieu, onChange, onAddImages, busy, onClose }) {
   )
 }
 
+// Bản đầu lưu files là danh sách tên (không có dòng theo file) — đọc được cả 2 dạng.
+const scanFilesOf = sc => (sc?.files || []).map(f => (typeof f === 'string' ? { name: f, rows: [] } : f))
+
+function DuplicateTems({ list }) {
+  if (!list.length) return null
+  const extra = list.reduce((s, e) => s + (Number(e.soLuong) || 0) * (e.hits.length - 1), 0)
+  return (
+    <div className="rounded-xl border border-red-200 bg-red-50/50 p-3 flex flex-col gap-2" role="alert" aria-label="Mã tem trùng">
+      <div className="text-sm text-red-800"><b>⚠ {list.length} mã tem bị quét trùng</b> giữa các file quét — số lượng đang bị cộng trùng khoảng <b>{extra.toLocaleString('vi-VN')}</b>. Kiểm tra thực tế mã tem thuộc kho nào rồi huỷ nhập ở chỗ còn lại.</div>
+      <div className="overflow-x-auto bg-white rounded-lg border border-red-100">
+        <table className="w-full text-xs" style={{ minWidth: 640 }}>
+          <thead className="bg-red-50/60 text-gray-600"><tr>{['Mã tem', 'Mã hàng', 'Tên hàng', 'Số lô', 'SL / tem', 'Xuất hiện ở'].map(h => <th key={h} className="px-2 py-1.5 text-left font-semibold">{h}</th>)}</tr></thead>
+          <tbody>
+            {list.map(e => (
+              <tr key={e.maTem} className="border-t border-red-50 align-top">
+                <td className="px-2 py-1.5 font-mono font-semibold text-red-700">{e.maTem}</td>
+                <td className="px-2 py-1.5 font-mono">{e.maHang}</td>
+                <td className="px-2 py-1.5">{e.tenHang}</td>
+                <td className="px-2 py-1.5 font-mono">{e.soLo}</td>
+                <td className="px-2 py-1.5 tabular-nums">{vn(e.soLuong)}</td>
+                <td className="px-2 py-1.5">{e.hits.map((h, i) => <div key={i} className="whitespace-nowrap"><b>{PXK_KHO.find(k => k.key === h.zone)?.label}</b>{h.kho && <span className="text-gray-500"> (kho {h.kho})</span>} · {h.fileName}{h.stt && <> · STT {h.stt}</>}</div>)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function DoiChieuSoSachTab() {
   const [batches] = useState(() => readGoodsBatches().sort((a, b) => String(b.processedAt).localeCompare(String(a.processedAt))))
   const [batchId, setBatchId] = useState(() => batches[0]?.id || '')
@@ -174,7 +205,6 @@ export default function DoiChieuSoSachTab() {
       try {
         if (isPdf(f)) {
           const stored = await uploadPxkFile(f)
-          const { extractPdfText, parsePdfItems } = await import('../utils/parseGoodsReceipt')
           const text = await extractPdfText(await f.arrayBuffer())
           const items = parsePdfItems(text).filter(it => it.source === 'phieuXuatKho')
           added.push(newPxkPhieu(items.length
@@ -207,20 +237,26 @@ export default function DoiChieuSoSachTab() {
   const addScanFiles = async (k, files) => {
     setError(''); setBusy(`scan-${k}`)
     try {
-      const { readActualScanRows, mergeActualScanRows } = await import('../utils/parseGoodsReceipt')
       const valid = files.filter(isExcel)
-      const prev = session.scan[k]
-      const raw = [...(prev?.raw || [])]
-      const names = [...(prev?.files || [])]
+      // Giữ dòng theo từng file (kèm mã tem, STT, kho trên file) để cảnh báo mã tem trùng giữa các file / các kho.
+      const list = scanFilesOf(session.scan[k])
       const errs = []
       for (const f of valid) {
-        try { raw.push(...readActualScanRows(await f.arrayBuffer())); names.push(f.name) } catch (err) { errs.push(`${f.name}: ${err.message}`) }
+        try {
+          const rows = readActualScanRows(await f.arrayBuffer()).map(r => ({ maHang: r.maHang, tenHang: r.tenHang || '', soLo: r.soLo || '', soLuong: r.soLuong ?? 0, maTem: r.maTem || '', stt: r.stt || '', kho: r.kho || '' }))
+          list.push({ name: f.name, rows })
+        } catch (err) { errs.push(`${f.name}: ${err.message}`) }
       }
       if (valid.length < files.length) errs.push('Chỉ nhận file .xlsx / .xls')
-      const slim = raw.map(r => ({ maHang: r.maHang, tenHang: r.tenHang || '', soLo: r.soLo || '', soLuong: r.soLuong ?? 0 }))
-      patch({ scan: { ...session.scan, [k]: { files: names, raw: slim, rows: mergeActualScanRows(slim) } } })
+      patch({ scan: { ...session.scan, [k]: { files: list, rows: mergeActualScanRows(list.flatMap(x => x.rows)) } } })
       if (errs.length) setError(errs.join(' · '))
     } catch (err) { setError(err.message || 'Không đọc được file quét.') } finally { setBusy('') }
+  }
+
+  const removeScanFile = (k, i) => {
+    const list = scanFilesOf(session.scan[k]).filter((_, idx) => idx !== i)
+    if (!list.length) { patch({ scan: { ...session.scan, [k]: null } }); return }
+    patch({ scan: { ...session.scan, [k]: { files: list, rows: mergeActualScanRows(list.flatMap(x => x.rows)) } } })
   }
 
   const toggleChecked = key => {
@@ -239,6 +275,7 @@ export default function DoiChieuSoSachTab() {
   }
 
   const openPhieu = session.phieus.find(p => p.id === openId)
+  const dupTems = findDuplicateTems(PXK_KHO.flatMap(({ key }) => scanFilesOf(session.scan[key]).map(f => ({ zone: key, fileName: f.name, rows: f.rows }))))
   const rows = results[kho] || []
   const visible = rows.filter(r => matchFilter(r, filter))
   const countOf = (k, f) => (results[k] || []).filter(r => matchFilter(r, f)).length
@@ -297,7 +334,7 @@ export default function DoiChieuSoSachTab() {
       <section className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3" aria-label="File quét nhập">
         <div>
           <h2 className="m-0 text-base font-semibold">2 · File quét nhập web nội bộ</h2>
-          <div className="text-xs text-gray-500">Xuất file .xls trên web nội bộ rồi thả vào đúng kho (cùng file như trang Đối soát). Kho nào chưa thả file thì cột “Đã quét” để trống, không báo lệch quét.</div>
+          <div className="text-xs text-gray-500">Xuất file .xls trên web nội bộ rồi thả vào đúng kho (cùng file như trang Đối soát). Kho nào chưa thả file thì cột “Đã quét” để trống, không báo lệch quét. App tự cảnh báo mã tem bị quét trùng giữa các file.</div>
         </div>
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           {PXK_KHO.map(({ key, label }) => {
@@ -306,7 +343,10 @@ export default function DoiChieuSoSachTab() {
               <DropZone key={key} onFiles={fs => void addScanFiles(key, fs)}>
                 <div className="flex items-center justify-between gap-2"><KhoChip kho={key} />
                   {sc && <button type="button" onClick={() => patch({ scan: { ...session.scan, [key]: null } })} className="text-[11px] text-gray-400 hover:text-red-600">Bỏ file</button>}</div>
-                {sc ? sc.files.map((n, i) => <div key={i} className="text-[11px] text-teal-700 flex items-center gap-1 min-w-0"><FileSpreadsheet size={12} className="shrink-0" /><span className="truncate" title={n}>{n}</span></div>)
+                {sc ? scanFilesOf(sc).map((f, i) => (
+                  <div key={i} className="text-[11px] text-teal-700 flex items-center gap-1 min-w-0"><FileSpreadsheet size={12} className="shrink-0" /><span className="truncate" title={f.name}>{f.name}</span>
+                    <button type="button" onClick={() => removeScanFile(key, i)} aria-label={`Bỏ file ${f.name}`} className="ml-auto text-gray-400 hover:text-red-600 shrink-0"><X size={12} /></button></div>
+                ))
                   : <div className="text-[11px] text-gray-400">Chưa có file quét {label}</div>}
                 <label className={`sheet-tab-action cursor-pointer self-start ${busy === `scan-${key}` ? 'opacity-60 pointer-events-none' : ''}`}>+ Thêm file .xls
                   <input type="file" accept=".xlsx,.xls" multiple hidden aria-label={`File quét ${label}`} onChange={e => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) void addScanFiles(key, fs) }} />
@@ -315,6 +355,7 @@ export default function DoiChieuSoSachTab() {
             )
           })}
         </div>
+        <DuplicateTems list={dupTems} />
       </section>
 
       <section className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3" aria-label="Kết quả đối chiếu">

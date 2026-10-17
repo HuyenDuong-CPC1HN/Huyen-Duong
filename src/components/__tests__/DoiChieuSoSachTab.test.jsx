@@ -14,6 +14,7 @@ vi.mock('../../data/pxkFiles', () => ({
 vi.mock('../../utils/parseGoodsReceipt', async orig => ({
   ...(await orig()),
   extractPdfText: vi.fn(async () => 'PHIẾU XUẤT KHO Số: FX126/005804'),
+  readActualScanRows: vi.fn(() => [{ maHang: 'C02918', tenHang: 'Conadin', soLo: '011026', soLuong: 154, maTem: 'T0001', stt: '1', kho: '' }]),
   parsePdfItems: vi.fn(() => [
     { maHang: 'C02918', tenHang: 'Conadin Roll-on Strong - Hộp 1 lọ 15ml', dvt: 'LO', soLuong: 154, soLo: '011026', hanDung: '2029-10-06', source: 'phieuXuatKho' },
   ]),
@@ -65,5 +66,20 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     store.values.clear()
     render(<DoiChieuSoSachTab />)
     expect(screen.getByText(/Chưa có chuyến nhập hàng nào đã lưu/)).toBeInTheDocument()
+  })
+
+  it('file quét lưu theo chuyến, cảnh báo mã tem quét trùng giữa 2 kho', async () => {
+    render(<DoiChieuSoSachTab />)
+    const xls = name => new File(['x'], name, { type: 'application/vnd.ms-excel' })
+    fireEvent.change(screen.getByLabelText('File quét Kho DTP'), { target: { files: [xls('quet_dtp.xls')] } })
+    expect(await screen.findByText('quet_dtp.xls')).toBeInTheDocument()
+    expect(screen.queryByRole('alert', { name: 'Mã tem trùng' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('File quét Kho C'), { target: { files: [xls('quet_c.xls')] } })
+    const alert = await screen.findByRole('alert', { name: 'Mã tem trùng' })
+    expect(within(alert).getByText('T0001')).toBeInTheDocument()
+    expect(within(alert).getByText(/quet_c\.xls/)).toBeInTheDocument()
+    expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.scan.DTP.files[0]).toMatchObject({ name: 'quet_dtp.xls', rows: [{ maTem: 'T0001' }] })
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ file quet_c.xls' }))
+    expect(screen.queryByRole('alert', { name: 'Mã tem trùng' })).not.toBeInTheDocument()
   })
 })
