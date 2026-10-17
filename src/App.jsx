@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History, Workflow } from 'lucide-react'
+import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History, Workflow, ClipboardCheck } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -21,6 +21,7 @@ import { loginExpired } from './utils/dailyLogin'
 const TongDonTab = lazy(() => import('./components/TongDonTab'))
 const UnifiedTrialTab = lazy(() => import('./components/UnifiedTrialTab'))
 const FlowV2Tab = lazy(() => import('./components/FlowV2Tab'))
+const DoiChieuSoSachTab = lazy(() => import('./components/DoiChieuSoSachTab'))
 
 const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
@@ -49,6 +50,7 @@ const NAV = [
     children: [
       { id: 'nhaphang', label: 'Nhập hàng', icon: PackagePlus },
       { id: 'doisoatthucte', label: 'Đối soát Thực tế ↔ Hoá đơn', icon: ListChecks },
+      { id: 'doichieusosach', label: 'Đối chiếu sổ sách (PXK)', icon: ClipboardCheck },
       { id: 'lichsunhaphang', label: 'Tra cứu lịch sử nhập hàng', icon: History },
     ],
   },
@@ -81,6 +83,7 @@ const BREADCRUMB = {
   hangchamluanchuyen: ['Trang chủ', 'Quản lý tồn kho', 'Hàng chậm luân chuyển'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
+  doichieusosach: ['Trang chủ', 'Nhập hàng', 'Đối chiếu sổ sách (PXK)'],
   lichsunhaphang: ['Trang chủ', 'Nhập hàng', 'Tra cứu lịch sử nhập hàng'],
   traHang:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi nhập trả lại'],
   traCuuHang: ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Tra cứu hàng'],
@@ -495,6 +498,7 @@ function AppContent({ user }) {
           {active === 'hangchamluanchuyen' && <ExpiryStockTab key="clc" mode="clc" />}
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
+          {active === 'doichieusosach' && <Suspense fallback={tabLoadingState}><DoiChieuSoSachTab /></Suspense>}
           {active === 'lichsunhaphang' && <NhapHangHistoryTab />}
           {active === 'traCuuHang' && <HangLookup onOpen={(row) => { setOpenTarget(row.ref); setActive({ tra: 'traHang', doitra: 'doiTra', kho: 'hangHuyCD' }[row.nguon]) }} />}
           {active === 'traHang' && <ReturnSlipsTab key={`tra-${openTarget}`} initialOpenId={openTarget} />}
