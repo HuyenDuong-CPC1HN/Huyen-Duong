@@ -259,7 +259,7 @@ export function readPxkPdfRows(text, parsePdfItems) {
 // Chữ đọc từ ảnh theo từng dòng in trên phiếu, có nhiễu (dấu tick, kẻ bảng "|", dấu phẩy rơi mất). Mỗi dòng có mã
 // vật tư là 1 dòng hàng; ô nào không chắc để trống để kho tự điền khi soát.
 const OCR_UNITS = new Set(['ONG', 'LO', 'VIEN', 'HOP', 'TUYP', 'CHAI', 'GOI', 'TUI', 'VI', 'BINH', 'CAI', 'KG', 'LIT', 'THUNG', 'BO', 'CUON', 'MIENG', 'HU', 'TAM', 'CAP', 'DOI', 'BAO'])
-const OCR_ORIGIN = /^[A-Z0-9]{2,10}-?[VY][NM]{1,2}[A-Z]?$|-VN/
+const OCR_ORIGIN = /^[A-Z0-9]{2,10}[-.]?[VY][NM]{1,2}[A-Z]?$|[-.]VN/
 
 // Số lượng đọc từ ảnh: mẫu phiếu in "3.380,000" (chấm nghìn, phẩy + 3 số lẻ) nhưng OCR hay rơi dấu.
 export function parseOcrQty(raw) {
@@ -324,4 +324,14 @@ export function ocrRowNeedsCheck(row, resultRows) {
   if (!row.ocr || row.checked || !row.maHang) return false
   const res = resultRows.find(x => x.key === keyOf(row.maHang, row.soLo))
   return !res || isNguonRow(res)
+}
+
+// Dấu tick bút ngay trước số lô hay bị đọc thành 1 chữ cái dính vào lô ("J010826"). Nếu thực nhận có đúng 1 dòng
+// cùng mã mà lô = lô đọc được bỏ ký tự đầu thì lấy lô thực nhận. Chỉ bỏ 1 ký tự đầu, không đoán gì khác.
+export function alignOcrLots(rows, received) {
+  return rows.map(r => {
+    if (!r.ocr || !r.soLo || received.some(x => keyOf(x.maHang, x.soLo) === keyOf(r.maHang, r.soLo))) return r
+    const same = received.filter(x => String(x.maHang).toUpperCase() === String(r.maHang).toUpperCase() && normLot(x.soLo) === normLot(r.soLo).slice(1))
+    return same.length === 1 ? { ...r, soLo: same[0].soLo } : r
+  })
 }

@@ -120,3 +120,13 @@ describe('Đọc chữ từ ảnh chụp nghiêng', () => {
     expect(parseOcrPxkText(text)).toEqual([{ maHang: 'F00629', tenHang: 'Falgankid25 mg/ml-Hộp4vix', dvt: 'ONG', soLuong: 3380, soLo: '13626G01', hanDung: '2029-07-12' }])
   })
 })
+
+describe('Sửa lô đọc từ ảnh bị dính dấu tick', () => {
+  it('bỏ 1 ký tự đầu khi khớp đúng 1 lô thực nhận cùng mã', async () => {
+    const { alignOcrLots, parseOcrPxkText } = await import('../pxkReconcile')
+    const received = [{ maHang: 'L01286', soLo: '010826' }]
+    expect(alignOcrLots([{ ocr: true, maHang: 'L01286', soLo: 'J010826' }], received)[0].soLo).toBe('010826')
+    expect(alignOcrLots([{ ocr: true, maHang: 'L01286', soLo: '010827' }], received)[0].soLo).toBe('010827') // lệch thật giữ nguyên
+    expect(parseOcrPxkText('1 C02918 Conadin Roll-on Strong - Hộp 1 DTP.VNM LO 154,000 011026 06/10/2029')[0].tenHang).toBe('Conadin Roll-on Strong - Hộp 1')
+  })
+})

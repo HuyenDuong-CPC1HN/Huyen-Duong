@@ -16,20 +16,22 @@ vi.mock('../../utils/parseGoodsReceipt', async orig => ({
   ...(await orig()),
   extractPdfText: vi.fn(async () => 'PHIẾU XUẤT KHO Số: FX126/005804'),
   readActualScanRows: vi.fn(() => [{ maHang: 'C02918', tenHang: 'Conadin', soLo: '011026', soLuong: 154, maTem: 'T0001', stt: '1', kho: '' }]),
-  parsePdfItems: vi.fn(() => [
+  parsePdfItems: vi.fn(() => (parseItemsMock.empty ? [] : [
     { maHang: 'C02918', tenHang: 'Conadin Roll-on Strong - Hộp 1 lọ 15ml', dvt: 'LO', soLuong: 154, soLo: '011026', hanDung: '2029-10-06', source: 'phieuXuatKho' },
-  ]),
+  ])),
 }))
 
 const ocrMock = vi.hoisted(() => vi.fn(async () => ''))
-vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock }))
+const ocrPdfMock = vi.hoisted(() => vi.fn(async () => ''))
+vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock, ocrPdf: ocrPdfMock }))
+const parseItemsMock = vi.hoisted(() => ({ empty: false }))
 
 const batch = {
   id: 'b1', processedAt: '2026-10-10T03:00:00.000Z', pdfMetadata: { ngayNhap: '10/10/2026' },
   khoC: [{ maHang: 'F00629', tenHang: 'Falgankid 25 mg/ml', dvt: 'ONG', soLo: '13626G01', hanDung: '2029-07-12', slHoaDon: 3380, slThucTe: 3300 }],
   khoLgt: [{ maHang: 'C02918', tenHang: 'Conadin Roll-on Strong', dvt: 'LO', soLo: '011026', hanDung: '2029-10-06', slHoaDon: 154, slThucTe: null }],
 }
-beforeEach(() => { ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
+beforeEach(() => { parseItemsMock.empty = false; ocrPdfMock.mockReset(); ocrPdfMock.mockResolvedValue(''); ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
 afterEach(() => cleanup())
 
 describe('Đối chiếu sổ sách (PXK)', () => {
@@ -132,5 +134,14 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     render(<DoiChieuSoSachTab />)
     fireEvent.change(screen.getByLabelText('Chụp ảnh phiếu Kho C'), { target: { files: [new File(['jpg'], 'IMG_3.jpg', { type: 'image/jpeg' })] } })
     expect(await screen.findByText(/⚠ không đọc được chữ trong ảnh \(Không tải được bộ đọc chữ/)).toBeInTheDocument()
+  })
+
+  it('PDF scan (không có chữ): app vẽ trang ra ảnh rồi đọc chữ, dòng khớp thực nhận tự xác nhận', async () => {
+    parseItemsMock.empty = true
+    ocrPdfMock.mockResolvedValue('Số: FX126/005804\n1 C02918 Conadin Roll-on Strong - Hộp 1 DTP.VNM LO 154,000 V J011026 06/10/2029')
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('+ Thêm file Kho DTP'), { target: { files: [new File(['%PDF'], 'scan.pdf', { type: 'application/pdf' })] } })
+    expect(await screen.findByText('PDF scan · đọc 1 dòng · khớp thực nhận')).toBeInTheDocument()
+    expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'scan', soPhieu: 'FX126/005804', rows: [{ maHang: 'C02918', soLo: '011026', ocr: true }] })
   })
 })

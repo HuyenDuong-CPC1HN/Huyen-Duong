@@ -86,3 +86,25 @@ export async function ocrImage(blob, accept = () => true) {
   }
   return best
 }
+
+// PDF scan (trang PDF chỉ là ảnh, không có chữ bên trong): vẽ từng trang ra ảnh rồi đọc chữ như ảnh chụp. Bản scan
+// phẳng, rõ nên thường đọc trúng ngay lần đầu. Trả về chữ của tất cả các trang nối lại.
+export async function ocrPdf(arrayBuffer, accept = () => true) {
+  const { importFresh } = await import('./staleChunk')
+  const pdfjs = await importFresh(() => import('pdfjs-dist/build/pdf.mjs'))
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+  const data = arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer)
+  const doc = await pdfjs.getDocument({ data }).promise
+  const texts = []
+  for (let n = 1; n <= doc.numPages; n += 1) {
+    const page = await doc.getPage(n)
+    const base = page.getViewport({ scale: 1 })
+    const viewport = page.getViewport({ scale: Math.min(4, Math.max(1, 3000 / Math.max(base.width, base.height))) })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(viewport.width)
+    canvas.height = Math.round(viewport.height)
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    texts.push(await ocrImage(canvas, accept))
+  }
+  return texts.join('\n')
+}
