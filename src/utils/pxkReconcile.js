@@ -182,3 +182,75 @@ export function buildNguonReport(resultsByKho, title = '') {
   const head = title ? `Kho CN HCM báo chênh lệch ${title} (sổ sách so với thực nhận):` : 'Kho CN HCM báo chênh lệch (sổ sách so với thực nhận):'
   return lines.length ? `${head}\n${lines.join('\n')}` : ''
 }
+
+// ---------- Đọc PDF Phiếu xuất kho mẫu CPC1 Hà Nội (số phiếu XD…) ----------
+// Mẫu này không có cột "Vị trí" như mẫu DTP 02-VT (parsePdfItems không đọc được), cột: Stt · Mã vật tư · Tên vật tư ·
+// Nước SX · Đvt · Số lượng · Lô · Hạn dùng. Thứ tự chữ trích từ PDF có thể không theo thứ tự cột, nên đọc theo dấu
+// hiệu thay vì vị trí: mỗi dòng hàng kết thúc ở Hạn dùng (dd/mm/yyyy); trong đoạn đó Mã vật tư là mã dạng A12345,
+// Số lượng dạng "1.050,000", Đvt là chữ in hoa đứng ngay trước Số lượng, Nước SX có dạng "…-VNM", Lô là chữ ngay
+// trước Hạn dùng, phần còn lại là Tên vật tư.
+const PXK_CODE = /^[A-Z]\d{4,5}$/
+const PXK_QTY = /^\d{1,3}(?:\.\d{3})*,\d{1,3}$|^\d+,\d{1,3}$/
+const PXK_ORIGIN = /^[A-Z0-9]+-[A-Z]{2,3}[A-Z]?$/
+const PXK_DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+
+export function parseCpc1PxkPdf(pdfText) {
+  let compact = String(pdfText || '').replace(/\s+/g, ' ').trim()
+  const end = compact.search(/NGƯỜI\s+LẬP|Ngày\s*\.{2,}/i)
+  if (end >= 0) compact = compact.slice(0, end)
+  const all = compact.split(' ').filter(Boolean)
+  // Bảng bắt đầu ngay sau dòng mã cột "A C B D 1 2 3 4" (PDF có thể trộn thứ tự: "A B C 2 3 4 1 D"); tiêu đề cột
+  // cũng có thể bị trộn thứ tự nên không dựa vào chữ "Hạn dùng".
+  const COL = new Set(['A', 'B', 'C', 'D', '1', '2', '3', '4'])
+  let start = -1
+  for (let i = 0; i + 8 <= all.length; i += 1) {
+    const win = all.slice(i, i + 8)
+    if (win.every(x => COL.has(x)) && ['A', 'B', 'C', 'D'].every(x => win.includes(x))) { start = i + 8; break }
+  }
+  if (start < 0) return []
+  const tokens = all.slice(start)
+  const rows = []
+  let chunk = []
+  for (const tok of tokens) {
+    const d = PXK_DATE.exec(tok)
+    if (!d) { chunk.push(tok); continue }
+    const row = parseChunk(chunk, `${d[3]}-${d[2].padStart(2, '0')}-${d[1].padStart(2, '0')}`)
+    if (row) rows.push(row)
+    chunk = []
+  }
+  return rows
+}
+
+function parseChunk(tokens, hanDung) {
+  const t = [...tokens]
+  while (t.length && /^\d{1,2}$/.test(t[0])) t.shift() // Stt (và số thứ tự dòng trống của dòng trước nếu có)
+  const iCode = t.findIndex(x => PXK_CODE.test(x))
+  const iQty = t.findIndex(x => PXK_QTY.test(x))
+  if (iCode < 0 || iQty < 0) return null
+  const used = new Set([iCode, iQty])
+  let dvt = ''
+  if (iQty > 0 && /^[A-ZĐ]{1,6}$/.test(t[iQty - 1]) && !PXK_CODE.test(t[iQty - 1])) { dvt = t[iQty - 1]; used.add(iQty - 1) }
+  const iOrigin = t.findIndex((x, i) => !used.has(i) && PXK_ORIGIN.test(x) && /VN/.test(x))
+  if (iOrigin >= 0) {
+    used.add(iOrigin)
+    // "CPC1HN-VN M": PDF ngắt chữ Nước SX làm 2 mẩu, mẩu sau 1 chữ cái cũng là Nước SX
+    if (/-VN$/.test(t[iOrigin]) && /^[A-Z]$/.test(t[iOrigin + 1] || '')) used.add(iOrigin + 1)
+  }
+  let iLot = t.length - 1
+  while (iLot >= 0 && used.has(iLot)) iLot -= 1
+  const soLo = iLot >= 0 && iLot > Math.max(iQty, iCode) ? t[iLot] : ''
+  if (soLo) used.add(iLot)
+  if (!dvt) {
+    const iDvt = t.findIndex((x, i) => !used.has(i) && i > iCode && /^[A-ZĐ]{2,6}$/.test(x))
+    if (iDvt >= 0 && iDvt > iQty - 3) { dvt = t[iDvt]; used.add(iDvt) }
+  }
+  const tenHang = t.filter((_, i) => !used.has(i)).join(' ').trim()
+  return { maHang: t[iCode], tenHang, dvt, soLuong: parseQty(t[iQty]), soLo, hanDung }
+}
+
+// Đọc 1 file PDF phiếu xuất kho bất kỳ mẫu: thử mẫu DTP 02-VT (parsePdfItems có sẵn) trước, rồi mẫu CPC1 Hà Nội.
+export function readPxkPdfRows(text, parsePdfItems) {
+  const dtp = parsePdfItems(text).filter(it => it.source === 'phieuXuatKho')
+  if (dtp.length) return dtp
+  return parseCpc1PxkPdf(text)
+}

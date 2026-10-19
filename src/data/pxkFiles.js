@@ -17,3 +17,7 @@ export async function uploadPxkFile(file, now = new Date()) {
 export async function getPxkFileUrl(path) {
   return (await repo()).getSignedUrl(path)
 }
+
+export async function downloadPxkFile(path) {
+  return (await repo()).downloadFile(path)
+}

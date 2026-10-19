@@ -66,3 +66,26 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(buildNguonReport({ C: rows })).toBe('')
   })
 })
+
+describe('Đọc PDF Phiếu xuất kho mẫu CPC1 Hà Nội', () => {
+  it('đọc đúng chữ trích từ PDF thật (tiêu đề cột và cột bị trộn thứ tự)', async () => {
+    const { parseCpc1PxkPdf, readPxkPdfRows } = await import('../pxkReconcile')
+    // Chữ trích từ file PHIẾU BỔ SUNG HCM (XD2611/04824) bằng extractPdfText
+    const text = 'CÔNG TY CỔ PHẦN DƯỢC PHẨM CPC1 HÀ NỘI Ngày 19 tháng 10 năm 2026 PHIẾU XUẤT KHO Số phiếu: XD2611/04824 Đơn vị mua hàng Công ty Cổ phần UPHARMA '
+      + 'XUẤT LOGICTICS - CN HỒ CHÍ MINH 19/10 Lý do xuất kho: Xuất tại kho (ngăn lô): 010108 Địa điểm: Nước SX Lô Hạn dùng Số lượng Đvt Tên vật tư Mã vật tư Stt '
+      + 'A B C 2 3 4 1 D 1 Zensonid - Hộp 10 lọ x 2 ml (BFS-R) Z00338 LO 1.050,000 22926F01 CPC1HN-VNM 11/06/2028 2 3 4 5 6 7 8 9 10 '
+      + 'Ngày........tháng........năm................ NGƯỜI LẬP THỦ KHO'
+    expect(readSoPhieu(text)).toBe('XD2611/04824')
+    expect(parseCpc1PxkPdf(text)).toEqual([{ maHang: 'Z00338', tenHang: 'Zensonid - Hộp 10 lọ x 2 ml (BFS-R)', dvt: 'LO', soLuong: 1050, soLo: '22926F01', hanDung: '2028-06-11' }])
+    expect(readPxkPdfRows(text, () => [])).toHaveLength(1)
+
+    // Nhiều dòng, chữ Nước SX bị ngắt "CPC1HN-VN M"
+    const multi = 'Stt Mã vật tư Tên vật tư Đvt Số lượng Hạn dùng Lô Nước SX A B C D 2 3 4 1 '
+      + '1 Falgankid 25 mg/ml - Hộp 4 vỉ x 5 ống 10ml W00520 ONG 60,000 CPC1HN-VN M 020126 12/01/2029 '
+      + '2 Linezolid-SB - Túi 300ml L01289 TUI 1,000 CPC1HN-VN M 04926G01 15/01/2029 3 4 5 Số chứng từ gốc kèm theo: Ngày........tháng'
+    expect(parseCpc1PxkPdf(multi).map(r => [r.maHang, r.tenHang, r.dvt, r.soLuong, r.soLo, r.hanDung])).toEqual([
+      ['W00520', 'Falgankid 25 mg/ml - Hộp 4 vỉ x 5 ống 10ml', 'ONG', 60, '020126', '2029-01-12'],
+      ['L01289', 'Linezolid-SB - Túi 300ml', 'TUI', 1, '04926G01', '2029-01-15'],
+    ])
+  })
+})
