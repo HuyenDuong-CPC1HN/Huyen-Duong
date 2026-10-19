@@ -352,25 +352,26 @@ describe('parseGoodsReceipt', () => {
     expect(warnings[0]).toContain('tách được 1 kiện')
   })
 
-  it('nhiều biên bản giao nhận cùng chuyến (file tổng + file riêng gửi kho khác): lấy số LỚN NHẤT, không cộng dồn kẻo đếm trùng', () => {
-    // File tổng (CPC1HN) đã gộp sẵn phần gửi DTP vào dòng không mã hàng ("HÀNG GỬI DTP") -> tổng 423 kiện
-    // đã bao gồm cả phần đó. File riêng của DTP (31 kiện) chỉ là xác nhận LẠI đúng phần đã gộp đó, không
-    // phải hàng thêm — cộng dồn (423+31=454) sẽ đếm trùng, đúng như lỗi thực tế người dùng gặp phải.
-    const pdfTongCPC1HN = '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 423 272 Tổng cả đơn 423 Kiện'
-    const pdfRiengDTP = '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 31 272 Tổng cả đơn 31 Kiện'
-    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '612', 'Lượng cần': 272, 'Số kiện cần': 423, ĐVT: 'TUYP' }])
-    const { warnings } = buildReceiptFromFiles({
-      khoCRows: readWarehouseExportRows(excelC),
-      khoLgtRows: [],
-      pdfTexts: [pdfTongCPC1HN, pdfRiengDTP],
-    })
-    expect(warnings).toHaveLength(0) // 423 (lớn nhất) khớp đúng 423 kiện đã tách -> không cảnh báo
-
-    const result = recheckKienTotal({ khoC: readWarehouseExportRows(excelC), khoLgt: [], pdfTexts: [pdfTongCPC1HN, pdfRiengDTP] })
-    expect(result).toMatchObject({ checked: true, matched: true, declaredTotal: 423 })
+  it('tổng kiện = cộng tất cả biên bản giao nhận CPC1 (2 biên bản Kho C cùng ngày vẫn cộng), không tính biên bản DTP', () => {
+    // Lỗi thực tế: 1 chuyến có 2 biên bản giao nhận Kho C cùng ngày (672 + 252 kiện) — trước đây lấy số lớn nhất
+    // trong ngày (672) nên báo lệch giả. Biên bản của DTP vẫn không cộng.
+    const bb1 = 'Ngày 17 tháng 10 năm 2026 Bên giao hàng: Công ty cổ phần dược phẩm CPC1 Hà Nội '
+      + '1 A01259 Arica - Hộp 1 tuýp 30g 612 0 672 272 Tổng cả đơn 672 Kiện'
+    const bb2 = 'Ngày 17 tháng 10 năm 2026 Bên giao hàng: Công ty cổ phần dược phẩm CPC1 Hà Nội '
+      + '1 B01767 Bupi - Hộp 10 lọ 010924 0 252 670 Tổng cả đơn 252 Kiện'
+    const bbDtp = 'Ngày 17 tháng 10 năm 2026 Bên giao hàng: CÔNG TY CỔ PHẦN DƯỢC PHẨM DTP '
+      + '1 C02019 Carbamol - Hộp 10 ống 010525 0 31 200 Tổng cả đơn 31 Kiện'
+    const excelC = makeWorkbook([{ Mã: 'A01259', Tên: 'A', 'Số lô đề nghị': '612', 'Lượng cần': 272, 'Số kiện cần': 924, ĐVT: 'TUYP' }])
+    const rows = readWarehouseExportRows(excelC)
+    const pdfTexts = [bb1, bb2, bbDtp]
+    const pdfNames = ['BBGN_1.pdf', 'BBGN_2.pdf', 'BBGN_DTP.pdf']
+    expect(buildReceiptFromFiles({ khoCRows: rows, khoLgtRows: [], pdfTexts, pdfNames }).warnings).toHaveLength(0)
+    const result = recheckKienTotal({ khoC: rows, khoLgt: [], pdfTexts, pdfNames })
+    expect(result).toMatchObject({ checked: true, matched: true, declaredTotal: 924 })
+    expect(result.message).toContain('không tính 1 biên bản của DTP')
   })
 
-  it('nhiều biên bản giao nhận KHÁC NGÀY (chuyến giao bổ sung/giao bù riêng): cộng dồn, không lấy max', () => {
+  it('nhiều biên bản giao nhận CPC1 KHÁC NGÀY (chuyến giao bổ sung/giao bù riêng): cộng dồn', () => {
     // Chuyến ngày 18/09 giao 400 kiện, ngày 19/09 giao bổ sung thêm 45 kiện (cùng đơn hàng, giao thiếu
     // hôm trước bù hôm sau) -> phải cộng dồn 400+45=445, không phải lấy max(400,45)=400 như trước đây
     // (lỗi thực tế người dùng gặp phải: thêm biên bản chuyến bổ sung nhưng tổng không tăng).
@@ -406,16 +407,16 @@ describe('parseGoodsReceipt', () => {
     expect(buildReceiptFromFiles({ khoCRows: rows, khoLgtRows: [], pdfTexts, pdfNames }).warnings).toHaveLength(0)
     const result = recheckKienTotal({ khoC: rows, khoLgt: [], pdfTexts, pdfNames })
     expect(result).toMatchObject({ checked: true, matched: true, declaredTotal: 518 })
-    expect(result.message).toContain('không cộng 2 biên bản chi tiết DTP')
+    expect(result.message).toContain('không tính 2 biên bản của DTP')
 
     // Không đọc được dòng bên giao hàng thì dựa vào tên file có chữ "DTP"
     const noCompany = [pdfDtp1.replace(/CÔNG TY.*DTP/, ''), pdfTong]
     expect(recheckKienTotal({ khoC: rows, khoLgt: [], pdfTexts: noCompany, pdfNames: ['24092026_BBGN_DTP_1.pdf', '25092026_BBGN.pdf'] }))
       .toMatchObject({ declaredTotal: 518 })
 
-    // Chuyến chỉ có biên bản DTP (không có biên bản tổng) thì vẫn tính tổng từ biên bản DTP
+    // Chuyến chỉ có biên bản DTP (không có biên bản CPC1) thì không đối chiếu tổng kiện — chỉ tính theo biên bản CPC1
     expect(recheckKienTotal({ khoC: rows, khoLgt: [], pdfTexts: [pdfDtp1, pdfDtp2], pdfNames: [] }))
-      .toMatchObject({ declaredTotal: 22 })
+      .toMatchObject({ checked: false })
   })
 
   it('keeps multi-token số lô intact (vd "1 14") instead of chopping it down to 1 token', () => {
