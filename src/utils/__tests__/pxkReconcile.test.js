@@ -89,3 +89,24 @@ describe('Đọc PDF Phiếu xuất kho mẫu CPC1 Hà Nội', () => {
     ])
   })
 })
+
+describe('Đọc chữ từ ảnh phiếu (OCR)', () => {
+  it('tách dòng hàng từ chữ đọc được của ảnh chụp thật, kể cả khi rơi dấu phẩy số lượng', async () => {
+    const { parseOcrPxkText, parseOcrQty } = await import('../pxkReconcile')
+    // Chữ đọc từ ảnh chụp phiếu DTP FX126/005804 và CPC1 XD2611/04592 (ảnh nghiêng, mất cột lô / HD)
+    const dtp = 'Ngày 09 tháng 10 năm 2026 Số: FX126/005804\n'
+      + '1 C02918 | Conadin Roll-on Strong - Hộp 1 DTP-VNM |LO 154,000 V |011026 v | 06/10/2029\n'
+      + 'lọ 15ml Ñ w_—m mm\n'
+      + '2 L01286 | Laforin - Hộp 1 lọ 500ml DITP-VNM  |LO 56000 vý |010826 | 17/08/2029\n'
+      + '3 D01997 Diasyl Softcap - Lọ ó0 viên DTP-VNM VIEN 7.200,000 ý 020726 v | 25/07/2029\n'
+    expect(parseOcrPxkText(dtp).map(r => [r.maHang, r.dvt, r.soLuong, r.soLo, r.hanDung])).toEqual([
+      ['C02918', 'LO', 154, '011026', '2029-10-06'],
+      ['L01286', 'LO', 56, '010826', '2029-08-17'],
+      ['D01997', 'VIEN', 7200, '020726', '2029-07-25'],
+    ])
+    expect(parseOcrPxkText('] F00629 | Falgankid 25 mg/ml - Hộp 4 vi x CPCIHN-VNN | ONG 3.380,0')).toEqual([
+      { maHang: 'F00629', tenHang: 'Falgankid 25 mg/ml - Hộp 4 vi x', dvt: 'ONG', soLuong: 3380, soLo: '', hanDung: '' },
+    ])
+    expect([parseOcrQty('3.380,000'), parseOcrQty('3380.000'), parseOcrQty('1.050,000'), parseOcrQty('56000'), parseOcrQty('7.200')]).toEqual([3380, 3380, 1050, 56, 7200])
+  })
+})

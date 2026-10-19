@@ -254,3 +254,54 @@ export function readPxkPdfRows(text, parsePdfItems) {
   if (dtp.length) return dtp
   return parseCpc1PxkPdf(text)
 }
+
+// ---------- Đọc chữ từ ẢNH phiếu (OCR miễn phí chạy trên trình duyệt, xem pxkOcr.js) ----------
+// Chữ đọc từ ảnh theo từng dòng in trên phiếu, có nhiễu (dấu tick, kẻ bảng "|", dấu phẩy rơi mất). Mỗi dòng có mã
+// vật tư là 1 dòng hàng; ô nào không chắc để trống để kho tự điền khi soát.
+const OCR_UNITS = new Set(['ONG', 'LO', 'VIEN', 'HOP', 'TUYP', 'CHAI', 'GOI', 'TUI', 'VI', 'BINH', 'CAI', 'KG', 'LIT', 'THUNG', 'BO', 'CUON', 'MIENG', 'HU', 'TAM', 'CAP', 'DOI', 'BAO'])
+const OCR_ORIGIN = /^[A-Z0-9]{2,10}-?[VY][NM]{1,2}[A-Z]?$|-VN/
+
+// Số lượng đọc từ ảnh: mẫu phiếu in "3.380,000" (chấm nghìn, phẩy + 3 số lẻ) nhưng OCR hay rơi dấu.
+export function parseOcrQty(raw) {
+  const t = String(raw || '').replace(/[^\d.,]/g, '')
+  if (!/\d/.test(t)) return null
+  let n
+  if (t.includes('.') && t.includes(',')) n = t.slice(0, t.lastIndexOf(',')).replace(/\./g, '')
+  else if (/[.,]0{1,3}$/.test(t)) n = t.replace(/[.,]0{1,3}$/, '').replace(/[.,]/g, '')
+  else if (/,\d{1,3}$/.test(t)) n = t.slice(0, t.lastIndexOf(',')).replace(/\./g, '')
+  else if (t.includes('.')) n = t.replace(/\./g, '')
+  else n = t.length >= 4 && t.endsWith('000') ? t.slice(0, -3) : t
+  const v = Number(n)
+  return Number.isFinite(v) ? v : null
+}
+
+export function parseOcrPxkText(text) {
+  const rows = []
+  for (const rawLine of String(text || '').split(/\n/)) {
+    const line = rawLine.replace(/[|[\]{}“”"'`~_]/g, ' ').replace(/\s+/g, ' ').trim()
+    const code = /\b([A-Z]\d{5}|[A-Z]\d{4})\b/.exec(line)
+    if (!code) continue
+    const dates = [...line.matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)]
+    const d = dates[dates.length - 1]
+    const hanDung = d ? `${d[3]}-${d[2].padStart(2, '0')}-${d[1].padStart(2, '0')}` : ''
+    const before = (d ? line.slice(0, d.index) : line).slice(code.index + code[0].length).trim()
+    const tokens = before.split(' ').filter(Boolean)
+    const iUnit = tokens.findIndex(x => OCR_UNITS.has(x.toUpperCase()) && x === x.toUpperCase())
+    const iOrigin = tokens.findIndex(x => OCR_ORIGIN.test(x))
+    const iQty = tokens.findIndex((x, i) => i > Math.max(iUnit, -1) && /\d/.test(x) && /^[\d.,]+$/.test(x.replace(/[^\d.,]/g, '')) && x.replace(/[^\d]/g, '').length >= 1 && !/[A-Z]/i.test(x))
+    // Lô: chữ có số đứng sau Số lượng, gần Hạn dùng nhất (bỏ dấu tick "v", "ý"...)
+    let soLo = ''
+    if (d) {
+      for (let i = tokens.length - 1; i > Math.max(iQty, iUnit, iOrigin); i -= 1) {
+        if (/\d/.test(tokens[i]) && /^[A-Z0-9/-]{4,}$/i.test(tokens[i])) { soLo = tokens[i].toUpperCase(); break }
+      }
+    }
+    const nameEnd = [iOrigin, iUnit, iQty].filter(i => i >= 0)
+    const tenHang = tokens.slice(0, nameEnd.length ? Math.min(...nameEnd) : tokens.length).join(' ').replace(/^[-–\s]+|[-–\s]+$/g, '')
+    rows.push({
+      maHang: code[1], tenHang, dvt: iUnit >= 0 ? tokens[iUnit].toUpperCase() : '',
+      soLuong: iQty >= 0 ? parseOcrQty(tokens[iQty]) : null, soLo, hanDung,
+    })
+  }
+  return rows
+}

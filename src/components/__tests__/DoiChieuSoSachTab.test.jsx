@@ -21,12 +21,15 @@ vi.mock('../../utils/parseGoodsReceipt', async orig => ({
   ]),
 }))
 
+const ocrMock = vi.hoisted(() => vi.fn(async () => ''))
+vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock }))
+
 const batch = {
   id: 'b1', processedAt: '2026-10-10T03:00:00.000Z', pdfMetadata: { ngayNhap: '10/10/2026' },
   khoC: [{ maHang: 'F00629', tenHang: 'Falgankid 25 mg/ml', dvt: 'ONG', soLo: '13626G01', hanDung: '2029-07-12', slHoaDon: 3380, slThucTe: 3300 }],
   khoLgt: [{ maHang: 'C02918', tenHang: 'Conadin Roll-on Strong', dvt: 'LO', soLo: '011026', hanDung: '2029-10-06', slHoaDon: 154, slThucTe: null }],
 }
-beforeEach(() => { store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
+beforeEach(() => { ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
 afterEach(() => cleanup())
 
 describe('Đối chiếu sổ sách (PXK)', () => {
@@ -93,5 +96,22 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(await screen.findByText('PDF gốc · tự đọc 1 dòng')).toBeInTheDocument()
     expect(screen.queryByText('chưa nhập dòng nào')).not.toBeInTheDocument()
     expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'pdf', autoRead: true, rows: [{ maHang: 'C02918' }] })
+  })
+
+  it('ảnh phiếu: app đọc chữ (miễn phí, trên trình duyệt), điền sẵn dòng hàng để soát', async () => {
+    ocrMock.mockResolvedValue('Ngày 09 tháng 10 năm 2026 Số: FX126/005804\n'
+      + '1 C02918 | Conadin Roll-on Strong - Hộp 1 DTP-VNM |LO 154,000 V |011026 v | 06/10/2029\n'
+      + '2 L01286 | Laforin - Hộp 1 lọ 500ml DITP-VNM  |LO 56000 vý |010826 | 17/08/2029')
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('Chụp ảnh phiếu Kho DTP'), { target: { files: [new File(['jpg'], 'IMG_1.jpg', { type: 'image/jpeg' })] } })
+    const editor = await screen.findByRole('region', { name: 'Nhập tay phiếu' })
+    expect(within(editor).getByText(/đọc chữ từ ảnh/)).toBeInTheDocument()
+    expect(within(editor).getByLabelText('Số phiếu')).toHaveValue('FX126/005804')
+    expect(within(editor).getByLabelText('Mã VT dòng 2')).toHaveValue('L01286')
+    expect(within(editor).getByLabelText('Số lượng dòng 2')).toHaveValue('56')
+    expect(screen.getByText('1 ảnh · đọc từ ảnh 2 dòng — cần soát')).toBeInTheDocument()
+    fireEvent.click(within(editor).getByRole('button', { name: /Đã soát xong/ }))
+    expect(screen.getByText('1 ảnh · đã nhập 2 dòng')).toBeInTheDocument()
+    expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'anh', needReview: false, rows: [{ maHang: 'C02918', soLuong: 154, soLo: '011026', hanDung: '2029-10-06' }, { maHang: 'L01286' }] })
   })
 })
