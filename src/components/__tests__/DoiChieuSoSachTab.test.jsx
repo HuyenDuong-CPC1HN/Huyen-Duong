@@ -147,7 +147,7 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'scan', soPhieu: 'FX126/005804', rows: [{ maHang: 'C02918', soLo: '011026', ocr: true }] })
   })
 
-  it('PDF scan nhiều trang: tách mỗi phiếu 1 thẻ, bỏ trang trùng số phiếu', async () => {
+  it('PDF scan nhiều trang: tách mỗi phiếu 1 thẻ; trang trùng số phiếu không tự bỏ — so sánh để anh chọn bản giữ', async () => {
     parseItemsMock.empty = true
     ocrPdfMock.mockImplementation(async (_buf, _accept, onProgress) => {
       onProgress(3, 3)
@@ -159,10 +159,21 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     })
     render(<DoiChieuSoSachTab />)
     fireEvent.change(screen.getByLabelText('+ Thêm file Kho DTP'), { target: { files: [new File(['%PDF'], 'quet.pdf', { type: 'application/pdf' })] } })
-    expect(await screen.findByText('XD2611/04789')).toBeInTheDocument()
-    expect(screen.getByText('XD2611/04759')).toBeInTheDocument()
-    expect(screen.getByText(/trang 3 trùng số phiếu XID2611\/04759 với trang 2 — đã bỏ/)).toBeInTheDocument()
+    const panel = await screen.findByRole('alert', { name: 'Phiếu trùng số' })
+    expect(within(panel).getByText('63.000 · 06/07/2029')).toHaveClass('bg-red-100')
+    expect(within(panel).getByText('48.300 · 06/07/2029')).toHaveClass('bg-red-100')
+    expect(screen.getAllByText(/Trùng số phiếu — chờ anh chọn bản giữ/)).toHaveLength(2)
+    // chưa chọn: Z00330 chưa tính vào đối chiếu
+    const result = screen.getByRole('region', { name: 'Kết quả đối chiếu' })
+    fireEvent.click(within(result).getByRole('button', { name: /Kho DTP/ }))
+    expect(within(result).queryByText('Z00330')).not.toBeInTheDocument()
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Giữ bản 2' }))
+    expect(screen.queryByRole('alert', { name: 'Phiếu trùng số' })).not.toBeInTheDocument()
     const saved = JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus
-    expect(saved.map(p => [p.kind, p.soPhieu, p.name])).toEqual([['scan', 'XD2611/04789', 'quet.pdf · trang 1'], ['scan', 'XD2611/04759', 'quet.pdf · trang 2']])
+    expect(saved.map(p => [p.soPhieu, Boolean(p.excluded)])).toEqual([['XD2611/04789', false], ['XD2611/04759', true], ['XID2611/04759', false]])
+    expect(within(result).getByText('Z00330')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Khôi phục' }))
+    expect(await screen.findByRole('alert', { name: 'Phiếu trùng số' })).toBeInTheDocument()
   })
 })

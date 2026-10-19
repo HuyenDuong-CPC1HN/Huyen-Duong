@@ -381,12 +381,12 @@ export function soPhieuKey(soPhieu) {
   return m ? `${m[1]}/${m[2]}` : String(soPhieu || '').trim().toUpperCase()
 }
 
-// File PDF scan nhiều trang = nhiều phiếu: mỗi trang có số phiếu là 1 phiếu, trang không đọc được số phiếu thì
-// gộp vào phiếu trang trước (phiếu dài 2 trang). Trang trùng số phiếu đã có (scan 2 lần / 2 liên — dòng hàng lặp lại)
-// thì bỏ, báo lại để không cộng sổ sách 2 lần. pageTexts: chữ đọc từng trang.
+// File PDF scan nhiều trang = nhiều phiếu: mỗi trang có số phiếu là 1 phiếu; trang không đọc được số phiếu, hoặc
+// cùng số phiếu với trang ngay trước mà dòng hàng khác hẳn, là trang tiếp của phiếu trước (phiếu dài 2 trang).
+// Trang trùng số phiếu (2 liên / scan 2 lần / bản nhà máy sửa lại) KHÔNG tự bỏ — tách thành phiếu riêng để kho tự chọn
+// giữ bản nào (xem pxkDuplicateGroups). pageTexts: chữ đọc từng trang.
 export function groupScanPages(pageTexts) {
   const groups = []
-  const dups = []
   pageTexts.forEach((text, i) => {
     const page = i + 1
     const soPhieu = readSoPhieu(text)
@@ -395,15 +395,23 @@ export function groupScanPages(pageTexts) {
     const last = groups[groups.length - 1]
     if (!soPhieu && last) { last.pages.push(page); last.rows.push(...rows); return }
     if (key && last && last.key === key) {
-      // Cùng số phiếu ngay trang sau: dòng hàng lặp lại phần lớn = bản trùng (2 liên / scan 2 lần), khác = trang tiếp
       const seen = new Set(last.rows.flatMap(r => [r.maHang, r.soLo && normLot(r.soLo)]).filter(Boolean))
       const overlap = rows.filter(r => seen.has(r.maHang) || (r.soLo && seen.has(normLot(r.soLo)))).length
-      if (rows.length && overlap * 2 >= rows.length) { dups.push({ page, soPhieu, ofPage: last.pages[0] }); return }
-      last.pages.push(page); last.rows.push(...rows); return
+      if (!rows.length || overlap * 2 < rows.length) { last.pages.push(page); last.rows.push(...rows); return }
     }
-    const prev = key && groups.find(g => g.key === key)
-    if (prev) { dups.push({ page, soPhieu, ofPage: prev.pages[0] }); return }
     groups.push({ key, soPhieu, pages: [page], rows })
   })
-  return { groups, dups }
+  return { groups }
+}
+
+// Các nhóm phiếu trùng số phiếu chưa được kho quyết định (bỏ qua phiếu đã bỏ / đang đọc / đã chọn "giữ tất cả").
+// Phiếu trong nhóm chưa quyết định KHÔNG đưa vào đối chiếu (tránh cộng sổ sách 2 lần) cho tới khi kho chọn.
+export function pxkDuplicateGroups(phieus) {
+  const by = new Map()
+  for (const p of phieus) {
+    if (p.excluded || p.kind === 'dang' || !p.soPhieu) continue
+    const k = soPhieuKey(p.soPhieu)
+    by.set(k, [...(by.get(k) || []), p])
+  }
+  return [...by.values()].filter(list => list.length > 1 && !list.every(p => p.keepDup))
 }

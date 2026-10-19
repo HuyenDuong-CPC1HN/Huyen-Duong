@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Plus, Trash2, X } from 'lucide-react'
 import {
   PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty,
-  alignOcrRows, groupScanPages, ocrRowNeedsCheck, soPhieuKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
+  alignOcrRows, groupScanPages, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
 } from '../utils/pxkReconcile'
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { downloadPxkFile, getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
@@ -217,20 +217,20 @@ const pdfOf = ph => (ph.files || []).find(f => /\.pdf$/i.test(f.name) || f.type 
 // Đọc 1 file PDF phiếu. PDF có chữ (PDF gốc, hoặc scan bật "PDF có thể tìm kiếm") đọc thẳng — chính xác, tức thì.
 // PDF scan chỉ là ảnh thì vẽ từng trang ra ảnh rồi đọc chữ (dòng đánh dấu ocr để tự đối chiếu thực nhận); file nhiều
 // trang tách thành nhiều phiếu theo số phiếu, bỏ trang trùng. onProgress(đã xong, tổng trang).
-// Trả về { kind, phieus: [{ soPhieu, pages, rows }], dups, problem }.
+// Trả về { kind, phieus: [{ soPhieu, pages, rows }], problem }.
 async function readPdfPhieu(buffer, onProgress = () => {}) {
   const text = await extractPdfText(buffer.slice ? buffer.slice(0) : buffer)
   const items = readPxkPdfRows(text, parsePdfItems)
   if (items.length) {
-    return { kind: 'pdf', dups: [], problem: '', phieus: [{ soPhieu: readSoPhieu(text), pages: [], rows: items.map(it => newPxkRow({ maHang: it.maHang, tenHang: it.tenHang, dvt: it.dvt, soLuong: it.soLuong, soLo: it.soLo, hanDung: it.hanDung || '' })) }] }
+    return { kind: 'pdf', problem: '', phieus: [{ soPhieu: readSoPhieu(text), pages: [], rows: items.map(it => newPxkRow({ maHang: it.maHang, tenHang: it.tenHang, dvt: it.dvt, soLuong: it.soLuong, soLo: it.soLo, hanDung: it.hanDung || '' })) }] }
   }
   try {
     const pageTexts = await ocrPdfPages(buffer, t => parseOcrPxkText(t).length > 0, onProgress)
-    const { groups, dups } = groupScanPages(pageTexts)
+    const { groups } = groupScanPages(pageTexts)
     const phieus = groups.filter(g => g.rows.length).map(g => ({ soPhieu: g.soPhieu, pages: g.pages, rows: g.rows.map(it => newPxkRow({ ...it, soLuong: it.soLuong ?? '', ocr: true })) }))
-    return { kind: 'scan', phieus, dups, problem: phieus.length ? '' : 'PDF scan: đọc được chữ nhưng không thấy dòng hàng nào (không thấy mã vật tư) — bản scan có thể mờ hoặc nghiêng' }
+    return { kind: 'scan', phieus, problem: phieus.length ? '' : 'PDF scan: đọc được chữ nhưng không thấy dòng hàng nào (không thấy mã vật tư) — bản scan có thể mờ hoặc nghiêng' }
   } catch (err) {
-    return { kind: 'scan', phieus: [], dups: [], problem: `PDF scan: không đọc được chữ (${err?.message || err})` }
+    return { kind: 'scan', phieus: [], problem: `PDF scan: không đọc được chữ (${err?.message || err})` }
   }
 }
 
@@ -242,6 +242,61 @@ async function rereadStoredPdf(ph) {
   const rows = read.phieus.flatMap(x => x.rows)
   if (!rows.length) return { ...ph, autoRead: true, ocrNote: read.problem }
   return { ...ph, kind: read.kind, autoRead: true, ocrNote: '', soPhieu: ph.soPhieu || read.phieus[0].soPhieu, rows }
+}
+
+// Khung so sánh các phiếu trùng số phiếu: từng dòng hàng (Mã + Lô) của mỗi bản đặt cạnh nhau, ô khác nhau tô đỏ —
+// kho xem rồi chọn giữ bản nào (bản nhà máy sửa lại có thể khác số lượng / lô), hoặc giữ tất cả nếu là phiếu khác nhau.
+function DuplicatePhieus({ groups, onKeep, onKeepAll }) {
+  return (
+    <div className="rounded-xl border-2 border-red-300 bg-red-50/60 p-3 flex flex-col gap-3" role="alert" aria-label="Phiếu trùng số">
+      <div className="text-sm text-red-800"><b>⚠ {groups.length} số phiếu bị trùng</b> — app không tự bỏ bản nào. Anh so các bản bên dưới (ô tô đỏ là chỗ khác nhau) rồi chọn <b>giữ bản đúng</b>; bản còn lại không tính vào đối chiếu (khôi phục lại được). Trong lúc chưa chọn, các phiếu này chưa tính vào đối chiếu.</div>
+      {groups.map(group => {
+        const keys = []
+        const cell = new Map()
+        group.forEach(p => p.rows.filter(x => x.maHang).forEach(x => {
+          const k = pxkRowKey(x.maHang, x.soLo)
+          if (!keys.includes(k)) keys.push(k)
+          cell.set(`${p.id}|${k}`, x)
+        }))
+        const show = x => (x ? `${vn(parseQty(x.soLuong))} · ${fmtHanDung(normHanDung(x.hanDung)) || '—'}` : 'không có')
+        return (
+          <div key={group[0].id} className="bg-white rounded-lg border border-red-200 p-2 flex flex-col gap-2">
+            <div className="text-sm font-semibold font-mono">{group[0].soPhieu}</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse" style={{ minWidth: 520 }}>
+                <thead>
+                  <tr className="bg-gray-50 text-gray-600">
+                    <th className="px-2 py-1.5 text-left">Mã · Lô</th>
+                    {group.map((p, i) => (
+                      <th key={p.id} className="px-2 py-1.5 text-left align-top">
+                        <div>Bản {i + 1} · <KhoChip kho={p.kho} /></div>
+                        <div className="font-normal text-gray-500 break-all">{p.name}</div>
+                        <button type="button" onClick={() => onKeep(group, p.id)} className="sheet-tab-action is-primary mt-1">Giữ bản {i + 1}</button>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {keys.map(k => {
+                    const vals = group.map(p => show(cell.get(`${p.id}|${k}`)))
+                    const diff = new Set(vals).size > 1
+                    const [ma, lo] = k.split('::')
+                    return (
+                      <tr key={k} className="border-t border-gray-100">
+                        <td className="px-2 py-1 font-mono">{ma} · {lo || '—'}</td>
+                        {vals.map((v, i) => <td key={i} className={`px-2 py-1 tabular-nums ${diff ? 'bg-red-100 text-red-800 font-semibold' : ''}`}>{v}</td>)}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" onClick={() => onKeepAll(group)} className="sheet-tab-action self-start">Giữ tất cả (là các phiếu khác nhau)</button>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // Ghi dữ liệu 1 chuyến từ bản mới nhất đang lưu (không dùng bản đang hiển thị) — các phiếu đọc ngầm xong lúc nào
@@ -275,9 +330,17 @@ export default function DoiChieuSoSachTab() {
   // Nạp sẵn bộ đọc chữ ngay khi mở trang (chạy ngầm) — thả phiếu vào là đọc luôn, không chờ tải lần đầu.
   useEffect(() => { const t = setTimeout(warmUpOcr, 800); return () => clearTimeout(t) }, [])
 
+  // Phiếu trùng số chưa chọn bản giữ + phiếu đã bỏ: không tính vào đối chiếu (tránh cộng sổ sách 2 lần).
+  const dupGroups = pxkDuplicateGroups(session.phieus)
+  const blocked = new Set(dupGroups.flat().map(p => p.id))
+  const counted = p => !p.excluded && !blocked.has(p.id)
   const results = Object.fromEntries(PXK_KHO.map(({ key }) => [key, reconcilePxk({
-    received: receivedRowsOf(batch, key), scanned: session.scan[key]?.rows || null, phieus: session.phieus.filter(p => p.kho === key),
+    received: receivedRowsOf(batch, key), scanned: session.scan[key]?.rows || null, phieus: session.phieus.filter(p => p.kho === key && counted(p)),
   })]))
+  const keepOne = (group, keepId) => upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (group.some(g => g.id === p.id)
+    ? (p.id === keepId ? { ...p, excluded: false, keepDup: false, excludedNote: '' } : { ...p, excluded: true, excludedNote: `trùng số phiếu ${p.soPhieu} — anh đã chọn giữ bản khác` })
+    : p)) }))
+  const keepAll = group => upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (group.some(g => g.id === p.id) ? { ...p, keepDup: true } : p)) }))
   const report = buildNguonReport(results, batch?.pdfMetadata?.ngayNhap ? `chuyến nhập ${batch.pdfMetadata.ngayNhap}` : '')
 
   // Thả / chụp phiếu: thẻ phiếu hiện ngay ("đang đọc…"), tải lên + đọc chạy ngầm — thả tiếp phiếu khác, xem bảng
@@ -318,18 +381,11 @@ export default function DoiChieuSoSachTab() {
         replace(() => [{ ...ph, kind: 'tay', reading: '', files: [stored], rows: [newPxkRow()], autoRead: true, ocrNote: `${read.problem}. Đã lưu file để nhập tay.` }])
         return
       }
-      const notes = read.dups.map(d => `trang ${d.page} trùng số phiếu ${d.soPhieu} với trang ${d.ofPage} — đã bỏ`)
-      replace(others => {
-        const have = new Set(others.filter(p => p.soPhieu).map(p => soPhieuKey(p.soPhieu)))
-        return read.phieus.filter(x => {
-          if (x.soPhieu && have.has(soPhieuKey(x.soPhieu))) { notes.push(`phiếu ${x.soPhieu} đã có từ trước — đã bỏ`); return false }
-          return true
-        }).map((x, i) => ({
+      // Phiếu trùng số (trong file hoặc với phiếu đã có) vẫn thêm đủ — app không tự bỏ, kho chọn bản giữ ở khung đỏ.
+      replace(() => read.phieus.map((x, i) => ({
           ...newPxkPhieu({ kho: k, kind: read.kind, name: read.phieus.length > 1 ? `${f.name} · trang ${x.pages.join(', ')}` : f.name, soPhieu: x.soPhieu, files: [stored], rows: read.kind === 'scan' ? alignOcrRows(x.rows, rec) : x.rows }),
           ...(i === 0 ? { id: ph.id } : {}), autoRead: true, ocrNote: '',
-        }))
-      })
-      if (notes.length) setZoneNote(n => ({ ...n, [k]: `${f.name}: ${notes.join('; ')}.` }))
+        })))
     } catch (err) {
       replace(() => [{ ...ph, kind: pdf ? 'tay' : 'anh', reading: '', rows: [newPxkRow()], autoRead: true, ocrNote: `không tải lên / đọc được (${err?.message || err})` }])
     }
@@ -476,8 +532,9 @@ export default function DoiChieuSoSachTab() {
       <section className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3" aria-label="Phiếu xuất kho nhà máy">
         <div>
           <h2 className="m-0 text-base font-semibold">1 · Phiếu xuất kho nhà máy</h2>
-          <div className="text-xs text-gray-500">Thả phiếu vào đúng vùng kho. <b>PDF gốc</b> (mẫu DTP) app tự đọc; <b>ảnh chụp</b> (mẫu CPC1 Hà Nội) lưu kèm, bấm <b>Nhập tay</b> gõ các dòng theo ảnh. Không giới hạn số phiếu, số ảnh.</div>
+          <div className="text-xs text-gray-500">Thả phiếu vào đúng vùng kho. <b>PDF gốc</b> app đọc tức thì; <b>PDF scan / ảnh chụp</b> app đọc chữ (chạy ngầm), dòng lệch thực nhận mới cần soát. Không giới hạn số phiếu, số ảnh.</div>
         </div>
+        {dupGroups.length > 0 && <DuplicatePhieus groups={dupGroups} onKeep={keepOne} onKeepAll={keepAll} />}
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           {PXK_KHO.map(({ key, label }) => {
             const list = session.phieus.filter(p => p.kho === key)
@@ -494,8 +551,18 @@ export default function DoiChieuSoSachTab() {
                       </div>
                     )
                   }
+                  if (p.excluded) {
+                    return (
+                      <div key={p.id} className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs flex flex-col gap-0.5 opacity-70">
+                        <div className="flex items-center gap-1.5 min-w-0"><FileText size={13} className="text-gray-400 shrink-0" /><span className="font-mono line-through truncate" title={p.name}>{p.soPhieu || p.name}</span>
+                          <button type="button" onClick={() => upd(cur => ({ ...cur, phieus: cur.phieus.map(x => (x.id === p.id ? { ...x, excluded: false, keepDup: false, excludedNote: '' } : x)) }))} className="ml-auto underline text-[#1e3a5f] font-semibold">Khôi phục</button></div>
+                        <div className="text-gray-500">Đã bỏ, không tính đối chiếu — {p.excludedNote || 'anh đã bỏ phiếu này'} · {p.name}</div>
+                      </div>
+                    )
+                  }
                   return (
-                    <div key={p.id} className={`bg-white border rounded-lg px-2 py-1.5 text-xs flex flex-col gap-0.5 ${openId === p.id ? 'border-[#1e3a5f]' : 'border-gray-200'}`}>
+                    <div key={p.id} className={`bg-white border rounded-lg px-2 py-1.5 text-xs flex flex-col gap-0.5 ${blocked.has(p.id) ? 'border-red-400 bg-red-50/40' : openId === p.id ? 'border-[#1e3a5f]' : 'border-gray-200'}`}>
+                      {blocked.has(p.id) && <div className="text-red-700 font-semibold">⚠ Trùng số phiếu — chờ anh chọn bản giữ (chưa tính đối chiếu)</div>}
                       <div className="flex items-center gap-1.5 min-w-0">
                         {p.kind === 'pdf' || p.files.length ? <FileText size={13} className="text-gray-400 shrink-0" /> : <ImageIcon size={13} className="text-gray-400 shrink-0" />}
                         <span className="font-mono font-semibold truncate" title={p.name}>{p.soPhieu || p.name || 'Phiếu chưa ghi số'}</span>
@@ -571,6 +638,7 @@ export default function DoiChieuSoSachTab() {
             )
           })}
         </div>
+        {dupGroups.length > 0 && <div className="rounded-lg border border-red-200 bg-red-50 text-red-800 text-xs px-3 py-2">⚠ Còn {dupGroups.length} số phiếu trùng chưa chọn bản giữ — các phiếu đó chưa tính vào bảng dưới. Chọn ở mục 1 phía trên.</div>}
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc kết luận">
           {FILTERS.map(([f, l]) => (
             <button key={f} type="button" onClick={() => setFilter(f)} aria-pressed={filter === f}

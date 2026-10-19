@@ -132,11 +132,11 @@ describe('Sửa lô đọc từ ảnh bị dính dấu tick', () => {
 })
 
 describe('PDF scan nhiều trang', () => {
-  it('mỗi trang 1 phiếu, bỏ trang trùng số phiếu, sửa mã đọc thiếu 1 số theo thực nhận', async () => {
-    const { groupScanPages, alignOcrRows, soPhieuKey } = await import('../pxkReconcile')
+  it('mỗi trang 1 phiếu, trang trùng số phiếu giữ riêng để kho chọn, sửa mã đọc thiếu 1 số theo thực nhận', async () => {
+    const { groupScanPages, alignOcrRows, soPhieuKey, pxkDuplicateGroups } = await import('../pxkReconcile')
     expect(soPhieuKey('XID2611/04759')).toBe(soPhieuKey('XD2611/04759'))
     const page = (so, line) => `PHIẾU XUẤT KHO Số phiếu: ${so}\n${line}`
-    const { groups, dups } = groupScanPages([
+    const { groups } = groupScanPages([
       page('XD2611/04789', '1 B02577 Bupi HOP 385 M51260802 31/07/2031'),
       page('XD2611/04759', '1 P0148 Paracetamol ONG 19.200,000 32226G03 13/07/2029'),
       'không đọc được số phiếu\n2 Q00145 Q ONG 1.350,000 010626 01/06/2029',
@@ -145,8 +145,12 @@ describe('PDF scan nhiều trang', () => {
     expect(groups.map(g => [g.soPhieu, g.pages, g.rows.map(r => r.maHang)])).toEqual([
       ['XD2611/04789', [1], ['B02577']],
       ['XD2611/04759', [2, 3], ['P0148', 'Q00145']],
+      ['XID2611/04759', [4], ['P01481']],
     ])
-    expect(dups).toEqual([{ page: 4, soPhieu: 'XID2611/04759', ofPage: 2 }])
+    const ph = groups.map((g, i) => ({ id: `p${i}`, soPhieu: g.soPhieu, kind: 'scan', rows: g.rows }))
+    expect(pxkDuplicateGroups(ph).map(gr => gr.map(p => p.id))).toEqual([['p1', 'p2']])
+    expect(pxkDuplicateGroups(ph.map(p => (p.id === 'p2' ? { ...p, excluded: true } : p)))).toEqual([])
+    expect(pxkDuplicateGroups(ph.map(p => ({ ...p, keepDup: true })))).toEqual([])
     const fixed = alignOcrRows(groups[1].rows.map(r => ({ ...r, ocr: true })), [{ maHang: 'P01481', soLo: '32226G03' }, { maHang: 'Q00145', soLo: '010626' }])
     expect(fixed.map(r => r.maHang)).toEqual(['P01481', 'Q00145'])
   })
