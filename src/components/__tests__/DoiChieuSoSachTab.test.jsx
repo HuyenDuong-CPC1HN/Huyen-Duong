@@ -126,4 +126,11 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     fireEvent.change(screen.getByLabelText('Chụp ảnh phiếu Kho DTP'), { target: { files: [new File(['jpg'], 'IMG_2.jpg', { type: 'image/jpeg' })] } })
     expect(await screen.findByText('1 ảnh · đọc từ ảnh 1 dòng · khớp thực nhận')).toBeInTheDocument()
   })
+
+  it('không đọc được ảnh thì báo lý do ngay dưới thẻ phiếu', async () => {
+    ocrMock.mockRejectedValue(new Error('Không tải được bộ đọc chữ (kiểm tra kết nối mạng).'))
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('Chụp ảnh phiếu Kho C'), { target: { files: [new File(['jpg'], 'IMG_3.jpg', { type: 'image/jpeg' })] } })
+    expect(await screen.findByText(/⚠ không đọc được chữ trong ảnh \(Không tải được bộ đọc chữ/)).toBeInTheDocument()
+  })
 })

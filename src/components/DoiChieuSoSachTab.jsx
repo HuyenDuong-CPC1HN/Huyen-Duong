@@ -251,8 +251,7 @@ export default function DoiChieuSoSachTab() {
           if (!items.length) errs.push(`${f.name}: PDF không đọc được dòng hàng (có thể là bản scan / ảnh) — đã thêm để nhập tay`)
         } else if (isImage(f)) {
           const [stored, read] = await Promise.all([uploadPxkFile(f), ocrRows(f)])
-          added.push(newPxkPhieu({ kho: k, kind: 'anh', name: f.name, soPhieu: read.soPhieu, images: [stored], rows: read.rows.length ? read.rows : [newPxkRow()] }))
-          if (read.problem) errs.push(`${f.name}: ${read.problem}. Đã lưu ảnh để nhập tay.`)
+          added.push({ ...newPxkPhieu({ kho: k, kind: 'anh', name: f.name, soPhieu: read.soPhieu, images: [stored], rows: read.rows.length ? read.rows : [newPxkRow()] }), ocrNote: read.problem ? `${read.problem}. Đã lưu ảnh để nhập tay.` : '' })
         } else errs.push(`${f.name}: chỉ nhận PDF hoặc ảnh`)
       } catch (err) { errs.push(`${f.name}: ${err.message || 'không tải lên được'}`) }
     }
@@ -323,10 +322,10 @@ export default function DoiChieuSoSachTab() {
         if (read.problem) problems.push(read.problem)
         soPhieu = soPhieu || read.soPhieu
       }
-      if (!rows.length) { setError(`Ảnh phiếu: ${problems[0] || 'không đọc được dòng hàng nào'}. Anh nhập tay giúp em, hoặc chụp lại thẳng, đủ sáng.`); return }
-      setPhieu({ ...ph, soPhieu, rows })
+      if (!rows.length) { setPhieu({ ...ph, ocrNote: `${problems[0] || 'không đọc được dòng hàng nào'}. Anh nhập tay, hoặc chụp lại thẳng, đủ sáng.` }); return }
+      setPhieu({ ...ph, soPhieu, rows, ocrNote: '' })
       setOpenId(ph.id)
-    } catch (err) { setError(err.message || 'Không đọc được ảnh.') } finally { setBusy('') }
+    } catch (err) { setPhieu({ ...ph, ocrNote: `không đọc được ảnh (${err.message || err})` }) } finally { setBusy('') }
   }
 
   const addScanFiles = async (k, files) => {
@@ -426,6 +425,8 @@ export default function DoiChieuSoSachTab() {
                           <button type="button" onClick={() => void rereadPdf(p)} disabled={busy === `reread-${p.id}`} className="underline text-[#1e3a5f] font-semibold">{busy === `reread-${p.id}` ? 'Đang đọc…' : 'Đọc lại PDF'}</button>
                         )}
                       </div>
+                      {busy === `ocr-${p.id}` && <div className="text-[11px] text-gray-500">Đang đọc chữ trong ảnh… thường 5–20 giây; lần đầu phải tải bộ đọc chữ nên có thể lâu hơn.</div>}
+                      {p.ocrNote && busy !== `ocr-${p.id}` && !p.rows.some(x => x.maHang) && <div className="text-[11px] text-red-700">⚠ {p.ocrNote}</div>}
                     </div>
                   )
                 })}
