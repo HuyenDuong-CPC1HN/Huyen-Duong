@@ -189,9 +189,12 @@ function DuplicateTems({ list }) {
 // Đọc chữ từ 1 ảnh → dòng hàng + số phiếu. Lỗi đọc (mất mạng lần đầu tải bộ đọc chữ…) thì trả rỗng, kho nhập tay.
 async function ocrRows(blob) {
   try {
-    const text = await ocrImage(blob)
-    return { soPhieu: readSoPhieu(text), rows: parseOcrPxkText(text).map(it => newPxkRow({ ...it, soLuong: it.soLuong ?? '', ocr: true })) }
-  } catch { return { soPhieu: '', rows: [] } }
+    const text = await ocrImage(blob, t => parseOcrPxkText(t).length > 0)
+    const rows = parseOcrPxkText(text).map(it => newPxkRow({ ...it, soLuong: it.soLuong ?? '', ocr: true }))
+    return { soPhieu: readSoPhieu(text), rows, problem: rows.length ? '' : 'đọc được chữ nhưng không thấy dòng hàng nào (không thấy mã vật tư dạng A12345) — ảnh có thể mờ, lóa hoặc bị cắt mất cột Mã vật tư' }
+  } catch (err) {
+    return { soPhieu: '', rows: [], problem: `không đọc được chữ trong ảnh (${err?.message || err})` }
+  }
 }
 
 const pdfOf = ph => (ph.files || []).find(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf')
@@ -249,6 +252,7 @@ export default function DoiChieuSoSachTab() {
         } else if (isImage(f)) {
           const [stored, read] = await Promise.all([uploadPxkFile(f), ocrRows(f)])
           added.push(newPxkPhieu({ kho: k, kind: 'anh', name: f.name, soPhieu: read.soPhieu, images: [stored], rows: read.rows.length ? read.rows : [newPxkRow()] }))
+          if (read.problem) errs.push(`${f.name}: ${read.problem}. Đã lưu ảnh để nhập tay.`)
         } else errs.push(`${f.name}: chỉ nhận PDF hoặc ảnh`)
       } catch (err) { errs.push(`${f.name}: ${err.message || 'không tải lên được'}`) }
     }
@@ -311,13 +315,15 @@ export default function DoiChieuSoSachTab() {
     setError(''); setBusy(`ocr-${ph.id}`)
     try {
       const rows = []
+      const problems = []
       let soPhieu = ph.soPhieu
       for (const img of ph.images) {
         const read = await ocrRows(new Blob([await downloadPxkFile(img.storagePath)], { type: img.type || 'image/jpeg' }))
         rows.push(...read.rows)
+        if (read.problem) problems.push(read.problem)
         soPhieu = soPhieu || read.soPhieu
       }
-      if (!rows.length) { setError('Không đọc được dòng hàng nào từ ảnh — anh nhập tay giúp em.'); return }
+      if (!rows.length) { setError(`Ảnh phiếu: ${problems[0] || 'không đọc được dòng hàng nào'}. Anh nhập tay giúp em, hoặc chụp lại thẳng, đủ sáng.`); return }
       setPhieu({ ...ph, soPhieu, rows })
       setOpenId(ph.id)
     } catch (err) { setError(err.message || 'Không đọc được ảnh.') } finally { setBusy('') }

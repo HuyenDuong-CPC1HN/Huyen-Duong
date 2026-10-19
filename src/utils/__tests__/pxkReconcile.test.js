@@ -110,3 +110,13 @@ describe('Đọc chữ từ ảnh phiếu (OCR)', () => {
     expect([parseOcrQty('3.380,000'), parseOcrQty('3380.000'), parseOcrQty('1.050,000'), parseOcrQty('56000'), parseOcrQty('7.200')]).toEqual([3380, 3380, 1050, 56, 7200])
   })
 })
+
+describe('Đọc chữ từ ảnh chụp nghiêng', () => {
+  it('lô + hạn dùng rơi sang dòng trên vẫn ghép đúng vào dòng hàng', async () => {
+    const { parseOcrPxkText } = await import('../pxkReconcile')
+    // Chữ đọc thật (trình duyệt) từ ảnh phiếu XD2611/04592 chụp nghiêng
+    const text = 'tại kho (ngăn lô): 010108 Địa điềm:\n¬ị cm lL.l- ở\n13626G01 12/07/2029\n'
+      + '1 | F00629 |Falgankid25 mg/ml-Hộp4vix  |CPCIHN-VNK| ONG 3380000\nSốngl0ml MU |. MU mm ng\n'
+    expect(parseOcrPxkText(text)).toEqual([{ maHang: 'F00629', tenHang: 'Falgankid25 mg/ml-Hộp4vix', dvt: 'ONG', soLuong: 3380, soLo: '13626G01', hanDung: '2029-07-12' }])
+  })
+})

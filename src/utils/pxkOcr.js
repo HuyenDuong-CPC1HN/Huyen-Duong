@@ -28,17 +28,23 @@ async function getWorker() {
   return workerPromise
 }
 
-// Làm xám + phóng to (cạnh dài ~3000px) + giãn tương phản + nhị phân hoá nhẹ.
-async function preprocess(blob) {
-  const bmp = await createImageBitmap(blob)
+// Vẽ ảnh lên canvas: xoay (độ), phóng to (cạnh dài ~3000px), làm xám, giãn tương phản; binarize = nhị phân hoá.
+async function prepare(blob, { rotate = 0, binarize = true } = {}) {
+  const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' })
   const scale = Math.min(3, Math.max(1, 3000 / Math.max(bmp.width, bmp.height)))
-  const w = Math.round(bmp.width * scale)
-  const h = Math.round(bmp.height * scale)
+  const bw = Math.round(bmp.width * scale)
+  const bh = Math.round(bmp.height * scale)
+  const swap = rotate === 90 || rotate === 270
   const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
+  canvas.width = swap ? bh : bw
+  canvas.height = swap ? bw : bh
   const ctx = canvas.getContext('2d')
-  ctx.drawImage(bmp, 0, 0, w, h)
+  ctx.translate(canvas.width / 2, canvas.height / 2)
+  ctx.rotate((rotate * Math.PI) / 180)
+  ctx.drawImage(bmp, -bw / 2, -bh / 2, bw, bh)
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  const w = canvas.width
+  const h = canvas.height
   const img = ctx.getImageData(0, 0, w, h)
   const px = img.data
   const hist = new Uint32Array(256)
@@ -47,7 +53,7 @@ async function preprocess(blob) {
     px[i] = g
     hist[Math.round(g)] += 1
   }
-  // Ngưỡng tương phản: bỏ 2% điểm tối nhất / sáng nhất.
+  // Giãn tương phản: bỏ 2% điểm tối nhất / sáng nhất.
   const total = w * h
   let lo = 0
   let hi = 255
@@ -55,19 +61,28 @@ async function preprocess(blob) {
   for (let acc = 0; hi > 0 && acc + hist[hi] < total * 0.02; hi -= 1) acc += hist[hi]
   const range = Math.max(1, hi - lo)
   for (let i = 0; i < px.length; i += 4) {
-    const v = Math.min(255, Math.max(0, ((px[i] - lo) * 255) / range))
-    const b = v > 150 ? 255 : 0
-    px[i] = b; px[i + 1] = b; px[i + 2] = b
+    let v = Math.min(255, Math.max(0, ((px[i] - lo) * 255) / range))
+    if (binarize) v = v > 150 ? 255 : 0
+    px[i] = v; px[i + 1] = v; px[i + 2] = v
   }
   ctx.putImageData(img, 0, 0)
   return canvas
 }
 
-// Trả về chữ đọc được (giữ xuống dòng theo dòng in trên phiếu).
-export async function ocrImage(blob) {
+// Đọc chữ trong ảnh (giữ xuống dòng theo dòng in trên phiếu). accept(text) = đọc ra dùng được chưa (vd thấy mã
+// hàng); chưa được thì thử lần lượt: không nhị phân hoá (ảnh tối / bóng đèn), xoay 90° và 270° (ảnh chụp ngang).
+export async function ocrImage(blob, accept = () => true) {
   const worker = await getWorker()
-  let input = blob
-  try { input = await preprocess(blob) } catch { /* trình duyệt không xử lý được ảnh (vd HEIC) — đọc ảnh gốc */ }
-  const { data } = await worker.recognize(input)
-  return data.text || ''
+  const tries = [{}, { binarize: false }, { rotate: 90 }, { rotate: 270 }]
+  let best = ''
+  for (const opt of tries) {
+    let input
+    try { input = await prepare(blob, opt) } catch { input = blob } // trình duyệt không vẽ được ảnh (vd HEIC) — đọc ảnh gốc
+    const { data } = await worker.recognize(input)
+    const text = data.text || ''
+    if (accept(text)) return text
+    if (text.length > best.length) best = text
+    if (input === blob) break
+  }
+  return best
 }

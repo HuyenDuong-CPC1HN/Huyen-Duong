@@ -275,12 +275,21 @@ export function parseOcrQty(raw) {
   return Number.isFinite(v) ? v : null
 }
 
+const OCR_LOT_DATE = /([A-Z0-9][A-Z0-9/-]{3,})\s+(\d{1,2}\/\d{1,2}\/\d{4})/i
+
 export function parseOcrPxkText(text) {
   const rows = []
-  for (const rawLine of String(text || '').split(/\n/)) {
-    const line = rawLine.replace(/[|[\]{}“”"'`~_]/g, ' ').replace(/\s+/g, ' ').trim()
-    const code = /\b([A-Z]\d{5}|[A-Z]\d{4})\b/.exec(line)
-    if (!code) continue
+  const lines = String(text || '').split(/\n/).map(l => l.replace(/[|[\]{}“”"'`~_]/g, ' ').replace(/\s+/g, ' ').trim())
+  const codeOf = l => /\b([A-Z]\d{5}|[A-Z]\d{4})\b/.exec(l)
+  lines.forEach((rawLine, li) => {
+    let line = rawLine
+    const code = codeOf(line)
+    if (!code) return
+    // Ảnh chụp nghiêng: "Lô Hạn dùng" ở mép phải có thể rơi sang dòng ngay trên / dưới (dòng không có mã hàng)
+    if (!/\d{1,2}\/\d{1,2}\/\d{4}/.test(line)) {
+      const near = [lines[li - 1], lines[li + 1]].find(l => l && !codeOf(l) && OCR_LOT_DATE.test(l))
+      if (near) { const m = OCR_LOT_DATE.exec(near); line = `${line} ${m[1]} ${m[2]}` }
+    }
     const dates = [...line.matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)]
     const d = dates[dates.length - 1]
     const hanDung = d ? `${d[3]}-${d[2].padStart(2, '0')}-${d[1].padStart(2, '0')}` : ''
@@ -302,7 +311,7 @@ export function parseOcrPxkText(text) {
       maHang: code[1], tenHang, dvt: iUnit >= 0 ? tokens[iUnit].toUpperCase() : '',
       soLuong: iQty >= 0 ? parseOcrQty(tokens[iQty]) : null, soLo, hanDung,
     })
-  }
+  })
   return rows
 }
 
