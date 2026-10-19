@@ -174,6 +174,21 @@ function DuplicateTems({ list }) {
   )
 }
 
+const pdfOf = ph => (ph.files || []).find(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf')
+
+// Đọc lại PDF đã lưu của 1 phiếu. Đọc được dòng hàng → phiếu PDF tự đọc; không được → giữ nhập tay (đánh dấu đã thử).
+async function rereadStoredPdf(ph) {
+  const pdf = pdfOf(ph)
+  if (!pdf) return { ...ph, autoRead: true }
+  const text = await extractPdfText(await downloadPxkFile(pdf.storagePath))
+  const items = readPxkPdfRows(text, parsePdfItems)
+  if (!items.length) return { ...ph, autoRead: true }
+  return {
+    ...ph, kind: 'pdf', autoRead: true, soPhieu: ph.soPhieu || readSoPhieu(text),
+    rows: items.map(it => newPxkRow({ maHang: it.maHang, tenHang: it.tenHang, dvt: it.dvt, soLuong: it.soLuong, soLo: it.soLo, hanDung: it.hanDung || '' })),
+  }
+}
+
 export default function DoiChieuSoSachTab() {
   const [batches] = useState(() => readGoodsBatches().sort((a, b) => String(b.processedAt).localeCompare(String(a.processedAt))))
   const [batchId, setBatchId] = useState(() => batches[0]?.id || '')
@@ -227,16 +242,31 @@ export default function DoiChieuSoSachTab() {
 
   // Phiếu PDF tải lên trước khi app đọc được mẫu CPC1 Hà Nội (đang ở dạng nhập tay): đọc lại từ file đã lưu.
   const rereadPdf = async ph => {
-    const pdf = ph.files.find(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf')
-    if (!pdf) return
     setError(''); setBusy(`reread-${ph.id}`)
     try {
-      const text = await extractPdfText(await downloadPxkFile(pdf.storagePath))
-      const items = readPxkPdfRows(text, parsePdfItems)
-      if (!items.length) { setError(`${pdf.name}: vẫn không đọc được dòng hàng (có thể là bản scan) — anh nhập tay giúp em.`); return }
-      setPhieu({ ...ph, kind: 'pdf', soPhieu: ph.soPhieu || readSoPhieu(text), rows: items.map(it => newPxkRow({ maHang: it.maHang, tenHang: it.tenHang, dvt: it.dvt, soLuong: it.soLuong, soLo: it.soLo, hanDung: it.hanDung || '' })) })
+      const next = await rereadStoredPdf(ph)
+      if (next.kind === 'pdf') setPhieu(next)
+      else setError(`${ph.name}: vẫn không đọc được dòng hàng (có thể là bản scan) — anh nhập tay giúp em.`)
     } catch (err) { setError(err.message || 'Không đọc lại được PDF.') } finally { setBusy('') }
   }
+
+  // Mở trang: phiếu PDF chưa có dòng nào (tải lên từ trước) thì tự đọc lại 1 lần, không cần bấm nút.
+  const autoReadDone = useRef(new Set())
+  useEffect(() => {
+    if (!batchId || autoReadDone.current.has(batchId)) return
+    autoReadDone.current.add(batchId)
+    const todo = (store[batchId]?.phieus || []).filter(p => p.kind === 'tay' && !p.autoRead && pdfOf(p) && !p.rows.some(r => r.maHang))
+    if (!todo.length) return
+    void (async () => {
+      const updated = new Map()
+      for (const ph of todo) {
+        try { updated.set(ph.id, await rereadStoredPdf(ph)) } catch { updated.set(ph.id, { ...ph, autoRead: true }) }
+      }
+      const cur = { ...emptyPxkSession(), ...(readPxkStore()[batchId] || {}) }
+      setStore(writePxkSession(batchId, { ...cur, phieus: cur.phieus.map(p => updated.get(p.id) || p) }))
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchId])
 
   const addImagesTo = async (ph, files) => {
     setError(''); setBusy(`img-${ph.id}`)

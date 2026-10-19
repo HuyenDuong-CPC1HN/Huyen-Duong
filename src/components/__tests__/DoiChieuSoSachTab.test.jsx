@@ -10,6 +10,7 @@ vi.mock('../../data/workspace', () => ({ opsStore: store.opsStore }))
 vi.mock('../../data/pxkFiles', () => ({
   uploadPxkFile: vi.fn(async f => ({ name: f.name, storagePath: `pxk/test/${f.name}`, type: f.type, size: f.size })),
   getPxkFileUrl: vi.fn(async () => 'blob:test'),
+  downloadPxkFile: vi.fn(async () => new ArrayBuffer(4)),
 }))
 vi.mock('../../utils/parseGoodsReceipt', async orig => ({
   ...(await orig()),
@@ -81,5 +82,16 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.scan.DTP.files[0]).toMatchObject({ name: 'quet_dtp.xls', rows: [{ maTem: 'T0001' }] })
     fireEvent.click(screen.getByRole('button', { name: 'Bỏ file quet_c.xls' }))
     expect(screen.queryByRole('alert', { name: 'Mã tem trùng' })).not.toBeInTheDocument()
+  })
+
+  it('phiếu PDF tải lên từ trước (đang chờ nhập tay) tự đọc lại khi mở trang', async () => {
+    store.values.set('pxk_doi_chieu', JSON.stringify({ b1: { phieus: [{
+      id: 'p1', kho: 'DTP', kind: 'tay', name: 'PHIEU_BO_SUNG.pdf', soPhieu: 'XD2611/04824', images: [],
+      files: [{ name: 'PHIEU_BO_SUNG.pdf', storagePath: 'pxk/test/a.pdf', type: 'application/pdf' }], rows: [{ rowId: 'r1', maHang: '' }],
+    }], scan: { C: null, DTP: null, SO: null }, checked: [] } }))
+    render(<DoiChieuSoSachTab />)
+    expect(await screen.findByText('PDF gốc · tự đọc 1 dòng')).toBeInTheDocument()
+    expect(screen.queryByText('chưa nhập dòng nào')).not.toBeInTheDocument()
+    expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'pdf', autoRead: true, rows: [{ maHang: 'C02918' }] })
   })
 })
