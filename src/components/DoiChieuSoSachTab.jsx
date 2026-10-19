@@ -96,6 +96,8 @@ function DropZone({ onFiles, children, className = '' }) {
   )
 }
 
+const FIX_LABEL = { maHang: 'mã', soLo: 'lô', hanDung: 'hạn dùng' }
+
 const ROW_COLS = [
   ['maHang', 'Mã VT', 90], ['tenHang', 'Tên vật tư', 240], ['dvt', 'ĐVT', 60], ['soLuong', 'Số lượng', 90], ['soLo', 'Lô', 100], ['hanDung', 'Hạn dùng', 105],
 ]
@@ -147,7 +149,7 @@ function PhieuEditor({ phieu, results, onChange, onAddImages, busy, onClose }) {
             <table className="w-full text-xs border-collapse" style={{ minWidth: 700 }}>
               <thead className="bg-gray-50"><tr>{ROW_COLS.map(([k, l, w]) => <th key={k} className="px-1.5 py-1.5 text-left font-semibold text-gray-500" style={{ width: w }}>{l}</th>)}<th /></tr></thead>
               <tbody>
-                {phieu.rows.map((r, i) => (
+                {phieu.rows.map((r, i) => [
                   <tr key={r.rowId} className={`border-t border-gray-100 ${pending(r) ? 'bg-amber-50' : ''}`}>
                     {ROW_COLS.map(([k, l]) => (
                       <td key={k} className="px-1 py-1">
@@ -156,8 +158,15 @@ function PhieuEditor({ phieu, results, onChange, onAddImages, busy, onClose }) {
                       </td>
                     ))}
                     <td className="px-1"><button type="button" onClick={() => onChange({ ...phieu, rows: phieu.rows.filter((_, idx) => idx !== i) })} aria-label={`Xoá dòng ${i + 1}`} className="text-gray-400 hover:text-red-600"><Trash2 size={13} /></button></td>
-                  </tr>
-                ))}
+                  </tr>,
+                  r.ocrFixed && (
+                    <tr key={`${r.rowId}-fix`} className={pending(r) ? 'bg-amber-50' : ''}>
+                      <td colSpan={ROW_COLS.length + 1} className="px-2 pb-1 text-[11px] text-gray-500">
+                        App sửa theo thực nhận — {Object.entries(r.ocrFixed).map(([k, v]) => `${FIX_LABEL[k] || k} ${v ? `đọc được "${k === 'hanDung' ? fmtHanDung(v) : v}"` : 'không đọc được'}`).join(', ')}
+                      </td>
+                    </tr>
+                  ),
+                ])}
               </tbody>
             </table>
           </div>

@@ -339,38 +339,70 @@ export const pxkRowKey = (maHang, soLo) => keyOf(maHang, soLo)
 // (có thể do đọc nhầm, hoặc lệch thật cần báo nhà máy). checked = kho đã soát, giữ nguyên.
 export function ocrRowNeedsCheck(row, resultRows) {
   if (!row.ocr || row.checked || !row.maHang) return false
+  // Ô không đọc được, app lấy theo thực nhận: chưa có gì xác nhận → vẫn cần soát
+  if (row.ocrFixed && Object.values(row.ocrFixed).some(v => !v)) return true
   const res = resultRows.find(x => x.key === keyOf(row.maHang, row.soLo))
   return !res || isNguonRow(res)
 }
 
-// Sửa lỗi đọc ảnh hay gặp bằng chính số thực nhận (chỉ sửa khi khớp đúng 1 dòng, không đoán gì khác):
-// - Mã hàng đọc thiếu / sai 1 ký tự ("P0148" ← P01481): thực nhận có đúng 1 dòng CÙNG LÔ mà mã chỉ khác 1 ký tự.
-// - Dấu tick bút trước số lô đọc thành 1 chữ cái dính vào lô ("J010826"): bỏ ký tự đầu nếu khớp đúng lô thực nhận.
-function oneEditApart(a, b) {
-  if (a === b) return false
-  if (Math.abs(a.length - b.length) > 1) return false
-  if (a.length === b.length) return [...a].filter((ch, i) => ch !== b[i]).length === 1
-  const [s1, l1] = a.length < b.length ? [a, b] : [b, a]
-  for (let i = 0; i < l1.length; i += 1) if (l1.slice(0, i) + l1.slice(i + 1) === s1) return true
+// Sửa lỗi đọc ảnh bằng "từ điển" là chính các dòng thực nhận của kho: dòng đọc được gần giống đúng 1 dòng thực nhận
+// (mã sai ≤ 2 ký tự, lô sai ≤ 2 ký tự hoặc dính dấu tick) thì lấy mã, lô, tên, Đvt, hạn dùng theo thực nhận — các ô
+// này đọc ảnh hay nhầm 1–2 ký tự. KHÔNG sửa số lượng (đó là số cần đối chiếu): số lượng khác thực nhận vẫn báo cần soát.
+// Ô nào đã sửa ghi lại chữ đọc được gốc ở ocrFixed để kho xem lại khi cần.
+function editDistance(a, b) {
+  const m = a.length
+  const n = b.length
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
+  for (let j = 1; j <= n; j += 1) dp[0][j] = j
+  for (let i = 1; i <= m; i += 1) {
+    for (let j = 1; j <= n; j += 1) dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+  }
+  return dp[m][n]
+}
+const up = v => String(v || '').trim().toUpperCase()
+
+// Lô / hạn dùng chỉ sửa khi chỗ khác nhau là lỗi đọc ảnh điển hình (0↔O, 1↔I, 8↔B…, rơi 1 ký tự, dính dấu tick ở
+// đầu) — khác kiểu khác (vd 010826 ↔ 010827) có thể là nhà máy ghi sai thật nên giữ nguyên để báo lệch.
+const CONFUSE = ['0ODQ', '1ILJT7', '2Z', '5S', '6G', '8B3', '9Q']
+const confusable = (a, b) => a === b || CONFUSE.some(g => g.includes(a) && g.includes(b))
+function ocrClose(truth, read) {
+  if (!truth || !read) return false
+  if (truth === read || truth === read.slice(1)) return true
+  if (truth.length === read.length) return [...truth].every((ch, i) => confusable(ch, read[i]))
+  if (truth.length === read.length + 1) { // đọc rơi 1 ký tự
+    for (let i = 0; i < truth.length; i += 1) if (truth.slice(0, i) + truth.slice(i + 1) === read) return true
+  }
   return false
 }
 
 export function alignOcrRows(rows, received) {
-  const has = (ma, lo) => received.some(x => keyOf(x.maHang, x.soLo) === keyOf(ma, lo))
   return rows.map(r => {
     if (!r.ocr || !r.maHang) return r
-    let next = r
-    const ma = String(r.maHang).toUpperCase()
-    if (!received.some(x => String(x.maHang).toUpperCase() === ma) && r.soLo) {
-      const cand = received.filter(x => oneEditApart(String(x.maHang).toUpperCase(), ma)
-        && (normLot(x.soLo) === normLot(r.soLo) || normLot(x.soLo) === normLot(r.soLo).slice(1)))
-      if (cand.length === 1) next = { ...next, maHang: cand[0].maHang }
+    const ma = up(r.maHang)
+    const lo = normLot(r.soLo)
+    const scored = received.map(x => {
+      const dMa = editDistance(up(x.maHang), ma)
+      const xl = normLot(x.soLo)
+      const loOk = !lo || ocrClose(xl, lo)
+      const dLo = !lo ? 1 : (xl === lo ? 0 : 1)
+      return { x, dMa, dLo, loOk, score: dMa * 2 + dLo }
+    }).filter(c => c.dMa <= 2 && c.loOk && (c.dMa === 0 || c.dLo === 0 || c.dMa <= 1))
+    if (!scored.length) return r
+    scored.sort((a, b) => a.score - b.score)
+    if (scored.length > 1 && scored[1].score === scored[0].score) return r // 2 dòng giống nhau ngang nhau: không đoán
+    const { x } = scored[0]
+    const fixed = {}
+    const hd = x.hanDung || ''
+    if (up(x.maHang) !== ma) fixed.maHang = r.maHang
+    if (normLot(x.soLo) !== lo) fixed.soLo = r.soLo
+    if (hd && r.hanDung !== hd && (!r.hanDung || ocrClose(hd, r.hanDung))) fixed.hanDung = r.hanDung
+    return {
+      ...r,
+      maHang: x.maHang, soLo: x.soLo || r.soLo,
+      hanDung: 'hanDung' in fixed ? hd : r.hanDung,
+      tenHang: x.tenHang || r.tenHang, dvt: x.dvt || r.dvt,
+      ...(Object.keys(fixed).length ? { ocrFixed: { ...(r.ocrFixed || {}), ...fixed } } : {}),
     }
-    if (next.soLo && !has(next.maHang, next.soLo)) {
-      const same = received.filter(x => String(x.maHang).toUpperCase() === String(next.maHang).toUpperCase() && normLot(x.soLo) === normLot(next.soLo).slice(1))
-      if (same.length === 1) next = { ...next, soLo: same[0].soLo }
-    }
-    return next
   })
 }
 export const alignOcrLots = alignOcrRows

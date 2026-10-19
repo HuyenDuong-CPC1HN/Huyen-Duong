@@ -173,3 +173,25 @@ describe('Tách cột chữ đọc từ bản scan thật (file quét 12 trang)'
     ])
   })
 })
+
+describe('Sửa lỗi đọc ảnh theo thực nhận (từ điển)', () => {
+  it('sửa mã / lô / hạn dùng đọc nhầm kiểu ảnh, giữ lệch thật, ô không đọc được vẫn cần soát', async () => {
+    const { alignOcrRows, ocrRowNeedsCheck } = await import('../pxkReconcile')
+    const received = [
+      { maHang: 'E00478', tenHang: 'B-Novo', dvt: 'VIEN', soLo: '010326', hanDung: '2029-03-02' },
+      { maHang: 'N00928', tenHang: 'Nausazy', dvt: 'ONG', soLo: '02026I01', hanDung: '2028-09-04' },
+      { maHang: 'G01184', tenHang: 'Gravia', dvt: 'VIEN', soLo: '010326', hanDung: '2029-03-30' },
+    ]
+    const [a, b, c, d] = alignOcrRows([
+      { ocr: true, maHang: 'E0047', soLo: '010326', hanDung: '2029-03-02', soLuong: 1500 },
+      { ocr: true, maHang: 'N00928', soLo: '02026101', hanDung: '2028-09-04', soLuong: 4800 },
+      { ocr: true, maHang: 'G01184', soLo: '', hanDung: '2029-03-30', soLuong: 320 },
+      { ocr: true, maHang: 'G01184', soLo: '010327', hanDung: '2029-03-30', soLuong: 320 },
+    ], received)
+    expect(a).toMatchObject({ maHang: 'E00478', tenHang: 'B-Novo', ocrFixed: { maHang: 'E0047' } })
+    expect(b).toMatchObject({ soLo: '02026I01', ocrFixed: { soLo: '02026101' } })
+    expect(c).toMatchObject({ soLo: '010326', ocrFixed: { soLo: '' } })
+    expect(ocrRowNeedsCheck(c, [])).toBe(true) // lô không đọc được → vẫn soát
+    expect(d.soLo).toBe('010327') // 6↔7 không phải lỗi đọc ảnh điển hình → giữ để báo lệch
+  })
+})
