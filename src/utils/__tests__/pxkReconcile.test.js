@@ -130,3 +130,42 @@ describe('Sửa lô đọc từ ảnh bị dính dấu tick', () => {
     expect(parseOcrPxkText('1 C02918 Conadin Roll-on Strong - Hộp 1 DTP.VNM LO 154,000 011026 06/10/2029')[0].tenHang).toBe('Conadin Roll-on Strong - Hộp 1')
   })
 })
+
+describe('PDF scan nhiều trang', () => {
+  it('mỗi trang 1 phiếu, bỏ trang trùng số phiếu, sửa mã đọc thiếu 1 số theo thực nhận', async () => {
+    const { groupScanPages, alignOcrRows, soPhieuKey } = await import('../pxkReconcile')
+    expect(soPhieuKey('XID2611/04759')).toBe(soPhieuKey('XD2611/04759'))
+    const page = (so, line) => `PHIẾU XUẤT KHO Số phiếu: ${so}\n${line}`
+    const { groups, dups } = groupScanPages([
+      page('XD2611/04789', '1 B02577 Bupi HOP 385 M51260802 31/07/2031'),
+      page('XD2611/04759', '1 P0148 Paracetamol ONG 19.200,000 32226G03 13/07/2029'),
+      'không đọc được số phiếu\n2 Q00145 Q ONG 1.350,000 010626 01/06/2029',
+      page('XID2611/04759', '1 P01481 Paracetamol ONG 19.200,000 32226G03 13/07/2029'),
+    ])
+    expect(groups.map(g => [g.soPhieu, g.pages, g.rows.map(r => r.maHang)])).toEqual([
+      ['XD2611/04789', [1], ['B02577']],
+      ['XD2611/04759', [2, 3], ['P0148', 'Q00145']],
+    ])
+    expect(dups).toEqual([{ page: 4, soPhieu: 'XID2611/04759', ofPage: 2 }])
+    const fixed = alignOcrRows(groups[1].rows.map(r => ({ ...r, ocr: true })), [{ maHang: 'P01481', soLo: '32226G03' }, { maHang: 'Q00145', soLo: '010626' }])
+    expect(fixed.map(r => r.maHang)).toEqual(['P01481', 'Q00145'])
+  })
+})
+
+describe('Tách cột chữ đọc từ bản scan thật (file quét 12 trang)', () => {
+  it('không lấy nhầm số trong tên hàng làm số lượng, bỏ dấu tick, sửa Đvt đọc nhầm', async () => {
+    const { parseOcrPxkText } = await import('../pxkReconcile')
+    const lines = [
+      '] A01264 | Ambroxen - Hộp 4 vì x 5 ống CPCIEN-VNN LONG 4.800,000 010326 22/03/2029 —',
+      '1 T02666 | Trinolon - Hộp 1 tuýp 5g CPCIBN-VNN|TUBE..|630000- 1219 |! 31/05/2029.',
+      '1 M01121 | Máy tính cằm tay 12 số- CHIEC 80,000 202606',
+      '6 K00672 Kim tiền thảo AGP 400 - Lọ 60 VNM VIEN 4.320,000 010626 05/06/2029 _',
+    ].join('\n')
+    expect(parseOcrPxkText(lines).map(r => [r.maHang, r.dvt, r.soLuong, r.soLo, r.hanDung])).toEqual([
+      ['A01264', 'ONG', 4800, '010326', '2029-03-22'],
+      ['T02666', 'TUYP', 630, '1219', '2029-05-31'],
+      ['M01121', 'CHIEC', 80, '202606', ''],
+      ['K00672', 'VIEN', 4320, '010626', '2029-06-05'],
+    ])
+  })
+})

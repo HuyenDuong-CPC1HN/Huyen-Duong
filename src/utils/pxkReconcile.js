@@ -258,8 +258,11 @@ export function readPxkPdfRows(text, parsePdfItems) {
 // ---------- Đọc chữ từ ẢNH phiếu (OCR miễn phí chạy trên trình duyệt, xem pxkOcr.js) ----------
 // Chữ đọc từ ảnh theo từng dòng in trên phiếu, có nhiễu (dấu tick, kẻ bảng "|", dấu phẩy rơi mất). Mỗi dòng có mã
 // vật tư là 1 dòng hàng; ô nào không chắc để trống để kho tự điền khi soát.
-const OCR_UNITS = new Set(['ONG', 'LO', 'VIEN', 'HOP', 'TUYP', 'CHAI', 'GOI', 'TUI', 'VI', 'BINH', 'CAI', 'KG', 'LIT', 'THUNG', 'BO', 'CUON', 'MIENG', 'HU', 'TAM', 'CAP', 'DOI', 'BAO'])
 const OCR_ORIGIN = /^[A-Z0-9]{2,10}[-.]?[VY][NM]{1,2}[A-Z]?$|[-.]VN/
+
+// Đvt đọc nhầm hay gặp → đúng chữ trên phiếu
+const UNIT_FIX = { LONG: 'ONG', ONC: 'ONG', '0NG': 'ONG', TUBE: 'TUYP', TUYB: 'TUYP', L0: 'LO', VIENN: 'VIEN' }
+const normUnit = u => UNIT_FIX[u] || u
 
 // Số lượng đọc từ ảnh: mẫu phiếu in "3.380,000" (chấm nghìn, phẩy + 3 số lẻ) nhưng OCR hay rơi dấu.
 export function parseOcrQty(raw) {
@@ -294,22 +297,36 @@ export function parseOcrPxkText(text) {
     const d = dates[dates.length - 1]
     const hanDung = d ? `${d[3]}-${d[2].padStart(2, '0')}-${d[1].padStart(2, '0')}` : ''
     const before = (d ? line.slice(0, d.index) : line).slice(code.index + code[0].length).trim()
-    const tokens = before.split(' ').filter(Boolean)
-    const iUnit = tokens.findIndex(x => OCR_UNITS.has(x.toUpperCase()) && x === x.toUpperCase())
-    const iOrigin = tokens.findIndex(x => OCR_ORIGIN.test(x))
-    const iQty = tokens.findIndex((x, i) => i > Math.max(iUnit, -1) && /\d/.test(x) && /^[\d.,]+$/.test(x.replace(/[^\d.,]/g, '')) && x.replace(/[^\d]/g, '').length >= 1 && !/[A-Z]/i.test(x))
-    // Lô: chữ có số đứng sau Số lượng, gần Hạn dùng nhất (bỏ dấu tick "v", "ý"...)
-    let soLo = ''
+    // Bỏ dấu kẻ bảng / dấu chấm dính 2 đầu mỗi chữ ("TUBE..", "]E0047]", "1219 |!")
+    const tokens = before.split(' ').map(x => (/[\p{L}\d]/u.test(x) ? x.replace(/^[^\p{L}\d]+|[^\p{L}\d]+$/gu, '') : (x === '-' || x === '–' ? '-' : ''))).filter(Boolean)
+    const isQty = x => /^[\d.,/]+$/.test(x) && x.replace(/\D/g, '').length >= 2
+    // Đọc từ phải sang trái (cột cuối ổn định hơn cột tên): [Lô] ← Số lượng ← Đvt ← Nước SX ← Tên. Số lượng in dạng
+    // "4.800,000" (có dấu ngăn), lô thường không có dấu — chữ cuối trước Hạn dùng có dấu ngăn kiểu số lượng thì không có lô.
+    const qtyLike = x => isQty(x) && /[.,/]\d{1,3}$/.test(x)
+    let iLot = -1
+    let iQty = -1
     if (d) {
-      for (let i = tokens.length - 1; i > Math.max(iQty, iUnit, iOrigin); i -= 1) {
-        if (/\d/.test(tokens[i]) && /^[A-Z0-9/-]{4,}$/i.test(tokens[i])) { soLo = tokens[i].toUpperCase(); break }
-      }
+      let i = tokens.length - 1
+      // bỏ dấu tick ("v", "ý", "1"...) trước hạn dùng: lô có ít nhất 4 ký tự
+      while (i >= 0 && !(/\d/.test(tokens[i]) && (tokens[i].length >= 4 || qtyLike(tokens[i])))) i -= 1
+      if (i >= 0 && !qtyLike(tokens[i])) { iLot = i; i -= 1 }
+      while (i >= 0 && !isQty(tokens[i])) i -= 1
+      iQty = i
+    } else {
+      for (let i = tokens.length - 1; i >= 0; i -= 1) if (qtyLike(tokens[i])) { iQty = i; break }
     }
+    if (iQty < 0) iQty = tokens.findIndex((x, i) => i > 0 && qtyLike(x))
+    // Không có hạn dùng (quà tặng / vật tư): chữ có số ngay sau Số lượng là Lô
+    if (!d && iQty >= 0 && tokens[iQty + 1] && /\d/.test(tokens[iQty + 1])) iLot = iQty + 1
+    const unitAt = iQty > 0 ? iQty - 1 : -1
+    const unitTok = unitAt >= 0 ? tokens[unitAt].toUpperCase() : ''
+    const iUnit = unitAt >= 0 && /^[A-ZĐ]{2,6}$/.test(unitTok) && !OCR_ORIGIN.test(unitTok) ? unitAt : -1
+    const iOrigin = tokens.findIndex((x, i) => OCR_ORIGIN.test(x.toUpperCase()) && (iQty < 0 || i < iQty))
     const nameEnd = [iOrigin, iUnit, iQty].filter(i => i >= 0)
-    const tenHang = tokens.slice(0, nameEnd.length ? Math.min(...nameEnd) : tokens.length).join(' ').replace(/^[-–\s]+|[-–\s]+$/g, '')
+    const tenHang = tokens.slice(0, nameEnd.length ? Math.min(...nameEnd) : tokens.length).join(' ').replace(/^[-\s]+|[-\s]+$/g, '')
     rows.push({
-      maHang: code[1], tenHang, dvt: iUnit >= 0 ? tokens[iUnit].toUpperCase() : '',
-      soLuong: iQty >= 0 ? parseOcrQty(tokens[iQty]) : null, soLo, hanDung,
+      maHang: code[1], tenHang, dvt: iUnit >= 0 ? normUnit(unitTok) : '',
+      soLuong: iQty >= 0 ? parseOcrQty(tokens[iQty]) : null, soLo: iLot >= 0 ? tokens[iLot].toUpperCase() : '', hanDung,
     })
   })
   return rows
@@ -326,12 +343,67 @@ export function ocrRowNeedsCheck(row, resultRows) {
   return !res || isNguonRow(res)
 }
 
-// Dấu tick bút ngay trước số lô hay bị đọc thành 1 chữ cái dính vào lô ("J010826"). Nếu thực nhận có đúng 1 dòng
-// cùng mã mà lô = lô đọc được bỏ ký tự đầu thì lấy lô thực nhận. Chỉ bỏ 1 ký tự đầu, không đoán gì khác.
-export function alignOcrLots(rows, received) {
+// Sửa lỗi đọc ảnh hay gặp bằng chính số thực nhận (chỉ sửa khi khớp đúng 1 dòng, không đoán gì khác):
+// - Mã hàng đọc thiếu / sai 1 ký tự ("P0148" ← P01481): thực nhận có đúng 1 dòng CÙNG LÔ mà mã chỉ khác 1 ký tự.
+// - Dấu tick bút trước số lô đọc thành 1 chữ cái dính vào lô ("J010826"): bỏ ký tự đầu nếu khớp đúng lô thực nhận.
+function oneEditApart(a, b) {
+  if (a === b) return false
+  if (Math.abs(a.length - b.length) > 1) return false
+  if (a.length === b.length) return [...a].filter((ch, i) => ch !== b[i]).length === 1
+  const [s1, l1] = a.length < b.length ? [a, b] : [b, a]
+  for (let i = 0; i < l1.length; i += 1) if (l1.slice(0, i) + l1.slice(i + 1) === s1) return true
+  return false
+}
+
+export function alignOcrRows(rows, received) {
+  const has = (ma, lo) => received.some(x => keyOf(x.maHang, x.soLo) === keyOf(ma, lo))
   return rows.map(r => {
-    if (!r.ocr || !r.soLo || received.some(x => keyOf(x.maHang, x.soLo) === keyOf(r.maHang, r.soLo))) return r
-    const same = received.filter(x => String(x.maHang).toUpperCase() === String(r.maHang).toUpperCase() && normLot(x.soLo) === normLot(r.soLo).slice(1))
-    return same.length === 1 ? { ...r, soLo: same[0].soLo } : r
+    if (!r.ocr || !r.maHang) return r
+    let next = r
+    const ma = String(r.maHang).toUpperCase()
+    if (!received.some(x => String(x.maHang).toUpperCase() === ma) && r.soLo) {
+      const cand = received.filter(x => oneEditApart(String(x.maHang).toUpperCase(), ma)
+        && (normLot(x.soLo) === normLot(r.soLo) || normLot(x.soLo) === normLot(r.soLo).slice(1)))
+      if (cand.length === 1) next = { ...next, maHang: cand[0].maHang }
+    }
+    if (next.soLo && !has(next.maHang, next.soLo)) {
+      const same = received.filter(x => String(x.maHang).toUpperCase() === String(next.maHang).toUpperCase() && normLot(x.soLo) === normLot(next.soLo).slice(1))
+      if (same.length === 1) next = { ...next, soLo: same[0].soLo }
+    }
+    return next
   })
+}
+export const alignOcrLots = alignOcrRows
+
+// Khoá so trùng số phiếu: phần số "2611/04759" (đọc ảnh hay nhầm phần chữ đầu: "XID2611/04759" = "XD2611/04759").
+export function soPhieuKey(soPhieu) {
+  const m = /(\d{3,6})\/(\d{3,7})\s*$/.exec(String(soPhieu || ''))
+  return m ? `${m[1]}/${m[2]}` : String(soPhieu || '').trim().toUpperCase()
+}
+
+// File PDF scan nhiều trang = nhiều phiếu: mỗi trang có số phiếu là 1 phiếu, trang không đọc được số phiếu thì
+// gộp vào phiếu trang trước (phiếu dài 2 trang). Trang trùng số phiếu đã có (scan 2 lần / 2 liên — dòng hàng lặp lại)
+// thì bỏ, báo lại để không cộng sổ sách 2 lần. pageTexts: chữ đọc từng trang.
+export function groupScanPages(pageTexts) {
+  const groups = []
+  const dups = []
+  pageTexts.forEach((text, i) => {
+    const page = i + 1
+    const soPhieu = readSoPhieu(text)
+    const rows = parseOcrPxkText(text)
+    const key = soPhieu ? soPhieuKey(soPhieu) : ''
+    const last = groups[groups.length - 1]
+    if (!soPhieu && last) { last.pages.push(page); last.rows.push(...rows); return }
+    if (key && last && last.key === key) {
+      // Cùng số phiếu ngay trang sau: dòng hàng lặp lại phần lớn = bản trùng (2 liên / scan 2 lần), khác = trang tiếp
+      const seen = new Set(last.rows.flatMap(r => [r.maHang, r.soLo && normLot(r.soLo)]).filter(Boolean))
+      const overlap = rows.filter(r => seen.has(r.maHang) || (r.soLo && seen.has(normLot(r.soLo)))).length
+      if (rows.length && overlap * 2 >= rows.length) { dups.push({ page, soPhieu, ofPage: last.pages[0] }); return }
+      last.pages.push(page); last.rows.push(...rows); return
+    }
+    const prev = key && groups.find(g => g.key === key)
+    if (prev) { dups.push({ page, soPhieu, ofPage: prev.pages[0] }); return }
+    groups.push({ key, soPhieu, pages: [page], rows })
+  })
+  return { groups, dups }
 }

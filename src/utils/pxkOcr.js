@@ -4,7 +4,6 @@
 
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js'
 let loading = null
-let workerPromise = null
 
 function loadTesseract() {
   if (window.Tesseract) return Promise.resolve(window.Tesseract)
@@ -21,11 +20,34 @@ function loadTesseract() {
   return loading
 }
 
-async function getWorker() {
-  if (!workerPromise) {
-    workerPromise = loadTesseract().then(T => T.createWorker('vie')).catch(err => { workerPromise = null; throw err })
+// Nhóm bộ đọc chữ: máy đủ mạnh (≥ 4 nhân) chạy 2 bộ song song — đọc nhiều trang / nhiều phiếu nhanh gần gấp đôi.
+const POOL_SIZE = typeof navigator !== 'undefined' && navigator.hardwareConcurrency >= 4 ? 2 : 1
+const pool = [] // [{ worker: Promise, busy }]
+const waiting = []
+
+function ensurePool() {
+  while (pool.length < POOL_SIZE) {
+    const slot = { busy: false, worker: null }
+    slot.worker = loadTesseract().then(T => T.createWorker('vie')).catch(err => { pool.splice(pool.indexOf(slot), 1); throw err })
+    pool.push(slot)
   }
-  return workerPromise
+}
+
+async function withWorker(fn) {
+  ensurePool()
+  let slot = pool.find(x => !x.busy)
+  if (!slot) slot = await new Promise(resolve => waiting.push(resolve))
+  slot.busy = true
+  try { return await fn(await slot.worker) } finally {
+    slot.busy = false
+    const next = waiting.shift()
+    if (next) { slot.busy = true; next(slot) }
+  }
+}
+
+// Nạp sẵn bộ đọc chữ (gọi khi mở trang) để lúc thả phiếu vào là đọc ngay, không phải chờ tải lần đầu.
+export function warmUpOcr() {
+  try { ensurePool(); pool.forEach(x => x.worker.catch(() => {})) } catch { /* bỏ qua — đọc thật sẽ báo lỗi */ }
 }
 
 // Vẽ ảnh lên canvas: xoay (độ), phóng to (cạnh dài ~3000px), làm xám, giãn tương phản; binarize = nhị phân hoá.
@@ -72,39 +94,53 @@ async function prepare(blob, { rotate = 0, binarize = true } = {}) {
 // Đọc chữ trong ảnh (giữ xuống dòng theo dòng in trên phiếu). accept(text) = đọc ra dùng được chưa (vd thấy mã
 // hàng); chưa được thì thử lần lượt: không nhị phân hoá (ảnh tối / bóng đèn), xoay 90° và 270° (ảnh chụp ngang).
 export async function ocrImage(blob, accept = () => true) {
-  const worker = await getWorker()
-  const tries = [{}, { binarize: false }, { rotate: 90 }, { rotate: 270 }]
-  let best = ''
-  for (const opt of tries) {
-    let input
-    try { input = await prepare(blob, opt) } catch { input = blob } // trình duyệt không vẽ được ảnh (vd HEIC) — đọc ảnh gốc
-    const { data } = await worker.recognize(input)
-    const text = data.text || ''
-    if (accept(text)) return text
-    if (text.length > best.length) best = text
-    if (input === blob) break
-  }
-  return best
+  return withWorker(async worker => {
+    const tries = [{}, { binarize: false }, { rotate: 90 }, { rotate: 270 }]
+    let best = ''
+    for (const opt of tries) {
+      let input
+      try { input = await prepare(blob, opt) } catch { input = blob } // trình duyệt không vẽ được ảnh (vd HEIC) — đọc ảnh gốc
+      const { data } = await worker.recognize(input)
+      const text = data.text || ''
+      if (accept(text)) return text
+      if (text.length > best.length) best = text
+      if (input === blob) break
+    }
+    return best
+  })
 }
 
-// PDF scan (trang PDF chỉ là ảnh, không có chữ bên trong): vẽ từng trang ra ảnh rồi đọc chữ như ảnh chụp. Bản scan
-// phẳng, rõ nên thường đọc trúng ngay lần đầu. Trả về chữ của tất cả các trang nối lại.
-export async function ocrPdf(arrayBuffer, accept = () => true) {
+// PDF scan (trang PDF chỉ là ảnh, không có chữ bên trong): vẽ từng trang ra ảnh rồi đọc chữ như ảnh chụp, các trang
+// đọc song song theo nhóm bộ đọc chữ. onProgress(đã xong, tổng). Trả về chữ từng trang (theo thứ tự trang).
+export async function ocrPdfPages(arrayBuffer, accept = () => true, onProgress = () => {}) {
+  warmUpOcr()
   const { importFresh } = await import('./staleChunk')
   const pdfjs = await importFresh(() => import('pdfjs-dist/build/pdf.mjs'))
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
   const data = arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer)
   const doc = await pdfjs.getDocument({ data }).promise
-  const texts = []
-  for (let n = 1; n <= doc.numPages; n += 1) {
-    const page = await doc.getPage(n)
-    const base = page.getViewport({ scale: 1 })
-    const viewport = page.getViewport({ scale: Math.min(4, Math.max(1, 3000 / Math.max(base.width, base.height))) })
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(viewport.width)
-    canvas.height = Math.round(viewport.height)
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-    texts.push(await ocrImage(canvas, accept))
+  let done = 0
+  let next = 1
+  const texts = new Array(doc.numPages).fill('')
+  onProgress(0, doc.numPages)
+  // Mỗi lần chỉ vẽ số trang bằng số bộ đọc chữ (trang vẽ ra ảnh khá nặng, vẽ hết 1 lúc dễ tràn bộ nhớ).
+  const runner = async () => {
+    while (next <= doc.numPages) {
+      const n = next
+      next += 1
+      const page = await doc.getPage(n)
+      const base = page.getViewport({ scale: 1 })
+      const viewport = page.getViewport({ scale: Math.min(4, Math.max(1, 3000 / Math.max(base.width, base.height))) })
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(viewport.width)
+      canvas.height = Math.round(viewport.height)
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+      texts[n - 1] = await ocrImage(canvas, accept)
+      canvas.width = 0
+      done += 1
+      onProgress(done, doc.numPages)
+    }
   }
-  return texts.join('\n')
+  await Promise.all(Array.from({ length: POOL_SIZE }, runner))
+  return texts
 }

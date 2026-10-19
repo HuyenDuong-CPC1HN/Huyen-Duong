@@ -22,8 +22,8 @@ vi.mock('../../utils/parseGoodsReceipt', async orig => ({
 }))
 
 const ocrMock = vi.hoisted(() => vi.fn(async () => ''))
-const ocrPdfMock = vi.hoisted(() => vi.fn(async () => ''))
-vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock, ocrPdf: ocrPdfMock }))
+const ocrPdfMock = vi.hoisted(() => vi.fn(async () => ['']))
+vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock, ocrPdfPages: ocrPdfMock, warmUpOcr: vi.fn() }))
 const parseItemsMock = vi.hoisted(() => ({ empty: false }))
 
 const batch = {
@@ -31,7 +31,7 @@ const batch = {
   khoC: [{ maHang: 'F00629', tenHang: 'Falgankid 25 mg/ml', dvt: 'ONG', soLo: '13626G01', hanDung: '2029-07-12', slHoaDon: 3380, slThucTe: 3300 }],
   khoLgt: [{ maHang: 'C02918', tenHang: 'Conadin Roll-on Strong', dvt: 'LO', soLo: '011026', hanDung: '2029-10-06', slHoaDon: 154, slThucTe: null }],
 }
-beforeEach(() => { parseItemsMock.empty = false; ocrPdfMock.mockReset(); ocrPdfMock.mockResolvedValue(''); ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
+beforeEach(() => { parseItemsMock.empty = false; ocrPdfMock.mockReset(); ocrPdfMock.mockResolvedValue(['']); ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
 afterEach(() => cleanup())
 
 describe('Đối chiếu sổ sách (PXK)', () => {
@@ -44,6 +44,8 @@ describe('Đối chiếu sổ sách (PXK)', () => {
 
     const img = new File(['jpg'], 'phieu.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByLabelText('Chụp ảnh phiếu Kho C'), { target: { files: [img] } })
+    expect(await screen.findByText('1 ảnh · chưa nhập dòng nào')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập tay' }))
     const editor = await screen.findByRole('region', { name: 'Nhập tay phiếu' })
     fireEvent.change(within(editor).getByLabelText('Số phiếu'), { target: { value: 'XD2611/04592' } })
     fireEvent.change(within(editor).getByLabelText('Mã VT dòng 1'), { target: { value: 'F00629' } })
@@ -138,10 +140,29 @@ describe('Đối chiếu sổ sách (PXK)', () => {
 
   it('PDF scan (không có chữ): app vẽ trang ra ảnh rồi đọc chữ, dòng khớp thực nhận tự xác nhận', async () => {
     parseItemsMock.empty = true
-    ocrPdfMock.mockResolvedValue('Số: FX126/005804\n1 C02918 Conadin Roll-on Strong - Hộp 1 DTP.VNM LO 154,000 V J011026 06/10/2029')
+    ocrPdfMock.mockResolvedValue(['Số: FX126/005804\n1 C02918 Conadin Roll-on Strong - Hộp 1 DTP.VNM LO 154,000 V J011026 06/10/2029'])
     render(<DoiChieuSoSachTab />)
     fireEvent.change(screen.getByLabelText('+ Thêm file Kho DTP'), { target: { files: [new File(['%PDF'], 'scan.pdf', { type: 'application/pdf' })] } })
     expect(await screen.findByText('PDF scan · đọc 1 dòng · khớp thực nhận')).toBeInTheDocument()
     expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'scan', soPhieu: 'FX126/005804', rows: [{ maHang: 'C02918', soLo: '011026', ocr: true }] })
+  })
+
+  it('PDF scan nhiều trang: tách mỗi phiếu 1 thẻ, bỏ trang trùng số phiếu', async () => {
+    parseItemsMock.empty = true
+    ocrPdfMock.mockImplementation(async (_buf, _accept, onProgress) => {
+      onProgress(3, 3)
+      return [
+        'Số phiếu: XD2611/04789\n1 C02918 Conadin DTP-VNM LO 154,000 011026 06/10/2029',
+        'Số phiếu: XD2611/04759\n1 Z00330 Zensalbu CPC1HN-VNM ONG 63.000,000 30426G02 06/07/2029',
+        'Số phiếu: XID2611/04759\n1 Z00330 Zensalbu CPC1HN-VNM ONG 48.300,000 30426G02 06/07/2029',
+      ]
+    })
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('+ Thêm file Kho DTP'), { target: { files: [new File(['%PDF'], 'quet.pdf', { type: 'application/pdf' })] } })
+    expect(await screen.findByText('XD2611/04789')).toBeInTheDocument()
+    expect(screen.getByText('XD2611/04759')).toBeInTheDocument()
+    expect(screen.getByText(/trang 3 trùng số phiếu XID2611\/04759 với trang 2 — đã bỏ/)).toBeInTheDocument()
+    const saved = JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus
+    expect(saved.map(p => [p.kind, p.soPhieu, p.name])).toEqual([['scan', 'XD2611/04789', 'quet.pdf · trang 1'], ['scan', 'XD2611/04759', 'quet.pdf · trang 2']])
   })
 })
