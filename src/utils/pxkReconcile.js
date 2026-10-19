@@ -305,3 +305,14 @@ export function parseOcrPxkText(text) {
   }
   return rows
 }
+
+export const pxkRowKey = (maHang, soLo) => keyOf(maHang, soLo)
+
+// Dòng đọc từ ảnh (ocr) tự coi là đúng khi khớp thực nhận: đối chiếu theo Mã + Lô ra không lệch sổ sách (cùng lô,
+// cùng hạn dùng, cùng số lượng) — đọc sai mà vẫn trùng từng ký tự là rất khó. Chỉ dòng lệch mới cần soát với ảnh
+// (có thể do đọc nhầm, hoặc lệch thật cần báo nhà máy). checked = kho đã soát, giữ nguyên.
+export function ocrRowNeedsCheck(row, resultRows) {
+  if (!row.ocr || row.checked || !row.maHang) return false
+  const res = resultRows.find(x => x.key === keyOf(row.maHang, row.soLo))
+  return !res || isNguonRow(res)
+}

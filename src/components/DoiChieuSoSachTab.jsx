@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Plus, Trash2, X } from 'lucide-react'
 import {
   PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty,
-  parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
+  ocrRowNeedsCheck, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
 } from '../utils/pxkReconcile'
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { downloadPxkFile, getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
@@ -87,8 +87,11 @@ const ROW_COLS = [
 ]
 
 // Nhập tay / sửa các dòng của 1 phiếu: ảnh phiếu bên trái, bảng gõ bên phải.
-function PhieuEditor({ phieu, onChange, onAddImages, busy, onClose }) {
-  const setRow = (i, k, v) => onChange({ ...phieu, rows: phieu.rows.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)) })
+function PhieuEditor({ phieu, results, onChange, onAddImages, busy, onClose }) {
+  const pending = r => ocrRowNeedsCheck(r, results)
+  const anyPending = phieu.rows.some(pending)
+  const fromOcr = phieu.rows.some(r => r.ocr)
+  const setRow = (i, k, v) => onChange({ ...phieu, rows: phieu.rows.map((r, idx) => (idx === i ? { ...r, [k]: v, checked: false } : r)) })
   const fixRow = (i, k) => {
     const r = phieu.rows[i]
     if (k === 'soLuong') setRow(i, k, parseQty(r.soLuong))
@@ -100,12 +103,15 @@ function PhieuEditor({ phieu, onChange, onAddImages, busy, onClose }) {
     <section className="rounded-2xl border border-[#1e3a5f]/30 bg-white p-3 flex flex-col gap-3" aria-label="Nhập tay phiếu">
       <div className="flex flex-wrap items-center gap-2">
         <KhoChip kho={phieu.kho} />
-        <span className="font-semibold text-sm">{phieu.kind === 'pdf' ? 'Dòng đọc từ PDF (sửa được nếu cần)' : (phieu.needReview ? 'Soát phiếu đọc từ ảnh' : 'Nhập tay phiếu theo ảnh')}</span>
-        <button type="button" onClick={onClose} className="sheet-tab-action ml-auto"><Check size={13} /> {phieu.needReview ? 'Đã soát xong' : 'Xong'}</button>
+        <span className="font-semibold text-sm">{phieu.kind === 'pdf' ? 'Dòng đọc từ PDF (sửa được nếu cần)' : (fromOcr ? 'Phiếu đọc từ ảnh' : 'Nhập tay phiếu theo ảnh')}</span>
+        <button type="button" onClick={onClose} className="sheet-tab-action ml-auto"><Check size={13} /> Xong</button>
       </div>
-      {phieu.needReview && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs px-3 py-2">
-          App đã <b>đọc chữ từ ảnh</b> và điền sẵn bên dưới. Đọc ảnh có thể nhầm vài ký tự (8↔3, 0↔O), anh <b>so từng ô với ảnh bên trái</b> rồi sửa; ô tô vàng là chưa đọc được, cần gõ tay. Soát xong bấm “Đã soát xong”.
+      {fromOcr && (
+        <div className={`rounded-lg border text-xs px-3 py-2 flex flex-wrap items-center gap-2 ${anyPending ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-green-200 bg-green-50 text-green-800'}`}>
+          {anyPending
+            ? <span>App đã <b>đọc chữ từ ảnh</b>. Dòng <b>khớp thực nhận</b> app tự xác nhận; dòng <b>tô vàng</b> lệch thực nhận — có thể đọc nhầm hoặc lệch thật, anh so với ảnh bên trái rồi sửa. Đúng là lệch thật thì bấm “Đã soát, lệch thật”.</span>
+            : <span>{phieu.rows.some(r => r.ocr && r.checked) ? '✓ Đã soát xong — dòng lệch thật được giữ để báo đầu nguồn.' : '✓ Mọi dòng đọc từ ảnh đều khớp thực nhận, không cần soát.'}</span>}
+          {anyPending && <button type="button" onClick={() => onChange({ ...phieu, rows: phieu.rows.map(r => (pending(r) ? { ...r, checked: true } : r)) })} className="sheet-tab-action ml-auto">Đã soát, lệch thật</button>}
         </div>
       )}
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
@@ -127,11 +133,11 @@ function PhieuEditor({ phieu, onChange, onAddImages, busy, onClose }) {
               <thead className="bg-gray-50"><tr>{ROW_COLS.map(([k, l, w]) => <th key={k} className="px-1.5 py-1.5 text-left font-semibold text-gray-500" style={{ width: w }}>{l}</th>)}<th /></tr></thead>
               <tbody>
                 {phieu.rows.map((r, i) => (
-                  <tr key={r.rowId} className="border-t border-gray-100">
+                  <tr key={r.rowId} className={`border-t border-gray-100 ${pending(r) ? 'bg-amber-50' : ''}`}>
                     {ROW_COLS.map(([k, l]) => (
                       <td key={k} className="px-1 py-1">
                         <input value={shown(r, k)} onChange={e => setRow(i, k, e.target.value)} onBlur={() => fixRow(i, k)} aria-label={`${l} dòng ${i + 1}`}
-                          className={`w-full border rounded px-1.5 py-1 ${phieu.needReview && k !== 'tenHang' && k !== 'dvt' && (r[k] === '' || r[k] === null || r[k] === undefined) ? 'border-amber-400 bg-amber-50' : 'border-gray-200'} ${k === 'soLuong' ? 'text-right tabular-nums' : ''} ${['maHang', 'soLo'].includes(k) ? 'font-mono' : ''}`} />
+                          className={`w-full border rounded px-1.5 py-1 ${pending(r) && k !== 'tenHang' && k !== 'dvt' && (r[k] === '' || r[k] === null || r[k] === undefined) ? 'border-amber-400 bg-white' : 'border-gray-200'} ${k === 'soLuong' ? 'text-right tabular-nums' : ''} ${['maHang', 'soLo'].includes(k) ? 'font-mono' : ''}`} />
                       </td>
                     ))}
                     <td className="px-1"><button type="button" onClick={() => onChange({ ...phieu, rows: phieu.rows.filter((_, idx) => idx !== i) })} aria-label={`Xoá dòng ${i + 1}`} className="text-gray-400 hover:text-red-600"><Trash2 size={13} /></button></td>
@@ -184,7 +190,7 @@ function DuplicateTems({ list }) {
 async function ocrRows(blob) {
   try {
     const text = await ocrImage(blob)
-    return { soPhieu: readSoPhieu(text), rows: parseOcrPxkText(text).map(it => newPxkRow({ ...it, soLuong: it.soLuong ?? '' })) }
+    return { soPhieu: readSoPhieu(text), rows: parseOcrPxkText(text).map(it => newPxkRow({ ...it, soLuong: it.soLuong ?? '', ocr: true })) }
   } catch { return { soPhieu: '', rows: [] } }
 }
 
@@ -242,13 +248,13 @@ export default function DoiChieuSoSachTab() {
           if (!items.length) errs.push(`${f.name}: PDF không đọc được dòng hàng (có thể là bản scan / ảnh) — đã thêm để nhập tay`)
         } else if (isImage(f)) {
           const [stored, read] = await Promise.all([uploadPxkFile(f), ocrRows(f)])
-          added.push({ ...newPxkPhieu({ kho: k, kind: 'anh', name: f.name, soPhieu: read.soPhieu, images: [stored], rows: read.rows.length ? read.rows : [newPxkRow()] }), needReview: read.rows.length > 0 })
+          added.push(newPxkPhieu({ kho: k, kind: 'anh', name: f.name, soPhieu: read.soPhieu, images: [stored], rows: read.rows.length ? read.rows : [newPxkRow()] }))
         } else errs.push(`${f.name}: chỉ nhận PDF hoặc ảnh`)
       } catch (err) { errs.push(`${f.name}: ${err.message || 'không tải lên được'}`) }
     }
     if (added.length) {
       patch({ phieus: [...session.phieus, ...added] })
-      const firstManual = added.find(p => p.kind !== 'pdf')
+      const firstManual = added.find(p => p.kind !== 'pdf' && !p.rows.some(x => x.maHang)) // ảnh đọc được dòng thì không mở, chỉ dòng lệch mới cần soát
       if (firstManual) setOpenId(firstManual.id)
     }
     if (errs.length) setError(errs.join(' · '))
@@ -296,7 +302,7 @@ export default function DoiChieuSoSachTab() {
         soPhieu = soPhieu || read.soPhieu
       }
       const kept = ph.rows.filter(x => x.maHang || x.tenHang)
-      setPhieu({ ...ph, soPhieu, images: [...ph.images, ...imgs], rows: rows.length ? [...kept, ...rows] : ph.rows, needReview: ph.needReview || rows.length > 0 })
+      setPhieu({ ...ph, soPhieu, images: [...ph.images, ...imgs], rows: rows.length ? [...kept, ...rows] : ph.rows })
     } catch (err) { setError(err.message || 'Không tải ảnh lên được.') } finally { setBusy('') }
   }
 
@@ -312,7 +318,7 @@ export default function DoiChieuSoSachTab() {
         soPhieu = soPhieu || read.soPhieu
       }
       if (!rows.length) { setError('Không đọc được dòng hàng nào từ ảnh — anh nhập tay giúp em.'); return }
-      setPhieu({ ...ph, soPhieu, rows, needReview: true })
+      setPhieu({ ...ph, soPhieu, rows })
       setOpenId(ph.id)
     } catch (err) { setError(err.message || 'Không đọc được ảnh.') } finally { setBusy('') }
   }
@@ -399,7 +405,13 @@ export default function DoiChieuSoSachTab() {
                         <button type="button" onClick={() => { if (openId === p.id) setOpenId(null); patch({ phieus: session.phieus.filter(x => x.id !== p.id) }) }} aria-label={`Xoá phiếu ${p.soPhieu || p.name}`} className="ml-auto text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 text-gray-500">
-                        <span className={n && !p.needReview ? '' : 'text-amber-700'}>{p.kind === 'pdf' ? `PDF gốc · tự đọc ${n} dòng` : `${p.images.length ? `${p.images.length} ảnh · ` : ''}${n ? (p.needReview ? `đọc từ ảnh ${n} dòng — cần soát` : `đã nhập ${n} dòng`) : 'chưa nhập dòng nào'}`}</span>
+                        {(() => {
+                          const ocrN = p.rows.filter(r => r.ocr && r.maHang).length
+                          const pend = p.rows.filter(r => ocrRowNeedsCheck(r, results[p.kho] || [])).length
+                          const text = p.kind === 'pdf' ? `PDF gốc · tự đọc ${n} dòng`
+                            : `${p.images.length ? `${p.images.length} ảnh · ` : ''}${!n ? 'chưa nhập dòng nào' : ocrN ? `đọc từ ảnh ${n} dòng${pend ? ` — ${pend} dòng cần soát` : (p.rows.some(r => r.ocr && r.checked) ? ' · đã soát' : ' · khớp thực nhận')}` : `đã nhập ${n} dòng`}`
+                          return <span className={!n || pend ? 'text-amber-700' : (ocrN && !pend ? 'text-green-700' : '')}>{text}</span>
+                        })()}
                         <button type="button" onClick={() => setOpenId(openId === p.id ? null : p.id)} className="underline text-[#1e3a5f] font-semibold">{p.kind === 'pdf' ? 'Xem / sửa' : 'Nhập tay'}</button>
                         {p.kind === 'anh' && p.images.length > 0 && !n && (
                           <button type="button" onClick={() => void ocrStored(p)} disabled={busy === `ocr-${p.id}`} className="underline text-[#1e3a5f] font-semibold">{busy === `ocr-${p.id}` ? 'Đang đọc chữ…' : 'Đọc chữ từ ảnh'}</button>
@@ -417,7 +429,7 @@ export default function DoiChieuSoSachTab() {
             )
           })}
         </div>
-        {openPhieu && <PhieuEditor phieu={openPhieu} onChange={setPhieu} onAddImages={fs => void addImagesTo(openPhieu, fs)} busy={busy === `img-${openPhieu.id}`} onClose={() => { if (openPhieu.needReview) setPhieu({ ...openPhieu, needReview: false }); setOpenId(null) }} />}
+        {openPhieu && <PhieuEditor phieu={openPhieu} results={results[openPhieu.kho] || []} onChange={setPhieu} onAddImages={fs => void addImagesTo(openPhieu, fs)} busy={busy === `img-${openPhieu.id}`} onClose={() => setOpenId(null)} />}
       </section>
 
       <section className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3" aria-label="File quét nhập">

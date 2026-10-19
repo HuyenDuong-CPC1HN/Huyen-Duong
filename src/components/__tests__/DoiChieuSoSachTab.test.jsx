@@ -98,20 +98,32 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'pdf', autoRead: true, rows: [{ maHang: 'C02918' }] })
   })
 
-  it('ảnh phiếu: app đọc chữ (miễn phí, trên trình duyệt), điền sẵn dòng hàng để soát', async () => {
+  it('ảnh phiếu: app đọc chữ, dòng khớp thực nhận tự xác nhận, chỉ dòng lệch cần soát', async () => {
     ocrMock.mockResolvedValue('Ngày 09 tháng 10 năm 2026 Số: FX126/005804\n'
       + '1 C02918 | Conadin Roll-on Strong - Hộp 1 DTP-VNM |LO 154,000 V |011026 v | 06/10/2029\n'
       + '2 L01286 | Laforin - Hộp 1 lọ 500ml DITP-VNM  |LO 56000 vý |010826 | 17/08/2029')
     render(<DoiChieuSoSachTab />)
     fireEvent.change(screen.getByLabelText('Chụp ảnh phiếu Kho DTP'), { target: { files: [new File(['jpg'], 'IMG_1.jpg', { type: 'image/jpeg' })] } })
-    const editor = await screen.findByRole('region', { name: 'Nhập tay phiếu' })
-    expect(within(editor).getByText(/đọc chữ từ ảnh/)).toBeInTheDocument()
-    expect(within(editor).getByLabelText('Số phiếu')).toHaveValue('FX126/005804')
-    expect(within(editor).getByLabelText('Mã VT dòng 2')).toHaveValue('L01286')
+    // C02918 khớp thực nhận (154, lô 011026) → tự xác nhận; L01286 không có trong thực nhận → cần soát
+    expect(await screen.findByText('1 ảnh · đọc từ ảnh 2 dòng — 1 dòng cần soát')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Nhập tay phiếu' })).not.toBeInTheDocument() // không bắt mở soát
+    expect(screen.getByText('FX126/005804')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập tay' }))
+    const editor = screen.getByRole('region', { name: 'Nhập tay phiếu' })
     expect(within(editor).getByLabelText('Số lượng dòng 2')).toHaveValue('56')
-    expect(screen.getByText('1 ảnh · đọc từ ảnh 2 dòng — cần soát')).toBeInTheDocument()
-    fireEvent.click(within(editor).getByRole('button', { name: /Đã soát xong/ }))
-    expect(screen.getByText('1 ảnh · đã nhập 2 dòng')).toBeInTheDocument()
-    expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'anh', needReview: false, rows: [{ maHang: 'C02918', soLuong: 154, soLo: '011026', hanDung: '2029-10-06' }, { maHang: 'L01286' }] })
+    expect(within(editor).getByLabelText('Mã VT dòng 2').closest('tr')).toHaveClass('bg-amber-50')
+    expect(within(editor).getByLabelText('Mã VT dòng 1').closest('tr')).not.toHaveClass('bg-amber-50')
+    fireEvent.click(within(editor).getByRole('button', { name: 'Đã soát, lệch thật' }))
+    expect(screen.getByText('1 ảnh · đọc từ ảnh 2 dòng · đã soát')).toBeInTheDocument()
+    expect(within(editor).getByText(/Đã soát xong/)).toBeInTheDocument()
+    expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0].rows).toMatchObject([{ maHang: 'C02918', ocr: true }, { maHang: 'L01286', ocr: true, checked: true }])
+  })
+
+  it('ảnh phiếu khớp hết thực nhận thì không cần soát', async () => {
+    ocrMock.mockResolvedValue('1 C02918 | Conadin Roll-on Strong - Hộp 1 DTP-VNM |LO 154,000 V |011026 v | 06/10/2029')
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('Chụp ảnh phiếu Kho DTP'), { target: { files: [new File(['jpg'], 'IMG_2.jpg', { type: 'image/jpeg' })] } })
+    expect(await screen.findByText('1 ảnh · đọc từ ảnh 1 dòng · khớp thực nhận')).toBeInTheDocument()
   })
 })
