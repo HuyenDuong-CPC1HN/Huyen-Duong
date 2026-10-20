@@ -8,7 +8,10 @@ export async function readPxkWithAi(storagePath, mimeType) {
   const { supabase } = await import('../supabase')
   if (!supabase) throw new Error('chưa kết nối máy chủ')
   const url = await getPxkFileUrl(storagePath)
-  const { data, error } = await supabase.functions.invoke('pxk-ocr', { body: { url, mimeType } })
+  // Hàm có thể được tạo trên Dashboard với tên viết hoa "PXK-OCR" — tên ở URL phân biệt hoa thường, nên thử cả 2.
+  let res = await supabase.functions.invoke('pxk-ocr', { body: { url, mimeType } })
+  if (res.error?.context?.status === 404) res = await supabase.functions.invoke('PXK-OCR', { body: { url, mimeType } })
+  const { data, error } = res
   if (error) {
     let msg = error.message || 'lỗi gọi AI'
     try {
