@@ -230,6 +230,8 @@ async function ocrRows(blob) {
   }
 }
 
+const fmtMb = n => `${((n || 0) / 1048576).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} MB`
+
 const pdfOf = ph => (ph.files || []).find(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf')
 
 // Gemini (qua Edge Function pxk-ocr) đọc phiếu scan / ảnh: hiểu bảng nên ít lệch cột hơn hẳn bộ đọc chữ thường. Dòng
@@ -391,7 +393,7 @@ export default function DoiChieuSoSachTab() {
     const bid = batchId
     const rec = receivedRowsOf(batch, k)
     const bad = files.filter(f => !isPdf(f) && !isImage(f))
-    const jobs = files.filter(f => isPdf(f) || isImage(f)).map(f => ({ f, ph: { ...newPxkPhieu({ kho: k, kind: 'dang', name: f.name }), reading: 'Đang tải lên…' } }))
+    const jobs = files.filter(f => isPdf(f) || isImage(f)).map(f => ({ f, ph: { ...newPxkPhieu({ kho: k, kind: 'dang', name: f.name }), reading: `Đang tải lên… (${fmtMb(f.size)})` } }))
     setZoneNote(n => ({ ...n, [k]: bad.length ? `Bỏ qua ${bad.map(f => f.name).join(', ')}: chỉ nhận PDF hoặc ảnh.` : '' }))
     if (!jobs.length) return
     jobs.forEach(j => inFlight.current.add(j.ph.id))
@@ -410,7 +412,11 @@ export default function DoiChieuSoSachTab() {
     }, bid)
     const pdf = isPdf(f)
     try {
-      const stored = await uploadPxkFile(f)
+      // Mạng chập chờn có thể làm việc tải lên treo mãi — quá 5 phút thì báo lỗi để kho thả lại.
+      const stored = await Promise.race([
+        uploadPxkFile(f),
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`tải lên quá 5 phút — file ${fmtMb(f.size)}, mạng có thể chậm; thử lại hoặc scan nhẹ hơn`)), 300000)),
+      ])
       setPh(p => ({ ...p, [pdf ? 'files' : 'images']: [stored], reading: pdf ? 'Đang đọc PDF…' : 'Đang đọc chữ trong ảnh… (vài giây)' }))
       if (!pdf) {
         setPh(p => ({ ...p, reading: 'AI đang đọc ảnh phiếu…' }))
