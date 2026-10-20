@@ -58,25 +58,36 @@ const SCHEMA = {
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
-let cachedModel = ''
-async function pickModel(key: string): Promise<string> {
-  const fixed = Deno.env.get('GEMINI_MODEL')
-  if (fixed) return fixed.replace(/^models\//, '')
-  if (cachedModel) return cachedModel
-  const res = await fetch(`${API}/models?pageSize=200&key=${key}`)
-  if (!res.ok) throw new Error(`Không lấy được danh sách mô hình Gemini (${res.status}) — kiểm tra GEMINI_API_KEY`)
-  const { models = [] } = await res.json()
-  const ok = models
-    .filter((m: { name: string, supportedGenerationMethods?: string[] }) => m.supportedGenerationMethods?.includes('generateContent'))
-    .map((m: { name: string }) => m.name.replace(/^models\//, ''))
-    .filter((n: string) => /flash/.test(n) && !/(image|tts|audio|live|thinking|exp|embedding|8b)/.test(n))
-  // Ưu tiên bản "flash" (chính xác hơn "flash-lite"), bản ổn định (không "preview"), số phiên bản lớn nhất.
-  const ver = (n: string) => Number((/(\d+(?:\.\d+)?)/.exec(n) || [])[1] || 0)
-  ok.sort((a: string, b: string) => (Number(/lite/.test(a)) - Number(/lite/.test(b))) || (Number(/preview/.test(a)) - Number(/preview/.test(b))) || (ver(b) - ver(a)))
-  if (!ok.length) throw new Error('Tài khoản Gemini không có mô hình "flash" nào dùng được')
-  cachedModel = ok[0]
-  return cachedModel
+// Danh sách mô hình thử lần lượt: mô hình đầu bận ("high demand") / hết lượt thì chuyển sang mô hình sau.
+let cachedModels: string[] = []
+async function pickModels(key: string): Promise<string[]> {
+  const fixed = (Deno.env.get('GEMINI_MODEL') || '').replace(/^models\//, '')
+  if (!cachedModels.length) {
+    const res = await fetch(`${API}/models?pageSize=200&key=${key}`)
+    if (!res.ok) {
+      if (fixed) return [fixed]
+      throw new Error(`Không lấy được danh sách mô hình Gemini (${res.status}) — kiểm tra GEMINI_API_KEY`)
+    }
+    const { models = [] } = await res.json()
+    const ok = models
+      .filter((m: { name: string, supportedGenerationMethods?: string[] }) => m.supportedGenerationMethods?.includes('generateContent'))
+      .map((m: { name: string }) => m.name.replace(/^models\//, ''))
+      .filter((n: string) => /flash/.test(n) && !/(image|tts|audio|live|thinking|exp|embedding|8b)/.test(n) && !/-\d{3}$/.test(n))
+    // Ưu tiên bản "flash" (chính xác hơn "flash-lite"), bản ổn định (không "preview"), số phiên bản lớn nhất.
+    const ver = (n: string) => Number((/(\d+(?:\.\d+)?)/.exec(n) || [])[1] || 0)
+    ok.sort((a: string, b: string) => (Number(/lite/.test(a)) - Number(/lite/.test(b))) || (Number(/preview/.test(a)) - Number(/preview/.test(b))) || (ver(b) - ver(a)))
+    cachedModels = ok
+  }
+  // 3 mô hình "flash" đầu + 1 mô hình "flash-lite" (khác nhóm máy chủ, thường còn rảnh khi bản flash bị quá tải).
+  const full = cachedModels.filter(n => !/lite/.test(n)).slice(0, 3)
+  const lite = cachedModels.filter(n => /lite/.test(n)).slice(0, 1)
+  const list = [...new Set([fixed, ...full, ...lite].filter(Boolean))]
+  if (!list.length) throw new Error('Tài khoản Gemini không có mô hình "flash" nào dùng được')
+  return list
 }
+
+// Gemini báo bận (503 "high demand"), lỗi tạm (500) hoặc hết lượt miễn phí của riêng mô hình đó (429): thử mô hình khác.
+const BUSY = new Set([429, 500, 503])
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -92,19 +103,27 @@ Deno.serve(async req => {
     if (!file.ok) return json({ error: `Không tải được file (${file.status})` }, 400)
     const bytes = new Uint8Array(await file.arrayBuffer())
     if (bytes.byteLength > MAX_BYTES) return json({ error: 'File lớn hơn 18 MB — tách thành nhiều file nhỏ hơn' }, 413)
-    const model = await pickModel(key)
-    const res = await fetch(`${API}/models/${model}:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ inline_data: { mime_type: mimeType || 'application/pdf', data: encodeBase64(bytes) } }, { text: PROMPT }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: SCHEMA },
-      }),
+    const body = JSON.stringify({
+      contents: [{ parts: [{ inline_data: { mime_type: mimeType || 'application/pdf', data: encodeBase64(bytes) } }, { text: PROMPT }] }],
+      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: SCHEMA },
     })
-    const out = await res.json()
-    if (!res.ok) {
-      const msg = out?.error?.message || `Gemini lỗi ${res.status}`
-      return json({ error: res.status === 429 ? `Hết lượt miễn phí của Gemini (thử lại sau): ${msg}` : msg }, res.status === 429 ? 429 : 502)
+    let model = ''
+    let out: { error?: { message?: string }, candidates?: { content?: { parts?: { text?: string }[] } }[] } = {}
+    let status = 0
+    const tried: string[] = []
+    for (const m of await pickModels(key)) {
+      model = m
+      const res = await fetch(`${API}/models/${m}:generateContent?key=${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+      out = await res.json().catch(() => ({}))
+      status = res.status
+      if (res.ok || !BUSY.has(res.status)) break
+      tried.push(`${m}: ${out?.error?.message || res.status}`)
+    }
+    if (status < 200 || status >= 300) {
+      const msg = tried.length ? tried.join(' | ') : (out?.error?.message || `Gemini lỗi ${status}`)
+      if (status === 429) return json({ error: `Hết lượt miễn phí của Gemini (thử lại sau): ${msg}` }, 429)
+      if (status === 503 || status === 500) return json({ error: `Gemini đang quá tải, đã thử ${tried.length} mô hình (thử lại sau ít phút): ${msg}` }, 503)
+      return json({ error: msg }, 502)
     }
     const text = out?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || ''
     const data = JSON.parse(text || '{"phieus":[]}')

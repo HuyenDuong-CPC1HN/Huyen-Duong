@@ -24,6 +24,9 @@ tự dùng bộ đọc chữ trên trình duyệt như cũ.
    `functions/pxk-ocr/index.ts`, bấm **Deploy** (giữ bật *Verify JWT* — chỉ người đã đăng nhập app gọi được).
    Hoặc dùng CLI: `supabase functions deploy pxk-ocr`.
 3. **Edge Functions → Secrets**: thêm `GEMINI_API_KEY` = khoá ở bước 1. Tuỳ chọn `GEMINI_MODEL` để cố định mô hình
-   (để trống thì hàm tự chọn mô hình "flash" mới nhất của tài khoản).
+   (để trống thì hàm tự chọn mô hình "flash" mới nhất của tài khoản; mô hình đó báo bận / hết lượt thì tự thử tối đa
+   3 mô hình "flash" khác).
+4. Sửa code hàm (vd bản mới trong repo): mở hàm → tab **Code** → dán đè toàn bộ `functions/pxk-ocr/index.ts` → **Deploy**.
+   App gọi được cả tên `pxk-ocr` lẫn `PXK-OCR`.
 
 Gói miễn phí của Gemini có giới hạn lượt / ngày và Google có thể dùng dữ liệu gửi lên để cải thiện sản phẩm.
