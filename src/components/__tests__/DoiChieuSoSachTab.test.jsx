@@ -24,7 +24,7 @@ vi.mock('../../utils/parseGoodsReceipt', async orig => ({
 const ocrMock = vi.hoisted(() => vi.fn(async () => ''))
 const ocrPdfMock = vi.hoisted(() => vi.fn(async () => ['']))
 const splitMock = vi.hoisted(() => vi.fn(async () => ({ numPages: 1, chunks: [] })))
-vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock, ocrPdfPages: ocrPdfMock, splitScanPdf: splitMock, warmUpOcr: vi.fn() }))
+vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock, ocrPdfPages: ocrPdfMock, splitScanPdf: splitMock, makePdfChunks: images => images.map(x => ({ pages: [x.page], images: [x] })), warmUpOcr: vi.fn() }))
 const parseItemsMock = vi.hoisted(() => ({ empty: false }))
 const aiMock = vi.hoisted(() => vi.fn(async () => { throw new Error('chưa bật AI đọc phiếu (Edge Function pxk-ocr chưa cài)') }))
 const chunksAiMock = vi.hoisted(() => vi.fn(async () => []))
@@ -183,14 +183,15 @@ describe('Đối chiếu sổ sách (PXK)', () => {
 
   it('AI (Gemini) đọc PDF scan: tách phiếu, dòng khớp thực nhận tự xác nhận, không dùng bộ đọc chữ thường', async () => {
     parseItemsMock.empty = true
-    aiMock.mockResolvedValue([
+    splitMock.mockResolvedValue({ numPages: 1, chunks: [{ pages: [1], images: [] }] })
+    chunksAiMock.mockResolvedValue([{ phieus: [
       { soPhieu: 'FX126/005804', trang: [1], rows: [{ maHang: 'C02918', tenHang: 'Conadin', dvt: 'LO', soLuong: 154, soLo: '011026', hanDung: '06/10/2029' }] },
-    ])
+    ] }])
     render(<DoiChieuSoSachTab />)
     fireEvent.change(screen.getByLabelText('+ Thêm file Kho DTP'), { target: { files: [new File(['%PDF'], 'quet.pdf', { type: 'application/pdf' })] } })
     expect(await screen.findByText('PDF scan · AI đọc 1 dòng · khớp thực nhận')).toBeInTheDocument()
     expect(ocrPdfMock).not.toHaveBeenCalled()
-    expect(aiMock).toHaveBeenCalledWith(expect.stringMatching(/^pxk\/test\//), 'application/pdf')
+    expect(splitMock).toHaveBeenCalledWith(expect.anything(), 4)
     expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'ai', soPhieu: 'FX126/005804', rows: [{ maHang: 'C02918', soLuong: 154, hanDung: '2029-10-06', ai: true }] })
   })
 
@@ -211,5 +212,38 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(ocrPdfMock.mock.calls[0][3]).toEqual([5, 6, 7, 8])
     const saved = JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus
     expect(saved.map(p => [p.soPhieu, p.kind])).toEqual([['XD2611/04789', 'ai'], ['XD2611/04795', 'scan'], ['XD2611/04800', 'ai']])
+    expect(saved[1].pages).toEqual([5, 6, 7, 8])
+  })
+
+  it('phần AI bị Supabase ngắt (546) thì tự gửi lại từng trang; còn lỗi thì bấm "AI đọc lại" trên thẻ đọc thường', async () => {
+    parseItemsMock.empty = true
+    const img = page => ({ page, bytes: new Uint8Array(1), width: 1, height: 1 })
+    splitMock.mockResolvedValue({ numPages: 3, chunks: [{ pages: [1], images: [img(1)] }, { pages: [2, 3], images: [img(2), img(3)] }] })
+    const p1 = { soPhieu: 'XD2611/04789', trang: [1], rows: [{ maHang: 'C02918', soLuong: 154, soLo: '011026' }] }
+    const zen = { soPhieu: 'XD2611/04795', trang: [1], rows: [{ maHang: 'Z00330', soLuong: 48300, soLo: '30426G02' }] }
+    chunksAiMock
+      .mockResolvedValueOnce([{ phieus: [p1] }, { error: 'hàm PXK-OCR báo lỗi 546: Edge Function returned a non-2xx status code' }])
+      // gửi lại từng trang: trang 2 được, trang 3 vẫn lỗi
+      .mockResolvedValueOnce([{ phieus: [zen] }, { error: 'hàm PXK-OCR báo lỗi 546: Edge Function returned a non-2xx status code' }])
+    ocrPdfMock.mockImplementation(async () => ['', '', 'Số phiếu: XD2611/04800\n1 F00629 Falgankid CPC1HN-VNM ONG 3.300,000 13626G01 12/07/2029'])
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('+ Thêm file Kho C'), { target: { files: [new File(['%PDF'], 'quet.pdf', { type: 'application/pdf' })] } })
+    expect(await screen.findByText(/AI chưa đọc được trang 3 \(hàm PXK-OCR báo lỗi 546/)).toBeInTheDocument()
+    expect(chunksAiMock.mock.calls[1][0].map(c => c.pages)).toEqual([[2], [3]])
+    expect(ocrPdfMock.mock.calls[0][3]).toEqual([3])
+    let saved = JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus
+    expect(saved.map(p => [p.soPhieu, p.kind, p.pages])).toEqual([['XD2611/04789', 'ai', [1]], ['XD2611/04795', 'ai', [2]], ['XD2611/04800', 'scan', [3]]])
+
+    // bấm "AI đọc lại" trên thẻ đọc thường → AI đọc riêng trang 3
+    splitMock.mockResolvedValue({ numPages: 3, chunks: [{ pages: [3], images: [img(3)] }] })
+    chunksAiMock.mockResolvedValueOnce([{ phieus: [{ soPhieu: 'XD2611/04800', trang: [1], rows: [{ maHang: 'F00629', soLuong: 3300, soLo: '13626G01' }] }] }])
+    fireEvent.click(screen.getByRole('button', { name: 'AI đọc lại' }))
+    await vi.waitFor(() => expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[2].kind).toBe('ai'))
+    expect(screen.queryByRole('button', { name: /AI đọc lại|AI đang đọc/ })).not.toBeInTheDocument()
+    expect(splitMock).toHaveBeenLastCalledWith(expect.anything(), 4, [3])
+    saved = JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus
+    expect(saved.map(p => [p.soPhieu, p.kind, p.pages, p.name])).toEqual([
+      ['XD2611/04789', 'ai', [1], 'quet.pdf · trang 1'], ['XD2611/04795', 'ai', [2], 'quet.pdf · trang 2'], ['XD2611/04800', 'ai', [3], 'quet.pdf · trang 3'],
+    ])
   })
 })

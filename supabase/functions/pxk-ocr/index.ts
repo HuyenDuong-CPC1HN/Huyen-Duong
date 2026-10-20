@@ -89,11 +89,22 @@ async function pickModels(key: string): Promise<string[]> {
 // Gemini báo bận (503 "high demand"), lỗi tạm (500) hoặc hết lượt miễn phí của riêng mô hình đó (429): thử mô hình khác.
 const BUSY = new Set([429, 500, 503])
 
+// Supabase ngắt hàm chạy quá ~150 giây (lỗi 546, trình duyệt không biết lý do) — tự dừng trước đó và báo rõ.
+const DEADLINE_MS = 130 * 1000
+
+// Tắt / giảm "suy nghĩ" của mô hình: đọc bảng không cần suy luận, tắt đi nhanh hơn nhiều lần.
+function thinkingOf(model: string) {
+  if (/2\.5-flash/.test(model)) return { thinkingBudget: 0 }
+  if (/^gemini-[3-9]/.test(model)) return { thinkingLevel: 'low' }
+  return null
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'Chỉ nhận POST' }, 405)
   const key = Deno.env.get('GEMINI_API_KEY')
   if (!key) return json({ error: 'Chưa cài GEMINI_API_KEY cho Edge Function pxk-ocr' }, 500)
+  const started = Date.now()
   try {
     const { url, mimeType } = await req.json()
     // Chỉ đọc file trong Storage của chính dự án (chặn dùng hàm này tải link lạ)
@@ -103,29 +114,58 @@ Deno.serve(async req => {
     if (!file.ok) return json({ error: `Không tải được file (${file.status})` }, 400)
     const bytes = new Uint8Array(await file.arrayBuffer())
     if (bytes.byteLength > MAX_BYTES) return json({ error: 'File lớn hơn 18 MB — tách thành nhiều file nhỏ hơn' }, 413)
-    const body = JSON.stringify({
-      contents: [{ parts: [{ inline_data: { mime_type: mimeType || 'application/pdf', data: encodeBase64(bytes) } }, { text: PROMPT }] }],
-      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: SCHEMA },
+    const data64 = encodeBase64(bytes)
+    const bodyOf = (thinking: unknown) => JSON.stringify({
+      contents: [{ parts: [{ inline_data: { mime_type: mimeType || 'application/pdf', data: data64 } }, { text: PROMPT }] }],
+      generationConfig: {
+        temperature: 0, maxOutputTokens: 16384, responseMimeType: 'application/json', responseSchema: SCHEMA,
+        ...(thinking ? { thinkingConfig: thinking } : {}),
+      },
     })
     let model = ''
-    let out: { error?: { message?: string }, candidates?: { content?: { parts?: { text?: string }[] } }[] } = {}
+    let out: { error?: { message?: string }, candidates?: { finishReason?: string, content?: { parts?: { text?: string }[] } }[] } = {}
     let status = 0
     const tried: string[] = []
     for (const m of await pickModels(key)) {
+      const left = DEADLINE_MS - (Date.now() - started)
+      if (left < 15000) break
       model = m
-      const res = await fetch(`${API}/models/${m}:generateContent?key=${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
-      out = await res.json().catch(() => ({}))
-      status = res.status
-      if (res.ok || !BUSY.has(res.status)) break
-      tried.push(`${m}: ${out?.error?.message || res.status}`)
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), left)
+      try {
+        const call = (thinking: unknown) => fetch(`${API}/models/${m}:generateContent?key=${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: bodyOf(thinking), signal: ctrl.signal })
+        const thinking = thinkingOf(m)
+        let res = await call(thinking)
+        out = await res.json().catch(() => ({}))
+        // Mô hình không nhận tuỳ chọn "suy nghĩ" → gọi lại không kèm.
+        if (res.status === 400 && thinking && /think/i.test(out?.error?.message || '')) {
+          res = await call(null)
+          out = await res.json().catch(() => ({}))
+        }
+        status = res.status
+        if (res.ok || !BUSY.has(res.status)) break
+        tried.push(`${m}: ${out?.error?.message || res.status}`)
+      } catch (err) {
+        if (!ctrl.signal.aborted) throw err
+        status = 504
+        tried.push(`${m}: quá ${Math.round((Date.now() - started) / 1000)} giây chưa đọc xong`)
+        break
+      } finally {
+        clearTimeout(timer)
+      }
     }
+    if (!model) return json({ error: 'Hết thời gian trước khi gọi được AI' }, 504)
+    if (status === 504) return json({ error: `AI đọc quá lâu, đã dừng để không bị Supabase ngắt (${tried.join(' | ')})` }, 504)
     if (status < 200 || status >= 300) {
       const msg = tried.length ? tried.join(' | ') : (out?.error?.message || `Gemini lỗi ${status}`)
       if (status === 429) return json({ error: `Hết lượt miễn phí của Gemini (thử lại sau): ${msg}` }, 429)
       if (status === 503 || status === 500) return json({ error: `Gemini đang quá tải, đã thử ${tried.length} mô hình (thử lại sau ít phút): ${msg}` }, 503)
       return json({ error: msg }, 502)
     }
-    const text = out?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || ''
+    const cand = out?.candidates?.[0]
+    const text = cand?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || ''
+    // Mô hình đôi khi lặp mãi 1 dòng tới khi hết giới hạn chữ → JSON cụt: báo rõ để app chia phần nhỏ hơn đọc lại.
+    if (cand?.finishReason === 'MAX_TOKENS') return json({ error: 'AI trả kết quả quá dài (bị cắt) — đọc lại với phần nhỏ hơn' }, 502)
     const data = JSON.parse(text || '{"phieus":[]}')
     return json({ model, phieus: Array.isArray(data.phieus) ? data.phieus : [] })
   } catch (err) {

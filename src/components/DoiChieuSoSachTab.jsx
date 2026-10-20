@@ -7,7 +7,7 @@ import {
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { downloadPxkFile, getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
 import { readPdfChunksWithAi, readPxkWithAi } from '../data/pxkAi'
-import { ocrImage, ocrPdfPages, splitScanPdf, warmUpOcr } from '../utils/pxkOcr'
+import { makePdfChunks, ocrImage, ocrPdfPages, splitScanPdf, warmUpOcr } from '../utils/pxkOcr'
 import { extractPdfText, findDuplicateTems, mergeActualScanRows, parsePdfItems, readActualScanRows } from '../utils/parseGoodsReceipt'
 
 // Mục "Đối chiếu sổ sách": Phiếu xuất kho nhà máy (sổ sách) ↔ BB thực nhận (chuyến đã lưu ở tab Nhập hàng) ↔ file
@@ -232,6 +232,9 @@ async function ocrRows(blob) {
 
 const fmtMb = n => `${((n || 0) / 1048576).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} MB`
 
+// Số trang (trong file PDF gốc) của 1 thẻ phiếu tách từ file nhiều trang — thẻ cũ chưa lưu thì lấy từ tên "… · trang 9, 10".
+const pagesOfPhieu = ph => (ph.pages?.length ? ph.pages : (/ · trang ([\d, ]+)$/.exec(ph.name || '')?.[1] || '').split(',').map(Number).filter(Boolean))
+
 const pdfOf = ph => (ph.files || []).find(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf')
 
 // Gemini (qua Edge Function pxk-ocr) đọc phiếu scan / ảnh: hiểu bảng nên ít lệch cột hơn hẳn bộ đọc chữ thường. Dòng
@@ -251,13 +254,39 @@ async function readAi(stored, mimeType) {
   } catch (err) { return { error: err?.message || String(err) } }
 }
 
-// PDF scan nhiều hơn chừng này trang thì chia phần gửi AI (gửi nguyên file lớn làm hàm Supabase quá giới hạn — lỗi 546).
+// PDF scan gửi AI từng phần chừng này trang (gửi nguyên file nhiều trang làm hàm Supabase quá giới hạn — lỗi 546).
 const AI_PAGES = 4
+// Lỗi tạm (Supabase ngắt hàm, AI đọc quá lâu / quá tải / kết quả bị cắt) — chia nhỏ phần đó gửi lại 1 lần.
+const AI_RETRY = /546|504|502|503|quá lâu|quá tải|high demand|bị cắt|non-2xx|Failed to send/i
+
+// AI đọc các trang PDF scan đã chia phần; phần lỗi tạm thì chia 1 trang / phần gửi lại (phần nhỏ đọc nhanh, ít bị
+// ngắt). onProgress('lời báo'). Trả về { phieus (đã đổi sang dòng app), failedPages, errors }.
+async function aiReadChunks(chunks, onProgress) {
+  const results = await readPdfChunksWithAi(chunks, (d, t) => onProgress(`AI đang đọc phiếu scan ${chunks.reduce((n, c) => n + c.pages.length, 0)} trang: xong ${d}/${t} phần… (mỗi phần khoảng 20–60 giây)`))
+  const retry = chunks.map((c, i) => (results[i]?.error && AI_RETRY.test(results[i].error) ? i : -1)).filter(i => i >= 0)
+  let allChunks = chunks
+  let allResults = results
+  if (retry.length) {
+    const small = retry.map(i => makePdfChunks(chunks[i].images || [], 1))
+    const flat = small.flat()
+    const again = flat.length ? await readPdfChunksWithAi(flat, (d, t) => onProgress(`AI đọc lại từng trang bị lỗi: xong ${d}/${t} trang…`)) : []
+    allChunks = []
+    allResults = []
+    let k = 0
+    chunks.forEach((c, i) => {
+      const at = retry.indexOf(i)
+      if (at < 0 || !small[at].length) { allChunks.push(c); allResults.push(results[i]); return }
+      small[at].forEach(x => { allChunks.push(x); allResults.push(again[k]); k += 1 })
+    })
+  }
+  const merged = mergeAiChunks(allChunks, allResults)
+  return { ...merged, phieus: mapAiPhieus(merged.phieus) }
+}
 
 // Đọc 1 file PDF phiếu. PDF có chữ (PDF gốc, hoặc scan bật "PDF có thể tìm kiếm") đọc thẳng — chính xác, tức thì.
-// PDF scan: AI đọc trước (file nhiều trang chia phần, phần nào AI lỗi thì riêng các trang đó đọc bằng bộ đọc chữ
-// thường); không có AI thì vẽ từng trang ra ảnh rồi đọc chữ (dòng đánh dấu ocr để tự đối chiếu thực nhận). File nhiều
-// trang tách thành nhiều phiếu theo số phiếu. onProgress(đã xong, tổng trang) hoặc onProgress('lời báo').
+// PDF scan: AI đọc trước (chia phần, trang nào AI vẫn lỗi thì riêng các trang đó đọc bằng bộ đọc chữ thường); không có
+// AI thì vẽ từng trang ra ảnh rồi đọc chữ (dòng đánh dấu ocr để tự đối chiếu thực nhận). File nhiều trang tách thành
+// nhiều phiếu theo số phiếu. onProgress(đã xong, tổng trang) hoặc onProgress('lời báo').
 // Trả về { kind, phieus: [{ kind?, soPhieu, pages, rows }], aiNote, problem }.
 async function readPdfPhieu(buffer, onProgress = () => {}, aiFile = null, onNote = () => {}) {
   const text = await extractPdfText(buffer.slice ? buffer.slice(0) : buffer)
@@ -270,28 +299,23 @@ async function readPdfPhieu(buffer, onProgress = () => {}, aiFile = null, onNote
   let ocrOnly = null // chỉ đọc thường các trang này (null = cả file)
   if (aiFile) {
     onProgress('Đang chuẩn bị file cho AI đọc…')
-    let split = { numPages: 0, chunks: [] }
-    try { split = await splitScanPdf(buffer, AI_PAGES) } catch { /* không chia được — gửi nguyên file */ }
-    if (split.chunks.length) {
-      const results = await readPdfChunksWithAi(split.chunks, (d, t) => onProgress(`AI đang đọc phiếu scan ${split.numPages} trang: xong ${d}/${t} phần… (mỗi phần khoảng 20–40 giây)`))
-      const merged = mergeAiChunks(split.chunks, results)
-      aiPhieus = mapAiPhieus(merged.phieus)
-      const err = merged.errors.join('; ')
-      if (aiPhieus.length && !merged.failedPages.length) return { kind: 'ai', phieus: aiPhieus, problem: '' }
-      if (aiPhieus.length) {
-        ocrOnly = merged.failedPages
-        aiNote = `AI chưa đọc được trang ${ocrOnly.join(', ')} (${err}) — các trang này đã đọc bằng bộ đọc chữ thường`
-        onNote(`AI chưa đọc được trang ${ocrOnly.join(', ')} (${err}) — đang đọc các trang này bằng bộ đọc chữ thường`)
-      } else {
-        aiNote = `AI chưa đọc được (${err || 'AI không thấy dòng hàng nào'}) — đã đọc bằng bộ đọc chữ thường`
-        onNote(`AI chưa đọc được (${err || 'AI không thấy dòng hàng nào'}) — đang chuyển sang bộ đọc chữ thường`)
-      }
+    let ai
+    try {
+      const { chunks } = await splitScanPdf(buffer, AI_PAGES)
+      ai = await aiReadChunks(chunks, onProgress)
+    } catch (err) {
+      ai = { phieus: [], failedPages: null, errors: [err?.message || String(err)] }
+    }
+    aiPhieus = ai.phieus
+    const err = ai.errors.join('; ') || 'AI không thấy dòng hàng nào'
+    if (aiPhieus.length && !ai.failedPages?.length) return { kind: 'ai', phieus: aiPhieus, problem: '' }
+    if (aiPhieus.length) {
+      ocrOnly = ai.failedPages
+      aiNote = `AI chưa đọc được trang ${ocrOnly.join(', ')} (${err}) — các trang này đã đọc bằng bộ đọc chữ thường, bấm "AI đọc lại" trên thẻ để thử lại`
+      onNote(`AI chưa đọc được trang ${ocrOnly.join(', ')} (${err}) — đang đọc các trang này bằng bộ đọc chữ thường`)
     } else {
-      onProgress(-1, 0)
-      const ai = await readAi(aiFile, 'application/pdf')
-      if (ai.phieus) return { kind: 'ai', phieus: ai.phieus, problem: '' }
-      aiNote = `AI chưa đọc được (${ai.error}) — đã đọc bằng bộ đọc chữ thường`
-      onNote(`AI chưa đọc được (${ai.error}) — đang chuyển sang bộ đọc chữ thường`)
+      aiNote = `AI chưa đọc được (${err}) — đã đọc bằng bộ đọc chữ thường`
+      onNote(`AI chưa đọc được (${err}) — đang chuyển sang bộ đọc chữ thường`)
     }
   }
   try {
@@ -385,6 +409,7 @@ export default function DoiChieuSoSachTab() {
   const [store, setStore] = useState(() => readPxkStore())
   const [openId, setOpenId] = useState(null)
   const [busy, setBusy] = useState('')
+  const [busyNote, setBusyNote] = useState('')
   const [error, setError] = useState('')
   const [kho, setKho] = useState('C')
   const [filter, setFilter] = useState('all')
@@ -468,9 +493,11 @@ export default function DoiChieuSoSachTab() {
         return
       }
       // Phiếu trùng số (trong file hoặc với phiếu đã có) vẫn thêm đủ — app không tự bỏ, kho chọn bản giữ ở khung đỏ.
+      // AI đọc được 1 phần: lời báo đặt ở các thẻ đọc thường (trang AI lỗi); không thì ở thẻ đầu.
+      const noteOn = read.phieus.some(x => x.kind === 'ai') ? (x => x.kind === 'scan') : ((x, i) => i === 0)
       replace(() => read.phieus.map((x, i) => ({
           ...newPxkPhieu({ kho: k, kind: x.kind || read.kind, name: read.phieus.length > 1 ? `${f.name} · trang ${x.pages.join(', ') || i + 1}` : f.name, soPhieu: x.soPhieu, files: [stored], rows: read.kind === 'pdf' ? x.rows : alignOcrRows(x.rows, rec) }),
-          ...(i === 0 ? { id: ph.id } : {}), autoRead: true, ocrNote: i === 0 ? (read.aiNote || '') : '',
+          ...(i === 0 ? { id: ph.id } : {}), pages: x.pages, autoRead: true, ocrNote: noteOn(x, i) ? (read.aiNote || '') : '',
         })))
     } catch (err) {
       replace(() => [{ ...ph, kind: pdf ? 'tay' : 'anh', reading: '', rows: [newPxkRow()], autoRead: true, ocrNote: `không tải lên / đọc được (${err?.message || err})` }])
@@ -498,6 +525,36 @@ export default function DoiChieuSoSachTab() {
       const next = { ...raw, rows: align(ph.kho, raw.rows) }
       setPhieu(next)
     } catch (err) { setError(err.message || 'Không đọc lại được PDF.') } finally { setBusy('') }
+  }
+
+  // Thẻ PDF scan đọc bằng bộ đọc chữ thường (AI lỗi lúc tải lên): AI đọc lại riêng các trang của thẻ. Đọc được hết thì
+  // thay thẻ bằng kết quả AI (có thể tách nhiều thẻ theo số phiếu); còn trang lỗi thì giữ nguyên kết quả đọc thường.
+  const aiReread = async ph => {
+    const pdf = pdfOf(ph)
+    if (!pdf) return
+    setError(''); setBusy(`ai-${ph.id}`); setBusyNote('Đang chuẩn bị file cho AI đọc…')
+    try {
+      const pages = pagesOfPhieu(ph)
+      const { chunks } = await splitScanPdf(await downloadPxkFile(pdf.storagePath), AI_PAGES, pages.length ? pages : null)
+      const ai = await aiReadChunks(chunks, setBusyNote)
+      if (!ai.phieus.length || ai.failedPages.length) {
+        const why = ai.errors.join('; ') || 'AI không thấy dòng hàng nào'
+        upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (p.id === ph.id ? { ...p, ocrNote: `AI vẫn chưa đọc được${ai.failedPages.length ? ` trang ${ai.failedPages.join(', ')}` : ''} (${why}) — giữ kết quả đọc thường, thử lại sau ít phút` } : p)) }))
+        return
+      }
+      const rec = receivedRowsOf(batch, ph.kho)
+      const baseName = (ph.name || pdf.name).replace(/ · trang [\d, ]+$/, '')
+      upd(cur => {
+        const i = cur.phieus.findIndex(p => p.id === ph.id)
+        if (i < 0) return cur
+        const list = [...cur.phieus]
+        list.splice(i, 1, ...ai.phieus.map((x, j) => ({
+          ...newPxkPhieu({ kho: ph.kho, kind: 'ai', name: pages.length || ai.phieus.length > 1 ? `${baseName} · trang ${x.pages.join(', ')}` : baseName, soPhieu: x.soPhieu || ph.soPhieu, files: ph.files, rows: alignOcrRows(x.rows, rec) }),
+          ...(j === 0 ? { id: ph.id } : {}), pages: x.pages, autoRead: true, ocrNote: '',
+        })))
+        return { ...cur, phieus: list }
+      })
+    } catch (err) { setError(`AI chưa đọc lại được: ${err.message || err}`) } finally { setBusy(''); setBusyNote('') }
   }
 
   // Mở trang: phiếu PDF chưa có dòng nào (tải lên từ trước) thì tự đọc lại 1 lần, không cần bấm nút.
@@ -668,10 +725,14 @@ export default function DoiChieuSoSachTab() {
                         {p.kind === 'anh' && p.images.length > 0 && !n && (
                           <button type="button" onClick={() => void ocrStored(p)} disabled={busy === `ocr-${p.id}`} className="underline text-[#1e3a5f] font-semibold">{busy === `ocr-${p.id}` ? 'Đang đọc chữ…' : 'Đọc chữ từ ảnh'}</button>
                         )}
+                        {p.kind === 'scan' && pdfOf(p) && (
+                          <button type="button" onClick={() => void aiReread(p)} disabled={busy === `ai-${p.id}`} className="underline text-[#1e3a5f] font-semibold">{busy === `ai-${p.id}` ? 'AI đang đọc…' : 'AI đọc lại'}</button>
+                        )}
                         {p.kind === 'tay' && p.files.length > 0 && !n && (
                           <button type="button" onClick={() => void rereadPdf(p)} disabled={busy === `reread-${p.id}`} className="underline text-[#1e3a5f] font-semibold">{busy === `reread-${p.id}` ? 'Đang đọc…' : 'Đọc lại PDF'}</button>
                         )}
                       </div>
+                      {busy === `ai-${p.id}` && <div className="text-[11px] text-[#1e3a5f] animate-pulse">⏳ {busyNote || 'AI đang đọc…'}</div>}
                       {busy === `ocr-${p.id}` && <div className="text-[11px] text-gray-500">Đang đọc chữ trong ảnh… thường 5–20 giây; lần đầu phải tải bộ đọc chữ nên có thể lâu hơn.</div>}
                       {p.ocrNote && busy !== `ocr-${p.id}` && <div className={`text-[11px] ${p.rows.some(x => x.maHang) ? 'text-amber-700' : 'text-red-700'}`}>⚠ {p.ocrNote}</div>}
                     </div>

@@ -57,10 +57,10 @@ export async function readPxkWithAi(storagePath, mimeType) {
   return Array.isArray(data?.phieus) ? data.phieus : []
 }
 
-// PDF scan nhiều trang đã chia phần (splitScanPdf): tải từng phần lên Storage (file tạm, đọc xong xoá), AI đọc 2 phần
-// song song (gói miễn phí giới hạn số lượt / phút). onProgress(số phần xong, tổng). Phần lỗi trả { error } để app đọc
+// PDF scan nhiều trang đã chia phần (splitScanPdf): tải từng phần lên Storage (file tạm, đọc xong xoá), AI đọc `parallel`
+// phần song song (gói miễn phí giới hạn số lượt / phút). onProgress(số phần xong, tổng). Phần lỗi trả { error } để app đọc
 // riêng các trang đó bằng bộ đọc chữ thường. Trả về [{ phieus } | { error }] theo thứ tự phần.
-export async function readPdfChunksWithAi(chunks, onProgress = () => {}) {
+export async function readPdfChunksWithAi(chunks, onProgress = () => {}, parallel = 2) {
   const results = new Array(chunks.length)
   let next = 0
   let done = 0
@@ -83,6 +83,6 @@ export async function readPdfChunksWithAi(chunks, onProgress = () => {}) {
       onProgress(done, chunks.length)
     }
   }
-  await Promise.all([runner(), runner()])
+  await Promise.all(Array.from({ length: parallel }, runner))
   return results
 }

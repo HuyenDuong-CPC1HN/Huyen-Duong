@@ -2,6 +2,8 @@
 // đâu). Thư viện và bộ chữ tiếng Việt (~1,4 MB) tải từ CDN jsDelivr ở lần dùng đầu, trình duyệt giữ lại cho lần sau.
 // Ảnh được làm xám, phóng to, tăng tương phản trước khi đọc (đọc đúng hơn hẳn với ảnh chụp điện thoại).
 
+import { jpegsToPdf } from './jpegPdf'
+
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js'
 let loading = null
 
@@ -119,34 +121,37 @@ async function openPdf(arrayBuffer) {
   return pdfjs.getDocument({ data }).promise
 }
 
-// Chia PDF scan nhiều trang thành các phần `size` trang (mỗi phần là 1 PDF mới ghép từ ảnh JPEG các trang, cạnh dài
-// ~2000px ≈ 240 dpi) để gửi AI đọc từng phần — file 15–20 trang gửi 1 lần làm hàm trên Supabase quá giới hạn (lỗi 546).
-// File ≤ size trang thì không chia (chunks rỗng). Trả về { numPages, chunks: [{ pages: [số trang], blob }] }.
-export async function splitScanPdf(arrayBuffer, size = 4) {
+// Ghép ảnh các trang thành từng phần `size` trang, mỗi phần 1 PDF. images: [{ page, bytes, width, height }].
+export function makePdfChunks(images, size) {
+  const chunks = []
+  for (let i = 0; i < images.length; i += size) {
+    const part = images.slice(i, i + size)
+    chunks.push({ pages: part.map(x => x.page), images: part, blob: new Blob([jpegsToPdf(part)], { type: 'application/pdf' }) })
+  }
+  return chunks
+}
+
+// Chia PDF scan thành các phần `size` trang để gửi AI đọc từng phần (mỗi phần là 1 PDF mới ghép từ ảnh JPEG các
+// trang, cạnh dài ~2000px ≈ 240 dpi) — gửi nguyên file nhiều trang làm hàm trên Supabase quá giới hạn (lỗi 546).
+// pages = chỉ lấy các trang này (số trang, từ 1). Trả về { numPages, chunks: [{ pages, images, blob }] }.
+export async function splitScanPdf(arrayBuffer, size = 4, pages = null) {
   const doc = await openPdf(arrayBuffer)
   const numPages = doc.numPages
-  if (numPages <= size) return { numPages, chunks: [] }
-  const { jpegsToPdf } = await import('./jpegPdf')
-  const chunks = []
-  for (let start = 1; start <= numPages; start += size) {
-    const pages = []
-    const jpegs = []
-    for (let n = start; n < start + size && n <= numPages; n += 1) {
-      const page = await doc.getPage(n)
-      const base = page.getViewport({ scale: 1 })
-      const viewport = page.getViewport({ scale: Math.min(4, 2000 / Math.max(base.width, base.height)) })
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(viewport.width)
-      canvas.height = Math.round(viewport.height)
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
-      jpegs.push({ bytes: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height })
-      canvas.width = 0
-      pages.push(n)
-    }
-    chunks.push({ pages, blob: new Blob([jpegsToPdf(jpegs)], { type: 'application/pdf' }) })
+  const list = pages ? pages.filter(n => n >= 1 && n <= numPages) : Array.from({ length: numPages }, (_, i) => i + 1)
+  const images = []
+  for (const n of list) {
+    const page = await doc.getPage(n)
+    const base = page.getViewport({ scale: 1 })
+    const viewport = page.getViewport({ scale: Math.min(4, 2000 / Math.max(base.width, base.height)) })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(viewport.width)
+    canvas.height = Math.round(viewport.height)
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+    images.push({ page: n, bytes: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height })
+    canvas.width = 0
   }
-  return { numPages, chunks }
+  return { numPages, chunks: makePdfChunks(images, size) }
 }
 
 // PDF scan (trang PDF chỉ là ảnh, không có chữ bên trong): vẽ từng trang ra ảnh rồi đọc chữ như ảnh chụp, các trang

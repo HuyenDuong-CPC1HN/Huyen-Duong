@@ -26,6 +26,8 @@ tự dùng bộ đọc chữ trên trình duyệt như cũ.
 3. **Edge Functions → Secrets**: thêm `GEMINI_API_KEY` = khoá ở bước 1. Tuỳ chọn `GEMINI_MODEL` để cố định mô hình
    (để trống thì hàm tự chọn mô hình "flash" mới nhất của tài khoản; mô hình đó báo bận / hết lượt thì tự thử tối đa
    3 mô hình "flash" khác).
+   Hàm tắt chế độ "suy nghĩ" của mô hình (đọc bảng nhanh hơn nhiều lần) và tự dừng sau ~130 giây để không bị Supabase
+   ngắt (lỗi 546); app tự chia PDF scan thành từng phần 4 trang, phần lỗi gửi lại từng trang.
 4. Sửa code hàm (vd bản mới trong repo): mở hàm → tab **Code** → dán đè toàn bộ `functions/pxk-ocr/index.ts` → **Deploy**.
    App gọi được cả tên `pxk-ocr` lẫn `PXK-OCR`.
 
