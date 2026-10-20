@@ -25,13 +25,15 @@ const ocrMock = vi.hoisted(() => vi.fn(async () => ''))
 const ocrPdfMock = vi.hoisted(() => vi.fn(async () => ['']))
 vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock, ocrPdfPages: ocrPdfMock, warmUpOcr: vi.fn() }))
 const parseItemsMock = vi.hoisted(() => ({ empty: false }))
+const aiMock = vi.hoisted(() => vi.fn(async () => { throw new Error('chưa bật AI đọc phiếu (Edge Function pxk-ocr chưa cài)') }))
+vi.mock('../../data/pxkAi', () => ({ readPxkWithAi: aiMock }))
 
 const batch = {
   id: 'b1', processedAt: '2026-10-10T03:00:00.000Z', pdfMetadata: { ngayNhap: '10/10/2026' },
   khoC: [{ maHang: 'F00629', tenHang: 'Falgankid 25 mg/ml', dvt: 'ONG', soLo: '13626G01', hanDung: '2029-07-12', slHoaDon: 3380, slThucTe: 3300 }],
   khoLgt: [{ maHang: 'C02918', tenHang: 'Conadin Roll-on Strong', dvt: 'LO', soLo: '011026', hanDung: '2029-10-06', slHoaDon: 154, slThucTe: null }],
 }
-beforeEach(() => { parseItemsMock.empty = false; ocrPdfMock.mockReset(); ocrPdfMock.mockResolvedValue(['']); ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
+beforeEach(() => { aiMock.mockReset(); aiMock.mockRejectedValue(new Error('chưa bật AI đọc phiếu (Edge Function pxk-ocr chưa cài)')); parseItemsMock.empty = false; ocrPdfMock.mockReset(); ocrPdfMock.mockResolvedValue(['']); ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
 afterEach(() => cleanup())
 
 describe('Đối chiếu sổ sách (PXK)', () => {
@@ -135,7 +137,7 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     ocrMock.mockRejectedValue(new Error('Không tải được bộ đọc chữ (kiểm tra kết nối mạng).'))
     render(<DoiChieuSoSachTab />)
     fireEvent.change(screen.getByLabelText('Chụp ảnh phiếu Kho C'), { target: { files: [new File(['jpg'], 'IMG_3.jpg', { type: 'image/jpeg' })] } })
-    expect(await screen.findByText(/⚠ không đọc được chữ trong ảnh \(Không tải được bộ đọc chữ/)).toBeInTheDocument()
+    expect(await screen.findByText(/⚠ AI chưa đọc được \(chưa bật AI đọc phiếu.*không đọc được chữ trong ảnh \(Không tải được bộ đọc chữ/)).toBeInTheDocument()
   })
 
   it('PDF scan (không có chữ): app vẽ trang ra ảnh rồi đọc chữ, dòng khớp thực nhận tự xác nhận', async () => {
@@ -175,5 +177,18 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(within(result).getByText('Z00330')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Khôi phục' }))
     expect(await screen.findByRole('alert', { name: 'Phiếu trùng số' })).toBeInTheDocument()
+  })
+
+  it('AI (Gemini) đọc PDF scan: tách phiếu, dòng khớp thực nhận tự xác nhận, không dùng bộ đọc chữ thường', async () => {
+    parseItemsMock.empty = true
+    aiMock.mockResolvedValue([
+      { soPhieu: 'FX126/005804', trang: [1], rows: [{ maHang: 'C02918', tenHang: 'Conadin', dvt: 'LO', soLuong: 154, soLo: '011026', hanDung: '06/10/2029' }] },
+    ])
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('+ Thêm file Kho DTP'), { target: { files: [new File(['%PDF'], 'quet.pdf', { type: 'application/pdf' })] } })
+    expect(await screen.findByText('PDF scan · AI đọc 1 dòng · khớp thực nhận')).toBeInTheDocument()
+    expect(ocrPdfMock).not.toHaveBeenCalled()
+    expect(aiMock).toHaveBeenCalledWith(expect.stringMatching(/^pxk\/test\//), 'application/pdf')
+    expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'ai', soPhieu: 'FX126/005804', rows: [{ maHang: 'C02918', soLuong: 154, hanDung: '2029-10-06', ai: true }] })
   })
 })

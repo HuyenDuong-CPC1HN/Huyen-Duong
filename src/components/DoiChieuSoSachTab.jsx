@@ -6,6 +6,7 @@ import {
 } from '../utils/pxkReconcile'
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { downloadPxkFile, getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
+import { readPxkWithAi } from '../data/pxkAi'
 import { ocrImage, ocrPdfPages, warmUpOcr } from '../utils/pxkOcr'
 import { extractPdfText, findDuplicateTems, mergeActualScanRows, parsePdfItems, readActualScanRows } from '../utils/parseGoodsReceipt'
 
@@ -119,7 +120,7 @@ function PhieuEditor({ phieu, results, onChange, onAddImages, busy, onClose }) {
     <section className="rounded-2xl border border-[#1e3a5f]/30 bg-white p-3 flex flex-col gap-3" aria-label="Nhập tay phiếu">
       <div className="flex flex-wrap items-center gap-2">
         <KhoChip kho={phieu.kho} />
-        <span className="font-semibold text-sm">{phieu.kind === 'pdf' ? 'Dòng đọc từ PDF (sửa được nếu cần)' : (fromOcr ? (phieu.kind === 'scan' ? 'Phiếu đọc từ PDF scan' : 'Phiếu đọc từ ảnh') : 'Nhập tay phiếu theo ảnh')}</span>
+        <span className="font-semibold text-sm">{phieu.kind === 'pdf' ? 'Dòng đọc từ PDF (sửa được nếu cần)' : (fromOcr ? (phieu.rows.some(r => r.ai) ? 'Phiếu AI đọc' : phieu.kind === 'scan' ? 'Phiếu đọc từ PDF scan' : 'Phiếu đọc từ ảnh') : 'Nhập tay phiếu theo ảnh')}</span>
         <button type="button" onClick={onClose} className="sheet-tab-action ml-auto"><Check size={13} /> Xong</button>
       </div>
       {fromOcr && (
@@ -211,6 +212,14 @@ function DuplicateTems({ list }) {
 }
 
 // Đọc chữ từ 1 ảnh → dòng hàng + số phiếu. Lỗi đọc (mất mạng lần đầu tải bộ đọc chữ…) thì trả rỗng, kho nhập tay.
+// Ảnh: AI đọc trước (nếu đã bật), không được thì bộ đọc chữ thường. file = ảnh đã lưu ({ storagePath, type }).
+async function readImage(blob, file) {
+  const ai = file ? await readAi(file, file.type || blob.type || 'image/jpeg') : { error: '' }
+  if (ai.phieus) return { soPhieu: ai.phieus[0].soPhieu, rows: ai.phieus.flatMap(x => x.rows), problem: '' }
+  const read = await ocrRows(blob)
+  return ai.error ? { ...read, problem: [`AI chưa đọc được (${ai.error})`, read.problem].filter(Boolean).join('; ') } : read
+}
+
 async function ocrRows(blob) {
   try {
     const text = await ocrImage(blob, t => parseOcrPxkText(t).length > 0)
@@ -223,21 +232,44 @@ async function ocrRows(blob) {
 
 const pdfOf = ph => (ph.files || []).find(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf')
 
+// Gemini (qua Edge Function pxk-ocr) đọc phiếu scan / ảnh: hiểu bảng nên ít lệch cột hơn hẳn bộ đọc chữ thường. Dòng
+// vẫn đánh dấu ocr để tự đối chiếu thực nhận (dòng lệch mới cần soát). Lỗi thì trả { error } để quay về cách thường.
+async function readAi(stored, mimeType) {
+  try {
+    const list = await readPxkWithAi(stored.storagePath, mimeType)
+    const phieus = list.map(x => ({
+      soPhieu: String(x.soPhieu || '').trim(), pages: Array.isArray(x.trang) ? x.trang : [],
+      rows: (x.rows || []).filter(it => it.maHang).map(it => newPxkRow({
+        maHang: String(it.maHang).trim().toUpperCase(), tenHang: it.tenHang || '', dvt: String(it.dvt || '').toUpperCase(),
+        soLuong: it.soLuong ?? '', soLo: String(it.soLo || '').trim().toUpperCase(), hanDung: normHanDung(it.hanDung), ocr: true, ai: true,
+      })),
+    })).filter(x => x.rows.length)
+    return phieus.length ? { phieus } : { error: 'AI không thấy dòng hàng nào' }
+  } catch (err) { return { error: err?.message || String(err) } }
+}
+
 // Đọc 1 file PDF phiếu. PDF có chữ (PDF gốc, hoặc scan bật "PDF có thể tìm kiếm") đọc thẳng — chính xác, tức thì.
 // PDF scan chỉ là ảnh thì vẽ từng trang ra ảnh rồi đọc chữ (dòng đánh dấu ocr để tự đối chiếu thực nhận); file nhiều
 // trang tách thành nhiều phiếu theo số phiếu, bỏ trang trùng. onProgress(đã xong, tổng trang).
 // Trả về { kind, phieus: [{ soPhieu, pages, rows }], problem }.
-async function readPdfPhieu(buffer, onProgress = () => {}) {
+async function readPdfPhieu(buffer, onProgress = () => {}, aiFile = null) {
   const text = await extractPdfText(buffer.slice ? buffer.slice(0) : buffer)
   const items = readPxkPdfRows(text, parsePdfItems)
   if (items.length) {
     return { kind: 'pdf', problem: '', phieus: [{ soPhieu: readSoPhieu(text), pages: [], rows: items.map(it => newPxkRow({ maHang: it.maHang, tenHang: it.tenHang, dvt: it.dvt, soLuong: it.soLuong, soLo: it.soLo, hanDung: it.hanDung || '' })) }] }
   }
+  let aiNote = ''
+  if (aiFile) {
+    onProgress(-1, 0)
+    const ai = await readAi(aiFile, 'application/pdf')
+    if (ai.phieus) return { kind: 'ai', phieus: ai.phieus, problem: '' }
+    aiNote = `AI chưa đọc được (${ai.error}) — đã đọc bằng bộ đọc chữ thường`
+  }
   try {
     const pageTexts = await ocrPdfPages(buffer, t => parseOcrPxkText(t).length > 0, onProgress)
     const { groups } = groupScanPages(pageTexts)
     const phieus = groups.filter(g => g.rows.length).map(g => ({ soPhieu: g.soPhieu, pages: g.pages, rows: g.rows.map(it => newPxkRow({ ...it, soLuong: it.soLuong ?? '', ocr: true })) }))
-    return { kind: 'scan', phieus, problem: phieus.length ? '' : 'PDF scan: đọc được chữ nhưng không thấy dòng hàng nào (không thấy mã vật tư) — bản scan có thể mờ hoặc nghiêng' }
+    return { kind: 'scan', phieus, aiNote, problem: phieus.length ? '' : 'PDF scan: đọc được chữ nhưng không thấy dòng hàng nào (không thấy mã vật tư) — bản scan có thể mờ hoặc nghiêng' }
   } catch (err) {
     return { kind: 'scan', phieus: [], problem: `PDF scan: không đọc được chữ (${err?.message || err})` }
   }
@@ -247,7 +279,7 @@ async function readPdfPhieu(buffer, onProgress = () => {}) {
 async function rereadStoredPdf(ph) {
   const pdf = pdfOf(ph)
   if (!pdf) return { ...ph, autoRead: true }
-  const read = await readPdfPhieu(await downloadPxkFile(pdf.storagePath))
+  const read = await readPdfPhieu(await downloadPxkFile(pdf.storagePath), () => {}, pdf)
   const rows = read.phieus.flatMap(x => x.rows)
   if (!rows.length) return { ...ph, autoRead: true, ocrNote: read.problem }
   return { ...ph, kind: read.kind, autoRead: true, ocrNote: '', soPhieu: ph.soPhieu || read.phieus[0].soPhieu, rows }
@@ -381,19 +413,28 @@ export default function DoiChieuSoSachTab() {
       const stored = await uploadPxkFile(f)
       setPh(p => ({ ...p, [pdf ? 'files' : 'images']: [stored], reading: pdf ? 'Đang đọc PDF…' : 'Đang đọc chữ trong ảnh… (vài giây)' }))
       if (!pdf) {
+        setPh(p => ({ ...p, reading: 'AI đang đọc ảnh phiếu…' }))
+        const ai = await readAi(stored, f.type || 'image/jpeg')
+        if (ai.phieus) {
+          const rows = ai.phieus.flatMap(x => x.rows)
+          replace(() => [{ ...ph, kind: 'anh', reading: '', images: [stored], soPhieu: ai.phieus[0].soPhieu, rows: alignOcrRows(rows, rec), ocrNote: '' }])
+          return
+        }
+        setPh(p => ({ ...p, reading: 'Đang đọc chữ trong ảnh… (vài giây)' }))
         const read = await ocrRows(f)
-        replace(() => [{ ...ph, kind: 'anh', reading: '', images: [stored], soPhieu: read.soPhieu, rows: read.rows.length ? alignOcrRows(read.rows, rec) : [newPxkRow()], ocrNote: read.problem ? `${read.problem}. Đã lưu ảnh để nhập tay.` : '' }])
+        const note = [`AI chưa đọc được (${ai.error}) — đã đọc bằng bộ đọc chữ thường`, read.problem && `${read.problem}. Đã lưu ảnh để nhập tay.`].filter(Boolean).join('. ')
+        replace(() => [{ ...ph, kind: 'anh', reading: '', images: [stored], soPhieu: read.soPhieu, rows: read.rows.length ? alignOcrRows(read.rows, rec) : [newPxkRow()], ocrNote: note }])
         return
       }
-      const read = await readPdfPhieu(await f.arrayBuffer(), (d, t) => setPh(p => ({ ...p, reading: t > 1 ? `Đang đọc chữ bản scan: xong ${d}/${t} trang…` : 'Đang đọc chữ bản scan…' })))
+      const read = await readPdfPhieu(await f.arrayBuffer(), (d, t) => setPh(p => ({ ...p, reading: d < 0 ? 'AI đang đọc phiếu scan… (khoảng 10–40 giây)' : t > 1 ? `Đang đọc chữ bản scan: xong ${d}/${t} trang…` : 'Đang đọc chữ bản scan…' })), stored)
       if (!read.phieus.length) {
         replace(() => [{ ...ph, kind: 'tay', reading: '', files: [stored], rows: [newPxkRow()], autoRead: true, ocrNote: `${read.problem}. Đã lưu file để nhập tay.` }])
         return
       }
       // Phiếu trùng số (trong file hoặc với phiếu đã có) vẫn thêm đủ — app không tự bỏ, kho chọn bản giữ ở khung đỏ.
       replace(() => read.phieus.map((x, i) => ({
-          ...newPxkPhieu({ kho: k, kind: read.kind, name: read.phieus.length > 1 ? `${f.name} · trang ${x.pages.join(', ')}` : f.name, soPhieu: x.soPhieu, files: [stored], rows: read.kind === 'scan' ? alignOcrRows(x.rows, rec) : x.rows }),
-          ...(i === 0 ? { id: ph.id } : {}), autoRead: true, ocrNote: '',
+          ...newPxkPhieu({ kho: k, kind: read.kind, name: read.phieus.length > 1 ? `${f.name} · trang ${x.pages.join(', ') || i + 1}` : f.name, soPhieu: x.soPhieu, files: [stored], rows: read.kind === 'pdf' ? x.rows : alignOcrRows(x.rows, rec) }),
+          ...(i === 0 ? { id: ph.id } : {}), autoRead: true, ocrNote: i === 0 ? (read.aiNote || '') : '',
         })))
     } catch (err) {
       replace(() => [{ ...ph, kind: pdf ? 'tay' : 'anh', reading: '', rows: [newPxkRow()], autoRead: true, ocrNote: `không tải lên / đọc được (${err?.message || err})` }])
@@ -448,7 +489,8 @@ export default function DoiChieuSoSachTab() {
       const rows = []
       let soPhieu = ph.soPhieu
       for (const f of files.filter(isImage)) {
-        const [stored, read] = await Promise.all([uploadPxkFile(f), ocrRows(f)])
+        const stored = await uploadPxkFile(f)
+        const read = await readImage(f, stored)
         imgs.push(stored)
         rows.push(...read.rows)
         soPhieu = soPhieu || read.soPhieu
@@ -466,7 +508,7 @@ export default function DoiChieuSoSachTab() {
       const problems = []
       let soPhieu = ph.soPhieu
       for (const img of ph.images) {
-        const read = await ocrRows(new Blob([await downloadPxkFile(img.storagePath)], { type: img.type || 'image/jpeg' }))
+        const read = await readImage(new Blob([await downloadPxkFile(img.storagePath)], { type: img.type || 'image/jpeg' }), img)
         rows.push(...read.rows)
         if (read.problem) problems.push(read.problem)
         soPhieu = soPhieu || read.soPhieu
@@ -582,7 +624,7 @@ export default function DoiChieuSoSachTab() {
                           const ocrN = p.rows.filter(r => r.ocr && r.maHang).length
                           const pend = p.rows.filter(r => ocrRowNeedsCheck(r, results[p.kho] || [])).length
                           const text = p.kind === 'pdf' ? `PDF gốc · tự đọc ${n} dòng`
-                            : `${p.kind === 'scan' ? 'PDF scan · ' : p.files.length ? 'PDF · ' : ''}${p.images.length ? `${p.images.length} ảnh · ` : ''}${!n ? 'chưa nhập dòng nào' : ocrN ? `${p.kind === 'scan' ? 'đọc' : 'đọc từ ảnh'} ${n} dòng${pend ? ` — ${pend} dòng cần soát` : (p.rows.some(r => r.ocr && r.checked) ? ' · đã soát' : ' · khớp thực nhận')}` : `đã nhập ${n} dòng`}`
+                            : `${p.kind === 'scan' || p.kind === 'ai' ? 'PDF scan · ' : p.files.length ? 'PDF · ' : ''}${p.images.length ? `${p.images.length} ảnh · ` : ''}${!n ? 'chưa nhập dòng nào' : ocrN ? `${p.rows.some(r => r.ai) ? 'AI đọc' : p.kind === 'scan' ? 'đọc' : 'đọc từ ảnh'} ${n} dòng${pend ? ` — ${pend} dòng cần soát` : (p.rows.some(r => r.ocr && r.checked) ? ' · đã soát' : ' · khớp thực nhận')}` : `đã nhập ${n} dòng`}`
                           return <span className={!n || pend ? 'text-amber-700' : (ocrN && !pend ? 'text-green-700' : '')}>{text}</span>
                         })()}
                         <button type="button" onClick={() => setOpenId(openId === p.id ? null : p.id)} className="underline text-[#1e3a5f] font-semibold">{p.kind === 'pdf' ? 'Xem / sửa' : 'Nhập tay'}</button>
@@ -594,7 +636,7 @@ export default function DoiChieuSoSachTab() {
                         )}
                       </div>
                       {busy === `ocr-${p.id}` && <div className="text-[11px] text-gray-500">Đang đọc chữ trong ảnh… thường 5–20 giây; lần đầu phải tải bộ đọc chữ nên có thể lâu hơn.</div>}
-                      {p.ocrNote && busy !== `ocr-${p.id}` && !p.rows.some(x => x.maHang) && <div className="text-[11px] text-red-700">⚠ {p.ocrNote}</div>}
+                      {p.ocrNote && busy !== `ocr-${p.id}` && <div className={`text-[11px] ${p.rows.some(x => x.maHang) ? 'text-amber-700' : 'text-red-700'}`}>⚠ {p.ocrNote}</div>}
                     </div>
                   )
                 })}
