@@ -254,7 +254,7 @@ async function readAi(stored, mimeType) {
 // PDF scan chỉ là ảnh thì vẽ từng trang ra ảnh rồi đọc chữ (dòng đánh dấu ocr để tự đối chiếu thực nhận); file nhiều
 // trang tách thành nhiều phiếu theo số phiếu, bỏ trang trùng. onProgress(đã xong, tổng trang).
 // Trả về { kind, phieus: [{ soPhieu, pages, rows }], problem }.
-async function readPdfPhieu(buffer, onProgress = () => {}, aiFile = null) {
+async function readPdfPhieu(buffer, onProgress = () => {}, aiFile = null, onNote = () => {}) {
   const text = await extractPdfText(buffer.slice ? buffer.slice(0) : buffer)
   const items = readPxkPdfRows(text, parsePdfItems)
   if (items.length) {
@@ -266,6 +266,7 @@ async function readPdfPhieu(buffer, onProgress = () => {}, aiFile = null) {
     const ai = await readAi(aiFile, 'application/pdf')
     if (ai.phieus) return { kind: 'ai', phieus: ai.phieus, problem: '' }
     aiNote = `AI chưa đọc được (${ai.error}) — đã đọc bằng bộ đọc chữ thường`
+    onNote(`AI chưa đọc được (${ai.error}) — đang chuyển sang bộ đọc chữ thường`)
   }
   try {
     const pageTexts = await ocrPdfPages(buffer, t => parseOcrPxkText(t).length > 0, onProgress)
@@ -432,9 +433,9 @@ export default function DoiChieuSoSachTab() {
         replace(() => [{ ...ph, kind: 'anh', reading: '', images: [stored], soPhieu: read.soPhieu, rows: read.rows.length ? alignOcrRows(read.rows, rec) : [newPxkRow()], ocrNote: note }])
         return
       }
-      const read = await readPdfPhieu(await f.arrayBuffer(), (d, t) => setPh(p => ({ ...p, reading: d < 0 ? 'AI đang đọc phiếu scan… (khoảng 10–40 giây)' : t > 1 ? `Đang đọc chữ bản scan: xong ${d}/${t} trang…` : 'Đang đọc chữ bản scan…' })), stored)
+      const read = await readPdfPhieu(await f.arrayBuffer(), (d, t) => setPh(p => ({ ...p, reading: d < 0 ? 'AI đang đọc phiếu scan… (khoảng 10–40 giây)' : t > 1 ? `Đang đọc chữ bản scan: xong ${d}/${t} trang…` : 'Đang đọc chữ bản scan…' })), stored, note => setPh(p => ({ ...p, ocrNote: note })))
       if (!read.phieus.length) {
-        replace(() => [{ ...ph, kind: 'tay', reading: '', files: [stored], rows: [newPxkRow()], autoRead: true, ocrNote: `${read.problem}. Đã lưu file để nhập tay.` }])
+        replace(() => [{ ...ph, kind: 'tay', reading: '', files: [stored], rows: [newPxkRow()], autoRead: true, ocrNote: [read.aiNote, `${read.problem}. Đã lưu file để nhập tay.`].filter(Boolean).join('. ') }])
         return
       }
       // Phiếu trùng số (trong file hoặc với phiếu đã có) vẫn thêm đủ — app không tự bỏ, kho chọn bản giữ ở khung đỏ.
@@ -605,6 +606,7 @@ export default function DoiChieuSoSachTab() {
                       <div key={p.id} className="bg-white border border-dashed border-[#1e3a5f]/40 rounded-lg px-2 py-1.5 text-xs flex flex-col gap-0.5">
                         <div className="flex items-center gap-1.5 min-w-0"><FileText size={13} className="text-gray-400 shrink-0" /><span className="font-mono font-semibold truncate" title={p.name}>{p.name}</span></div>
                         <div className="text-[#1e3a5f] animate-pulse">⏳ {p.reading || 'Đang đọc…'}</div>
+                        {p.ocrNote && <div className="text-[11px] text-amber-700">⚠ {p.ocrNote}</div>}
                       </div>
                     )
                   }
