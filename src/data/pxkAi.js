@@ -15,7 +15,11 @@ export async function readPxkWithAi(storagePath, mimeType) {
       const body = await error.context?.json?.()
       if (body?.error) msg = body.error
     } catch { /* giữ lời nhắn gốc */ }
-    if (/not found|404|Failed to send a request/i.test(msg)) msg = 'chưa bật AI đọc phiếu (Edge Function pxk-ocr chưa cài)'
+    const status = error.context?.status
+    // Giữ lời nhắn gốc trong ngoặc để biết đúng nguyên nhân (sai tên hàm, chưa deploy, lỗi mạng / CORS, lỗi khởi động…)
+    if (status === 404 || /not found/i.test(msg)) msg = `không tìm thấy hàm "pxk-ocr" trên Supabase — kiểm tra tên hàm (${msg})`
+    else if (/Failed to send a request/i.test(msg)) msg = `không gọi được hàm "pxk-ocr" (chưa deploy, sai tên, hoặc bị chặn mạng) — ${msg}`
+    else if (status) msg = `hàm pxk-ocr báo lỗi ${status}: ${msg}`
     throw new Error(msg)
   }
   if (data?.error) throw new Error(data.error)
