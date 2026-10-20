@@ -21,3 +21,7 @@ export async function getPxkFileUrl(path) {
 export async function downloadPxkFile(path) {
   return (await repo()).downloadFile(path)
 }
+
+export async function removePxkFile(path) {
+  return (await repo()).remove(path)
+}

@@ -110,23 +110,60 @@ export async function ocrImage(blob, accept = () => true) {
   })
 }
 
-// PDF scan (trang PDF chỉ là ảnh, không có chữ bên trong): vẽ từng trang ra ảnh rồi đọc chữ như ảnh chụp, các trang
-// đọc song song theo nhóm bộ đọc chữ. onProgress(đã xong, tổng). Trả về chữ từng trang (theo thứ tự trang).
-export async function ocrPdfPages(arrayBuffer, accept = () => true, onProgress = () => {}) {
-  warmUpOcr()
+async function openPdf(arrayBuffer) {
   const { importFresh } = await import('./staleChunk')
   const pdfjs = await importFresh(() => import('pdfjs-dist/build/pdf.mjs'))
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
-  const data = arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer)
-  const doc = await pdfjs.getDocument({ data }).promise
+  // pdfjs giữ (chuyển giao) bộ nhớ của mảng truyền vào — đưa bản sao để buffer gốc còn dùng tiếp được.
+  const data = arrayBuffer instanceof Uint8Array ? arrayBuffer.slice() : new Uint8Array(arrayBuffer.slice(0))
+  return pdfjs.getDocument({ data }).promise
+}
+
+// Chia PDF scan nhiều trang thành các phần `size` trang (mỗi phần là 1 PDF mới ghép từ ảnh JPEG các trang, cạnh dài
+// ~2000px ≈ 240 dpi) để gửi AI đọc từng phần — file 15–20 trang gửi 1 lần làm hàm trên Supabase quá giới hạn (lỗi 546).
+// File ≤ size trang thì không chia (chunks rỗng). Trả về { numPages, chunks: [{ pages: [số trang], blob }] }.
+export async function splitScanPdf(arrayBuffer, size = 4) {
+  const doc = await openPdf(arrayBuffer)
+  const numPages = doc.numPages
+  if (numPages <= size) return { numPages, chunks: [] }
+  const { jpegsToPdf } = await import('./jpegPdf')
+  const chunks = []
+  for (let start = 1; start <= numPages; start += size) {
+    const pages = []
+    const jpegs = []
+    for (let n = start; n < start + size && n <= numPages; n += 1) {
+      const page = await doc.getPage(n)
+      const base = page.getViewport({ scale: 1 })
+      const viewport = page.getViewport({ scale: Math.min(4, 2000 / Math.max(base.width, base.height)) })
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(viewport.width)
+      canvas.height = Math.round(viewport.height)
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+      jpegs.push({ bytes: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height })
+      canvas.width = 0
+      pages.push(n)
+    }
+    chunks.push({ pages, blob: new Blob([jpegsToPdf(jpegs)], { type: 'application/pdf' }) })
+  }
+  return { numPages, chunks }
+}
+
+// PDF scan (trang PDF chỉ là ảnh, không có chữ bên trong): vẽ từng trang ra ảnh rồi đọc chữ như ảnh chụp, các trang
+// đọc song song theo nhóm bộ đọc chữ. onProgress(đã xong, tổng). only = chỉ đọc các trang này (số trang, từ 1).
+// Trả về chữ từng trang (theo thứ tự trang; trang không đọc để chuỗi rỗng).
+export async function ocrPdfPages(arrayBuffer, accept = () => true, onProgress = () => {}, only = null) {
+  warmUpOcr()
+  const doc = await openPdf(arrayBuffer)
+  const list = only ? only.filter(n => n >= 1 && n <= doc.numPages) : Array.from({ length: doc.numPages }, (_, i) => i + 1)
   let done = 0
-  let next = 1
+  let next = 0
   const texts = new Array(doc.numPages).fill('')
-  onProgress(0, doc.numPages)
+  onProgress(0, list.length)
   // Mỗi lần chỉ vẽ số trang bằng số bộ đọc chữ (trang vẽ ra ảnh khá nặng, vẽ hết 1 lúc dễ tràn bộ nhớ).
   const runner = async () => {
-    while (next <= doc.numPages) {
-      const n = next
+    while (next < list.length) {
+      const n = list[next]
       next += 1
       const page = await doc.getPage(n)
       const base = page.getViewport({ scale: 1 })
@@ -138,7 +175,7 @@ export async function ocrPdfPages(arrayBuffer, accept = () => true, onProgress =
       texts[n - 1] = await ocrImage(canvas, accept)
       canvas.width = 0
       done += 1
-      onProgress(done, doc.numPages)
+      onProgress(done, list.length)
     }
   }
   await Promise.all(Array.from({ length: POOL_SIZE }, runner))

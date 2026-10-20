@@ -23,17 +23,19 @@ vi.mock('../../utils/parseGoodsReceipt', async orig => ({
 
 const ocrMock = vi.hoisted(() => vi.fn(async () => ''))
 const ocrPdfMock = vi.hoisted(() => vi.fn(async () => ['']))
-vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock, ocrPdfPages: ocrPdfMock, warmUpOcr: vi.fn() }))
+const splitMock = vi.hoisted(() => vi.fn(async () => ({ numPages: 1, chunks: [] })))
+vi.mock('../../utils/pxkOcr', () => ({ ocrImage: ocrMock, ocrPdfPages: ocrPdfMock, splitScanPdf: splitMock, warmUpOcr: vi.fn() }))
 const parseItemsMock = vi.hoisted(() => ({ empty: false }))
 const aiMock = vi.hoisted(() => vi.fn(async () => { throw new Error('chưa bật AI đọc phiếu (Edge Function pxk-ocr chưa cài)') }))
-vi.mock('../../data/pxkAi', () => ({ readPxkWithAi: aiMock }))
+const chunksAiMock = vi.hoisted(() => vi.fn(async () => []))
+vi.mock('../../data/pxkAi', () => ({ readPxkWithAi: aiMock, readPdfChunksWithAi: chunksAiMock }))
 
 const batch = {
   id: 'b1', processedAt: '2026-10-10T03:00:00.000Z', pdfMetadata: { ngayNhap: '10/10/2026' },
   khoC: [{ maHang: 'F00629', tenHang: 'Falgankid 25 mg/ml', dvt: 'ONG', soLo: '13626G01', hanDung: '2029-07-12', slHoaDon: 3380, slThucTe: 3300 }],
   khoLgt: [{ maHang: 'C02918', tenHang: 'Conadin Roll-on Strong', dvt: 'LO', soLo: '011026', hanDung: '2029-10-06', slHoaDon: 154, slThucTe: null }],
 }
-beforeEach(() => { aiMock.mockReset(); aiMock.mockRejectedValue(new Error('chưa bật AI đọc phiếu (Edge Function pxk-ocr chưa cài)')); parseItemsMock.empty = false; ocrPdfMock.mockReset(); ocrPdfMock.mockResolvedValue(['']); ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
+beforeEach(() => { splitMock.mockReset(); splitMock.mockResolvedValue({ numPages: 1, chunks: [] }); chunksAiMock.mockReset(); aiMock.mockReset(); aiMock.mockRejectedValue(new Error('chưa bật AI đọc phiếu (Edge Function pxk-ocr chưa cài)')); parseItemsMock.empty = false; ocrPdfMock.mockReset(); ocrPdfMock.mockResolvedValue(['']); ocrMock.mockReset(); ocrMock.mockResolvedValue(''); store.values.clear(); store.values.set('goods_receipt_batches', JSON.stringify([batch])) })
 afterEach(() => cleanup())
 
 describe('Đối chiếu sổ sách (PXK)', () => {
@@ -190,5 +192,24 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(ocrPdfMock).not.toHaveBeenCalled()
     expect(aiMock).toHaveBeenCalledWith(expect.stringMatching(/^pxk\/test\//), 'application/pdf')
     expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0]).toMatchObject({ kind: 'ai', soPhieu: 'FX126/005804', rows: [{ maHang: 'C02918', soLuong: 154, hanDung: '2029-10-06', ai: true }] })
+  })
+
+  it('PDF scan nhiều trang: chia phần cho AI đọc, phần AI lỗi thì riêng các trang đó đọc bằng bộ đọc chữ thường', async () => {
+    parseItemsMock.empty = true
+    const chunks = [{ pages: [1, 2, 3, 4] }, { pages: [5, 6, 7, 8] }, { pages: [9] }]
+    splitMock.mockResolvedValue({ numPages: 9, chunks })
+    chunksAiMock.mockResolvedValue([
+      { phieus: [{ soPhieu: 'XD2611/04789', trang: [1, 2], rows: [{ maHang: 'C02918', soLuong: 154, soLo: '011026' }] }] },
+      { error: 'Gemini đang quá tải' },
+      { phieus: [{ soPhieu: 'XD2611/04800', trang: [1], rows: [{ maHang: 'F00629', soLuong: 3300, soLo: '13626G01' }] }] },
+    ])
+    ocrPdfMock.mockImplementation(async () => ['', '', '', '', 'Số phiếu: XD2611/04795\n1 Z00330 Zensalbu CPC1HN-VNM ONG 48.300,000 30426G02 06/07/2029', '', '', '', ''])
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('+ Thêm file Kho C'), { target: { files: [new File(['%PDF'], 'quet.pdf', { type: 'application/pdf' })] } })
+    expect(await screen.findByText(/AI chưa đọc được trang 5, 6, 7, 8 \(Gemini đang quá tải\)/)).toBeInTheDocument()
+    expect(aiMock).not.toHaveBeenCalled()
+    expect(ocrPdfMock.mock.calls[0][3]).toEqual([5, 6, 7, 8])
+    const saved = JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus
+    expect(saved.map(p => [p.soPhieu, p.kind])).toEqual([['XD2611/04789', 'ai'], ['XD2611/04795', 'scan'], ['XD2611/04800', 'ai']])
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNguonReport, isNguonRow, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
+import { buildNguonReport, isNguonRow, mergeAiChunks, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
 
 const phieu = (soPhieu, rows) => ({ soPhieu, rows })
 
@@ -193,5 +193,27 @@ describe('Sửa lỗi đọc ảnh theo thực nhận (từ điển)', () => {
     expect(c).toMatchObject({ soLo: '010326', ocrFixed: { soLo: '' } })
     expect(ocrRowNeedsCheck(c, [])).toBe(true) // lô không đọc được → vẫn soát
     expect(d.soLo).toBe('010327') // 6↔7 không phải lỗi đọc ảnh điển hình → giữ để báo lệch
+  })
+})
+
+describe('mergeAiChunks — ghép kết quả AI đọc từng phần PDF scan', () => {
+  const row = maHang => ({ maHang, soLuong: 1, soLo: 'L1' })
+  it('đổi số trang về file gốc, nối trang tiếp của phiếu qua ranh giới 2 phần, gom trang của phần lỗi', () => {
+    const chunks = [{ pages: [1, 2, 3, 4] }, { pages: [5, 6, 7, 8] }, { pages: [9, 10] }, { pages: [11] }]
+    const r = mergeAiChunks(chunks, [
+      { phieus: [{ soPhieu: 'X1', trang: [1, 2, 3], rows: [row('A00001')] }, { soPhieu: 'X2', trang: [4], rows: [row('A00002')] }] },
+      { phieus: [{ soPhieu: '', trang: [1], rows: [row('A00003')] }, { soPhieu: 'X3', trang: [2, 3, 4], rows: [row('A00004')] }] },
+      { error: 'quá tải' },
+      { phieus: [{ soPhieu: '', trang: [1], rows: [row('A00005')] }] },
+    ])
+    expect(r.phieus.map(p => [p.soPhieu, p.trang, p.rows.map(x => x.maHang)])).toEqual([
+      ['X1', [1, 2, 3], ['A00001']],
+      ['X2', [4, 5], ['A00002', 'A00003']],
+      ['X3', [6, 7, 8], ['A00004']],
+      // phần trước lỗi → không nối bừa vào phiếu X3
+      ['', [11], ['A00005']],
+    ])
+    expect(r.failedPages).toEqual([9, 10])
+    expect(r.errors).toEqual(['quá tải'])
   })
 })

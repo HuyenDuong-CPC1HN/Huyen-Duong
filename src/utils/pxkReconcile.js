@@ -447,3 +447,36 @@ export function pxkDuplicateGroups(phieus) {
   }
   return [...by.values()].filter(list => list.length > 1 && !list.every(p => p.keepDup))
 }
+
+// Ghép kết quả AI đọc từng phần của PDF scan đã chia (splitScanPdf). chunks: [{ pages: [số trang trong file gốc] }],
+// results[i]: { phieus: [{ soPhieu, trang: [số trang trong phần], rows }] } hoặc { error }. Số trang đổi về số trang
+// file gốc; phần mở đầu bằng trang không có số phiếu (phiếu kéo dài qua ranh giới 2 phần) thì nối vào phiếu cuối của
+// phần trước. Trả về { phieus: [{ soPhieu, trang, rows }], failedPages, errors }.
+export function mergeAiChunks(chunks, results) {
+  const phieus = []
+  const failedPages = []
+  const errors = []
+  let prevOk = false
+  chunks.forEach((c, i) => {
+    const r = results[i]
+    if (!r || r.error || !Array.isArray(r.phieus)) {
+      failedPages.push(...c.pages)
+      if (r?.error && !errors.includes(r.error)) errors.push(r.error)
+      prevOk = false
+      return
+    }
+    r.phieus.forEach((p, j) => {
+      const trang = (Array.isArray(p.trang) ? p.trang : []).map(n => c.pages[n - 1]).filter(Boolean)
+      const soPhieu = String(p.soPhieu || '').trim()
+      const last = phieus[phieus.length - 1]
+      if (!soPhieu && j === 0 && prevOk && last) {
+        last.trang.push(...trang)
+        last.rows.push(...(p.rows || []))
+        return
+      }
+      phieus.push({ soPhieu, trang, rows: [...(p.rows || [])] })
+    })
+    prevOk = true
+  })
+  return { phieus, failedPages, errors }
+}

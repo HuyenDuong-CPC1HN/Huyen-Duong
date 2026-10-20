@@ -1,6 +1,6 @@
 // Gọi Edge Function "pxk-ocr" (supabase/functions/pxk-ocr) để Gemini đọc Phiếu xuất kho PDF scan / ảnh. Khoá Gemini
 // nằm ở secret của Supabase, trình duyệt chỉ gửi link ký sẵn của file đã tải lên Storage.
-import { getPxkFileUrl } from './pxkFiles'
+import { getPxkFileUrl, removePxkFile, uploadPxkFile } from './pxkFiles'
 
 // Trả về [{ soPhieu, trang, rows: [{ maHang, tenHang, dvt, soLuong, soLo, hanDung }] }]. Lỗi (chưa bật hàm, hết lượt
 // miễn phí, mất mạng…) thì ném Error có lời nhắn tiếng Việt để app quay về cách đọc thường.
@@ -8,8 +8,12 @@ let knownName = '' // tên hàm đã gọi được ở lần trước — lần
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
+// Nạp module Supabase 1 lần (các phần PDF gọi AI song song dùng chung).
+let supabaseModule = null
+const loadSupabase = () => (supabaseModule ||= import('../supabase'))
+
 export async function readPxkWithAi(storagePath, mimeType) {
-  const { supabase } = await import('../supabase')
+  const { supabase } = await loadSupabase()
   if (!supabase) throw new Error('chưa kết nối máy chủ')
   const url = await getPxkFileUrl(storagePath)
   // Hàm có thể được tạo trên Dashboard với tên viết hoa "PXK-OCR" — tên ở URL phân biệt hoa thường, nên thử cả 2.
@@ -51,4 +55,34 @@ export async function readPxkWithAi(storagePath, mimeType) {
   }
   if (data?.error) throw new Error(data.error)
   return Array.isArray(data?.phieus) ? data.phieus : []
+}
+
+// PDF scan nhiều trang đã chia phần (splitScanPdf): tải từng phần lên Storage (file tạm, đọc xong xoá), AI đọc 2 phần
+// song song (gói miễn phí giới hạn số lượt / phút). onProgress(số phần xong, tổng). Phần lỗi trả { error } để app đọc
+// riêng các trang đó bằng bộ đọc chữ thường. Trả về [{ phieus } | { error }] theo thứ tự phần.
+export async function readPdfChunksWithAi(chunks, onProgress = () => {}) {
+  const results = new Array(chunks.length)
+  let next = 0
+  let done = 0
+  onProgress(0, chunks.length)
+  const runner = async () => {
+    while (next < chunks.length) {
+      const i = next
+      next += 1
+      try {
+        const stored = await uploadPxkFile(new File([chunks[i].blob], `ai-phan-${i + 1}.pdf`, { type: 'application/pdf' }))
+        try {
+          results[i] = { phieus: await readPxkWithAi(stored.storagePath, 'application/pdf') }
+        } finally {
+          removePxkFile(stored.storagePath).catch(() => {})
+        }
+      } catch (err) {
+        results[i] = { error: err?.message || String(err) }
+      }
+      done += 1
+      onProgress(done, chunks.length)
+    }
+  }
+  await Promise.all([runner(), runner()])
+  return results
 }
