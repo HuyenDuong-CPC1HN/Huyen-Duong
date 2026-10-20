@@ -409,7 +409,7 @@ export default function DoiChieuSoSachTab() {
   const [store, setStore] = useState(() => readPxkStore())
   const [openId, setOpenId] = useState(null)
   const [busy, setBusy] = useState('')
-  const [busyNote, setBusyNote] = useState('')
+  const [aiBusy, setAiBusy] = useState({}) // id thẻ → lời báo AI đang đọc lại
   const [error, setError] = useState('')
   const [kho, setKho] = useState('C')
   const [filter, setFilter] = useState('all')
@@ -529,20 +529,29 @@ export default function DoiChieuSoSachTab() {
 
   // Thẻ PDF scan đọc bằng bộ đọc chữ thường (AI lỗi lúc tải lên): AI đọc lại riêng các trang của thẻ. Đọc được hết thì
   // thay thẻ bằng kết quả AI (có thể tách nhiều thẻ theo số phiếu); còn trang lỗi thì giữ nguyên kết quả đọc thường.
-  const aiReread = async ph => {
+  // Mỗi thẻ có trạng thái riêng (aiBusy[id] = lời báo) — bấm nhiều thẻ / "AI đọc lại tất cả" cùng lúc được.
+  const setAiNote = (id, note) => setAiBusy(m => {
+    const next = { ...m }
+    if (note) next[id] = note
+    else delete next[id]
+    return next
+  })
+  const aiReread = async (ph, bid = batchId) => {
     const pdf = pdfOf(ph)
     if (!pdf) return
-    setError(''); setBusy(`ai-${ph.id}`); setBusyNote('Đang chuẩn bị file cho AI đọc…')
+    const setNote = note => setAiNote(ph.id, note)
+    const setNoteOf = note => upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (p.id === ph.id ? { ...p, ocrNote: note } : p)) }), bid)
+    setNote('Đang chuẩn bị file cho AI đọc…')
     try {
       const pages = pagesOfPhieu(ph)
       const { chunks } = await splitScanPdf(await downloadPxkFile(pdf.storagePath), AI_PAGES, pages.length ? pages : null)
-      const ai = await aiReadChunks(chunks, setBusyNote)
+      const ai = await aiReadChunks(chunks, setNote)
       if (!ai.phieus.length || ai.failedPages.length) {
         const why = ai.errors.join('; ') || 'AI không thấy dòng hàng nào'
-        upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (p.id === ph.id ? { ...p, ocrNote: `AI vẫn chưa đọc được${ai.failedPages.length ? ` trang ${ai.failedPages.join(', ')}` : ''} (${why}) — giữ kết quả đọc thường, thử lại sau ít phút` } : p)) }))
+        setNoteOf(`AI vẫn chưa đọc được${ai.failedPages.length ? ` trang ${ai.failedPages.join(', ')}` : ''} (${why}) — giữ kết quả đọc thường, thử lại sau ít phút`)
         return
       }
-      const rec = receivedRowsOf(batch, ph.kho)
+      const rec = receivedRowsOf(batches.find(b => b.id === bid) || batch, ph.kho)
       const baseName = (ph.name || pdf.name).replace(/ · trang [\d, ]+$/, '')
       upd(cur => {
         const i = cur.phieus.findIndex(p => p.id === ph.id)
@@ -553,8 +562,26 @@ export default function DoiChieuSoSachTab() {
           ...(j === 0 ? { id: ph.id } : {}), pages: x.pages, autoRead: true, ocrNote: '',
         })))
         return { ...cur, phieus: list }
-      })
-    } catch (err) { setError(`AI chưa đọc lại được: ${err.message || err}`) } finally { setBusy(''); setBusyNote('') }
+      }, bid)
+    } catch (err) {
+      setNoteOf(`AI chưa đọc lại được (${err?.message || err}) — giữ kết quả đọc thường`)
+    } finally { setNote('') }
+  }
+
+  // "AI đọc lại tất cả" thẻ đọc thường của 1 kho: xếp hàng, mỗi lúc 2 thẻ (gói AI miễn phí giới hạn số lượt / phút).
+  const aiRereadAll = async list => {
+    const bid = batchId
+    const todo = list.filter(p => !aiBusy[p.id])
+    todo.forEach(p => setAiNote(p.id, 'Chờ tới lượt AI đọc…'))
+    let next = 0
+    const runner = async () => {
+      while (next < todo.length) {
+        const ph = todo[next]
+        next += 1
+        await aiReread(ph, bid)
+      }
+    }
+    await Promise.all([runner(), runner()])
   }
 
   // Mở trang: phiếu PDF chưa có dòng nào (tải lên từ trước) thì tự đọc lại 1 lần, không cần bấm nút.
@@ -682,9 +709,19 @@ export default function DoiChieuSoSachTab() {
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           {PXK_KHO.map(({ key, label }) => {
             const list = session.phieus.filter(p => p.kho === key)
+            const scanList = list.filter(p => p.kind === 'scan' && !p.excluded && pdfOf(p))
+            const waiting = scanList.filter(p => !aiBusy[p.id])
             return (
               <DropZone key={key} onFiles={fs => addPxkFiles(key, fs)}>
                 <div className="flex items-center justify-between"><KhoChip kho={key} /><span className="text-[11px] text-gray-400">{list.length} phiếu</span></div>
+                {scanList.length > 1 && (
+                  <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-2 py-1.5 text-[11px] text-amber-800">
+                    <span>{scanList.length} thẻ đang là kết quả đọc thường (AI chưa đọc được).</span>
+                    <button type="button" onClick={() => void aiRereadAll(scanList)} disabled={!waiting.length} className="ml-auto shrink-0 rounded-md bg-[#1e3a5f] px-2 py-1 font-semibold text-white disabled:opacity-50">
+                      {waiting.length ? `AI đọc lại tất cả (${waiting.length})` : 'AI đang đọc…'}
+                    </button>
+                  </div>
+                )}
                 {list.map(p => {
                   const n = p.rows.filter(r => r.maHang).length
                   if (p.kind === 'dang') {
@@ -726,15 +763,15 @@ export default function DoiChieuSoSachTab() {
                           <button type="button" onClick={() => void ocrStored(p)} disabled={busy === `ocr-${p.id}`} className="underline text-[#1e3a5f] font-semibold">{busy === `ocr-${p.id}` ? 'Đang đọc chữ…' : 'Đọc chữ từ ảnh'}</button>
                         )}
                         {p.kind === 'scan' && pdfOf(p) && (
-                          <button type="button" onClick={() => void aiReread(p)} disabled={busy === `ai-${p.id}`} className="underline text-[#1e3a5f] font-semibold">{busy === `ai-${p.id}` ? 'AI đang đọc…' : 'AI đọc lại'}</button>
+                          <button type="button" onClick={() => void aiReread(p)} disabled={Boolean(aiBusy[p.id])} className="underline text-[#1e3a5f] font-semibold disabled:no-underline disabled:text-gray-400">{aiBusy[p.id] ? 'AI đang đọc…' : 'AI đọc lại'}</button>
                         )}
                         {p.kind === 'tay' && p.files.length > 0 && !n && (
                           <button type="button" onClick={() => void rereadPdf(p)} disabled={busy === `reread-${p.id}`} className="underline text-[#1e3a5f] font-semibold">{busy === `reread-${p.id}` ? 'Đang đọc…' : 'Đọc lại PDF'}</button>
                         )}
                       </div>
-                      {busy === `ai-${p.id}` && <div className="text-[11px] text-[#1e3a5f] animate-pulse">⏳ {busyNote || 'AI đang đọc…'}</div>}
+                      {aiBusy[p.id] && <div className="text-[11px] text-[#1e3a5f] animate-pulse">⏳ {aiBusy[p.id]}</div>}
                       {busy === `ocr-${p.id}` && <div className="text-[11px] text-gray-500">Đang đọc chữ trong ảnh… thường 5–20 giây; lần đầu phải tải bộ đọc chữ nên có thể lâu hơn.</div>}
-                      {p.ocrNote && busy !== `ocr-${p.id}` && <div className={`text-[11px] ${p.rows.some(x => x.maHang) ? 'text-amber-700' : 'text-red-700'}`}>⚠ {p.ocrNote}</div>}
+                      {p.ocrNote && busy !== `ocr-${p.id}` && !aiBusy[p.id] && <div className={`text-[11px] ${p.rows.some(x => x.maHang) ? 'text-amber-700' : 'text-red-700'}`}>⚠ {p.ocrNote}</div>}
                     </div>
                   )
                 })}

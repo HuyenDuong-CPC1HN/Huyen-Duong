@@ -246,4 +246,23 @@ describe('Đối chiếu sổ sách (PXK)', () => {
       ['XD2611/04789', 'ai', [1], 'quet.pdf · trang 1'], ['XD2611/04795', 'ai', [2], 'quet.pdf · trang 2'], ['XD2611/04800', 'ai', [3], 'quet.pdf · trang 3'],
     ])
   })
+
+  it('"AI đọc lại tất cả": các thẻ đọc thường của 1 kho được AI đọc lại cùng lượt, mỗi thẻ báo trạng thái riêng', async () => {
+    parseItemsMock.empty = true
+    splitMock.mockImplementation(async (_buf, _size, pages) => ({ numPages: 2, chunks: (pages || [1, 2]).map(n => ({ pages: [n], images: [] })) }))
+    chunksAiMock.mockResolvedValueOnce([{ error: 'Hết lượt miễn phí của Gemini (thử lại sau)' }, { error: 'Hết lượt miễn phí của Gemini (thử lại sau)' }])
+    ocrPdfMock.mockImplementation(async () => [
+      'Số phiếu: XD2611/04789\n1 C02918 Conadin DTP-VNM LO 154,000 011026 06/10/2029',
+      'Số phiếu: XD2611/04800\n1 F00629 Falgankid CPC1HN-VNM ONG 3.300,000 13626G01 12/07/2029',
+    ])
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('+ Thêm file Kho C'), { target: { files: [new File(['%PDF'], 'quet.pdf', { type: 'application/pdf' })] } })
+    const all = await screen.findByRole('button', { name: 'AI đọc lại tất cả (2)' })
+    const byPage = { 1: { soPhieu: 'XD2611/04789', trang: [1], rows: [{ maHang: 'C02918', soLuong: 154, soLo: '011026' }] }, 2: { soPhieu: 'XD2611/04800', trang: [1], rows: [{ maHang: 'F00629', soLuong: 3300, soLo: '13626G01' }] } }
+    chunksAiMock.mockImplementation(async chunks => chunks.map(c => ({ phieus: [byPage[c.pages[0]]] })))
+    fireEvent.click(all)
+    await vi.waitFor(() => expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus.map(p => p.kind)).toEqual(['ai', 'ai']))
+    expect(splitMock.mock.calls.slice(1).map(c => c[2]).sort()).toEqual([[1], [2]])
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: /AI đọc lại tất cả|AI đang đọc/ })).not.toBeInTheDocument())
+  })
 })
