@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, GraduationCap } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, Copy, GraduationCap } from 'lucide-react'
 import { opsStore } from '../data/workspace'
 import { LEARNING_PROGRAM } from '../data/learningProgram'
+import { LESSONS } from '../data/lessons'
+import LessonView from './LessonView'
 import {
   LEARNING_STORE_KEY, fmtScore, gradebookText, moduleResult, normalizeProgress, overview, parseScore, phaseGpa,
   scheduleWeek, taskDone, weekStart,
@@ -42,7 +44,7 @@ function CommitInput({ value, onCommit, label, className = '', placeholder = '',
   )
 }
 
-function ModuleCard({ mod, progress, open, onToggle, setTask, setModule, nowWeek }) {
+function ModuleCard({ mod, progress, open, onToggle, setTask, setModule, nowWeek, onOpenLesson }) {
   const r = moduleResult(mod, progress)
   const st = STATUS[r.status]
   const m = progress.modules[mod.code] || {}
@@ -82,7 +84,13 @@ function ModuleCard({ mod, progress, open, onToggle, setTask, setModule, nowWeek
                     <tr key={t.code} className={`border-t border-gray-100 align-top ${done ? 'bg-green-50/40' : ''}`}>
                       <td className={`px-2 py-1.5 tabular-nums ${late ? 'text-red-600 font-semibold' : ''}`} title={late ? 'Chậm so với lịch học' : undefined}>{t.week}</td>
                       <td className="px-2 py-1.5 text-gray-700">{t.lecture}</td>
-                      <td className="px-2 py-1.5"><div>{t.task}</div><div className="font-mono text-[11px] text-[#1e3a5f] mt-0.5">{t.code}</div></td>
+                      <td className="px-2 py-1.5"><div>{t.task}</div>
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                          <span className="font-mono text-[11px] text-[#1e3a5f]">{t.code}</span>
+                          {LESSONS[t.code]
+                            ? <button type="button" onClick={() => onOpenLesson(t.code)} className="inline-flex items-center gap-1 rounded-md bg-[#1e3a5f] px-2 py-0.5 text-[11px] font-semibold text-white"><BookOpen size={11} /> Vào học</button>
+                            : <span className="text-[11px] text-gray-400">giáo án soạn trước khi tới tuần học</span>}
+                        </div></td>
                       <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={Boolean(p.hoc)} onChange={e => setTask(t.code, { hoc: e.target.checked })} aria-label={`Đã học ${t.code}`} /></td>
                       <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={Boolean(p.nop)} onChange={e => setTask(t.code, { nop: e.target.checked })} aria-label={`Đã nộp ${t.code}`} /></td>
                       <td className="px-2 py-1.5"><CommitInput score value={p.diem} onCommit={v => setTask(t.code, { diem: v })} label={`Điểm ${t.code}`} placeholder="0–10"
@@ -125,6 +133,7 @@ export default function LoTrinhHocTab() {
   const [phase, setPhase] = useState(() => currentMod?.phase ?? 1)
   const [openSet, setOpenSet] = useState(() => new Set(currentMod ? [currentMod.code] : []))
   const [copyMsg, setCopyMsg] = useState('')
+  const [lessonCode, setLessonCode] = useState('')
   const nowWeek = scheduleWeek(progress.startDate)
 
   const save = next => { setProgress(next); opsStore.setItem(LEARNING_STORE_KEY, JSON.stringify(next)) }
@@ -135,6 +144,15 @@ export default function LoTrinhHocTab() {
   const copyGradebook = () => {
     const text = gradebookText(LEARNING_PROGRAM, progress)
     navigator.clipboard?.writeText(text).then(() => setCopyMsg('Đã sao chép sổ điểm — dán vào đầu cuộc trò chuyện mới với giảng viên.'), () => setCopyMsg('Không sao chép được, trình duyệt chặn quyền.'))
+  }
+
+  if (lessonCode) {
+    const mod = LEARNING_PROGRAM.find(m => m.tasks.some(t => t.code === lessonCode))
+    const task = mod?.tasks.find(t => t.code === lessonCode)
+    if (task) {
+      return <LessonView task={task} moduleName={`${mod.code} · ${mod.name}`} progress={progress} setTask={setTask}
+        onBack={() => { setLessonCode(''); window.scrollTo?.(0, 0) }} />
+    }
   }
 
   const behind = nowWeek !== null && nowWeek > 0 ? nowWeek - ov.currentWeek : null
@@ -193,7 +211,7 @@ export default function LoTrinhHocTab() {
       <div className="flex flex-col gap-3">
         {LEARNING_PROGRAM.filter(m => m.phase === phase).map(mod => (
           <ModuleCard key={mod.code} mod={mod} progress={progress} open={openSet.has(mod.code)} onToggle={() => toggle(mod.code)}
-            setTask={setTask} setModule={setModule} nowWeek={nowWeek} />
+            setTask={setTask} setModule={setModule} nowWeek={nowWeek} onOpenLesson={code => { setLessonCode(code); window.scrollTo?.(0, 0) }} />
         ))}
       </div>
     </div>

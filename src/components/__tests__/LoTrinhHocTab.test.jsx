@@ -50,4 +50,17 @@ describe('Tab Lộ trình học', () => {
     fireEvent.click(screen.getByRole('button', { name: /PDS203/ }))
     expect(screen.getByLabelText('Đã học BT-203.1')).toBeInTheDocument()
   })
+
+  it('vào học: mở giáo án, có nguồn chính thống, file bài tập, tích đã học ngay trong bài', () => {
+    render(<LoTrinhHocTab />)
+    fireEvent.click(screen.getAllByRole('button', { name: /Vào học/ })[1]) // BT-101.2
+    expect(screen.getByRole('heading', { name: /Tra cứu và đối chiếu chứng từ/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /SUMIFS function/ })).toHaveAttribute('href', 'https://support.microsoft.com/en-us/excel/functions/sumifs-function')
+    expect(screen.getByRole('link', { name: /Tải file dữ liệu/ })).toHaveAttribute('href', '/hoc-tap/PDA101/BT-101.2_DoiChieu_PXK_ThucNhan.xlsx')
+    expect(screen.getByText(/NỘP BÀI – BT-101.2 – \[Họ tên\]/)).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Đã học xong bài giảng'))
+    expect(saved().tasks['BT-101.2']).toEqual({ hoc: true })
+    fireEvent.click(screen.getByRole('button', { name: /Quay lại lộ trình/ }))
+    expect(screen.getByLabelText('Đã học BT-101.2')).toBeChecked()
+  })
 })

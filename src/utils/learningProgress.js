@@ -123,3 +123,13 @@ export function gradebookText(program, progress, today = new Date()) {
   }
   return lines.join('\n')
 }
+
+// Mẫu tin nộp bài cho giảng viên AI (dán vào chat): mã bài + các mục cần nộp theo giáo án.
+export function submitTemplate(code, lesson) {
+  return [
+    `NỘP BÀI – ${code} – [Họ tên]`,
+    `Bài: ${lesson.title}`,
+    '',
+    ...lesson.assignment.submit.map((s, i) => `${i + 1}. ${s}\n   → `),
+  ].join('\n')
+}

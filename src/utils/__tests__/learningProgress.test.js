@@ -82,3 +82,25 @@ describe('Lộ trình học — chấm điểm và tiến độ', () => {
     expect(t).not.toContain('PDA102')
   })
 })
+
+describe('Giáo án đã soạn', () => {
+  it('mỗi giáo án gắn đúng mã bài có trong chương trình, đủ phần, thang chấm 10 điểm, nguồn có thật trong danh mục', async () => {
+    const { LESSONS, SOURCES, LEARN_LINKS } = await import('../../data/lessons')
+    const codes = new Set(LEARNING_PROGRAM.flatMap(m => m.tasks.map(t => t.code)))
+    expect(Object.keys(LESSONS)).toEqual(['BT-101.1', 'BT-101.2', 'BT-101.3', 'BT-101.4'])
+    for (const [code, l] of Object.entries(LESSONS)) {
+      expect(codes.has(code)).toBe(true)
+      expect(l.objectives.length).toBeGreaterThan(2)
+      expect(l.selfCheck.length).toBeGreaterThan(2)
+      expect(l.assignment.rubric.reduce((s, r) => s + r[1], 0)).toBe(10)
+      expect(l.assignment.file.url).toMatch(/^\/hoc-tap\/PDA101\//)
+      for (const k of [...l.sources, ...l.business.sources]) expect(SOURCES[k]?.url).toMatch(/^https:\/\//)
+      for (const k of l.learn) expect(LEARN_LINKS[k]?.url).toMatch(/^https:\/\//)
+    }
+  })
+  it('file dữ liệu bài tập có trong thư mục public', async () => {
+    const fs = await import('node:fs')
+    const { LESSONS } = await import('../../data/lessons')
+    for (const l of Object.values(LESSONS)) expect(fs.existsSync(`public${decodeURI(l.assignment.file.url)}`)).toBe(true)
+  })
+})
