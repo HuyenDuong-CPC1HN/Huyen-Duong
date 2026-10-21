@@ -50,8 +50,12 @@ export function parseQty(text) {
 export const normHanDung = v => (v ? parseDateText(v) || String(v).trim() : '')
 export const fmtHanDung = v => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || '')); return m ? `${m[3]}/${m[2]}/${m[1]}` : (v || '') }
 
+// Đuôi nội bộ gắn sau số lô (vd "010126.SDKM", "13626G01-GMP") — bỏ khi so lô: phần trước đuôi khớp là cùng lô.
+const LOT_SUFFIX = /[\s.\-_/]*(SDKM|GMP)$/
+
 export function normLot(v) {
-  const lot = String(v ?? '').trim().toUpperCase()
+  let lot = String(v ?? '').trim().toUpperCase()
+  for (let prev = ''; prev !== lot && lot.length > 4;) { prev = lot; lot = lot.replace(LOT_SUFFIX, '') }
   const tokens = lot.split(/\s+/)
   return tokens.length > 1 && tokens.every(x => /^\d+$/.test(x)) ? tokens.join('') : lot
 }

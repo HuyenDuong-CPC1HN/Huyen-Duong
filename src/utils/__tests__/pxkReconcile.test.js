@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNguonReport, isNguonRow, mergeAiChunks, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
+import { buildNguonReport, isNguonRow, mergeAiChunks, normLot, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
 
 const phieu = (soPhieu, rows) => ({ soPhieu, rows })
 
@@ -215,5 +215,21 @@ describe('mergeAiChunks — ghép kết quả AI đọc từng phần PDF scan',
     ])
     expect(r.failedPages).toEqual([9, 10])
     expect(r.errors).toEqual(['quá tải'])
+  })
+})
+
+describe('Lô có đuôi nội bộ (.SDKM, GMP)', () => {
+  it('bỏ đuôi khi so lô — phần trước đuôi khớp là cùng lô, không báo lệch lô', () => {
+    expect(['010126.SDKM', '010126 SDKM', '010126-GMP', '010126GMP', '010126.gmp', '010126'].map(normLot)).toEqual(Array(6).fill('010126'))
+    expect(normLot('13626G01.SDKM')).toBe('13626G01')
+    expect(normLot('010127.SDKM')).not.toBe(normLot('010126'))
+    const rows = reconcilePxk({
+      received: [{ maHang: 'A01324', tenHang: 'BFS-Adenosin', dvt: 'LO', soLo: '010126.SDKM', hanDung: '2029-01-17', soLuong: 180 }],
+      scanned: [{ maHang: 'A01324', soLo: '010126', soLuong: 180 }],
+      phieus: [{ soPhieu: 'XD2611/04792', rows: [{ maHang: 'A01324', soLo: '010126', hanDung: '17/01/2029', soLuong: 180 }] }],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ soLo: '010126.SDKM', pLo: '010126', a: 180, b: 180, c: 180, tags: ['ok'] })
+    expect(buildNguonReport({ C: rows })).toBe('')
   })
 })
