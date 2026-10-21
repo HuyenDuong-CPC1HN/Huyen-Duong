@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Plus, Trash2, X } from 'lucide-react'
 import {
   PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty,
-  alignOcrRows, groupScanPages, mergeAiChunks, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
+  alignOcrRows, batchMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
 } from '../utils/pxkReconcile'
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { downloadPxkFile, getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
@@ -432,8 +432,11 @@ export default function DoiChieuSoSachTab() {
   const dupGroups = pxkDuplicateGroups(session.phieus)
   const blocked = new Set(dupGroups.flat().map(p => p.id))
   const counted = p => !p.excluded && !blocked.has(p.id)
+  // File quét: bỏ mã hàng không có trong biên bản nhập hàng (phát sinh, gây nhiễu) — không tính đối chiếu.
+  const batchMa = batchMaHang(batch)
+  const scanSplit = Object.fromEntries(PXK_KHO.map(({ key }) => [key, session.scan[key]?.rows ? splitScanByBatch(session.scan[key].rows, batchMa) : null]))
   const results = Object.fromEntries(PXK_KHO.map(({ key }) => [key, reconcilePxk({
-    received: receivedRowsOf(batch, key), scanned: session.scan[key]?.rows || null, phieus: session.phieus.filter(p => p.kho === key && counted(p)),
+    received: receivedRowsOf(batch, key), scanned: scanSplit[key]?.kept ?? null, phieus: session.phieus.filter(p => p.kho === key && counted(p)),
   })]))
   const keepOne = (group, keepId) => upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (group.some(g => g.id === p.id)
     ? (p.id === keepId ? { ...p, excluded: false, keepDup: false, excludedNote: '' } : { ...p, excluded: true, excludedNote: `trùng số phiếu ${p.soPhieu} — anh đã chọn giữ bản khác` })
@@ -680,7 +683,7 @@ export default function DoiChieuSoSachTab() {
   }
 
   const openPhieu = session.phieus.find(p => p.id === openId)
-  const dupTems = findDuplicateTems(PXK_KHO.flatMap(({ key }) => scanFilesOf(session.scan[key]).map(f => ({ zone: key, fileName: f.name, rows: f.rows }))))
+  const dupTems = findDuplicateTems(PXK_KHO.flatMap(({ key }) => scanFilesOf(session.scan[key]).map(f => ({ zone: key, fileName: f.name, rows: splitScanByBatch(f.rows, batchMa).kept }))))
   const rows = results[kho] || []
   const visible = rows.filter(r => matchFilter(r, filter))
   const countOf = (k, f) => (results[k] || []).filter(r => matchFilter(r, f)).length
@@ -801,6 +804,11 @@ export default function DoiChieuSoSachTab() {
                     <button type="button" onClick={() => removeScanFile(key, i)} aria-label={`Bỏ file ${f.name}`} className="ml-auto text-gray-400 hover:text-red-600 shrink-0"><X size={12} /></button></div>
                 ))
                   : <div className="text-[11px] text-gray-400">Chưa có file quét {label}</div>}
+                {scanSplit[key]?.dropped.length > 0 && (
+                  <div className="text-[11px] text-gray-500" title={scanSplit[key].dropped.join(', ')}>
+                    Bỏ qua {scanSplit[key].dropped.length} mã chỉ có trong file quét, không có trong biên bản nhập hàng (không tính đối chiếu): {scanSplit[key].dropped.slice(0, 6).join(', ')}{scanSplit[key].dropped.length > 6 ? '…' : ''}
+                  </div>
+                )}
                 <label className={`sheet-tab-action cursor-pointer self-start ${busy === `scan-${key}` ? 'opacity-60 pointer-events-none' : ''}`}>+ Thêm file .xls
                   <input type="file" accept=".xlsx,.xls" multiple hidden aria-label={`File quét ${label}`} onChange={e => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) void addScanFiles(key, fs) }} />
                 </label>

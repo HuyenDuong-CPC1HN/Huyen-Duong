@@ -95,6 +95,21 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(screen.queryByRole('alert', { name: 'Mã tem trùng' })).not.toBeInTheDocument()
   })
 
+  it('file quét: mã hàng không có trong biên bản nhập hàng bị bỏ, không tính đối chiếu', async () => {
+    const { readActualScanRows } = await import('../../utils/parseGoodsReceipt')
+    readActualScanRows.mockReturnValueOnce([
+      { maHang: 'C02918', tenHang: 'Conadin', soLo: '011026', soLuong: 154, maTem: 'T0001', stt: '1', kho: '' },
+      { maHang: 'X99999', tenHang: 'Hàng lạ', soLo: 'L1', soLuong: 5, maTem: 'T0002', stt: '2', kho: '' },
+    ])
+    render(<DoiChieuSoSachTab />)
+    fireEvent.change(screen.getByLabelText('File quét Kho DTP'), { target: { files: [new File(['x'], 'quet_dtp.xls')] } })
+    expect(await screen.findByText(/Bỏ qua 1 mã chỉ có trong file quét, không có trong biên bản nhập hàng \(không tính đối chiếu\): X99999/)).toBeInTheDocument()
+    const result = screen.getByRole('region', { name: 'Kết quả đối chiếu' })
+    fireEvent.click(within(result).getByRole('button', { name: /Kho DTP/ }))
+    expect(within(result).getByText('C02918')).toBeInTheDocument()
+    expect(within(result).queryByText('X99999')).not.toBeInTheDocument()
+  })
+
   it('phiếu PDF tải lên từ trước (đang chờ nhập tay) tự đọc lại khi mở trang', async () => {
     store.values.set('pxk_doi_chieu', JSON.stringify({ b1: { phieus: [{
       id: 'p1', kho: 'DTP', kind: 'tay', name: 'PHIEU_BO_SUNG.pdf', soPhieu: 'XD2611/04824', images: [],

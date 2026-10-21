@@ -484,3 +484,23 @@ export function mergeAiChunks(chunks, results) {
   })
   return { phieus, failedPages, errors }
 }
+
+const maKey = v => String(v || '').trim().toUpperCase()
+
+// Mã hàng có trong biên bản nhập hàng của chuyến (tab Nhập hàng, mọi kho).
+export function batchMaHang(batch) {
+  return new Set([...(batch?.khoC || []), ...(batch?.khoLgt || [])].map(r => maKey(r.maHang)).filter(Boolean))
+}
+
+// Dòng file quét có mã hàng hoàn toàn không có trong biên bản nhập hàng là phát sinh, gây nhiễu — bỏ, không tính đối
+// chiếu. Trả về { kept: dòng giữ lại, dropped: [mã đã bỏ] }. Chuyến không có dòng nào thì giữ hết.
+export function splitScanByBatch(rows, maSet) {
+  if (!maSet?.size) return { kept: rows || [], dropped: [] }
+  const kept = []
+  const dropped = new Set()
+  for (const r of rows || []) {
+    if (maSet.has(maKey(r.maHang))) kept.push(r)
+    else if (maKey(r.maHang)) dropped.add(maKey(r.maHang))
+  }
+  return { kept, dropped: [...dropped].sort() }
+}

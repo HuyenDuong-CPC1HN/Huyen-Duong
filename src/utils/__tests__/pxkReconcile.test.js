@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNguonReport, isNguonRow, mergeAiChunks, normLot, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
+import { batchMaHang, buildNguonReport, isNguonRow, mergeAiChunks, normLot, splitScanByBatch, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
 
 const phieu = (soPhieu, rows) => ({ soPhieu, rows })
 
@@ -231,5 +231,19 @@ describe('Lô có đuôi nội bộ (.SDKM, GMP)', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ soLo: '010126.SDKM', pLo: '010126', a: 180, b: 180, c: 180, tags: ['ok'] })
     expect(buildNguonReport({ C: rows })).toBe('')
+  })
+})
+
+describe('File quét: bỏ mã không có trong biên bản nhập hàng', () => {
+  it('chỉ giữ dòng quét có mã trong biên bản (mọi kho của chuyến), báo lại các mã đã bỏ', () => {
+    const batch = { khoC: [{ maHang: 'F00629' }], khoLgt: [{ maHang: 'c02918' }] }
+    const ma = batchMaHang(batch)
+    const r = splitScanByBatch([
+      { maHang: 'F00629', soLo: 'A', soLuong: 1 }, { maHang: 'C02918', soLo: 'B', soLuong: 2 },
+      { maHang: 'X99999', soLo: 'C', soLuong: 3 }, { maHang: 'X99999', soLo: 'D', soLuong: 4 }, { maHang: 'A00001', soLo: 'E', soLuong: 5 },
+    ], ma)
+    expect(r.kept.map(x => x.maHang)).toEqual(['F00629', 'C02918'])
+    expect(r.dropped).toEqual(['A00001', 'X99999'])
+    expect(splitScanByBatch([{ maHang: 'X99999' }], new Set()).kept).toHaveLength(1)
   })
 })
