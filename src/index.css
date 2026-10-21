@@ -1418,16 +1418,16 @@ body {
   .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc table,
   .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc th,
   .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc td { font-size: 10.5pt !important; }
-  /* Gom cả biên bản (kể cả khung ký duyệt) vào 1 trang A4 ngang: dòng sát hơn, ô ký thấp lại. */
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc { line-height: 1.3 !important; }
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc table { margin: 4px 0 !important; }
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc th,
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc td { padding: 3px 6px !important; }
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc .rsw-xm-people th,
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc .rsw-xm-people td { padding: 1px 6px !important; }
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc .rsw-xm-sign td { padding: 2px 6px !important; }
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc .rsw-xm-sign .rsw-sign-gap { height: 4px; }
-  .rsw-print-root .flowv2-paper .rsw-paper.rsw-xm-doc .rsw-mgr-row td { height: 70px; }
+  /* Mọi biên bản xác minh (các tab): gom cả biên bản (kể cả khung ký duyệt) vào 1 trang A4 ngang: dòng sát hơn, ô ký thấp lại. */
+  .rsw-print-root .rsw-paper.rsw-xm-doc { line-height: 1.3 !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc table { margin: 4px 0 !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc th,
+  .rsw-print-root .rsw-paper.rsw-xm-doc td { padding: 3px 6px !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-xm-people th,
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-xm-people td { padding: 1px 6px !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-xm-sign td { padding: 2px 6px !important; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-xm-sign .rsw-sign-gap { height: 4px; }
+  .rsw-print-root .rsw-paper.rsw-xm-doc .rsw-mgr-row td { height: 70px; }
 }
 
 /* Không khai báo @page size/margin ở đây: để hộp thoại in của trình duyệt hiện đủ mục Layout (dọc/ngang),
