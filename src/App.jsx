@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History, Workflow, ClipboardCheck } from 'lucide-react'
+import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History, Workflow, ClipboardCheck, GraduationCap } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -22,6 +22,7 @@ const TongDonTab = lazy(() => import('./components/TongDonTab'))
 const UnifiedTrialTab = lazy(() => import('./components/UnifiedTrialTab'))
 const FlowV2Tab = lazy(() => import('./components/FlowV2Tab'))
 const DoiChieuSoSachTab = lazy(() => import('./components/DoiChieuSoSachTab'))
+const LoTrinhHocTab = lazy(() => import('./components/LoTrinhHocTab'))
 
 const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
@@ -68,6 +69,7 @@ const NAV = [
   },
   // Kho A không phải kho theo dõi hàng: mỗi tháng chỉ hoàn thiện hồ sơ huỷ cho kế toán, nên tách riêng khỏi nhóm trên.
   { id: 'hangHuyA', label: 'Hồ sơ huỷ Kho A', icon: FolderOpen },
+  { id: 'loTrinhHoc', label: 'Lộ trình học DA/DS', icon: GraduationCap },
 ]
 
 // Mục menu (hoặc con của nó, tới cấp cuối) có đang được chọn không — để tô sáng cả nhóm cha.
@@ -91,6 +93,7 @@ const BREADCRUMB = {
   hangHuyA:   ['Trang chủ', 'Hồ sơ huỷ Kho A'],
   doiTra:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng'],
   flowV2:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Hàng trả & huỷ (Demo)'],
+  loTrinhHoc: ['Trang chủ', 'Lộ trình học DA/DS'],
 }
 
 export default function App() {
@@ -506,6 +509,7 @@ function AppContent({ user }) {
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab />}
           {active === 'doiTra'     && <SwapReturnHub key={`swap-${openTarget}`} initialOpenRecordId={openTarget} />}
           {active === 'flowV2'     && <Suspense fallback={tabLoadingState}><FlowV2Tab /></Suspense>}
+          {active === 'loTrinhHoc' && <Suspense fallback={tabLoadingState}><LoTrinhHocTab /></Suspense>}
         </main>
       </div>
     </div>
