@@ -88,7 +88,7 @@ export default function LessonView({ task, moduleName, progress, onBack, setTask
         </div>
       </section>
 
-      <Section title="Lịch học tuần này (7–8 giờ)" id="ls-plan">
+      <Section title="Lịch học mỗi tuần (khoảng 15 giờ, 2 bài/tuần)" id="ls-plan">
         <div className="overflow-x-auto">
           <table className="w-full text-[13px] border-collapse min-w-[480px]">
             <tbody>{WEEK_PLAN.map(([d, w, t]) => <tr key={d} className="border-t border-gray-100"><td className="py-1.5 pr-3 font-semibold whitespace-nowrap">{d}</td><td className="py-1.5 pr-3">{w}</td><td className="py-1.5 text-gray-500 whitespace-nowrap">{t}</td></tr>)}</tbody>

@@ -166,7 +166,7 @@ export default function LoTrinhHocTab() {
         <div className="flex flex-wrap items-center gap-2">
           <GraduationCap size={20} className="text-[#1e3a5f]" />
           <h2 className="m-0 text-base font-semibold">Dược sĩ phân tích dữ liệu · Data Analyst → Data Scientist</h2>
-          <span className="text-xs text-gray-400">60 tuần · 7–8 giờ/tuần · điểm đạt ≥ 7,0</span>
+          <span className="text-xs text-gray-400">GĐ 1: 13 tuần (3 tháng), khoảng 15 giờ/tuần · GĐ 2: tuần 14–41, 7–8 giờ/tuần · điểm đạt ≥ 7,0</span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl bg-slate-50 p-3 flex flex-col gap-1">
@@ -202,7 +202,7 @@ export default function LoTrinhHocTab() {
       </section>
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Giai đoạn">
-        {[[1, 'Giai đoạn 1 · Data Analyst (tuần 1–32)'], [2, 'Giai đoạn 2 · Data Scientist (tuần 33–60)']].map(([k, l]) => (
+        {[[1, 'Giai đoạn 1 · Data Analyst (tuần 1–13 · 3 tháng)'], [2, 'Giai đoạn 2 · Data Scientist (tuần 14–41)']].map(([k, l]) => (
           <button key={k} type="button" onClick={() => setPhase(k)} aria-pressed={phase === k}
             className={`px-3 py-1.5 rounded-lg text-sm border ${phase === k ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200'}`}>{l}</button>
         ))}

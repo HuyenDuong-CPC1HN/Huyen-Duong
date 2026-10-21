@@ -30,7 +30,7 @@ describe('Tab Lộ trình học', () => {
     const da = screen.getByLabelText('Điểm dự án PDA101')
     fireEvent.change(da, { target: { value: '8' } }); fireEvent.blur(da)
     expect(screen.getByText('8,4 · Giỏi')).toBeInTheDocument() // 0,4×8,5 + 0,2×9 + 0,4×8
-    expect(screen.getByText('4/58 bài đã học + đã nộp')).toBeInTheDocument()
+    expect(screen.getByText('4/53 bài đã học + đã nộp')).toBeInTheDocument()
     expect(screen.getByText('BT-102.1')).toBeInTheDocument() // bài tiếp theo
   })
 

@@ -41,7 +41,7 @@ const SEPARATOR_WARN = { warn: 'Máy cài vùng **Tiếng Việt** thường dù
 export const PDA101_LESSONS = {
   'BT-101.1': {
     title: 'Chuẩn hoá dữ liệu kho với Excel Table',
-    time: 'Đọc giáo án 60 phút · thực hành 3–4 giờ',
+    time: 'Nửa tuần · đọc giáo án 60–90 phút, thực hành 3–5 giờ',
     objectives: [
       'Nhận biết 6 lỗi dữ liệu thường gặp khi xuất file từ phần mềm kho.',
       'Đưa dữ liệu về dạng bảng chuẩn và tạo Excel Table có tên.',
@@ -154,7 +154,7 @@ export const PDA101_LESSONS = {
 
   'BT-101.2': {
     title: 'Tra cứu và đối chiếu chứng từ: XLOOKUP, SUMIFS, COUNTIFS, IFS, LET',
-    time: 'Đọc giáo án 60–75 phút · thực hành 3–4 giờ',
+    time: 'Nửa tuần · đọc giáo án 60–90 phút, thực hành 3–5 giờ',
     objectives: [
       'Tạo khoá đối chiếu Mã hàng + Số lô, chuẩn hoá lô có đuôi nội bộ.',
       'Dùng XLOOKUP để tra cứu, biết khi nào XLOOKUP không đủ và phải dùng SUMIFS.',
@@ -255,7 +255,7 @@ export const PDA101_LESSONS = {
 
   'BT-101.3': {
     title: 'PivotTable: báo cáo nhập – xuất – tồn',
-    time: 'Đọc giáo án 60 phút · thực hành 3–4 giờ',
+    time: 'Nửa tuần · đọc giáo án 60–90 phút, thực hành 3–5 giờ',
     objectives: [
       'Chuẩn bị dữ liệu đúng chuẩn cho PivotTable.',
       'Tạo PivotTable theo tháng, nhà máy, nhóm ATC; nhóm ngày theo tháng/quý; hiển thị tỉ trọng %.',
@@ -342,7 +342,7 @@ export const PDA101_LESSONS = {
 
   'BT-101.4': {
     title: 'Power Query: tự động gộp file và làm mới báo cáo',
-    time: 'Đọc giáo án 75 phút · thực hành 3–4 giờ',
+    time: 'Nửa tuần · đọc giáo án 60–90 phút, thực hành 3–5 giờ',
     objectives: [
       'Hiểu Power Query: mỗi thao tác được ghi thành 1 bước và tự chạy lại khi Refresh.',
       'Gộp nhiều file cùng cấu trúc trong 1 thư mục.',
@@ -427,11 +427,12 @@ export const PDA101_LESSONS = {
   },
 }
 
-// Lịch học gợi ý cho mỗi tuần (7–8 giờ).
+// Lịch học gợi ý mỗi tuần ở Giai đoạn 1 (3 tháng): khoảng 15 giờ, 2 bài/tuần.
 export const WEEK_PLAN = [
-  ['Thứ 2', 'Đọc giáo án, làm theo các ví dụ', '60 phút'],
-  ['Thứ 3', 'Xem tài liệu, video chính thức ở mục "Học thêm"', '60 phút'],
-  ['Thứ 4 – Thứ 5', 'Luyện lại công thức trên file bài tập; trả lời câu hỏi tự kiểm tra; hỏi giảng viên chỗ chưa hiểu', '2 × 60 phút'],
-  ['Thứ 7 / Chủ nhật', 'Làm bài tập tuần', '3–4 giờ'],
-  ['Chủ nhật tối', 'Nộp bài trong chat, ghi điểm vào tab', '15 phút'],
+  ['Thứ 2', 'Đọc giáo án bài 1 của tuần, làm theo các ví dụ', '1,5–2 giờ'],
+  ['Thứ 3', 'Làm bài tập bài 1', '1,5–2 giờ'],
+  ['Thứ 4', 'Hoàn thành và nộp bài 1; đọc giáo án bài 2', '1,5–2 giờ'],
+  ['Thứ 5 – Thứ 6', 'Câu hỏi tự kiểm tra, tài liệu gốc; hỏi giảng viên chỗ chưa hiểu', '2 × 1,5 giờ'],
+  ['Thứ 7 / Chủ nhật', 'Làm bài tập bài 2', '4–5 giờ'],
+  ['Chủ nhật tối', 'Nộp bài 2, ghi điểm vào tab', '15 phút'],
 ]

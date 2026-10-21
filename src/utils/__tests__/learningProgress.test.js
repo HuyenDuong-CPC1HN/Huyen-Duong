@@ -7,11 +7,14 @@ const noExam = LEARNING_PROGRAM.find(m => m.code === 'PDA105')
 const scored = (codes, diem) => Object.fromEntries(codes.map(c => [c, { hoc: true, nop: true, diem }]))
 
 describe('Lộ trình học — chương trình', () => {
-  it('14 học phần, mã bài không trùng, đủ 60 tuần', () => {
+  it('14 học phần, mã bài không trùng; GĐ1 13 tuần (195 giờ), GĐ2 tới tuần 41', () => {
     expect(LEARNING_PROGRAM).toHaveLength(14)
     const codes = LEARNING_PROGRAM.flatMap(m => m.tasks.map(t => t.code))
     expect(new Set(codes).size).toBe(codes.length)
-    expect(LEARNING_PROGRAM.at(-1).tasks.at(-1).week).toBe('60')
+    expect(LEARNING_PROGRAM.at(-1).tasks.at(-1).week).toBe('41')
+    const da = LEARNING_PROGRAM.filter(m => m.phase === 1)
+    expect(da.at(-1).tasks.at(-1).week).toBe('13')
+    expect(da.reduce((n, m) => n + m.hours, 0)).toBe(195)
     expect(LEARNING_PROGRAM.filter(m => !m.hasExam).map(m => m.code)).toEqual(['PDA105', 'PDS204', 'PDS205'])
   })
 })
@@ -62,7 +65,7 @@ describe('Lộ trình học — chấm điểm và tiến độ', () => {
   it('tiến độ: bài xong = đã học + đã nộp; tuần đang học là bài đầu tiên chưa xong', () => {
     const p = normalizeProgress({ tasks: { 'BT-101.1': { hoc: true, nop: true }, 'BT-101.2': { hoc: true } } })
     const ov = overview(LEARNING_PROGRAM, p)
-    expect(ov).toMatchObject({ done: 1, total: 58, currentWeek: 2, nextTask: { code: 'BT-101.2' } })
+    expect(ov).toMatchObject({ done: 1, total: 53, currentWeek: 1, nextTask: { code: 'BT-101.2' } })
     expect(ov.percent).toBe(2)
   })
 
