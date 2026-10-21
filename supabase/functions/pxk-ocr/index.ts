@@ -4,6 +4,8 @@
 //
 // Vào: { url, mimeType } — url là link ký sẵn (signed URL) của file trong bucket ops-files của chính dự án này.
 // Ra:  { model, phieus: [{ soPhieu, trang: [số trang], rows: [{ maHang, tenHang, dvt, soLuong, soLo, hanDung }] }] }
+//      soLuong là chữ in nguyên văn trên phiếu ("30,000" = 30) — app tự đổi ra số theo quy ước phiếu (chấm nghìn, phẩy
+//      thập phân); để AI tự đổi thì "30,000" hay bị hiểu nhầm thành 30000.
 //
 // Secret: GEMINI_API_KEY (bắt buộc), GEMINI_MODEL (tuỳ chọn — để trống thì tự chọn mô hình "flash" mới nhất
 // đang có trong tài khoản, vì Google hay đổi tên mô hình).
@@ -23,9 +25,9 @@ const PROMPT = `Đây là bản scan / ảnh chụp các PHIẾU XUẤT KHO củ
 Mỗi trang có "Số phiếu" / "Số" là 1 phiếu. Trang không có số phiếu là trang tiếp của phiếu ngay trước.
 Hai trang trùng số phiếu thì vẫn trả RIÊNG từng trang (không gộp, không bỏ).
 Với mỗi dòng hàng lấy: maHang = "Mã vật tư" (1 chữ cái + 5 chữ số, vd F00629), tenHang = "Tên vật tư", dvt = "Đvt",
-soLuong = "Số lượng" đổi ra số (phiếu in dấu chấm phân cách nghìn, dấu phẩy thập phân: "3.380,000" = 3380; "154,000" = 154),
+soLuong = "Số lượng" CHÉP NGUYÊN VĂN đúng như in, giữ cả dấu chấm và dấu phẩy, KHÔNG tự đổi ra số (vd "30,000", "3.380,000", "154,000"),
 soLo = "Lô" (giữ nguyên chữ hoa / số, vd 13626G01), hanDung = "Hạn dùng" dạng dd/mm/yyyy (để trống nếu không có).
-Ô không đọc được thì để chuỗi rỗng (soLuong để null). Bỏ qua các dòng trống chỉ có số thứ tự.`
+Ô không đọc được thì để chuỗi rỗng. Bỏ qua các dòng trống chỉ có số thứ tự.`
 
 const SCHEMA = {
   type: 'OBJECT',
@@ -43,7 +45,7 @@ const SCHEMA = {
               type: 'OBJECT',
               properties: {
                 maHang: { type: 'STRING' }, tenHang: { type: 'STRING' }, dvt: { type: 'STRING' },
-                soLuong: { type: 'NUMBER', nullable: true }, soLo: { type: 'STRING' }, hanDung: { type: 'STRING' },
+                soLuong: { type: 'STRING' }, soLo: { type: 'STRING' }, hanDung: { type: 'STRING' },
               },
               required: ['maHang', 'soLuong', 'soLo'],
             },

@@ -110,6 +110,15 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(within(result).queryByText('X99999')).not.toBeInTheDocument()
   })
 
+  it('mở trang: dòng AI đã lưu bị nhầm phần thập phân (số ×1000 so với thực nhận) tự sửa lại', async () => {
+    store.values.set('pxk_doi_chieu', JSON.stringify({ b1: { phieus: [{
+      id: 'p1', kho: 'C', kind: 'ai', name: 'quet.pdf', soPhieu: 'XD2611/04751', images: [], files: [],
+      rows: [{ rowId: 'r1', maHang: 'F00629', soLo: '13626G01', soLuong: 3300000, ocr: true, ai: true }],
+    }] } }))
+    render(<DoiChieuSoSachTab />)
+    await vi.waitFor(() => expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus[0].rows[0]).toMatchObject({ soLuong: 3300, ocrFixed: { soLuong: '3300000' } }))
+  })
+
   it('phiếu PDF tải lên từ trước (đang chờ nhập tay) tự đọc lại khi mở trang', async () => {
     store.values.set('pxk_doi_chieu', JSON.stringify({ b1: { phieus: [{
       id: 'p1', kho: 'DTP', kind: 'tay', name: 'PHIEU_BO_SUNG.pdf', soPhieu: 'XD2611/04824', images: [],
@@ -200,7 +209,7 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     parseItemsMock.empty = true
     splitMock.mockResolvedValue({ numPages: 1, chunks: [{ pages: [1], images: [] }] })
     chunksAiMock.mockResolvedValue([{ phieus: [
-      { soPhieu: 'FX126/005804', trang: [1], rows: [{ maHang: 'C02918', tenHang: 'Conadin', dvt: 'LO', soLuong: 154, soLo: '011026', hanDung: '06/10/2029' }] },
+      { soPhieu: 'FX126/005804', trang: [1], rows: [{ maHang: 'C02918', tenHang: 'Conadin', dvt: 'LO', soLuong: '154,000', soLo: '011026', hanDung: '06/10/2029' }] },
     ] }])
     render(<DoiChieuSoSachTab />)
     fireEvent.change(screen.getByLabelText('+ Thêm file Kho DTP'), { target: { files: [new File(['%PDF'], 'quet.pdf', { type: 'application/pdf' })] } })

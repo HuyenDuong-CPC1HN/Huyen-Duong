@@ -351,7 +351,8 @@ export function ocrRowNeedsCheck(row, resultRows) {
 
 // Sửa lỗi đọc ảnh bằng "từ điển" là chính các dòng thực nhận của kho: dòng đọc được gần giống đúng 1 dòng thực nhận
 // (mã sai ≤ 2 ký tự, lô sai ≤ 2 ký tự hoặc dính dấu tick) thì lấy mã, lô, tên, Đvt, hạn dùng theo thực nhận — các ô
-// này đọc ảnh hay nhầm 1–2 ký tự. KHÔNG sửa số lượng (đó là số cần đối chiếu): số lượng khác thực nhận vẫn báo cần soát.
+// này đọc ảnh hay nhầm 1–2 ký tự. KHÔNG sửa số lượng (đó là số cần đối chiếu): số lượng khác thực nhận vẫn báo cần soát
+// — trừ lỗi AI nhầm phần thập phân ("30,000" thành 30000, xem aiThousandFix).
 // Ô nào đã sửa ghi lại chữ đọc được gốc ở ocrFixed để kho xem lại khi cần.
 function editDistance(a, b) {
   const m = a.length
@@ -379,6 +380,46 @@ function ocrClose(truth, read) {
   return false
 }
 
+// Hàm AI bản cũ tự đổi số lượng ra số và hay hiểu "30,000" (= 30, phẩy là thập phân) thành 30000. Dòng AI có số chia
+// hết 1000 mà chia 1000 đúng bằng số thực nhận cùng mã + lô thì là đọc nhầm kiểu đó → lấy số đã chia, ghi lại số cũ.
+function aiThousandFix(r, recQtys) {
+  const v = typeof r.soLuong === 'number' ? r.soLuong : null
+  if (!r.ai || v === null || v < 1000 || v % 1000 !== 0 || !recQtys.includes(v / 1000)) return r
+  return { ...r, soLuong: v / 1000, ocrFixed: { ...(r.ocrFixed || {}), soLuong: String(v) } }
+}
+
+// Sửa các dòng AI đã lưu bị nhầm kiểu trên (phiếu đọc trước khi hàm AI trả số nguyên văn). receivedOf(kho) = dòng
+// thực nhận của kho. Trả về { phieus, changed: số dòng đã sửa }.
+export function fixAiThousandRows(phieus, receivedOf) {
+  const cache = {}
+  const qtysOf = kho => {
+    if (!cache[kho]) {
+      const m = new Map()
+      for (const x of receivedOf(kho) || []) {
+        const k = keyOf(x.maHang, x.soLo)
+        const q = Number(x.soLuong) || 0
+        const cur = m.get(k) || { sum: 0, each: [] }
+        m.set(k, { sum: cur.sum + q, each: [...cur.each, q] })
+      }
+      cache[kho] = m
+    }
+    return cache[kho]
+  }
+  let changed = 0
+  const out = phieus.map(p => {
+    if (!(p.rows || []).some(r => r.ai)) return p
+    const rows = p.rows.map(r => {
+      if (!r.ai) return r
+      const g = qtysOf(p.kho).get(keyOf(r.maHang, r.soLo))
+      const next = g ? aiThousandFix(r, [g.sum, ...g.each]) : r
+      if (next !== r) changed += 1
+      return next
+    })
+    return rows.some((r, i) => r !== p.rows[i]) ? { ...p, rows } : p
+  })
+  return { phieus: out, changed }
+}
+
 export function alignOcrRows(rows, received) {
   return rows.map(r => {
     if (!r.ocr || !r.maHang) return r
@@ -400,8 +441,10 @@ export function alignOcrRows(rows, received) {
     if (up(x.maHang) !== ma) fixed.maHang = r.maHang
     if (normLot(x.soLo) !== lo) fixed.soLo = r.soLo
     if (hd && r.hanDung !== hd && (!r.hanDung || ocrClose(hd, r.hanDung))) fixed.hanDung = r.hanDung
+    const q = aiThousandFix(r, [Number(x.soLuong)])
+    if (q !== r) fixed.soLuong = q.ocrFixed.soLuong
     return {
-      ...r,
+      ...r, soLuong: q.soLuong,
       maHang: x.maHang, soLo: x.soLo || r.soLo,
       hanDung: 'hanDung' in fixed ? hd : r.hanDung,
       tenHang: x.tenHang || r.tenHang, dvt: x.dvt || r.dvt,

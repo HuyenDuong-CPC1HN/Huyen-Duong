@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Plus, Trash2, X } from 'lucide-react'
 import {
-  PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty,
-  alignOcrRows, batchMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
+  PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty, parseOcrQty,
+  alignOcrRows, fixAiThousandRows, batchMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
 } from '../utils/pxkReconcile'
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { downloadPxkFile, getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
@@ -97,7 +97,7 @@ function DropZone({ onFiles, children, className = '' }) {
   )
 }
 
-const FIX_LABEL = { maHang: 'mã', soLo: 'lô', hanDung: 'hạn dùng' }
+const FIX_LABEL = { maHang: 'mã', soLo: 'lô', hanDung: 'hạn dùng', soLuong: 'số lượng' }
 
 const ROW_COLS = [
   ['maHang', 'Mã VT', 90], ['tenHang', 'Tên vật tư', 240], ['dvt', 'ĐVT', 60], ['soLuong', 'Số lượng', 90], ['soLo', 'Lô', 100], ['hanDung', 'Hạn dùng', 105],
@@ -243,7 +243,9 @@ const mapAiPhieus = list => list.map(x => ({
   kind: 'ai', soPhieu: String(x.soPhieu || '').trim(), pages: Array.isArray(x.trang) ? x.trang : [],
   rows: (x.rows || []).filter(it => it.maHang).map(it => newPxkRow({
     maHang: String(it.maHang).trim().toUpperCase(), tenHang: it.tenHang || '', dvt: String(it.dvt || '').toUpperCase(),
-    soLuong: it.soLuong ?? '', soLo: String(it.soLo || '').trim().toUpperCase(), hanDung: normHanDung(it.hanDung), ocr: true, ai: true,
+    // Hàm AI mới trả chữ in nguyên văn ("30,000") → đổi theo quy ước phiếu; hàm cũ trả số sẵn.
+    soLuong: typeof it.soLuong === 'string' ? (parseOcrQty(it.soLuong) ?? '') : (it.soLuong ?? ''),
+    soLo: String(it.soLo || '').trim().toUpperCase(), hanDung: normHanDung(it.hanDung), ocr: true, ai: true,
   })),
 })).filter(x => x.rows.length)
 
@@ -586,6 +588,18 @@ export default function DoiChieuSoSachTab() {
     }
     await Promise.all([runner(), runner()])
   }
+
+  // Mở chuyến: sửa các dòng AI đã lưu bị đọc nhầm phần thập phân ("30,000" thành 30000) — đối chiếu số thực nhận.
+  useEffect(() => {
+    if (!batch) return
+    const cur = readPxkStore()[batchId]
+    if (!cur?.phieus?.length) return
+    const { phieus, changed } = fixAiThousandRows(cur.phieus, k => receivedRowsOf(batch, k))
+    if (!changed) return
+    const fixed = new Map(phieus.filter((p, i) => p !== cur.phieus[i]).map(p => [p.id, p]))
+    upd(s => ({ ...s, phieus: s.phieus.map(p => fixed.get(p.id) || p) }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchId])
 
   // Mở trang: phiếu PDF chưa có dòng nào (tải lên từ trước) thì tự đọc lại 1 lần, không cần bấm nút.
   const autoReadDone = useRef(new Set())

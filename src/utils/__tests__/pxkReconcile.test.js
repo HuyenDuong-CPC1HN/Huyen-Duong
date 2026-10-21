@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { batchMaHang, buildNguonReport, isNguonRow, mergeAiChunks, normLot, splitScanByBatch, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
+import { alignOcrRows, batchMaHang, buildNguonReport, fixAiThousandRows, isNguonRow, mergeAiChunks, normLot, splitScanByBatch, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
 
 const phieu = (soPhieu, rows) => ({ soPhieu, rows })
 
@@ -245,5 +245,34 @@ describe('File quét: bỏ mã không có trong biên bản nhập hàng', () =>
     expect(r.kept.map(x => x.maHang)).toEqual(['F00629', 'C02918'])
     expect(r.dropped).toEqual(['A00001', 'X99999'])
     expect(splitScanByBatch([{ maHang: 'X99999' }], new Set()).kept).toHaveLength(1)
+  })
+})
+
+describe('AI đọc nhầm phần thập phân ("30,000" thành 30000)', () => {
+  const received = [
+    { maHang: 'T02722', soLo: '060726', soLuong: 30 }, { maHang: 'T02722', soLo: '190726', soLuong: 40 },
+    { maHang: 'F00629', soLo: '13626G01', soLuong: 3300 },
+  ]
+  it('sửa dòng AI đã lưu: chia 1000 đúng bằng thực nhận cùng mã + lô thì lấy số đã chia, ghi lại số cũ', () => {
+    const phieus = [
+      { id: 'a', kho: 'C', rows: [
+        { maHang: 'T02722', soLo: '060726', soLuong: 30000, ai: true },
+        { maHang: 'T02722', soLo: '190726', soLuong: 40000, ai: true },
+        { maHang: 'F00629', soLo: '13626G01', soLuong: 3000, ai: true }, // lệch thật (3000 ≠ 3300 và ≠ 3) — giữ nguyên
+      ] },
+      { id: 'b', kho: 'C', rows: [{ maHang: 'T02722', soLo: '060726', soLuong: 30000 }] }, // không phải dòng AI
+    ]
+    const r = fixAiThousandRows(phieus, () => received)
+    expect(r.changed).toBe(2)
+    expect(r.phieus[0].rows.map(x => x.soLuong)).toEqual([30, 40, 3000])
+    expect(r.phieus[0].rows[0].ocrFixed).toEqual({ soLuong: '30000' })
+    expect(r.phieus[1]).toBe(phieus[1])
+    expect(fixAiThousandRows(r.phieus, () => received).changed).toBe(0)
+  })
+  it('đọc mới (hàm AI cũ còn trả số): sửa luôn lúc khớp thực nhận', () => {
+    const [row] = alignOcrRows([{ maHang: 'T02722', soLo: '060726', soLuong: 30000, ocr: true, ai: true }], received)
+    expect(row).toMatchObject({ soLuong: 30, ocrFixed: { soLuong: '30000' } })
+    const [ocr] = alignOcrRows([{ maHang: 'T02722', soLo: '060726', soLuong: 30000, ocr: true }], received)
+    expect(ocr.soLuong).toBe(30000) // bộ đọc chữ thường: không đụng số lượng
   })
 })
