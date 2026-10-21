@@ -119,7 +119,7 @@ export default function FlowV2BatchWorkspace({ b, onSave, onAdvance, onBackStep,
           <div className="grid gap-4 items-start min-w-0" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))' }}>
             <div className="flex flex-col gap-3 min-w-0"><div className="font-semibold text-gray-800">{s.t}</div>{work}</div>
             <PreviewPrintPanel docs={[
-              { key: 'xm', label: 'BB xác minh huỷ', landscape: true, node: <XacMinhPaper phieu={phieu} keToan={b.form.keToan} /> },
+              { key: 'xm', label: 'BB xác minh huỷ', landscape: true, node: <div className="flowv2-paper"><XacMinhPaper phieu={phieu} keToan={b.form.keToan} /></div> },
               { key: 'xl', label: 'BB xử lý', landscape: false, node: <XuLyPaper phieu={phieu} keToan={b.form.keToan} /> },
             ]} />
           </div>
