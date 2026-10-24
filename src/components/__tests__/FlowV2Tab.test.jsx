@@ -45,6 +45,12 @@ describe('Hàng trả & huỷ (Demo)', () => {
 
     expect(screen.getAllByText('BIÊN BẢN XÁC MINH TÌNH TRẠNG HÀNG HOÁ').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Nhà thuốc Phước Thiện/).length).toBeGreaterThan(0)
+    // chọn nhầm kho lúc tạo: đổi sang DTP thì BB xác minh sang mẫu UPHARMA, đổi lại C thì về mẫu CPC1HN
+    fireEvent.change(screen.getByLabelText('Kho của hồ sơ'), { target: { value: 'DTP' } })
+    expect(read('flowv2_cases')[0].kho).toBe('DTP')
+    expect(screen.getAllByText('CÔNG TY CỔ PHẦN UPHARMA').length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText('Kho của hồ sơ'), { target: { value: 'C' } })
+    expect(screen.queryByText('CÔNG TY CỔ PHẦN UPHARMA')).not.toBeInTheDocument()
     // Bước BB xác minh vẫn sửa được tên hàng (vd bỏ chữ "(Afghanistan)")
     fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Zensalbu nebules 2.5 - Hộp 2 vỉ' } })
     expect(screen.getAllByText('Zensalbu nebules 2.5 - Hộp 2 vỉ').length).toBeGreaterThan(0)

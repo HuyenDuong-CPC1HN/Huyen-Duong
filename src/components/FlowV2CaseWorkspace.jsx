@@ -82,6 +82,8 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
             <div style={grid(200)}>
               <Field label="Khách hàng" kind="hand"><input value={c.khachHang} onChange={e => set({ khachHang: e.target.value })} className={handCls} aria-label="Khách hàng" /></Field>
               <Field label="Số đơn / số phiếu" kind="hand"><input value={c.soDon} onChange={e => set({ soDon: e.target.value })} className={handCls} aria-label="Số đơn" /></Field>
+              {/* chọn nhầm kho lúc tạo hồ sơ thì đổi ở đây; BB xác minh tự đổi mẫu (Kho C: CPC1HN, Kho DTP: UPHARMA) */}
+              <Field label="Kho" kind="hand"><select value={c.kho} onChange={e => set({ kho: e.target.value })} className={handCls} aria-label="Kho của hồ sơ"><option value="C">Kho C</option><option value="DTP">Kho DTP</option></select></Field>
               {c.kind === 'loi' && <Field label="Lý do lỗi" kind="hand"><input value={c.loiLyDo} onChange={e => set({ loiLyDo: e.target.value, items: c.items.map(it => (!it.tinhTrang || it.tinhTrang === c.loiLyDo || it.tinhTrang === 'Hàng lỗi' ? { ...it, tinhTrang: e.target.value } : it)) })} className={handCls} placeholder="VD: Gãy, vỡ ống" aria-label="Lý do lỗi" /></Field>}
             </div>
             {(c.files || []).length > 0 && <div className="text-xs text-gray-500">File đã tải: {c.files.map(f => f.name).join(', ')}</div>}
