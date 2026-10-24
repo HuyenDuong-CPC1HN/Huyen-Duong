@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FlowV2Tab from '../FlowV2Tab'
+import { newCase, newItem } from '../../utils/flowV2'
 
 const store = vi.hoisted(() => {
   const values = new Map()
@@ -167,5 +168,26 @@ describe('Hàng trả & huỷ (Demo) — lấy dữ liệu từ tab cũ', () => 
     expect(screen.getByText(/Không có phiếu mới ở tab cũ/)).toBeInTheDocument()
     expect(read('flowv2_cases')).toHaveLength(1)
     expect(read('flowv2_batches')).toHaveLength(1)
+  })
+})
+
+describe('Hàng trả & huỷ (Demo) — cột Chờ ký chọn hàng loạt', () => {
+  const atSign = (kind, khachHang) => ({ ...newCase({ kind, sub: 'daNhan', kho: 'DTP', khachHang, items: [newItem({ maHang: 'A1', tenHang: 'Hàng A', soLuong: 1 })] }), step: 1 })
+
+  it('tick chọn tất cả → "Đã ký đủ → chuyển tiếp": mỗi hồ sơ sang bước kế của loại mình; bỏ tick 1 thẻ thì chỉ chuyển thẻ còn lại', () => {
+    const tra = atSign('tra', 'Thanh Dũng'), loi = atSign('loi', 'Nhà thuốc Nhiplus'), tra2 = atSign('tra', 'Nhà thuốc Minh An')
+    store.values.set('flowv2_cases', JSON.stringify([tra, loi, tra2]))
+    render(<FlowV2Tab />)
+    expect(screen.queryByRole('button', { name: /Đã ký đủ → chuyển tiếp/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Chọn tất cả hồ sơ chờ ký'))
+    fireEvent.click(screen.getByLabelText('Chọn Nhà thuốc Minh An')) // bỏ 1 thẻ
+    expect(screen.getByLabelText('Chọn tất cả hồ sơ chờ ký').indeterminate).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Đã ký đủ → chuyển tiếp (2)' }))
+
+    const byName = Object.fromEntries(read('flowv2_cases').map(c => [c.khachHang, c.step]))
+    expect(byName).toEqual({ 'Thanh Dũng': 2, 'Nhà thuốc Nhiplus': 2, 'Nhà thuốc Minh An': 1 })
+    expect(screen.getByText(/Đã chuyển 2 hồ sơ đã ký đủ: 1 sang "Kế toán nhập trả lại \(phiếu \+ hoá đơn\)", 1 sang "Nhập lại kho \(phiếu nhập lại\)"/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Chọn Nhà thuốc Minh An')).not.toBeChecked()
   })
 })

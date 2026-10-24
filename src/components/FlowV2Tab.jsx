@@ -145,11 +145,12 @@ function PsModal({ kho, onClose, onAdd }) {
   )
 }
 
-function CaseCard({ c, batch, onOpen }) {
+// onSelect (cột Chờ ký): thẻ có ô tick để chọn nhiều hồ sơ chuyển bước 1 lần — ô tick nằm ngoài nút mở hồ sơ.
+function CaseCard({ c, batch, onOpen, selected = false, onSelect = null }) {
   const flow = CASE_FLOWS[c.kind], s = stepOfCase(c), nxt = flow.steps[c.step + 1]
   const days = daysSince(c.stepAt)
-  return (
-    <button type="button" onClick={onOpen} className="w-full text-left bg-white rounded-xl border border-gray-200 p-2.5 hover:shadow-sm" style={{ borderLeft: `4px solid ${KIND_BORDER[c.kind]}` }}>
+  const card = (
+    <button type="button" onClick={onOpen} className={`w-full text-left bg-white rounded-xl border p-2.5 hover:shadow-sm ${onSelect ? 'pr-9' : ''} ${selected ? 'border-[#1e3a5f] ring-1 ring-[#1e3a5f]' : 'border-gray-200'}`} style={{ borderLeft: `4px solid ${KIND_BORDER[c.kind]}` }}>
       <div className="flex flex-wrap items-center gap-1.5"><KindTag kind={c.kind} /><KhoTag kho={c.kho} />{days >= 3 && s.col < 4 && <span className="text-[11px] font-semibold text-red-600">{days} ngày</span>}</div>
       <div className="font-semibold text-sm mt-1">{c.khachHang || 'Khách hàng chưa ghi'}</div>
       <div className="text-xs text-gray-500">{c.soDon || 'chưa có số đơn'} · {c.items.filter(it => it.maHang || it.tenHang).length} mặt hàng</div>
@@ -157,6 +158,14 @@ function CaseCard({ c, batch, onOpen }) {
       <div className="text-xs font-semibold text-[#1e3a5f] mt-1.5">{s.col === 4 ? `✓ ${s.t}` : `Đang ở: ${s.t}${s.k === 'dangHuy' && batch ? ` ${batch.no}` : ''}`}</div>
       {s.k === 'choHuy' ? <div className="text-xs text-gray-500">Đang ở khu Huỷ hàng, chờ gom đợt</div> : nxt && s.col < 4 && s.k !== 'dangHuy' && <div className="text-xs text-gray-500">Tiếp theo: {nxt.t}</div>}
     </button>
+  )
+  if (!onSelect) return card
+  return (
+    <div className="relative">
+      {card}
+      <input type="checkbox" checked={selected} onChange={e => onSelect(e.target.checked)} aria-label={`Chọn ${c.khachHang || c.soDon || 'hồ sơ'}`}
+        className="absolute top-2.5 right-2.5 w-4 h-4 cursor-pointer accent-[#1e3a5f]" />
+    </div>
   )
 }
 
@@ -230,6 +239,8 @@ export default function FlowV2Tab() {
   const [modal, setModal] = useState(null) // 'new' | 'kt' | { ps: 'C' | 'DTP' }
   const [sel, setSel] = useState({ C: [], DTP: [] })
   const [ktMsg, setKtMsg] = useState('')
+  const [signSel, setSignSel] = useState([]) // hồ sơ đang tick ở cột Chờ ký
+  const [bulkMsg, setBulkMsg] = useState('')
 
   useEffect(() => {
     const reload = () => setData(readFlowV2())
@@ -307,6 +318,22 @@ export default function FlowV2Tab() {
       ? `Đã lấy ${r.added.cases} hồ sơ khách trả và ${r.added.batches} đợt huỷ từ tab cũ, xếp vào Hoàn thành / Huỷ xong.`
       : 'Không có phiếu mới ở tab cũ — đã lấy hết từ trước.')
   }
+  // Cột Chờ ký: các hồ sơ đã tick đã ký đủ → mỗi hồ sơ sang bước kế của loại mình (trả nguyên vẹn: kế toán nhập trả lại,
+  // trả lỗi: nhập lại kho), giống bấm "Đã ký đủ" trong từng hồ sơ.
+  const signAll = ids => {
+    let s = data
+    const moved = []
+    for (const id of ids) {
+      const c = s.cases.find(x => x.id === id)
+      if (!c || stepOfCase(c).k !== 'kyNhap') continue
+      s = { ...s, ...advanceCase(s, id) }
+      moved.push(CASE_FLOWS[c.kind].steps[c.step + 1].t)
+    }
+    if (moved.length) save({ cases: s.cases, ...(s.pool !== data.pool ? { pool: s.pool } : {}) })
+    setSignSel([])
+    const byStep = [...new Set(moved)].map(t => `${moved.filter(x => x === t).length} sang "${t}"`).join(', ')
+    setBulkMsg(moved.length ? `Đã chuyển ${moved.length} hồ sơ đã ký đủ: ${byStep}.` : '')
+  }
   const late = visible.filter(c => daysSince(c.stepAt) >= 3 && stepOfCase(c).col < 4).length
   const atKt = visible.filter(c => stepOfCase(c).kt).length
   const openBatches = data.batches.filter(b => b.step < BATCH_STEPS.length - 1).length
@@ -323,6 +350,7 @@ export default function FlowV2Tab() {
         </header>
         {legacyMsg && <div className="text-xs text-green-700">{legacyMsg}</div>}
         {ktMsg && <div className="text-xs text-green-700" role="status">{ktMsg}</div>}
+        {bulkMsg && <div className="text-xs text-green-700" role="status">{bulkMsg}</div>}
 
         <div className="flex flex-wrap gap-2" role="tablist">
           {[['board', 'Bảng việc khách trả'], ['huy', `Huỷ hàng · ${data.pool.length} chờ huỷ · ${openBatches} đợt đang làm`]].map(([k, l]) => (
@@ -352,6 +380,9 @@ export default function FlowV2Tab() {
                 const isDone = ci === 4
                 // Cột Hoàn thành chỉ hiện tháng đang chọn; đang tìm kiếm thì tìm trên mọi tháng. Các cột việc luôn hiện hết.
                 const list = visible.filter(c => stepOfCase(c).col === ci && (!isDone || q.trim() || doneMonth(c) === doneMon))
+                const isSign = ci === 2
+                const ids = list.map(c => c.id)
+                const picked = isSign ? ids.filter(id => signSel.includes(id)) : [] // chỉ tính hồ sơ đang hiện (theo bộ lọc)
                 return (
                   <div key={title} className="bg-slate-100 rounded-2xl p-2.5 flex flex-col gap-2 min-h-60">
                     <div><div className="flex items-center justify-between text-sm font-semibold">{title}<span className="text-xs bg-white rounded-full px-2 text-gray-500">{list.length}</span></div>
@@ -360,12 +391,24 @@ export default function FlowV2Tab() {
                         <select value={doneMon} onChange={e => setDoneMon(e.target.value)} aria-label="Tháng hoàn thành" className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs">
                           {doneMonthOptions(data.cases).map(m => <option key={m} value={m}>{fmtMonthVi(m)}{m === monthKey() ? ' (tháng này)' : ''} · {data.cases.filter(c => doneMonth(c) === m).length} hồ sơ</option>)}
                         </select>
+                      )}
+                      {isSign && list.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                            <input type="checkbox" checked={picked.length === ids.length} aria-label="Chọn tất cả hồ sơ chờ ký" className="w-4 h-4 accent-[#1e3a5f]"
+                              ref={el => { if (el) el.indeterminate = picked.length > 0 && picked.length < ids.length }}
+                              onChange={e => setSignSel(e.target.checked ? ids : [])} /> Chọn tất cả
+                          </label>
+                          {picked.length > 0 && <button type="button" onClick={() => signAll(picked)} className="sheet-tab-action is-primary">Đã ký đủ → chuyển tiếp ({picked.length})</button>}
+                          {picked.length > 0 && <div className="w-full text-[11px] text-gray-500">Trả nguyên vẹn sang kế toán nhập trả lại, trả lỗi sang nhập lại kho.</div>}
+                        </div>
                       )}</div>
                     {isDone ? (
                       <div className="flex flex-col gap-1.5 overflow-y-auto pr-0.5" style={{ maxHeight: '70vh' }}>
                         {[...list].sort((x, y) => String(y.stepAt).localeCompare(String(x.stepAt))).map(c => <DoneRow key={c.id} c={c} onOpen={() => setOpenCase(c.id)} />)}
                       </div>
-                    ) : list.map(c => <CaseCard key={c.id} c={c} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)} />)}
+                    ) : list.map(c => <CaseCard key={c.id} c={c} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)}
+                      {...(isSign ? { selected: signSel.includes(c.id), onSelect: on => setSignSel(sel0 => (on ? [...sel0, c.id] : sel0.filter(x => x !== c.id))) } : {})} />)}
                   </div>
                 )
               })}
