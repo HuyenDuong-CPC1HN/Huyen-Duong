@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, X } from 'lucide-react'
+import { Link2, Plus, Search, X } from 'lucide-react'
 import {
-  BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, backBatch, backCase, daysSince,
-  dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, monthKey, makeBatch, toIsoDate, newCase, newItem, newPsEntry, stepOfCase,
+  BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, applyKtDone, backBatch, backCase, daysSince,
+  dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, ktLinkUrl, ktPending, monthKey, makeBatch, newKtToken,
+  toIsoDate, newCase, newItem, newPsEntry, stepOfCase,
 } from '../utils/flowV2'
-import { readFlowV2, readLegacySources, writeFlowV2 } from '../data/flowV2Store'
+import { fetchKtDone, readFlowV2, readKtLinks, readLegacySources, removeKtDone, syncKtQueue, writeFlowV2, writeKtLinks } from '../data/flowV2Store'
+import { KE_TOAN_LIST } from '../utils/returnSlips'
 import { importLegacy } from '../utils/flowV2Legacy'
 import { uploadFlowFiles } from '../data/flowV2Files'
 import { readReturnPdf } from '../utils/flowV2Pdf'
@@ -168,6 +170,52 @@ function DoneRow({ c, onOpen }) {
   )
 }
 
+// Link riêng cho từng kế toán (trang #ketoan=<mã>, không đăng nhập — supabase/functions/ke-toan): tạo, chép, đổi link.
+function KtLinksModal({ data, onClose }) {
+  const [links, setLinks] = useState(readKtLinks)
+  const [msg, setMsg] = useState('')
+  const copy = (name, token, done = 'Đã chép link') => {
+    const url = ktLinkUrl(token)
+    const ok = () => setMsg(`${done} của ${name}. Gửi riêng cho ${name} qua Zalo.`)
+    if (!navigator.clipboard?.writeText) { setMsg('Trình duyệt không cho chép tự động — anh bôi đen link trong ô để chép.'); return }
+    navigator.clipboard.writeText(url).then(ok, () => setMsg('Trình duyệt chặn chép — anh bôi đen link trong ô để chép.'))
+  }
+  const make = name => {
+    const next = { ...links, [name]: newKtToken() }
+    writeKtLinks(next)
+    setLinks(next)
+    syncKtQueue()
+    copy(name, next[name], links[name] ? 'Đã đổi link (link cũ hết dùng được) và chép link mới' : 'Đã tạo và chép link')
+  }
+  return (
+    <Modal title="Link kế toán" onClose={onClose}>
+      <p className="m-0 text-xs text-gray-500">Mỗi kế toán 1 link riêng, mở không cần đăng nhập: thấy hồ sơ khách trả / đợt huỷ đang chờ mình và bấm
+        <b> "Đã xong"</b>. Hồ sơ tự chuyển bước khi kho mở tab này. Lộ link thì bấm <b>Đổi link</b>, link cũ hết dùng được ngay.
+        Trang kế toán cần hàm <b>ke-toan</b> trên Supabase (xem supabase/README.md).</p>
+      {msg && <div className="text-xs text-green-700" role="status">{msg}</div>}
+      <div className="flex flex-col divide-y divide-gray-100">
+        {KE_TOAN_LIST.map(name => {
+          const p = ktPending(data, name)
+          const n = p.cases.length + p.batches.length
+          const token = links[name]
+          return (
+            <div key={name} className="py-2 flex flex-wrap items-center gap-2">
+              <div className="min-w-44"><div className="text-sm font-semibold">{name}</div><div className="text-[11px] text-gray-500">{n ? `${n} việc đang chờ` : 'không có việc chờ'}</div></div>
+              {token ? (
+                <>
+                  <input readOnly value={ktLinkUrl(token)} onFocus={e => e.target.select()} aria-label={`Link của ${name}`} className="flex-1 min-w-48 px-2 py-1 border border-gray-200 rounded-lg text-xs font-mono text-gray-600" />
+                  <button type="button" onClick={() => copy(name, token)} className="sheet-tab-action">Chép link</button>
+                  <button type="button" onClick={() => make(name)} className="sheet-tab-action">Đổi link</button>
+                </>
+              ) : <button type="button" onClick={() => make(name)} className="sheet-tab-action is-primary ml-auto"><Link2 size={13} /> Tạo link</button>}
+            </div>
+          )
+        })}
+      </div>
+    </Modal>
+  )
+}
+
 // Tab "Hàng trả & huỷ (Demo)": bảng việc hồ sơ khách trả + khu Huỷ hàng (Chờ huỷ, đợt huỷ) cho Kho C / Kho DTP.
 export default function FlowV2Tab() {
   const [data, setData] = useState(() => readFlowV2())
@@ -179,13 +227,36 @@ export default function FlowV2Tab() {
   const [legacyMsg, setLegacyMsg] = useState('')
   const [openCase, setOpenCase] = useState(null)
   const [openBatch, setOpenBatch] = useState(null)
-  const [modal, setModal] = useState(null) // 'new' | { ps: 'C' | 'DTP' }
+  const [modal, setModal] = useState(null) // 'new' | 'kt' | { ps: 'C' | 'DTP' }
   const [sel, setSel] = useState({ C: [], DTP: [] })
+  const [ktMsg, setKtMsg] = useState('')
 
   useEffect(() => {
     const reload = () => setData(readFlowV2())
     window.addEventListener(FLOWV2_EVENT, reload)
     return () => window.removeEventListener(FLOWV2_EVENT, reload)
+  }, [])
+  // Kế toán bấm "Đã xong" trên link riêng: khi mở tab / quay lại cửa sổ app thì đọc các xác nhận, chuyển bước, xoá khoá.
+  useEffect(() => {
+    let alive = true
+    const pull = async () => {
+      try {
+        const rows = await fetchKtDone()
+        if (!alive || !rows.length) return
+        const cur = readFlowV2()
+        const r = applyKtDone(cur, rows.map(x => x.value))
+        if (r.applied.length) {
+          writeFlowV2({ cases: r.cases, batches: r.batches, ...(r.pool !== cur.pool ? { pool: r.pool } : {}) })
+          setKtMsg(`Kế toán đã bấm "Đã xong" trên link: ${r.applied.map(a => `${a.by} — ${a.label}`).join('; ')}.`)
+        }
+        removeKtDone(rows.map(x => x.key))
+      } catch { /* mất mạng / chưa có quyền: lần mở tab sau đọc lại */ }
+    }
+    syncKtQueue()
+    void pull()
+    const onFocus = () => { void pull() }
+    window.addEventListener('focus', onFocus)
+    return () => { alive = false; window.removeEventListener('focus', onFocus) }
   }, [])
   const save = patch => { writeFlowV2(patch); setData(d => ({ ...d, ...patch })) }
   const saveCase = c => save({ cases: data.cases.map(x => (x.id === c.id ? c : x)) })
@@ -247,9 +318,11 @@ export default function FlowV2Tab() {
           <span className="font-semibold">Hàng trả &amp; huỷ (Demo)</span>
           <span className="text-xs text-gray-500">Bản dùng thử song song — dữ liệu riêng, không ảnh hưởng các tab cũ.</span>
           <button type="button" onClick={pullLegacy} className="sheet-tab-action ml-auto">Lấy dữ liệu từ tab cũ</button>
+          <button type="button" onClick={() => setModal('kt')} className="sheet-tab-action"><Link2 size={13} /> Link kế toán</button>
           {view === 'board' && <button type="button" onClick={() => setModal('new')} className="sheet-tab-action is-primary"><Plus size={13} /> Tạo hồ sơ khách trả</button>}
         </header>
         {legacyMsg && <div className="text-xs text-green-700">{legacyMsg}</div>}
+        {ktMsg && <div className="text-xs text-green-700" role="status">{ktMsg}</div>}
 
         <div className="flex flex-wrap gap-2" role="tablist">
           {[['board', 'Bảng việc khách trả'], ['huy', `Huỷ hàng · ${data.pool.length} chờ huỷ · ${openBatches} đợt đang làm`]].map(([k, l]) => (
@@ -348,6 +421,7 @@ export default function FlowV2Tab() {
           </div>
         )}
       </div>
+      {modal === 'kt' && <KtLinksModal data={data} onClose={() => setModal(null)} />}
       {modal === 'new' && <NewCaseModal onClose={() => setModal(null)} onCreate={createCase} />}
       {modal?.ps && <PsModal kho={modal.ps} onClose={() => setModal(null)} onAdd={entry => { save({ pool: [entry, ...data.pool] }); setModal(null) }} />}
     </div>

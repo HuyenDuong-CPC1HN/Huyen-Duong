@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  advanceBatch, advanceCase, backBatch, backCase, batchAsHuyPhieu, caseAsReturnSlip, dissolveBatch, ktPending, makeBatch,
-  newCase, newItem, newPsEntry, nextBatchNo, parseDateText, stepIndex, stepOfCase,
+  advanceBatch, advanceCase, applyKtDone, backBatch, backCase, batchAsHuyPhieu, caseAsReturnSlip, dissolveBatch, ktLinkUrl, ktPending,
+  ktQueue, makeBatch, newCase, newItem, newKtToken, newPsEntry, nextBatchNo, parseDateText, stepIndex, stepOfCase,
 } from '../flowV2'
 
 const now = new Date('2026-10-14T08:00:00')
@@ -142,5 +142,51 @@ describe('Hàng trả & huỷ — cột Hoàn thành theo tháng', () => {
     expect(doneMonth(done)).toBe('2026-09')
     expect(doneMonthOptions([c, done], new Date(2026, 9, 15))).toEqual(['2026-10', '2026-09'])
     expect(fmtMonthVi('2026-09')).toBe('Tháng 9/2026')
+  })
+})
+
+describe('Hàng trả & huỷ — link kế toán', () => {
+  const traAtKt = (keToan = 'Trần Thị Ái Lâm') => {
+    const c = { ...newCase({ kind: 'tra', sub: 'daNhan', kho: 'DTP', khachHang: 'Nhà thuốc Hải Phong', soDon: 'DU262/058586', items: [newItem({ maHang: 'TH0089', tenHang: 'Tobrameson', soLo: '021025', hanDung: '2027-10-19', soLuong: 20, dvt: 'LO' }), newItem()] }, now), keToan }
+    return goTo(st({ cases: [c] }), c.id, 'ktNhap')
+  }
+
+  it('hàng đợi chỉ gồm việc đang ở bước kế toán, dòng hàng rút gọn, bỏ dòng trống', () => {
+    const s = traAtKt()
+    const other = newCase({ kind: 'tra', sub: 'daNhan', khachHang: 'Chưa tới kế toán' }, now)
+    const q = ktQueue({ ...s, cases: [...s.cases, other] })
+    expect(q).toHaveLength(1)
+    expect(q[0]).toMatchObject({ kind: 'case', id: s.cases[0].id, keToan: 'Trần Thị Ái Lâm', kho: 'DTP', khachHang: 'Nhà thuốc Hải Phong', so: 'DU262/058586', viec: 'Nhập trả lại (phiếu nhập + hoá đơn)' })
+    expect(q[0].items).toEqual([{ maHang: 'TH0089', tenHang: 'Tobrameson', soLo: '021025', hanDung: '2027-10-19', soLuong: 20, dvt: 'LO' }])
+  })
+
+  it('đợt huỷ ở bước kế toán cũng vào hàng đợi', () => {
+    const c = newCase({ kind: 'loi', kho: 'C', khachHang: 'PK An Bình', items: [newItem({ maHang: 'A01264', tenHang: 'Ambroxen', soLuong: 5 })] }, now)
+    let s = goTo(st({ cases: [c] }), c.id, 'choHuy')
+    s = { ...s, ...makeBatch(s, 'C', [s.pool[0].id], now) }
+    const id = s.batches[0].id
+    s = { ...s, ...advanceBatch(s, id, {}, now) }
+    s = { ...s, ...advanceBatch(s, id, {}, now) }
+    expect(ktQueue(s)).toEqual([expect.objectContaining({ kind: 'batch', id, so: 'ĐH-C-1026-01', viec: 'Xuất huỷ khỏi phần mềm' })])
+  })
+
+  it('áp "Đã xong": hồ sơ sang bước kế, ghi tên kế toán + giờ bấm; việc đã xong / không còn ở bước kế toán thì bỏ qua', () => {
+    const s = traAtKt()
+    const id = s.cases[0].id
+    const at = '2026-10-23T09:15:00.000Z'
+    const r = applyKtDone(s, [{ kind: 'case', id, by: 'Trần Thị Ái Lâm', at }, { kind: 'case', id: 'khong_co', by: 'X', at }])
+    expect(stepOfCase(r.cases[0]).k).toBe('banTiep')
+    expect(r.cases[0].ktDone).toEqual({ by: 'Trần Thị Ái Lâm (bấm trên link kế toán)', at })
+    expect(r.applied).toEqual([expect.objectContaining({ id, label: 'Nhà thuốc Hải Phong' })])
+    const again = applyKtDone(r, [{ kind: 'case', id, by: 'Trần Thị Ái Lâm', at }])
+    expect(again.applied).toEqual([])
+    expect(again.cases).toBe(r.cases)
+  })
+
+  it('mã link ngẫu nhiên 32 ký tự base64url, mỗi lần khác nhau; link dạng #ketoan=', () => {
+    const a = newKtToken(), b = newKtToken()
+    expect(a).toMatch(/^[A-Za-z0-9_-]{32}$/)
+    expect(a).not.toBe(b)
+    expect(ktLinkUrl(a, 'https://app.vn')).toBe(`https://app.vn/#ketoan=${a}`)
   })
 })

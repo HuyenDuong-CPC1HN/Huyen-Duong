@@ -170,7 +170,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
                 <select value={c.keToan} onChange={e => set({ keToan: e.target.value })} className={presetCls} aria-label="Kế toán phụ trách">{KE_TOAN_LIST.map(n => <option key={n}>{n}</option>)}</select>
               </Field>
             </div>
-            <div className="text-[11px] text-gray-400">Link riêng cho kế toán tự bấm "Đã xong" sẽ làm ở bước sau; tạm thời kho bấm xác nhận khi kế toán báo.</div>
+            <div className="text-[11px] text-gray-400">Kế toán bấm "Đã xong" trên link riêng (nút "Link kế toán" ở bảng việc) thì app tự chuyển bước khi kho mở tab. Kế toán báo miệng thì kho bấm xác nhận bên dưới.</div>
           </div>
           {next('Kế toán đã xong → Hoàn thành', { ktBy: `Kho xác nhận (${c.keToan} báo)` })}
         </>

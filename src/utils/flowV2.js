@@ -311,6 +311,66 @@ export function ktPending({ cases, batches }, name) {
   }
 }
 
+// ===== Link kế toán: trang riêng không đăng nhập (#ketoan=<mã>), qua Edge Function supabase/functions/ke-toan =====
+// Kho giữ mã link của từng kế toán; app kho ghi sẵn bản rút gọn các việc đang chờ kế toán (hàng đợi) để hàm chỉ việc
+// lọc theo tên. Kế toán bấm "Đã xong" thì hàm ghi 1 khoá riêng cho việc đó; app kho đọc, chuyển bước, rồi xoá khoá.
+export const FLOWV2_KT_LINKS_KEY = 'flowv2_kt_links' // { "Tên kế toán": "mã link" }
+export const FLOWV2_KT_QUEUE_KEY = 'flowv2_kt_queue'
+export const KT_DONE_PREFIX = 'flowv2_ktdone:'
+
+const ktRows = items => items.filter(it => it.maHang || it.tenHang)
+  .map(it => ({ maHang: it.maHang || '', tenHang: it.tenHang || '', soLo: it.soLo || '', hanDung: it.hanDung || '', soLuong: it.soLuong ?? null, dvt: it.dvt || '' }))
+
+// Việc đang chờ kế toán (mọi kế toán), chỉ gồm thông tin kế toán cần để làm phiếu.
+export function ktQueue({ cases, batches }) {
+  return [
+    ...cases.filter(c => stepOfCase(c).kt).map(c => {
+      const hd = c.traHang?.form
+      return {
+        kind: 'case', id: c.id, keToan: c.keToan || DEFAULT_KE_TOAN, kho: c.kho, viec: 'Nhập trả lại (phiếu nhập + hoá đơn)',
+        loai: CASE_FLOWS[c.kind].short, khachHang: c.khachHang || '', so: c.soDon || '',
+        hoaDon: hd?.soHD ? { so: hd.soHD, kyHieu: hd.kyHieu || '', ngay: hd.ngayHD || '' } : null,
+        since: c.stepAt, items: ktRows(c.items),
+      }
+    }),
+    ...batches.filter(b => BATCH_STEPS[b.step]?.kt).map(b => ({
+      kind: 'batch', id: b.id, keToan: b.keToan || DEFAULT_KE_TOAN, kho: b.kho, viec: 'Xuất huỷ khỏi phần mềm',
+      loai: 'Đợt huỷ', khachHang: '', so: b.no, hoaDon: null, since: b.stepAt, items: ktRows(b.items),
+    })),
+  ]
+}
+
+// Áp các lần kế toán bấm "Đã xong" trên link ({ kind, id, by, at }): việc còn ở bước kế toán thì sang bước kế, ghi tên
+// kế toán + giờ bấm; việc kho đã tự xác nhận / đã lùi bước thì bỏ qua. applied: các việc đã chuyển (kèm nhãn để báo).
+export function applyKtDone(state, done) {
+  let s = state
+  const applied = []
+  for (const d of done) {
+    const at = d?.at && !Number.isNaN(new Date(d.at).getTime()) ? new Date(d.at) : new Date()
+    const opts = { ktBy: `${d?.by || 'Kế toán'} (bấm trên link kế toán)` }
+    if (d?.kind === 'case') {
+      const c = s.cases.find(x => x.id === d.id)
+      if (!c || !stepOfCase(c).kt) continue
+      s = { ...s, ...advanceCase(s, d.id, opts, at) }
+      applied.push({ ...d, label: c.khachHang || c.soDon || 'Hồ sơ khách trả' })
+    } else if (d?.kind === 'batch') {
+      const b = s.batches.find(x => x.id === d.id)
+      if (!b || !BATCH_STEPS[b.step].kt) continue
+      s = { ...s, ...advanceBatch(s, d.id, opts, at) }
+      applied.push({ ...d, label: `đợt huỷ ${b.no}` })
+    }
+  }
+  return { ...s, applied }
+}
+
+// Mã link ngẫu nhiên 32 ký tự (base64url), đủ dài để không đoán được.
+export function newKtToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24))
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+// Theo đường gốc của app (Vercel "/", GitHub Pages "/Huyen-Duong/").
+export const ktLinkUrl = (token, origin = window.location.origin, base = import.meta.env.BASE_URL || '/') => `${origin}${base}#ketoan=${token}`
+
 // "22/08/2029", "22-08-29", "2029-08-22" → "2029-08-22"; không đọc được → null.
 export function parseDateText(text) {
   const t = String(text || '').trim()

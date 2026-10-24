@@ -32,3 +32,18 @@ tự dùng bộ đọc chữ trên trình duyệt như cũ.
    App gọi được cả tên `pxk-ocr` lẫn `PXK-OCR`.
 
 Gói miễn phí của Gemini có giới hạn lượt / ngày và Google có thể dùng dữ liệu gửi lên để cải thiện sản phẩm.
+
+## Edge Function `ke-toan` (link riêng cho kế toán, tab Hàng trả & huỷ)
+
+Kế toán mở link `https://<app>/#ketoan=<mã>` (không cần đăng nhập) để xem việc đang chờ mình (hồ sơ khách trả chờ nhập
+trả lại, đợt huỷ chờ xuất huỷ) và bấm **Đã xong**. App kho tự chuyển hồ sơ / đợt huỷ sang bước kế khi mở tab.
+
+1. Supabase Dashboard → **Edge Functions** → **Deploy a new function** → **Via Editor**, tên đúng `ke-toan` (chữ
+   thường), dán toàn bộ `functions/ke-toan/index.ts`, bấm **Deploy**.
+2. Mở hàm → **Details** (hoặc Settings) → **tắt "Verify JWT" / "Enforce JWT verification"** → Save. Kế toán không có
+   tài khoản đăng nhập nên phải tắt; hàm tự kiểm tra mã link, chỉ trả việc của đúng người giữ link và chỉ ghi được
+   khoá xác nhận `flowv2_ktdone:*`.
+3. Không cần thêm secret: `SUPABASE_URL` và `SUPABASE_SERVICE_ROLE_KEY` có sẵn trong môi trường Edge Function. Không
+   đưa khoá service role vào code app hay biến `VITE_*`.
+4. Trong app: tab **Hàng trả & huỷ** → nút **Link kế toán** → **Tạo link** cho từng kế toán, chép gửi qua Zalo.
+   Lộ link thì bấm **Đổi link** — link cũ hết dùng được ngay.

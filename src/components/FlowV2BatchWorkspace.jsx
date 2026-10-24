@@ -89,7 +89,7 @@ export default function FlowV2BatchWorkspace({ b, onSave, onAdvance, onBackStep,
           <div style={grid(220)}>
             <Field label="Kế toán phụ trách" kind="preset"><select value={b.keToan} onChange={e => set({ keToan: e.target.value })} className={presetCls} aria-label="Kế toán phụ trách">{KE_TOAN_LIST.map(n => <option key={n}>{n}</option>)}</select></Field>
           </div>
-          <div className="text-[11px] text-gray-400">Link riêng cho kế toán tự bấm "Đã xong" sẽ làm ở bước sau; tạm thời kho bấm xác nhận khi kế toán báo.</div>
+          <div className="text-[11px] text-gray-400">Kế toán bấm "Đã xong" trên link riêng (nút "Link kế toán" ở bảng việc) thì app tự chuyển bước khi kho mở tab. Kế toán báo miệng thì kho bấm xác nhận bên dưới.</div>
         </div>
         <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onAdvance({ ktBy: `Kho xác nhận (${b.keToan} báo)` })} className="sheet-tab-action is-primary">Kế toán đã xong → Huỷ xong</button>{back}</div>
       </>
