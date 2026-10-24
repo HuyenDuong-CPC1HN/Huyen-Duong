@@ -268,7 +268,7 @@ export function caseAsReturnSlip(c) {
     khachHang: c.khachHang,
     pdf: { mau: c.kho === 'DTP' ? 'UPHARMA' : 'CPC1HN', benMua: { ten: c.khachHang }, items: rows.map(it => ({ ten: it.tenHang, dvt: it.dvt, soLuong: it.soLuong ?? '' })) },
     form: {
-      xmNgay: f.xmNgay, xmGio: f.xmGio, xmKeToan: f.keToan, xmDiaDiem: 'CN.Hồ Chí Minh',
+      xmNgay: f.xmNgay, xmGio: f.xmGio, xmKeToan: f.keToan, xmDiaDiem: 'CN.Hồ Chí Minh', xmYKien: f.yKien,
       xmTinhTrang: defaultTinhTrang(c), xmKetQua: 'Kiểm tra hàng đúng lô, đúng hạn dùng, đúng số lượng.',
       items: rows.map(it => ({ soLo: it.soLo, hanDung: it.hanDung, quyCach: it.quyCach, tinhTrang: it.tinhTrang })),
     },

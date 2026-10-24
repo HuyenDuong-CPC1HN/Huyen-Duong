@@ -186,7 +186,7 @@ export function XacMinhPaper({ slip }) {
           <tr>
             {[0, 1, 2].map(i => (
               <td key={i} className={`${td} text-left align-top`}>
-                <div>Ý kiến: Nhập lại vào kho</div>
+                <div>Ý kiến: {f.xmYKien?.[i] ?? 'Nhập lại vào kho'}</div>
                 <div>Chữ ký:</div><div className="rsw-sign-gap" />
                 <div>Ngày: ……………………</div>
               </td>

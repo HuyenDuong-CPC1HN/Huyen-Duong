@@ -51,6 +51,12 @@ describe('Hàng trả & huỷ (Demo)', () => {
     expect(screen.getAllByText('CÔNG TY CỔ PHẦN UPHARMA').length).toBeGreaterThan(0)
     fireEvent.change(screen.getByLabelText('Kho của hồ sơ'), { target: { value: 'C' } })
     expect(screen.queryByText('CÔNG TY CỔ PHẦN UPHARMA')).not.toBeInTheDocument()
+    // Ý kiến trong khung ký duyệt: mặc định "Nhập lại vào kho", sửa từng ô thì biên bản đổi theo, ô khác giữ nguyên
+    expect(screen.getAllByText('Ý kiến: Nhập lại vào kho').length).toBeGreaterThanOrEqual(3)
+    fireEvent.change(screen.getByLabelText('Ý kiến Kế toán'), { target: { value: 'Nhập lại kho, chờ hoá đơn điều chỉnh' } })
+    expect(read('flowv2_cases')[0].form.yKien).toEqual(['Nhập lại vào kho', 'Nhập lại kho, chờ hoá đơn điều chỉnh', 'Nhập lại vào kho'])
+    expect(screen.getAllByText('Ý kiến: Nhập lại kho, chờ hoá đơn điều chỉnh').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Ý kiến Kho vận')).toHaveValue('Nhập lại vào kho')
     // Bước BB xác minh vẫn sửa được tên hàng (vd bỏ chữ "(Afghanistan)")
     fireEvent.change(screen.getByLabelText('Tên hàng dòng 1'), { target: { value: 'Zensalbu nebules 2.5 - Hộp 2 vỉ' } })
     expect(screen.getAllByText('Zensalbu nebules 2.5 - Hộp 2 vỉ').length).toBeGreaterThan(0)

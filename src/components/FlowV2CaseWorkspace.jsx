@@ -14,6 +14,9 @@ import { handCls, presetCls, grid } from './workspaceStyles'
 import { ItemsEditor, KindTag, PhotoBox, StepList } from './FlowV2Parts'
 
 const subLabel = c => (c.kind !== 'tra' ? '' : c.sub === 'tuChoi' ? 'Khách từ chối nhận — BB trả hàng nội bộ' : 'Khách đã nhận rồi trả — BB trả hàng có chữ ký khách')
+// 3 ô "Ý kiến" trong khung ký duyệt của BB xác minh (đúng thứ tự cột), mặc định như file Word mẫu.
+const Y_KIEN_COLS = ['Dược sĩ phụ trách chuyên môn', 'Kế toán', 'Kho vận']
+const Y_KIEN_MAC_DINH = 'Nhập lại vào kho'
 
 // Màn làm việc của 1 hồ sơ khách trả: trái là các bước, giữa là việc của bước hiện tại, biên bản xác minh xem trước + in.
 // onSave(c) lưu hồ sơ · onAdvance(opts) sang bước kế · onBackStep() lùi 1 bước · onClose() về bảng việc.
@@ -99,6 +102,15 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
               onAdd={() => set({ items: [...c.items, newItem({ tinhTrang: c.kind === 'tra' ? 'Hàng nguyên vẹn' : (c.loiLyDo || 'Hàng lỗi') })] })}
               onRemove={i => set({ items: c.items.length > 1 ? c.items.filter((_, idx) => idx !== i) : [newItem()] })} />
             {!hasItems && <div className="text-xs text-amber-700">Gõ ít nhất 1 dòng hàng (mã hoặc tên) để làm biên bản.</div>}
+            <div className="text-xs font-semibold text-gray-600">Ý kiến trong khung ký duyệt</div>
+            <div style={grid(180)}>
+              {Y_KIEN_COLS.map((label, i) => (
+                <Field key={label} label={label} kind="preset">
+                  <input value={c.form.yKien?.[i] ?? Y_KIEN_MAC_DINH} className={presetCls} aria-label={`Ý kiến ${label}`}
+                    onChange={e => setForm('yKien', Y_KIEN_COLS.map((_, j) => (j === i ? e.target.value : c.form.yKien?.[j] ?? Y_KIEN_MAC_DINH)))} />
+                </Field>
+              ))}
+            </div>
           </div>
           {c.kind === 'tra' && c.sub === 'daNhan' && (
             <PhotoBox title="BB trả hàng có chữ ký khách — không bắt buộc" hint="Bản cứng gửi về công ty. Muốn lưu bản mềm thì chụp ảnh hoặc tải file lên, không có cũng làm tiếp được." {...photoProps('photos')} />
