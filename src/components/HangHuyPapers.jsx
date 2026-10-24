@@ -163,6 +163,8 @@ export function XacMinhPaper({ phieu, keToan = 'Lưu Thị Thuỳ' }) {
           </tr>
         </tbody>
       </table>
+      {/* Phần nối dài khung "Xác nhận của Quản lý" khi in: cao tối đa 70px, tự co về 0 khi biên bản dài để vừa 1 trang (index.css) */}
+      <div className="rsw-mgr-fill" aria-hidden="true"><span /><span /></div>
     </div>
   )
 }

@@ -124,6 +124,11 @@ describe('ReturnSlipWorkspace — khung ký duyệt biên bản xác minh', () =
     expect(cells[0].className).toContain('text-center') // chữ canh giữa ô
     expect(cells[1].getAttribute('colspan')).toBe('2') // ô ký trống chiếm 2 cột
     expect(cells[1].textContent).toBe('')
+    // phần nối dài khung khi in (tự co để biên bản vừa 1 trang) nằm ngay sau bảng ký duyệt, chỉ là khung trống
+    const fill = table.nextElementSibling
+    expect(fill.className).toBe('rsw-mgr-fill')
+    expect(fill.getAttribute('aria-hidden')).toBe('true')
+    expect(fill.textContent).toBe('')
   })
 })
 
