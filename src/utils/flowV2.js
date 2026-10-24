@@ -321,21 +321,26 @@ export const KT_DONE_PREFIX = 'flowv2_ktdone:'
 const ktRows = items => items.filter(it => it.maHang || it.tenHang)
   .map(it => ({ maHang: it.maHang || '', tenHang: it.tenHang || '', soLo: it.soLo || '', hanDung: it.hanDung || '', soLuong: it.soLuong ?? null, dvt: it.dvt || '' }))
 
-// Việc đang chờ kế toán (mọi kế toán), chỉ gồm thông tin kế toán cần để làm phiếu.
+// Việc đang chờ kế toán (mọi kế toán), chỉ gồm thông tin kế toán cần để làm phiếu. papers: dữ liệu dựng lại đúng các
+// biên bản kho đã lập trong app (cùng mẫu với màn xem trước / in của kho) để trang kế toán hiện biên bản.
 export function ktQueue({ cases, batches }) {
   return [
     ...cases.filter(c => stepOfCase(c).kt).map(c => {
       const hd = c.traHang?.form
+      // giống màn hồ sơ: khách từ chối nhận mà hồ sơ cũ chưa có phần biên bản trả hàng thì dựng mẫu nội bộ mặc định
+      const traHang = c.traHang || (c.kind === 'tra' && c.sub === 'tuChoi' ? newTraHang({ khachHang: c.khachHang, keToan: c.form?.keToan }, new Date(c.createdAt || c.stepAt || Date.now())) : null)
       return {
         kind: 'case', id: c.id, keToan: c.keToan || DEFAULT_KE_TOAN, kho: c.kho, viec: 'Nhập trả lại (phiếu nhập + hoá đơn)',
         loai: CASE_FLOWS[c.kind].short, khachHang: c.khachHang || '', so: c.soDon || '',
         hoaDon: hd?.soHD ? { so: hd.soHD, kyHieu: hd.kyHieu || '', ngay: hd.ngayHD || '' } : null,
         since: c.stepAt, items: ktRows(c.items),
+        papers: { xm: caseAsReturnSlip(c), th: traHang ? caseReturnSlip({ ...c, traHang }) : null },
       }
     }),
     ...batches.filter(b => BATCH_STEPS[b.step]?.kt).map(b => ({
       kind: 'batch', id: b.id, keToan: b.keToan || DEFAULT_KE_TOAN, kho: b.kho, viec: 'Xuất huỷ khỏi phần mềm',
       loai: 'Đợt huỷ', khachHang: '', so: b.no, hoaDon: null, since: b.stepAt, items: ktRows(b.items),
+      papers: { huy: batchAsHuyPhieu(b), keToan: b.form?.keToan || b.keToan || DEFAULT_KE_TOAN },
     })),
   ]
 }

@@ -158,6 +158,9 @@ describe('Hàng trả & huỷ — link kế toán', () => {
     expect(q).toHaveLength(1)
     expect(q[0]).toMatchObject({ kind: 'case', id: s.cases[0].id, keToan: 'Trần Thị Ái Lâm', kho: 'DTP', khachHang: 'Nhà thuốc Hải Phong', so: 'DU262/058586', viec: 'Nhập trả lại (phiếu nhập + hoá đơn)' })
     expect(q[0].items).toEqual([{ maHang: 'TH0089', tenHang: 'Tobrameson', soLo: '021025', hanDung: '2027-10-19', soLuong: 20, dvt: 'LO' }])
+    // dữ liệu dựng lại biên bản kho đã lập (BB xác minh; khách đã nhận rồi trả thì không có BB trả hàng nội bộ)
+    expect(q[0].papers.xm).toEqual(caseAsReturnSlip(s.cases[0]))
+    expect(q[0].papers.th).toBeNull()
   })
 
   it('đợt huỷ ở bước kế toán cũng vào hàng đợi', () => {

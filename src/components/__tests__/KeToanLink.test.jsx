@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import KeToanPage from '../KeToanPage'
 import FlowV2Tab from '../FlowV2Tab'
-import { advanceCase, newCase, newItem } from '../../utils/flowV2'
+import { advanceBatch, advanceCase, ktQueue, makeBatch, newCase, newItem, stepOfCase } from '../../utils/flowV2'
 
 const store = vi.hoisted(() => {
   const values = new Map()
@@ -27,28 +27,67 @@ function caseAtKt() {
 }
 
 describe('Trang kế toán (link riêng, không đăng nhập)', () => {
-  const item = { kind: 'case', id: 'case_1', keToan: 'Trần Thị Ái Lâm', kho: 'DTP', viec: 'Nhập trả lại (phiếu nhập + hoá đơn)', loai: 'Trả nguyên vẹn',
-    khachHang: 'Nhà thuốc Hải Phong', so: 'DU262/058586', hoaDon: { so: '0001234', kyHieu: '1C26TPH', ngay: '2026-10-20' }, since: new Date().toISOString(),
-    items: [{ maHang: 'TH0089', tenHang: 'Tobrameson - Hộp 1 ống 5ml', soLo: '021025', hanDung: '2027-10-19', soLuong: 20, dvt: 'LO' }] }
+  // Việc mẫu dựng đúng như app kho ghi hàng đợi: 2 hồ sơ nhập trả lại (Kho DTP, Kho C) + 1 đợt huỷ Kho C.
+  function queueItems() {
+    const go = (s, id, k) => { while (stepOfCase(s.cases.find(c => c.id === id)).k !== k) s = { ...s, ...advanceCase(s, id) }; return s }
+    const dtp = { ...newCase({ kind: 'tra', sub: 'daNhan', kho: 'DTP', khachHang: 'Nhà thuốc Hải Phong', soDon: 'DU262/058586', items: [newItem({ maHang: 'TH0089', tenHang: 'Tobrameson - Hộp 1 ống 5ml', soLo: '021025', hanDung: '2027-10-19', soLuong: 20, dvt: 'LO' })] }), keToan: 'Trần Thị Ái Lâm' }
+    const c = { ...newCase({ kind: 'tra', sub: 'tuChoi', kho: 'C', khachHang: 'Bệnh viện Vạn Phúc', soDon: 'C262/000777', items: [newItem({ maHang: 'P10001', tenHang: 'Paracetamol 500mg', soLuong: 5 })] }), keToan: 'Trần Thị Ái Lâm' }
+    const loi = newCase({ kind: 'loi', kho: 'C', khachHang: 'PK An Bình', items: [newItem({ maHang: 'A01264', tenHang: 'Ambroxen', soLuong: 3 })] })
+    let s = { cases: [dtp, c, loi], pool: [], batches: [] }
+    s = go(go(go(s, dtp.id, 'ktNhap'), c.id, 'ktNhap'), loi.id, 'choHuy')
+    s = { ...s, ...makeBatch(s, 'C', [s.pool[0].id]) }
+    const bid = s.batches[0].id
+    s = { ...s, ...advanceBatch(s, bid) }
+    s = { ...s, ...advanceBatch(s, bid) }
+    s = { ...s, batches: s.batches.map(b => ({ ...b, keToan: 'Trần Thị Ái Lâm' })) }
+    return ktQueue(s)
+  }
+  const T = 'abcdefghijklmnopqrstuvwxyz012345'
 
-  it('mở bằng mã trong link: thấy việc của mình; bấm Đã xong → xác nhận → gửi đúng việc, việc biến khỏi danh sách', async () => {
-    window.location.hash = '#ketoan=abcdefghijklmnopqrstuvwxyz012345'
-    api.callKeToan.mockImplementation(async b => (b.action === 'list' ? { name: 'Trần Thị Ái Lâm', items: [item] } : { ok: true }))
+  it('lọc theo kho / công việc, tìm kiếm; mỗi việc 1 dòng, bấm mở thấy hàng hoá + biên bản kho đã lập', async () => {
+    window.location.hash = `#ketoan=${T}`
+    api.callKeToan.mockResolvedValue({ name: 'Trần Thị Ái Lâm', items: queueItems() })
     render(<KeToanPage />)
     expect(await screen.findByText('Xin chào Trần Thị Ái Lâm')).toBeInTheDocument()
-    expect(api.callKeToan).toHaveBeenCalledWith({ t: 'abcdefghijklmnopqrstuvwxyz012345', action: 'list' })
-    const card = screen.getByRole('article', { name: /Nhà thuốc Hải Phong/ })
-    expect(within(card).getByText('Tobrameson - Hộp 1 ống 5ml')).toBeInTheDocument()
-    expect(within(card).getByText('19/10/2027')).toBeInTheDocument()
-    expect(within(card).getByText('0001234')).toBeInTheDocument()
+    expect(api.callKeToan).toHaveBeenCalledWith({ t: T, action: 'list' })
+    expect(screen.getAllByRole('article')).toHaveLength(3)
+    expect(screen.queryByText('Tobrameson - Hộp 1 ống 5ml')).not.toBeInTheDocument() // dòng gọn, chưa mở
 
-    fireEvent.click(within(card).getByRole('button', { name: /Đã xong/ }))
+    fireEvent.click(within(screen.getByRole('group', { name: 'Kho' })).getByRole('button', { name: /Kho C/ }))
+    expect(screen.getAllByRole('article')).toHaveLength(2)
+    fireEvent.click(within(screen.getByRole('group', { name: 'Công việc' })).getByRole('button', { name: /Xuất huỷ/ }))
+    expect(screen.getAllByRole('article')).toHaveLength(1)
+    expect(screen.getByText(/Đợt huỷ ĐH-C-/)).toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Kho' })).getByRole('button', { name: /Tất cả/ }))
+    fireEvent.click(within(screen.getByRole('group', { name: 'Công việc' })).getByRole('button', { name: /Tất cả/ }))
+
+    fireEvent.change(screen.getByLabelText('Tìm việc'), { target: { value: 'tobra' } }) // không dấu, không phân biệt hoa thường
+    expect(screen.getAllByRole('article')).toHaveLength(1)
+    fireEvent.change(screen.getByLabelText('Tìm việc'), { target: { value: 'khong co' } })
+    expect(screen.getByText('Không có việc nào khớp bộ lọc / từ khoá.')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Tìm việc'), { target: { value: 'vạn phúc' } })
+    fireEvent.click(screen.getByRole('button', { name: /Bệnh viện Vạn Phúc/ }))
+    const row = screen.getByRole('article')
+    expect(within(row).getByText('Paracetamol 500mg')).toBeInTheDocument()
+    // biên bản trả hàng nội bộ + BB xác minh, đúng mẫu của kho
+    expect(await within(row).findByRole('button', { name: 'BB trả hàng nội bộ' })).toBeInTheDocument()
+    fireEvent.click(within(row).getByRole('button', { name: 'BB xác minh (nhập lại)' }))
+    expect(within(row).getAllByText('BIÊN BẢN XÁC MINH TÌNH TRẠNG HÀNG HOÁ').length).toBeGreaterThan(0)
+  })
+
+  it('bấm Đã xong → hỏi lại → gửi đúng việc, việc biến khỏi danh sách', async () => {
+    window.location.hash = `#ketoan=${T}`
+    const items = queueItems()
+    api.callKeToan.mockImplementation(async b => (b.action === 'list' ? { name: 'Trần Thị Ái Lâm', items } : { ok: true }))
+    render(<KeToanPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Nhà thuốc Hải Phong/ }))
+    const row = screen.getByRole('article', { name: /Nhà thuốc Hải Phong/ })
+    fireEvent.click(within(row).getByRole('button', { name: /Đã xong/ }))
     expect(api.callKeToan).toHaveBeenCalledTimes(1) // chưa gửi, đang hỏi lại
-    fireEvent.click(within(card).getByRole('button', { name: 'Đúng, đã xong' }))
-    await waitFor(() => expect(api.callKeToan).toHaveBeenCalledWith({ t: 'abcdefghijklmnopqrstuvwxyz012345', action: 'done', kind: 'case', id: 'case_1' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Đúng, đã xong' }))
+    await waitFor(() => expect(api.callKeToan).toHaveBeenCalledWith({ t: T, action: 'done', kind: 'case', id: items[0].id }))
     expect(await screen.findByRole('status')).toHaveTextContent('Đã báo kho: Nhà thuốc Hải Phong')
-    expect(screen.queryByRole('article')).not.toBeInTheDocument()
-    expect(screen.getByText('Không có việc nào đang chờ anh/chị.')).toBeInTheDocument()
+    expect(screen.getAllByRole('article')).toHaveLength(2)
   })
 
   it('link sai / đã đổi: báo lỗi từ máy chủ; link thiếu mã thì không gọi máy chủ', async () => {
