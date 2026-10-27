@@ -2,8 +2,8 @@ import { opsStore } from './workspace'
 import { PXK_STORE_KEY } from '../utils/pxkReconcile'
 
 // Dữ liệu mục "Đối chiếu sổ sách" theo từng chuyến nhập hàng (id chuyến ở goods_receipt_batches):
-// { [batchId]: { phieus: [...], scan: { C, DTP, SO }, checked: [...] } }. Lưu ở ops_settings, tách khỏi dữ liệu tab cũ.
-export const emptyPxkSession = () => ({ phieus: [], scan: { C: null, DTP: null, SO: null }, checked: [] })
+// { [batchId]: { phieus: [...], scan: { C, DTP, SO }, checked: [...], reasons: { 'kho:dòng': lý do } } }. Lưu ở ops_settings, tách khỏi dữ liệu tab cũ.
+export const emptyPxkSession = () => ({ phieus: [], scan: { C: null, DTP: null, SO: null }, checked: [], reasons: {} })
 
 export function readPxkStore() {
   try {

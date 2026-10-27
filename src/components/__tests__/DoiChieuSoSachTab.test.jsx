@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DoiChieuSoSachTab from '../DoiChieuSoSachTab'
+import { newPxkPhieu, newPxkRow } from '../../utils/pxkReconcile'
 
 const store = vi.hoisted(() => {
   const values = new Map()
@@ -92,6 +93,30 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(within(result).getByText('Không có dòng nào khớp “khong co”.')).toBeInTheDocument()
     fireEvent.click(within(result).getByRole('button', { name: 'Xoá từ khoá tìm' }))
     expect(rows()).toHaveLength(2)
+  })
+
+  it('dòng chưa khớp: nhập lý do → Xác nhận lý do thì thành Khớp, ra khỏi Báo đầu nguồn; Bỏ xác nhận thì lệch lại', () => {
+    const ph = newPxkPhieu({ kho: 'C', kind: 'anh', soPhieu: 'XD2611/04592', rows: [newPxkRow({ maHang: 'F00629', soLuong: 3380, soLo: '13626G01', hanDung: '2029-07-12' })] })
+    store.values.set('pxk_doi_chieu', JSON.stringify({ b1: { phieus: [ph], scan: { C: null, DTP: null, SO: null }, checked: [] } }))
+    render(<DoiChieuSoSachTab />)
+    const result = screen.getByRole('region', { name: 'Kết quả đối chiếu' })
+    expect(within(result).getByText('Sổ sách thừa')).toBeInTheDocument()
+    expect(screen.getByLabelText('Nội dung báo đầu nguồn').value).toContain('XD2611/04592')
+    fireEvent.click(within(result).getByRole('button', { name: 'Nhập lý do' }))
+    const confirm = within(result).getByRole('button', { name: 'Xác nhận lý do' })
+    expect(confirm).toBeDisabled()
+    fireEvent.change(within(result).getByLabelText('Lý do F00629 lô 13626G01'), { target: { value: 'Nhà máy giao bù 80 ống chuyến sau' } })
+    fireEvent.click(confirm)
+    expect(within(result).queryByText('Sổ sách thừa', { selector: 'span.rounded' })).not.toBeInTheDocument()
+    expect(within(result).getByText('Khớp', { selector: 'span.rounded' })).toBeInTheDocument()
+    expect(within(result).getByText(/Nhà máy giao bù 80 ống chuyến sau/)).toBeInTheDocument()
+    expect(within(result).getByRole('button', { name: /Báo đầu nguồn/ })).toHaveTextContent('Báo đầu nguồn 0')
+    expect(screen.getByLabelText('Nội dung báo đầu nguồn')?.value || '').not.toContain('XD2611/04592')
+    const saved = JSON.parse(store.values.get('pxk_doi_chieu')).b1.reasons
+    expect(Object.keys(saved)[0]).toMatch(/^C:/)
+    expect(Object.values(saved)[0]).toMatchObject({ text: 'Nhà máy giao bù 80 ống chuyến sau', was: ['thua'] })
+    fireEvent.click(within(result).getByRole('button', { name: 'Bỏ xác nhận' }))
+    expect(within(result).getByText('Sổ sách thừa')).toBeInTheDocument()
   })
 
   it('chưa có chuyến nhập hàng thì nhắc làm ở mục Nhập hàng trước', () => {

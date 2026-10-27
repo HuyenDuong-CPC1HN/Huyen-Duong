@@ -418,6 +418,8 @@ export default function DoiChieuSoSachTab() {
   const [filter, setFilter] = useState('all')
   const [q, setQ] = useState('') // tìm trong bảng đối chiếu (giữ nguyên khi đổi kho)
   const [copyMsg, setCopyMsg] = useState('')
+  const [reasonFor, setReasonFor] = useState(null) // dòng đang nhập lý do ("kho:key")
+  const [reasonText, setReasonText] = useState('')
   const reportRef = useRef(null)
 
   const batch = batches.find(b => b.id === batchId) || null
@@ -439,8 +441,15 @@ export default function DoiChieuSoSachTab() {
   // File quét: bỏ mã hàng không có trong biên bản nhập hàng (phát sinh, gây nhiễu) — không tính đối chiếu.
   const batchMa = batchMaHang(batch)
   const scanSplit = Object.fromEntries(PXK_KHO.map(({ key }) => [key, session.scan[key]?.rows ? splitScanByBatch(session.scan[key].rows, batchMa) : null]))
+  // Dòng chưa khớp anh đã nhập + xác nhận lý do → tính là Khớp (ra khỏi Báo đầu nguồn). Lý do chỉ áp khi dòng vẫn lệch
+  // đúng như lúc xác nhận; dữ liệu đổi (lệch kiểu khác) thì dòng hiện lại để xem lại.
+  const reasons = session.reasons || {}
+  const tagSig = tags => [...tags].sort().join(',')
   const results = Object.fromEntries(PXK_KHO.map(({ key }) => [key, reconcilePxk({
     received: receivedRowsOf(batch, key), scanned: scanSplit[key]?.kept ?? null, phieus: session.phieus.filter(p => p.kho === key && counted(p)),
+  }).map(r => {
+    const rs = reasons[`${key}:${r.key}`]
+    return rs && rs.sig === tagSig(r.tags) && !r.tags.includes('ok') ? { ...r, tags: ['ok'], reason: rs } : r
   })]))
   const keepOne = (group, keepId) => upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (group.some(g => g.id === p.id)
     ? (p.id === keepId ? { ...p, excluded: false, keepDup: false, excludedNote: '' } : { ...p, excluded: true, excludedNote: `trùng số phiếu ${p.soPhieu} — anh đã chọn giữ bản khác` })
@@ -683,6 +692,13 @@ export default function DoiChieuSoSachTab() {
     patch({ scan: { ...session.scan, [k]: { files: list, rows: mergeActualScanRows(list.flatMap(x => x.rows)) } } })
   }
 
+  const confirmReason = (ck, r) => {
+    const text = reasonText.trim()
+    if (!text) return
+    patch({ reasons: { ...reasons, [ck]: { text, sig: tagSig(r.tags), was: r.tags, at: new Date().toISOString() } } })
+    setReasonFor(null); setReasonText('')
+  }
+  const dropReason = ck => { const next = { ...reasons }; delete next[ck]; patch({ reasons: next }) }
   const toggleChecked = key => {
     const set = new Set(session.checked)
     if (set.has(key)) set.delete(key)
@@ -903,7 +919,24 @@ export default function DoiChieuSoSachTab() {
                     <td className="px-2 py-1.5 font-mono">{r.c === null ? <span className="text-gray-400 font-sans">không có dòng nào</span>
                       : <><span className={lotBad ? 'text-violet-700 font-bold' : ''}>{r.pLo || '—'}</span> · <span className={hdBad ? 'text-violet-700 font-bold' : ''}>{fmtHanDung(r.pHd) || '—'}</span></>}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{vn(r.c)}{r.c !== null && r.a !== r.c && <div className="text-red-700 font-semibold">{r.a > r.c ? 'thiếu' : 'thừa'} {vn(Math.abs(r.a - r.c))}</div>}</td>
-                    <td className="px-2 py-1.5 border-l border-gray-100"><div className="flex flex-col items-start gap-1">{r.tags.map(t => <span key={t} className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${TONE[PXK_TAGS[t].tone]}`}>{PXK_TAGS[t].label}</span>)}</div></td>
+                    <td className="px-2 py-1.5 border-l border-gray-100"><div className="flex flex-col items-start gap-1">
+                      {r.tags.map(t => <span key={t} className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${TONE[PXK_TAGS[t].tone]}`}>{PXK_TAGS[t].label}</span>)}
+                      {r.reason ? (
+                        <div className="text-[11px] text-gray-600 max-w-56">
+                          <span className="text-gray-400">{r.reason.was.map(t => PXK_TAGS[t]?.label).filter(Boolean).join(', ')} — lý do:</span> {r.reason.text}
+                          <button type="button" onClick={() => dropReason(ck)} className="ml-1 underline text-gray-400 hover:text-gray-700">Bỏ xác nhận</button>
+                        </div>
+                      ) : !r.tags.includes('ok') && (reasonFor === ck ? (
+                        <div className="flex flex-col gap-1 w-56">
+                          <textarea rows={2} autoFocus value={reasonText} onChange={e => setReasonText(e.target.value)} aria-label={`Lý do ${r.maHang} lô ${r.soLo}`}
+                            placeholder="VD: lô nội bộ đổi tên, nhà máy giao bù chuyến sau…" className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+                          <div className="flex gap-1">
+                            <button type="button" onClick={() => confirmReason(ck, r)} disabled={!reasonText.trim()} className="px-2 py-0.5 rounded bg-[#1e3a5f] text-white text-[11px] font-semibold disabled:opacity-40">Xác nhận lý do</button>
+                            <button type="button" onClick={() => { setReasonFor(null); setReasonText('') }} className="px-2 py-0.5 rounded border border-gray-200 text-[11px]">Huỷ</button>
+                          </div>
+                        </div>
+                      ) : <button type="button" onClick={() => { setReasonFor(ck); setReasonText('') }} className="text-[11px] text-[#1e3a5f] underline">Nhập lý do</button>)}
+                    </div></td>
                     <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={done} onChange={() => toggleChecked(ck)} aria-label={`Đã kiểm ${r.maHang} lô ${r.soLo}`} /></td>
                   </tr>
                 )
