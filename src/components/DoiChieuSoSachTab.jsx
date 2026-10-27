@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Plus, Trash2, X } from 'lucide-react'
+import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Plus, Search, Trash2, X } from 'lucide-react'
 import {
   PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty, parseOcrQty,
   alignOcrRows, fixAiThousandRows, batchMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
@@ -19,6 +19,7 @@ const TONE = {
   lot: 'bg-violet-50 text-violet-700 border-violet-200',
   warn: 'bg-amber-50 text-amber-700 border-amber-200',
 }
+const searchNorm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase()
 const FILTERS = [
   ['all', 'Tất cả'], ['nguon', 'Báo đầu nguồn'], ['lot', 'Lệch lô / HD'], ['quet', 'Quét chưa khớp'], ['ok', 'Khớp'],
 ]
@@ -415,6 +416,7 @@ export default function DoiChieuSoSachTab() {
   const [error, setError] = useState('')
   const [kho, setKho] = useState('C')
   const [filter, setFilter] = useState('all')
+  const [q, setQ] = useState('') // tìm trong bảng đối chiếu (giữ nguyên khi đổi kho)
   const [copyMsg, setCopyMsg] = useState('')
   const reportRef = useRef(null)
 
@@ -699,7 +701,11 @@ export default function DoiChieuSoSachTab() {
   const openPhieu = session.phieus.find(p => p.id === openId)
   const dupTems = findDuplicateTems(PXK_KHO.flatMap(({ key }) => scanFilesOf(session.scan[key]).map(f => ({ zone: key, fileName: f.name, rows: splitScanByBatch(f.rows, batchMa).kept }))))
   const rows = results[kho] || []
-  const visible = rows.filter(r => matchFilter(r, filter))
+  // Tìm không dấu, không phân biệt hoa thường theo mã VT, tên vật tư, lô / lô trên phiếu, số phiếu.
+  const nq = searchNorm(q.trim())
+  const hit = r => !nq || searchNorm([r.maHang, r.tenHang, r.soLo, r.pLo, ...(r.phieus || [])].join(' ')).includes(nq)
+  const visible = rows.filter(r => matchFilter(r, filter) && hit(r))
+  const chipCount = f => rows.filter(r => matchFilter(r, f) && hit(r)).length
   const countOf = (k, f) => (results[k] || []).filter(r => matchFilter(r, f)).length
 
   return (
@@ -847,13 +853,21 @@ export default function DoiChieuSoSachTab() {
           })}
         </div>
         {dupGroups.length > 0 && <div className="rounded-lg border border-red-200 bg-red-50 text-red-800 text-xs px-3 py-2">⚠ Còn {dupGroups.length} số phiếu trùng chưa chọn bản giữ — các phiếu đó chưa tính vào bảng dưới. Chọn ở mục 1 phía trên.</div>}
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc kết luận">
-          {FILTERS.map(([f, l]) => (
-            <button key={f} type="button" onClick={() => setFilter(f)} aria-pressed={filter === f}
-              className={`px-2.5 py-1 rounded-full text-xs border ${filter === f ? 'border-[#1e3a5f] bg-slate-100 font-semibold' : 'border-gray-200 bg-white text-gray-600'}`}>
-              {l} <span className="tabular-nums">{countOf(kho, f)}</span>
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc kết luận">
+            {FILTERS.map(([f, l]) => (
+              <button key={f} type="button" onClick={() => setFilter(f)} aria-pressed={filter === f}
+                className={`px-2.5 py-1 rounded-full text-xs border ${filter === f ? 'border-[#1e3a5f] bg-slate-100 font-semibold' : 'border-gray-200 bg-white text-gray-600'}`}>
+                {l} <span className="tabular-nums">{chipCount(f)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="relative ml-auto w-full sm:w-72">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm mã VT, tên vật tư, lô, số phiếu…" aria-label="Tìm trong bảng đối chiếu"
+              className="w-full pl-8 pr-7 py-1.5 border border-gray-200 rounded-lg text-xs" />
+            {q && <button type="button" onClick={() => setQ('')} aria-label="Xoá từ khoá tìm" className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-gray-400 hover:text-gray-700"><X size={13} /></button>}
+          </div>
         </div>
         <div className="overflow-x-auto border border-gray-200 rounded-xl">
           <table className="w-full text-xs border-collapse" style={{ minWidth: 980 }}>
@@ -870,7 +884,7 @@ export default function DoiChieuSoSachTab() {
               </tr>
             </thead>
             <tbody>
-              {visible.length === 0 && <tr><td colSpan={12} className="px-3 py-4 text-gray-400">{rows.length ? 'Không có dòng nào ở mục này.' : 'Chưa có dữ liệu cho kho này.'}</td></tr>}
+              {visible.length === 0 && <tr><td colSpan={12} className="px-3 py-4 text-gray-400">{!rows.length ? 'Chưa có dữ liệu cho kho này.' : nq ? `Không có dòng nào khớp “${q.trim()}”${filter !== 'all' ? ' ở mục này' : ''}.` : 'Không có dòng nào ở mục này.'}</td></tr>}
               {visible.map(r => {
                 const ck = `${kho}:${r.key}`
                 const done = session.checked.includes(ck)

@@ -74,6 +74,26 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(within(result).getByText('Khớp', { selector: 'span.rounded' })).toBeInTheDocument()
   })
 
+  it('tìm trong bảng đối chiếu: không dấu theo mã VT / tên / lô, số trên nút lọc tính theo kết quả tìm, xoá từ khoá thì hiện lại hết', () => {
+    store.values.set('goods_receipt_batches', JSON.stringify([{ ...batch, khoC: [...batch.khoC,
+      { maHang: 'A01264', tenHang: 'Ambroxen 15mg/5ml', dvt: 'ONG', soLo: '250826', hanDung: '2028-08-25', slHoaDon: 200, slThucTe: 200 }] }]))
+    render(<DoiChieuSoSachTab />)
+    const result = screen.getByRole('region', { name: 'Kết quả đối chiếu' })
+    const rows = () => within(result).getAllByRole('row').slice(1)
+    expect(rows()).toHaveLength(2)
+    const search = within(result).getByLabelText('Tìm trong bảng đối chiếu')
+    fireEvent.change(search, { target: { value: 'FALGAN' } })
+    expect(rows()).toHaveLength(1)
+    expect(within(rows()[0]).getByText('F00629')).toBeInTheDocument()
+    expect(within(result).getByRole('button', { name: /Tất cả/ })).toHaveTextContent('Tất cả 1')
+    fireEvent.change(search, { target: { value: '250826' } }) // tìm theo lô
+    expect(within(rows()[0]).getByText('A01264')).toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'khong co' } })
+    expect(within(result).getByText('Không có dòng nào khớp “khong co”.')).toBeInTheDocument()
+    fireEvent.click(within(result).getByRole('button', { name: 'Xoá từ khoá tìm' }))
+    expect(rows()).toHaveLength(2)
+  })
+
   it('chưa có chuyến nhập hàng thì nhắc làm ở mục Nhập hàng trước', () => {
     store.values.clear()
     render(<DoiChieuSoSachTab />)
