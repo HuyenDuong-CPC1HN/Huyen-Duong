@@ -23,6 +23,8 @@ export const PXK_TAGS = {
   khongNhan: { label: 'Có trên PXK, không nhận', tone: 'bad', nguon: true },
   lot: { label: 'Lệch lô / HD', tone: 'lot', nguon: true },
   quet: { label: 'Quét chưa khớp', tone: 'warn' },
+  // dòng lệch kho đã kiểm lại và ghi lý do (không phải khớp thật) — không vào Báo đầu nguồn
+  daKiem: { label: 'Đã kiểm lại', tone: 'checked' },
 }
 export const isNguonRow = row => row.tags.some(t => PXK_TAGS[t]?.nguon)
 

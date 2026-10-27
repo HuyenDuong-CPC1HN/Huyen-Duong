@@ -95,7 +95,7 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(rows()).toHaveLength(2)
   })
 
-  it('dòng chưa khớp: nhập lý do → Xác nhận lý do thì thành Khớp, ra khỏi Báo đầu nguồn; Bỏ xác nhận thì lệch lại', () => {
+  it('dòng chưa khớp: nhập lý do → Xác nhận lý do thì thành Đã kiểm lại (không phải Khớp), tick Đã kiểm, ra khỏi Báo đầu nguồn; Bỏ xác nhận thì lệch lại', () => {
     const ph = newPxkPhieu({ kho: 'C', kind: 'anh', soPhieu: 'XD2611/04592', rows: [newPxkRow({ maHang: 'F00629', soLuong: 3380, soLo: '13626G01', hanDung: '2029-07-12' })] })
     store.values.set('pxk_doi_chieu', JSON.stringify({ b1: { phieus: [ph], scan: { C: null, DTP: null, SO: null }, checked: [] } }))
     render(<DoiChieuSoSachTab />)
@@ -108,8 +108,12 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     fireEvent.change(within(result).getByLabelText('Lý do F00629 lô 13626G01'), { target: { value: 'Nhà máy giao bù 80 ống chuyến sau' } })
     fireEvent.click(confirm)
     expect(within(result).queryByText('Sổ sách thừa', { selector: 'span.rounded' })).not.toBeInTheDocument()
-    expect(within(result).getByText('Khớp', { selector: 'span.rounded' })).toBeInTheDocument()
+    expect(within(result).getByText('Đã kiểm lại', { selector: 'span.rounded' })).toBeInTheDocument()
+    expect(within(result).queryByText('Khớp', { selector: 'span.rounded' })).not.toBeInTheDocument()
     expect(within(result).getByText(/Nhà máy giao bù 80 ống chuyến sau/)).toBeInTheDocument()
+    expect(within(result).getByLabelText('Đã kiểm F00629 lô 13626G01')).toBeChecked()
+    expect(within(result).getByRole('button', { name: /^Khớp/ })).toHaveTextContent('Khớp 0')
+    expect(within(result).getByRole('button', { name: /^Đã kiểm lại/ })).toHaveTextContent('Đã kiểm lại 1')
     expect(within(result).getByRole('button', { name: /Báo đầu nguồn/ })).toHaveTextContent('Báo đầu nguồn 0')
     expect(screen.getByLabelText('Nội dung báo đầu nguồn')?.value || '').not.toContain('XD2611/04592')
     const saved = JSON.parse(store.values.get('pxk_doi_chieu')).b1.reasons
@@ -117,6 +121,7 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(Object.values(saved)[0]).toMatchObject({ text: 'Nhà máy giao bù 80 ống chuyến sau', was: ['thua'] })
     fireEvent.click(within(result).getByRole('button', { name: 'Bỏ xác nhận' }))
     expect(within(result).getByText('Sổ sách thừa')).toBeInTheDocument()
+    expect(within(result).getByLabelText('Đã kiểm F00629 lô 13626G01')).not.toBeChecked()
   })
 
   it('chưa có chuyến nhập hàng thì nhắc làm ở mục Nhập hàng trước', () => {

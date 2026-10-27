@@ -18,10 +18,11 @@ const TONE = {
   bad: 'bg-red-50 text-red-700 border-red-200',
   lot: 'bg-violet-50 text-violet-700 border-violet-200',
   warn: 'bg-amber-50 text-amber-700 border-amber-200',
+  checked: 'bg-sky-50 text-sky-700 border-sky-200',
 }
 const searchNorm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase()
 const FILTERS = [
-  ['all', 'Tất cả'], ['nguon', 'Báo đầu nguồn'], ['lot', 'Lệch lô / HD'], ['quet', 'Quét chưa khớp'], ['ok', 'Khớp'],
+  ['all', 'Tất cả'], ['nguon', 'Báo đầu nguồn'], ['lot', 'Lệch lô / HD'], ['quet', 'Quét chưa khớp'], ['daKiem', 'Đã kiểm lại'], ['ok', 'Khớp'],
 ]
 const KHO_CHIP = { C: 'border-red-200 bg-red-50 text-red-700', DTP: 'border-blue-200 bg-blue-50 text-blue-700', SO: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
 const vn = n => (n === null || n === undefined ? '—' : Number(n).toLocaleString('vi-VN'))
@@ -441,15 +442,15 @@ export default function DoiChieuSoSachTab() {
   // File quét: bỏ mã hàng không có trong biên bản nhập hàng (phát sinh, gây nhiễu) — không tính đối chiếu.
   const batchMa = batchMaHang(batch)
   const scanSplit = Object.fromEntries(PXK_KHO.map(({ key }) => [key, session.scan[key]?.rows ? splitScanByBatch(session.scan[key].rows, batchMa) : null]))
-  // Dòng chưa khớp anh đã nhập + xác nhận lý do → tính là Khớp (ra khỏi Báo đầu nguồn). Lý do chỉ áp khi dòng vẫn lệch
-  // đúng như lúc xác nhận; dữ liệu đổi (lệch kiểu khác) thì dòng hiện lại để xem lại.
+  // Dòng chưa khớp anh đã nhập + xác nhận lý do → "Đã kiểm lại" (vẫn là lệch, nhưng ra khỏi Báo đầu nguồn). Lý do chỉ áp
+  // khi dòng vẫn lệch đúng như lúc xác nhận; dữ liệu đổi (lệch kiểu khác) thì dòng hiện lại để xem lại.
   const reasons = session.reasons || {}
   const tagSig = tags => [...tags].sort().join(',')
   const results = Object.fromEntries(PXK_KHO.map(({ key }) => [key, reconcilePxk({
     received: receivedRowsOf(batch, key), scanned: scanSplit[key]?.kept ?? null, phieus: session.phieus.filter(p => p.kho === key && counted(p)),
   }).map(r => {
     const rs = reasons[`${key}:${r.key}`]
-    return rs && rs.sig === tagSig(r.tags) && !r.tags.includes('ok') ? { ...r, tags: ['ok'], reason: rs } : r
+    return rs && rs.sig === tagSig(r.tags) && !r.tags.includes('ok') ? { ...r, tags: ['daKiem'], reason: rs } : r
   })]))
   const keepOne = (group, keepId) => upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (group.some(g => g.id === p.id)
     ? (p.id === keepId ? { ...p, excluded: false, keepDup: false, excludedNote: '' } : { ...p, excluded: true, excludedNote: `trùng số phiếu ${p.soPhieu} — anh đã chọn giữ bản khác` })
@@ -695,10 +696,10 @@ export default function DoiChieuSoSachTab() {
   const confirmReason = (ck, r) => {
     const text = reasonText.trim()
     if (!text) return
-    patch({ reasons: { ...reasons, [ck]: { text, sig: tagSig(r.tags), was: r.tags, at: new Date().toISOString() } } })
+    patch({ reasons: { ...reasons, [ck]: { text, sig: tagSig(r.tags), was: r.tags, at: new Date().toISOString() } }, checked: [...new Set([...session.checked, ck])] })
     setReasonFor(null); setReasonText('')
   }
-  const dropReason = ck => { const next = { ...reasons }; delete next[ck]; patch({ reasons: next }) }
+  const dropReason = ck => { const next = { ...reasons }; delete next[ck]; patch({ reasons: next, checked: session.checked.filter(x => x !== ck) }) }
   const toggleChecked = key => {
     const set = new Set(session.checked)
     if (set.has(key)) set.delete(key)
