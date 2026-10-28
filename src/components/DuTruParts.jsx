@@ -304,7 +304,10 @@ export function DetailPanel({ r, model, settings, onClose, onLinkJw, onAlone }) 
             {r.sea !== 1 && <><span className="text-gray-500">× hệ số mùa vụ</span><b className="text-right tabular-nums">{fmt2(r.sea)}</b></>}
             <span className="text-gray-500 border-t border-gray-100 pt-1">× {r.coverDays} ngày cần đủ hàng</span><b className="text-right tabular-nums border-t border-gray-100 pt-1">{fmtN(r.rd * r.coverDays)}</b>
             <span className="text-gray-500">− Tồn hiện có (các kho đang chọn)</span><b className="text-right tabular-nums">{fmtN(r.TON)}</b>
-            <span className="border-t border-gray-100 pt-1"><b>Đề xuất</b></span><b className="text-right tabular-nums border-t border-gray-100 pt-1">{fmtN(r.de)}</b>
+            <span className="border-t border-gray-100 pt-1"><b>Đề xuất</b>{r.kien ? ' (chưa tròn kiện)' : ''}</span><b className="text-right tabular-nums border-t border-gray-100 pt-1">{fmtN(r.de)}</b>
+            {r.kien
+              ? <><span><b>Tròn kiện</b> <span className="text-gray-500">(1 kiện = {fmtN(r.kien)} {r.p0.dvt}): {fmtN(r.deK / r.kien)} kiện</span></span><b className="text-right tabular-nums">{fmtN(r.deK)}</b></>
+              : <><span className="text-gray-500">Chưa có quy cách kiện — nhập ở tab Quy cách hàng hoá để làm tròn kiện</span><span /></>}
             <span className="text-gray-500">Cách đang làm: xuất 1 tháng {fmtN(r.month1)}{model.has4 ? '' : ' (≈ từ file 3 tháng)'} − tồn {fmtN(r.TON)}</span><span className="text-right tabular-nums text-gray-500">{fmtN(r.old)}</span>
           </div>
           <div className="overflow-x-auto"><table className="w-full text-xs border-collapse">

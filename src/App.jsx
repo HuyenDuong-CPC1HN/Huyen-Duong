@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History, Workflow, ClipboardCheck, GraduationCap, ShoppingCart } from 'lucide-react'
+import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History, Workflow, ClipboardCheck, GraduationCap, ShoppingCart, Package } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -24,6 +24,7 @@ const FlowV2Tab = lazy(() => import('./components/FlowV2Tab'))
 const DoiChieuSoSachTab = lazy(() => import('./components/DoiChieuSoSachTab'))
 const LoTrinhHocTab = lazy(() => import('./components/LoTrinhHocTab'))
 const DuTruHangTab = lazy(() => import('./components/DuTruHangTab'))
+const QuyCachTab = lazy(() => import('./components/QuyCachTab'))
 
 const NAV = [
   { id: 'home', label: 'Trang chủ', icon: Home },
@@ -44,6 +45,7 @@ const NAV = [
       { id: 'tonkhocandate', label: 'Hàng cận date', icon: CalendarClock },
       { id: 'hangchamluanchuyen', label: 'Hàng chậm luân chuyển', icon: Hourglass },
       { id: 'duTruHang', label: 'Dự trù hàng', icon: ShoppingCart },
+      { id: 'quyCachHang', label: 'Quy cách hàng hoá', icon: Package },
     ],
   },
   {
@@ -86,6 +88,7 @@ const BREADCRUMB = {
   tonkhocandate: ['Trang chủ', 'Quản lý tồn kho', 'Hàng cận date'],
   hangchamluanchuyen: ['Trang chủ', 'Quản lý tồn kho', 'Hàng chậm luân chuyển'],
   duTruHang: ['Trang chủ', 'Quản lý tồn kho', 'Dự trù hàng'],
+  quyCachHang: ['Trang chủ', 'Quản lý tồn kho', 'Quy cách hàng hoá'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
   doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
   doichieusosach: ['Trang chủ', 'Nhập hàng', 'Đối chiếu sổ sách (PXK)'],
@@ -503,6 +506,7 @@ function AppContent({ user }) {
           {active === 'tonkhocandate' && <ExpiryStockTab key="canDate" mode="canDate" />}
           {active === 'hangchamluanchuyen' && <ExpiryStockTab key="clc" mode="clc" />}
           {active === 'duTruHang' && <Suspense fallback={tabLoadingState}><DuTruHangTab /></Suspense>}
+          {active === 'quyCachHang' && <Suspense fallback={tabLoadingState}><QuyCachTab /></Suspense>}
           {active === 'nhaphang' && <NhapHangTab />}
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
           {active === 'doichieusosach' && <Suspense fallback={tabLoadingState}><DoiChieuSoSachTab /></Suspense>}

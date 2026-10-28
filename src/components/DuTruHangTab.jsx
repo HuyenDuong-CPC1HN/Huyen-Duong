@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Copy, Search } from 'lucide-react'
 import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, groupOn, groupOrder, groupsOf, normText, parseNxtXml, weekKey } from '../utils/duTru'
 import { readDuTruOrder, readDuTruSettings, writeDuTruOrder, writeDuTruSettings } from '../data/duTruStore'
+import { addQuyCachProducts, readQuyCach } from '../data/quyCachStore'
 import { AlertTag, DetailPanel, FileSlots, KhoPicker, MergeGroups, NumInput } from './DuTruParts'
 
 // Tab "Dự trù hàng": mỗi kho (C / DTP / SO) dự trù riêng, quy tắc riêng. Hiện làm Kho C: tải file nhập – xuất – tồn
@@ -40,12 +41,14 @@ function KhoC() {
   const closeDetail = useCallback(() => setSel(null), [])
   const [copyMsg, setCopyMsg] = useState('')
   const [copyText, setCopyText] = useState('')
+  const [quyCach, setQuyCach] = useState(() => readQuyCach())
+  const kien = useMemo(() => Object.fromEntries(Object.entries(quyCach).filter(([, v]) => v.kien > 0).map(([ma, v]) => [ma, v.kien])), [quyCach])
 
   const model = useMemo(() => buildDuTruModel(files), [files])
   const P = useMemo(() => ({ Ld: settings.Ld, ss: settings.ss, useSea: settings.useSea && !!model?.hasLY }), [settings.Ld, settings.ss, settings.useSea, model])
   const week = model ? weekKey(model.to) : ''
   const order = useMemo(() => orders[week] || (week ? readDuTruOrder(week, 'C') : EMPTY_ORDER), [orders, week])
-  const rows = useMemo(() => (model ? computePlan(model, settings, P, order.chot) : []), [model, settings, P, order.chot])
+  const rows = useMemo(() => (model ? computePlan(model, settings, P, order.chot, kien) : []), [model, settings, P, order.chot, kien])
 
   const save = patch => { const next = { ...settings, ...patch }; setSettings(next); writeDuTruSettings(next, 'C') }
   const saveOrder = patch => { const next = { ...order, ...patch }; setOrders(o => ({ ...o, [week]: next })); writeDuTruOrder(week, next, 'C') }
@@ -61,8 +64,9 @@ function KhoC() {
     if (sel) setSel(ord)
   }
   const setAlone = (ma, on) => save({ jwAlone: on ? [...new Set([...settings.jwAlone, ma])] : settings.jwAlone.filter(c => c !== ma) })
-  const chotOf = r => order.chot[r.id] ?? r.de
-  const addOf = r => order.add[r.id] ?? r.addDe
+  const chotOf = r => order.chot[r.id] ?? r.deK
+  const addOf = r => order.add[r.id] ?? r.addDeK
+  const kienTxt = (r, n) => (r.kien && n > 0 ? `${fmt1(n / r.kien)} kiện` : '')
 
   const pick = async (k, file) => {
     setSlotMsg(m => ({ ...m, [k]: { busy: `Đang đọc ${file.name} (${fmt1(file.size / 1048576)} MB)…` } }))
@@ -70,6 +74,12 @@ function KhoC() {
     try {
       const parsed = parseNxtXml(await readText(file))
       setFiles(f => ({ ...f, [k]: { ...parsed, name: file.name } }))
+      if (k === 'f3') { // thêm mã mới (các kho đang tính) vào danh sách Quy cách hàng hoá
+        const kho = new Set(settings.kho)
+        const seen = new Map()
+        for (const d of parsed.data) if (kho.has(d.kho) && !seen.has(d.ma)) seen.set(d.ma, { ma: d.ma, ten: d.ten, dvt: d.dvt })
+        setQuyCach(addQuyCachProducts([...seen.values()]).all)
+      }
       setSlotMsg(m => ({ ...m, [k]: {} }))
       setSel(null)
     } catch (err) {
@@ -186,12 +196,12 @@ function KhoC() {
                   <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm mã, tên hàng…" aria-label="Tìm mã, tên hàng" className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-sm" />
                 </div>
                 <button type="button" className="sheet-tab-action" onClick={() => copy([
-                  ['Mã đặt hàng', 'Các mã gộp', 'Tên hàng', 'ĐVT', 'Bán/tuần', '4 tuần gần nhất/tuần', 'Tồn hiện có', 'Đủ bán (tuần)', 'Cách đang làm', 'Đề xuất', 'Chốt đặt', 'Lưu ý'].join('\t'),
-                  ...shown.map(r => [r.order, r.codes.join(', '), r.p0.ten, r.p0.dvt, fmt1(r.rd * 7), r.r4 == null ? '' : fmt1(r.r4 * 7), Math.round(r.TON), Number.isFinite(r.weeks) ? fmt1(r.weeks) : '', r.old, r.de, chotOf(r), r.alerts.map(a => a.t).join('; ')].join('\t')),
+                  ['Mã đặt hàng', 'Các mã gộp', 'Tên hàng', 'ĐVT', 'Bán/tuần', '4 tuần gần nhất/tuần', 'Tồn hiện có', 'Đủ bán (tuần)', 'Cách đang làm', 'Đề xuất (chưa tròn)', 'SL 1 kiện', 'Đề xuất tròn kiện', 'Chốt đặt', 'Số kiện', 'Lưu ý'].join('\t'),
+                  ...shown.map(r => [r.order, r.codes.join(', '), r.p0.ten, r.p0.dvt, fmt1(r.rd * 7), r.r4 == null ? '' : fmt1(r.r4 * 7), Math.round(r.TON), Number.isFinite(r.weeks) ? fmt1(r.weeks) : '', r.old, r.de, r.kien || '', r.deK, chotOf(r), r.kien ? fmt1(chotOf(r) / r.kien) : '', r.alerts.map(a => a.t).join('; ')].join('\t')),
                 ].join('\n'), `Đã chép ${shown.length} dòng, dán vào Excel.`)}><Copy size={13} /> Chép bảng (dán vào Excel)</button>
                 {copyMsg && <span className="text-xs text-green-700" role="status">{copyMsg}</span>}
               </div>
-              <div className="text-xs text-gray-500">{chip ? `Đang lọc: ${chip.l}. ` : ''}Hiện {fmtN(shown.length)}/{fmtN(rows.length)} mã, xếp theo tên vật tư A → Z. Bấm vào dòng để xem tồn theo kho, theo lô và cách tính. Cột "Cách đang làm" để so sánh, không dùng để đặt.</div>
+              <div className="text-xs text-gray-500">{chip ? `Đang lọc: ${chip.l}. ` : ''}Hiện {fmtN(shown.length)}/{fmtN(rows.length)} mã, xếp theo tên vật tư A → Z. Bấm vào dòng để xem tồn theo kho, theo lô và cách tính. Cột "Cách đang làm" để so sánh, không dùng để đặt. Đề xuất đã làm tròn lên đủ kiện theo tab Quy cách hàng hoá{rows.some(r => r.de > 0 && !r.kien) ? <b className="text-amber-700"> · {rows.filter(r => r.de > 0 && !r.kien).length} mã cần đặt chưa có quy cách kiện</b> : ''}.</div>
               <div className="overflow-x-auto border border-gray-200 rounded-xl">
                 <table className="w-full text-sm border-collapse" style={{ minWidth: 1000 }}>
                   <thead className="bg-gray-50 text-gray-500 text-xs"><tr>
@@ -199,7 +209,7 @@ function KhoC() {
                     <th className="px-2 py-2 text-right">Tồn hiện có</th><th className="px-2 py-2 text-right">Đủ bán</th><th className="px-2 py-2 text-right">Cách đang làm</th><th className="px-2 py-2 text-right">Đề xuất</th><th className="px-2 py-2 text-right">Chốt đặt</th><th className="px-2 py-2 text-left">Lưu ý</th>
                   </tr></thead>
                   <tbody>{shown.map(r => {
-                    const diff = r.de - r.old
+                    const diff = r.deK - r.old
                     const cover = r.weeks < P.Ld / 7 ? 'text-red-600 font-semibold' : r.weeks > 8 ? 'text-amber-700 font-semibold' : ''
                     const r4cls = r.r4 == null ? '' : r.X3 >= 10 && r.r4 >= 1.5 * r.rate ? 'text-amber-700 font-semibold' : r.X3 >= 10 && r.r4 <= 0.5 * r.rate ? 'text-red-600 font-semibold' : ''
                     return (
@@ -211,8 +221,8 @@ function KhoC() {
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.TON)}</td>
                         <td className={`px-2 py-1.5 text-right tabular-nums ${cover}`}>{fmtW(r.weeks)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-gray-400">{fmtN(r.old)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums"><b>{fmtN(r.de)}</b>{diff !== 0 && <div className={`text-[11px] ${diff > 0 ? 'text-amber-700' : 'text-green-700'}`}>{diff > 0 ? '+' : '−'}{fmtN(Math.abs(diff))}</div>}</td>
-                        <td className="px-2 py-1.5 text-right"><NumInput value={chotOf(r)} label={`Chốt đặt ${r.order}`} onCommit={v => saveOrder({ chot: { ...order.chot, [r.id]: v } })} /></td>
+                        <td className="px-2 py-1.5 text-right tabular-nums"><b>{fmtN(r.deK)}</b>{r.kien && r.deK > 0 ? <div className="text-[11px] text-slate-600 whitespace-nowrap">{fmtN(r.deK / r.kien)} kiện</div> : null}{diff !== 0 && <div className={`text-[11px] ${diff > 0 ? 'text-amber-700' : 'text-green-700'}`}>{diff > 0 ? '+' : '−'}{fmtN(Math.abs(diff))}</div>}</td>
+                        <td className="px-2 py-1.5 text-right"><NumInput value={chotOf(r)} label={`Chốt đặt ${r.order}`} onCommit={v => saveOrder({ chot: { ...order.chot, [r.id]: v } })} />{kienTxt(r, chotOf(r)) && <div className={`text-[11px] whitespace-nowrap ${chotOf(r) % r.kien ? 'text-amber-700' : 'text-slate-600'}`}>= {kienTxt(r, chotOf(r))}{chotOf(r) % r.kien ? ' (lẻ kiện)' : ''}</div>}</td>
                         <td className="px-2 py-1.5"><div className="flex flex-wrap gap-1 min-w-44">{r.alerts.length ? [...r.alerts].sort((a, b) => LV_ORDER[a.lv] - LV_ORDER[b.lv]).slice(0, 3).map(a => <AlertTag key={a.k} a={a} />) : <span className="text-xs text-green-700">Ổn định</span>}</div></td>
                       </tr>
                     )
@@ -235,7 +245,7 @@ function KhoC() {
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.expW)}</td><td className="px-2 py-1.5 text-right tabular-nums"><b>{fmtN(r.XW)}</b></td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-amber-700 font-semibold">+{Math.round((r.XW / r.expW - 1) * 100)}%</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.tonNow)}</td><td className="px-2 py-1.5 text-right tabular-nums">{fmtN(chotOf(r))}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums"><b>{fmtN(r.addDe)}</b></td>
+                        <td className="px-2 py-1.5 text-right tabular-nums"><b>{fmtN(r.addDeK)}</b>{kienTxt(r, r.addDeK) && <div className="text-[11px] text-slate-600">{kienTxt(r, r.addDeK)}</div>}</td>
                         <td className="px-2 py-1.5 text-right"><NumInput value={addOf(r)} label={`Chốt bổ sung ${r.order}`} onCommit={v => saveOrder({ add: { ...order.add, [r.id]: v } })} /></td>
                       </tr>
                     ))}{!rows.some(r => r.fast) && <tr><td colSpan={9} className="px-3 py-4 text-gray-400">Tuần này không có mã nào bán nhanh bất thường.</td></tr>}</tbody>
@@ -267,7 +277,7 @@ function KhoC() {
                 <span className="text-xs text-gray-500">Đã nhập {web.filter(x => order.done[x.r.id]).length}/{web.length} mã · xếp theo tên vật tư</span>
                 <span className="ml-auto flex flex-wrap gap-1.5">
                   <button type="button" className="sheet-tab-action" onClick={() => copy(web.map(({ r, q: n }) => `${r.order}\t${r.p0.ten}\t${n}`).join('\n'), 'Đã chép danh sách.')}><Copy size={13} /> Chép danh sách</button>
-                  <button type="button" className="sheet-tab-action" onClick={() => copy([`ĐẶT HÀNG KHO C – số liệu đến ${fmtDmy(model.to)}`, ...web.map(({ r, q: n }, i) => `${i + 1}. ${r.order} ${r.p0.ten}: ${fmtN(n)} ${r.p0.dvt}`)].join('\n'), 'Đã chép, dán vào Zalo.')}><Copy size={13} /> Chép nội dung gửi Zalo</button>
+                  <button type="button" className="sheet-tab-action" onClick={() => copy([`ĐẶT HÀNG KHO C – số liệu đến ${fmtDmy(model.to)}`, ...web.map(({ r, q: n }, i) => `${i + 1}. ${r.order} ${r.p0.ten}: ${fmtN(n)} ${r.p0.dvt}${kienTxt(r, n) ? ` (${kienTxt(r, n)})` : ''}`)].join('\n'), 'Đã chép, dán vào Zalo.')}><Copy size={13} /> Chép nội dung gửi Zalo</button>
                 </span>
               </div>
               {copyMsg && <span className="text-xs text-green-700" role="status">{copyMsg}</span>}
@@ -275,7 +285,7 @@ function KhoC() {
                 <li key={r.id} className={`flex items-center gap-2 py-1.5 border-b border-gray-100 text-sm ${order.done[r.id] ? 'text-gray-400' : ''}`}>
                   <input type="checkbox" checked={!!order.done[r.id]} onChange={e => saveOrder({ done: { ...order.done, [r.id]: e.target.checked } })} aria-label={`Đã nhập ${r.order}`} />
                   <span className="font-mono">{r.order}</span><span>{r.p0.ten}</span>
-                  <b className={`ml-auto tabular-nums whitespace-nowrap ${order.done[r.id] ? 'line-through' : ''}`}>{fmtN(n)} {r.p0.dvt}</b>
+                  <b className={`ml-auto tabular-nums whitespace-nowrap ${order.done[r.id] ? 'line-through' : ''}`}>{fmtN(n)} {r.p0.dvt}{kienTxt(r, n) && <span className="ml-1 font-normal text-gray-500">· {kienTxt(r, n)}</span>}</b>
                 </li>
               ))}{!web.length && <li className="text-sm text-gray-400">Chưa có mã nào cần đặt.</li>}</ul>
             </section>
@@ -289,6 +299,7 @@ function KhoC() {
                 <li><b>Bán/ngày</b> = Sl xuất của file 3 tháng ÷ số ngày của kỳ{model.hasLY ? ' × hệ số mùa vụ (tốc độ bán tháng tới năm ngoái ÷ tốc độ 3 tháng năm ngoái, giới hạn 0,7 – 1,5; mã năm ngoái bán dưới 10 thì không tính)' : ''}.</li>
                 <li><b>Số ngày cần đủ hàng</b> = 7 (chu kỳ đặt) + số ngày từ lúc đặt đến khi nhập + số ngày tồn an toàn.</li>
                 <li><b>Đề xuất</b> = bán/ngày × số ngày cần đủ hàng − tồn hiện có (Tồn cuối), không âm, làm tròn lên.</li>
+                <li><b>Tròn kiện</b>: đề xuất làm tròn lên số kiện đủ theo tab <b>Quy cách hàng hoá</b> (VD: cần 130, 1 kiện = 50 → đề xuất 150 = 3 kiện). Mã chưa có quy cách thì giữ số lẻ.</li>
                 <li><b>Đơn bổ sung thứ 6</b>: trong tuần bán nhanh hơn dự kiến từ 30% trở lên thì tính lại bằng tốc độ tuần này, đủ bán {7 + P.Ld - 2} ngày tới chuyến sau, trừ tồn hiện có và đơn chính đã chốt.</li>
                 <li><b>4 tuần gần nhất</b> chỉ dùng để cảnh báo bán tăng / giảm mạnh và tính cột "Cách đang làm" (xuất 1 tháng − tồn).</li>
               </ol>

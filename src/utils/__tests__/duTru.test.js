@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyseItem, buildDuTruModel, computePlan, groupsOf, jwCandidates, parseNxtXml, planItems, seaOf, weekKey } from '../duTru'
+import { analyseItem, buildDuTruModel, computePlan, groupsOf, jwCandidates, parseNxtXml, planItems, roundKien, seaOf, weekKey } from '../duTru'
 import { nxtXml } from './nxtXmlFixture'
 
 // [mã, tên, mã kho, ĐVT, lô, hạn dùng, tồn đầu, nhập, xuất, tồn cuối]
@@ -117,6 +117,18 @@ describe('Dự trù hàng — tính đề xuất', () => {
     // gộp tay chứa trọn nhóm tự tìm thì thay nhóm đó (nhóm gộp tay xét trước)
     const wide = { ...settings, manual: [['B00002', 'J00602', 'J00710']] }
     expect(groupsOf(m, wide).map(g => g.codes)).toEqual([['B00002', 'J00602', 'J00710']])
+  })
+
+  it('quy cách kiện: đề xuất làm tròn lên đủ kiện; nhóm gộp lấy quy cách mã đặt hàng, chưa có thì mã cùng nhóm', () => {
+    expect(roundKien(130, 50)).toBe(150)
+    expect(roundKien(150, 50)).toBe(150)
+    expect(roundKien(0, 50)).toBe(0)
+    expect(roundKien(33, null)).toBe(33)
+    const plan = computePlan(model, settings, P, {}, { J00602: 20 })
+    const b = plan.find(r => r.id === 'B00002')
+    expect(b.de).toBe(33)
+    expect(b).toMatchObject({ kien: 20, deK: 40 })
+    expect(plan.find(r => r.id === 'A00001')).toMatchObject({ kien: null, deK: 0 })
   })
 
   it('khoá tuần: thứ 4 và thứ 6 cùng tuần', () => {

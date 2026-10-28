@@ -257,12 +257,19 @@ const collator = new Intl.Collator('vi', { sensitivity: 'base', numeric: true })
 // Xếp theo tên vật tư A → Z (tiếng Việt), trùng tên thì theo mã
 export const byName = (a, b) => collator.compare(a.p0.ten, b.p0.ten) || a.order.localeCompare(b.order)
 
-// Cả bảng dự trù. chot: { [id]: số chốt đơn chính } — đơn bổ sung trừ phần đã chốt (chưa chốt thì lấy đề xuất).
-export function computePlan(model, settings, P, chot = {}) {
+// Làm tròn lên số kiện đủ (k = số lượng 1 kiện, từ tab Quy cách hàng hoá); chưa có quy cách thì giữ nguyên.
+export const roundKien = (q, k) => (q > 0 && k > 0 ? Math.ceil(q / k - 1e-9) * k : q)
+
+// Cả bảng dự trù. chot: { [id]: số chốt đơn chính } — đơn bổ sung trừ phần đã chốt (chưa chốt thì lấy đề xuất tròn kiện).
+// kien: { [mã]: số lượng 1 kiện } — nhóm gộp lấy quy cách của mã đặt hàng, chưa có thì lấy mã cùng nhóm.
+export function computePlan(model, settings, P, chot = {}, kien = {}) {
   const list = planItems(model, settings).map(it => analyseItem(model, settings, it, P))
   for (const r of list) {
-    const main = chot[r.id] ?? r.de
+    r.kien = [r.order, ...r.codes].map(c => kien[c]).find(v => v > 0) || null
+    r.deK = roundKien(r.de, r.kien)
+    const main = chot[r.id] ?? r.deK
     r.addDe = r.fast ? Math.max(0, Math.ceil(r.rateNew * r.untilNext + r.rd * P.ss - r.tonNow - main - 1e-9)) : 0
+    r.addDeK = roundKien(r.addDe, r.kien)
   }
   return list.sort(byName)
 }

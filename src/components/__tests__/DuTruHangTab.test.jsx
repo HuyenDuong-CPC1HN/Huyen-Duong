@@ -87,6 +87,15 @@ describe('Dự trù hàng (Kho C)', () => {
     expect(screen.getByRole('dialog', { name: 'Chi tiết mã hàng' })).toHaveTextContent('gộp E00010, J00710')
   })
 
+  it('có quy cách kiện (tab Quy cách hàng hoá) thì đề xuất và số chốt mặc định tròn kiện; tải file thì thêm mã vào danh sách quy cách', async () => {
+    store.values.set('quycach_hang', JSON.stringify({ B00002: { ten: 'Siro B - Hộp 1 lọ 100ml', dvt: 'LO', kien: 20, note: '', at: '' } }))
+    const plan = await loadMain()
+    const siro = within(plan).getByText('Siro B - Hộp 1 lọ 100ml').closest('tr')
+    expect(within(siro).getByLabelText('Chốt đặt B00002')).toHaveValue('40') // cần 33 → 2 kiện × 20
+    expect(siro).toHaveTextContent('2 kiện')
+    expect(Object.keys(JSON.parse(store.values.get('quycach_hang'))).sort()).toEqual(['A00003', 'B00002', 'J00602', 'Z00001'])
+  })
+
   it('bấm dòng mở chi tiết: tồn theo kho, cách tính; file sai mẫu thì báo lỗi ngay ở ô', async () => {
     const plan = await loadMain()
     fireEvent.click(within(plan).getByText('Siro B - Hộp 1 lọ 100ml'))
