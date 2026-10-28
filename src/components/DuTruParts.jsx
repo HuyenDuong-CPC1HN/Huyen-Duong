@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
-import { analyseItem, fmt1, fmt2, fmtDmy, fmtN, groupOn, groupOrder, groupsOf, isJW } from '../utils/duTru'
+import { analyseItem, fmt1, fmt2, fmtDmy, fmtN, groupOn, groupOrder, groupsOf, isJW, normText } from '../utils/duTru'
 
 // Các phần của tab "Dự trù hàng": ô tải file, chọn kho, mã cùng sản phẩm, chi tiết 1 mã.
 const fmtHd = s => (s ? String(s).slice(0, 10).split('-').reverse().join('/') : '')
@@ -96,7 +96,86 @@ export function KhoPicker({ model, settings, onToggle, onName }) {
   )
 }
 
-export function MergeGroups({ model, settings, P, onSetMerge, onAddManual, onDelManual }) {
+// Quy mã J / W đứng riêng về mã nhận điều (trong khung chi tiết): chọn 1 mã gợi ý hoặc gõ mã khác.
+export function JwLinkBox({ r, model, settings, onLink, onAlone }) {
+  const kho = new Set(settings.kho)
+  const [pick, setPick] = useState(r.cands?.[0]?.ma || '')
+  const [other, setOther] = useState('')
+  const [msg, setMsg] = useState('')
+  const stat = c => (model.byMa.get(c) || []).filter(x => kho.has(x.kho)).reduce((s, x) => ({ tc: s.tc + x.tc, x: s.x + x.x }), { tc: 0, x: 0 })
+  if ((settings.jwAlone || []).includes(r.order)) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+        Anh đã đánh dấu <b className="font-mono">{r.order}</b> là hàng mua ngoài riêng (không phải hàng 2 mã).
+        <button type="button" className="sheet-tab-action" onClick={() => onAlone(r.order, false)}>Bỏ đánh dấu</button>
+      </div>
+    )
+  }
+  const go = () => {
+    const t = (other.trim() || pick).toUpperCase()
+    if (!t) { setMsg('Chọn hoặc gõ mã nhận điều.'); return }
+    if (!model.prod[t]) { setMsg(`Không thấy mã ${t} trong file.`); return }
+    if (isJW(t)) { setMsg(`${t} cũng là mã J / W; cần mã nhận điều.`); return }
+    if (normText(model.prod[t].dvt) !== normText(r.p0.dvt)) { setMsg(`Không gộp được: khác đơn vị tính (${r.p0.dvt} / ${model.prod[t].dvt}), cộng số lượng sẽ sai.`); return }
+    onLink(r.order, t)
+  }
+  return (
+    <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 flex flex-col gap-2" aria-label="Quy về mã nhận điều">
+      <div className="text-sm"><b>Quy về mã nhận điều.</b> <span className="font-mono">{r.order}</span> là mã J / W đang tính riêng. Nếu là hàng 2 mã, chọn mã nhận điều cùng hàng: app cộng tồn + xuất 2 mã và đặt bằng mã nhận điều. Lựa chọn được lưu cho các tuần sau.</div>
+      {r.cands?.length > 0 && (
+        <div className="overflow-x-auto"><table className="w-full text-xs border-collapse bg-white rounded">
+          <thead className="text-gray-500"><tr><th className="px-1.5 py-1 text-left">Chọn</th><th className="px-1.5 py-1 text-left">Mã nhận điều gợi ý</th><th className="px-1.5 py-1 text-left">Tên trên file</th><th className="px-1.5 py-1 text-right">Tồn</th><th className="px-1.5 py-1 text-right">Xuất trong kỳ</th></tr></thead>
+          <tbody>{r.cands.map(c => {
+            const s = stat(c.ma)
+            return (
+              <tr key={c.ma} className="border-t border-gray-100 cursor-pointer" onClick={() => { setPick(c.ma); setOther('') }}>
+                <td className="px-1.5 py-1"><input type="radio" name={`jw-${r.order}`} checked={!other && pick === c.ma} onChange={() => { setPick(c.ma); setOther('') }} aria-label={`Chọn ${c.ma}`} /></td>
+                <td className="px-1.5 py-1 font-mono">{c.ma}</td><td className="px-1.5 py-1">{model.prod[c.ma].ten}</td>
+                <td className="px-1.5 py-1 text-right tabular-nums">{fmtN(s.tc)}</td><td className="px-1.5 py-1 text-right tabular-nums">{fmtN(s.x)}</td>
+              </tr>
+            )
+          })}</tbody>
+        </table></div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <label className="flex items-center gap-1.5">{r.cands?.length ? 'Hoặc mã khác' : 'Mã nhận điều'}
+          <input value={other} onChange={e => setOther(e.target.value)} placeholder="VD: A01338" aria-label="Mã nhận điều khác" className="w-28 border border-gray-200 rounded px-2 py-1 text-sm font-mono" /></label>
+        <button type="button" className="sheet-tab-action is-primary" onClick={go}>Gộp vào {(other.trim() || pick).toUpperCase() || 'mã nhận điều'}</button>
+        <button type="button" className="sheet-tab-action" onClick={() => onAlone(r.order, true)}>Không phải hàng 2 mã</button>
+      </div>
+      {msg && <div className="text-xs text-red-600" role="status">{msg}</div>}
+    </section>
+  )
+}
+
+// Danh sách mã J / W đứng riêng có gợi ý (mục 3): duyệt nhanh cả loạt.
+function JwPending({ rows, model, onLink, onAlone }) {
+  const [pick, setPick] = useState({})
+  if (!rows.length) return null
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 flex flex-col gap-2" aria-label="Mã J / W chưa quy về mã nhận điều">
+      <div className="text-sm"><b>{rows.length} mã J / W chưa quy về mã nhận điều.</b> <span className="text-xs text-gray-600">Tên khác mã nhận điều nên app không tự gộp. App gợi ý mã cùng hàng (cùng ĐVT, tên và quy cách giống nhất); anh chọn đúng mã rồi bấm Gộp.</span></div>
+      <div className="flex flex-col gap-1.5 max-h-[420px] overflow-y-auto pr-1">
+        {rows.map(r => {
+          const t = pick[r.order] || r.cands[0].ma
+          return (
+            <div key={r.order} className="bg-white rounded-lg border border-gray-200 px-2.5 py-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-mono font-semibold">{r.order}</span><span className="min-w-40 flex-1">{r.p0.ten}<span className="ml-1 text-gray-500">· tồn {fmtN(r.TON)} · xuất {fmtN(r.X3)}</span></span>
+              <span className="text-gray-500">→</span>
+              <select value={t} onChange={e => setPick(p => ({ ...p, [r.order]: e.target.value }))} aria-label={`Mã nhận điều cho ${r.order}`} className="border border-gray-200 rounded px-1.5 py-1 text-xs max-w-[340px]">
+                {r.cands.map(c => <option key={c.ma} value={c.ma}>{c.ma} · {model.prod[c.ma].ten}</option>)}
+              </select>
+              <button type="button" className="sheet-tab-action is-primary" onClick={() => onLink(r.order, t)}>Gộp</button>
+              <button type="button" className="sheet-tab-action" onClick={() => onAlone(r.order, true)}>Không phải hàng 2 mã</button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function MergeGroups({ model, settings, P, jwRows, onSetMerge, onAddManual, onDelManual, onLinkJw, onAlone }) {
   const [text, setText] = useState('')
   const [msg, setMsg] = useState('')
   const groups = groupsOf(model, settings)
@@ -113,6 +192,7 @@ export function MergeGroups({ model, settings, P, onSetMerge, onAddManual, onDel
   }
   return (
     <div className="flex flex-col gap-2.5">
+      <JwPending rows={jwRows || []} model={model} onLink={onLinkJw} onAlone={onAlone} />
       <div className="text-xs text-gray-500">Một sản phẩm có 2 – 3 mã vật tư (quy định nội bộ). App tự tìm các mã <b>trùng tên + ĐVT</b> ở các kho đang chọn và gộp: cộng tồn, cộng xuất rồi mới dự trù, để không đặt gấp đôi. <b>Mã đặt hàng</b> mặc định là mã không bắt đầu bằng J / W; anh đổi được. Không phải cùng sản phẩm thì bấm Không gộp.</div>
       <div className="flex flex-col gap-2.5 max-h-[560px] overflow-y-auto pr-1">
         {groups.map(g => {
@@ -159,6 +239,11 @@ export function MergeGroups({ model, settings, P, onSetMerge, onAddManual, onDel
         <button type="button" onClick={add} className="sheet-tab-action">Gộp</button>
       </div>
       {msg && <div className="text-xs text-gray-600" role="status">{msg}</div>}
+      {(settings.jwAlone || []).length > 0 && (
+        <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5">Mã J / W anh đã đánh dấu không phải hàng 2 mã:
+          {settings.jwAlone.map(c => <button key={c} type="button" onClick={() => onAlone(c, false)} title="Bỏ đánh dấu" className="px-1.5 py-0.5 rounded-full border border-gray-200 bg-white font-mono">{c} ×</button>)}
+        </div>
+      )}
     </div>
   )
 }
@@ -183,7 +268,7 @@ function RateBars({ r, model }) {
 }
 
 // Khung bật lên trên bảng (bảng dài vài trăm dòng): bấm nền mờ hoặc Esc để đóng.
-export function DetailPanel({ r, model, settings, onClose }) {
+export function DetailPanel({ r, model, settings, onClose, onLinkJw, onAlone }) {
   const lots = r.rows.flatMap(x => x.lots.map(l => ({ ...l, ma: x.ma, kho: x.kho }))).sort((a, b) => String(a.hd).localeCompare(String(b.hd)))
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
@@ -199,6 +284,7 @@ export function DetailPanel({ r, model, settings, onClose }) {
         <button type="button" onClick={onClose} className="sheet-tab-action ml-auto" aria-label="Đóng chi tiết"><X size={14} /> Đóng</button>
       </div>
       <div className="flex flex-wrap gap-1">{r.alerts.length ? r.alerts.map(a => <AlertTag key={a.k} a={a} />) : <span className="text-xs text-green-700">Ổn định, không có cảnh báo</span>}</div>
+      {r.codes.length === 1 && isJW(r.order) && onLinkJw && <JwLinkBox key={r.order} r={r} model={model} settings={settings} onLink={onLinkJw} onAlone={onAlone} />}
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
         <div className="flex flex-col gap-3 min-w-0">
           <RateBars r={r} model={model} />

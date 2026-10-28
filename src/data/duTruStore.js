@@ -21,6 +21,7 @@ export function readDuTruSettings(branch = 'C') {
     khoName: { ...KHO_NAME_DEFAULT_C, ...(v.khoName || {}) },
     merge: v.merge || {},
     manual: Array.isArray(v.manual) ? v.manual : [],
+    jwAlone: Array.isArray(v.jwAlone) ? v.jwAlone : [], // mã J / W anh xác nhận không phải hàng 2 mã: thôi gợi ý mã nhận điều
     Ld: Number.isFinite(v.Ld) ? v.Ld : 5,
     ss: Number.isFinite(v.ss) ? v.ss : 3,
     useSea: v.useSea !== false,

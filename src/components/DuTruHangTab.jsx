@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Copy, Search } from 'lucide-react'
-import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, normText, parseNxtXml, weekKey } from '../utils/duTru'
+import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, groupOn, groupOrder, groupsOf, normText, parseNxtXml, weekKey } from '../utils/duTru'
 import { readDuTruOrder, readDuTruSettings, writeDuTruOrder, writeDuTruSettings } from '../data/duTruStore'
 import { AlertTag, DetailPanel, FileSlots, KhoPicker, MergeGroups, NumInput } from './DuTruParts'
 
@@ -49,6 +49,18 @@ function KhoC() {
 
   const save = patch => { const next = { ...settings, ...patch }; setSettings(next); writeDuTruSettings(next, 'C') }
   const saveOrder = patch => { const next = { ...order, ...patch }; setOrders(o => ({ ...o, [week]: next })); writeDuTruOrder(week, next, 'C') }
+  // Quy mã J / W về mã nhận điều: gộp tay [mã nhận điều (+ các mã đang gộp cùng nó), mã J / W], đặt bằng mã nhận điều
+  const linkJw = (jw, target) => {
+    const g = groupsOf(model, settings).find(x => groupOn(settings, x) && x.codes.includes(target))
+    const codes = [...new Set([...(g ? g.codes : [target]), jw])].sort()
+    const ord = g ? groupOrder(model, settings, g) : target
+    save({
+      manual: [...settings.manual.filter(c => !g || `manual:${c.join(',')}` !== g.key), codes],
+      merge: { ...settings.merge, [`manual:${codes.join(',')}`]: { on: true, order: ord } },
+    })
+    if (sel) setSel(ord)
+  }
+  const setAlone = (ma, on) => save({ jwAlone: on ? [...new Set([...settings.jwAlone, ma])] : settings.jwAlone.filter(c => c !== ma) })
   const chotOf = r => order.chot[r.id] ?? r.de
   const addOf = r => order.add[r.id] ?? r.addDe
 
@@ -77,6 +89,7 @@ function KhoC() {
   const shown = rows.filter(r => (!chip || chip.f(r)) && (!nq || normText(`${r.codes.join(' ')} ${r.p0.ten}`).includes(nq)))
   const web = rows.map(r => ({ r, q: chotOf(r) + (addOf(r) || 0) })).filter(x => x.q > 0)
   const selRow = rows.find(r => r.id === sel)
+  const jwRows = rows.filter(r => r.cands?.length)
   const allAlerts = rows.flatMap(r => r.alerts.filter(a => a.k !== 'merge').map(a => ({ ...a, r }))).sort((a, b) => LV_ORDER[a.lv] - LV_ORDER[b.lv])
 
   const act = rows.filter(r => r.rd > 0)
@@ -110,8 +123,8 @@ function KhoC() {
               onToggle={(c, on) => save({ kho: on ? [...new Set([...settings.kho, c])] : settings.kho.filter(x => x !== c) })}
               onName={(c, name) => save({ khoName: { ...settings.khoName, [c]: name } })} />
           </Box>
-          <Box open={false} title="3 · Mã cùng sản phẩm" sub={`${rows.filter(r => r.codes.length > 1).length} nhóm đang gộp`}>
-            <MergeGroups model={model} settings={settings} P={P}
+          <Box open={false} title="3 · Mã cùng sản phẩm" sub={<>{rows.filter(r => r.codes.length > 1).length} nhóm đang gộp{jwRows.length > 0 && <b className="ml-2 text-amber-700">· {jwRows.length} mã J / W chưa quy về mã nhận điều</b>}</>}>
+            <MergeGroups model={model} settings={settings} P={P} jwRows={jwRows} onLinkJw={linkJw} onAlone={setAlone}
               onSetMerge={(key, patch) => save({ merge: { ...settings.merge, [key]: { ...(settings.merge[key] || {}), ...patch } } })}
               onAddManual={codes => save({ manual: [...settings.manual, codes] })}
               onDelManual={codes => save({ manual: settings.manual.filter(c => c.join(',') !== codes.join(',')) })} />
@@ -191,7 +204,7 @@ function KhoC() {
                     const r4cls = r.r4 == null ? '' : r.X3 >= 10 && r.r4 >= 1.5 * r.rate ? 'text-amber-700 font-semibold' : r.X3 >= 10 && r.r4 <= 0.5 * r.rate ? 'text-red-600 font-semibold' : ''
                     return (
                       <tr key={r.id} onClick={() => setSel(sel === r.id ? null : r.id)} className={`border-t border-gray-100 cursor-pointer align-top ${sel === r.id ? 'bg-slate-100' : 'hover:bg-slate-50'}`}>
-                        <td className="px-2 py-1.5 font-mono">{r.order}{r.codes.length > 1 && <div className="text-[11px] font-sans text-slate-600">gộp {r.codes.length} mã</div>}</td>
+                        <td className="px-2 py-1.5 font-mono">{r.order}{r.codes.length > 1 && <div className="text-[11px] font-sans text-slate-600">gộp {r.codes.length} mã</div>}{r.cands?.length > 0 && <div className="text-[11px] font-sans text-amber-700">mã J / W · có thể là {r.cands[0].ma}</div>}</td>
                         <td className="px-2 py-1.5">{r.p0.ten}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmt1(r.rd * 7)}{r.sea !== 1 && <div className="text-[11px] text-gray-500">mùa vụ ×{fmt1(r.sea)}</div>}</td>
                         <td className={`px-2 py-1.5 text-right tabular-nums ${r4cls}`}>{r.r4 == null ? <span className="text-gray-300">—</span> : fmt1(r.r4 * 7)}</td>
@@ -289,7 +302,7 @@ function KhoC() {
           )}
 
           {copyText && <textarea readOnly value={copyText} onFocus={e => e.target.select()} aria-label="Nội dung để chép" className="w-full min-h-40 border border-gray-200 rounded-lg p-2 font-mono text-xs" />}
-          {selRow && <DetailPanel r={selRow} model={model} settings={settings} onClose={closeDetail} />}
+          {selRow && <DetailPanel r={selRow} model={model} settings={settings} onClose={closeDetail} onLinkJw={linkJw} onAlone={setAlone} />}
         </>
       )}
     </div>

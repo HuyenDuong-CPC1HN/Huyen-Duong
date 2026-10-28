@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyseItem, buildDuTruModel, computePlan, groupsOf, parseNxtXml, planItems, seaOf, weekKey } from '../duTru'
+import { analyseItem, buildDuTruModel, computePlan, groupsOf, jwCandidates, parseNxtXml, planItems, seaOf, weekKey } from '../duTru'
 import { nxtXml } from './nxtXmlFixture'
 
 // [mã, tên, mã kho, ĐVT, lô, hạn dùng, tồn đầu, nhập, xuất, tồn cuối]
@@ -95,6 +95,28 @@ describe('Dự trù hàng — tính đề xuất', () => {
     expect(a.fast).toBe(true) // 80 trong 4 ngày ≥ 1,3 × 40
     expect(a.tonNow).toBe(120)
     expect(a.addDe).toBe(Math.ceil(20 * a.untilNext + 10 * 3 - 120 - 50))
+  })
+
+  it('mã J / W tên khác mã nhận điều: chỉ gợi ý (cùng ĐVT, quy cách giống nhất), anh chọn thì gộp và đặt bằng mã nhận điều', () => {
+    const m = buildDuTruModel({ f3: parseNxtXml(nxtXml('01/08/2026', '28/10/2026', [
+      ...F3,
+      ['E00010', 'Thuốc E - Hộp 4 vỉ x 5 ống 0.5ml', '020101', 'ONG', 'E1', '2028-01-01', 0, 400, 300, 100],
+      ['E00011', 'Thuốc E - Hộp 1 ống 10ml', '020101', 'ONG', 'E2', '2028-01-01', 0, 70, 50, 20],
+      ['E00012', 'Thuốc E - Hộp 4 vỉ x 5 ống 0.5ml', '020101', 'HOP', 'E3', '2028-01-01', 0, 10, 5, 5], // khác ĐVT
+      ['J00710', 'Thuốc E - H20 0.5ml', '020102', 'ONG', 'J1', '2028-01-01', 120, 0, 120, 0],
+    ])) })
+    expect(jwCandidates(m, settings, 'J00710').map(c => c.ma)).toEqual(['E00010', 'E00011']) // "H20" = "4 vỉ x 5", cùng 0.5ml
+    const lone = planItems(m, settings).find(i => i.id === 'J00710')
+    expect(lone.codes).toEqual(['J00710'])
+    expect(analyseItem(m, settings, lone, P).alerts[0].k).toBe('jw')
+    expect(planItems(m, { ...settings, jwAlone: ['J00710'] }).find(i => i.id === 'J00710').cands).toBeUndefined()
+    const linked = { ...settings, manual: [['E00010', 'J00710']] }
+    const it2 = planItems(m, linked).find(i => i.codes.includes('J00710'))
+    expect(it2).toMatchObject({ id: 'E00010', codes: ['E00010', 'J00710'] })
+    expect(analyseItem(m, linked, it2, P)).toMatchObject({ X3: 420, TON: 100 })
+    // gộp tay chứa trọn nhóm tự tìm thì thay nhóm đó (nhóm gộp tay xét trước)
+    const wide = { ...settings, manual: [['B00002', 'J00602', 'J00710']] }
+    expect(groupsOf(m, wide).map(g => g.codes)).toEqual([['B00002', 'J00602', 'J00710']])
   })
 
   it('khoá tuần: thứ 4 và thứ 6 cùng tuần', () => {

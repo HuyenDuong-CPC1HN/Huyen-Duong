@@ -65,6 +65,28 @@ describe('Dự trù hàng (Kho C)', () => {
     expect(within(web).getByText(/Đã nhập 1\//)).toBeInTheDocument()
   })
 
+  it('mã J / W chưa quy về mã nhận điều: bấm dòng, chọn mã gợi ý → gộp, đặt bằng mã nhận điều; lựa chọn được lưu', async () => {
+    render(<DuTruHangTab />)
+    fireEvent.change(screen.getByLabelText('Tải file 3 tháng gần nhất → hôm nay'), { target: { files: [file('nxt.xml', nxtXml('01/08/2026', '28/10/2026', [
+      ...F3,
+      ['E00010', 'Thuốc E - Hộp 4 vỉ x 5 ống 0.5ml', '020101', 'ONG', 'E1', '2028-01-01', 0, 400, 300, 100],
+      ['J00710', 'Thuốc E - H20 0.5ml', '020102', 'ONG', 'J1', '2028-01-01', 120, 0, 120, 0],
+    ]))] } })
+    const plan = await screen.findByRole('region', { name: 'Đơn chính' })
+    const row = within(plan).getByText('Thuốc E - H20 0.5ml').closest('tr')
+    expect(row).toHaveTextContent('có thể là E00010')
+    expect(row).toHaveTextContent('Chưa quy về mã nhận điều')
+    fireEvent.click(row)
+    const box = within(screen.getByRole('dialog', { name: 'Chi tiết mã hàng' })).getByRole('region', { name: 'Quy về mã nhận điều' })
+    fireEvent.click(within(box).getByRole('button', { name: 'Gộp vào E00010' }))
+    expect(JSON.parse(store.values.get('dutru_settings_C')).manual).toEqual([['E00010', 'J00710']])
+    expect(within(plan).queryByText('Thuốc E - H20 0.5ml')).not.toBeInTheDocument()
+    const merged = within(plan).getByText('Thuốc E - Hộp 4 vỉ x 5 ống 0.5ml').closest('tr')
+    expect(merged).toHaveTextContent('E00010')
+    expect(merged).toHaveTextContent('gộp 2 mã')
+    expect(screen.getByRole('dialog', { name: 'Chi tiết mã hàng' })).toHaveTextContent('gộp E00010, J00710')
+  })
+
   it('bấm dòng mở chi tiết: tồn theo kho, cách tính; file sai mẫu thì báo lỗi ngay ở ô', async () => {
     const plan = await loadMain()
     fireEvent.click(within(plan).getByText('Siro B - Hộp 1 lọ 100ml'))

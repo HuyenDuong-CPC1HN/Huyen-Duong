@@ -118,7 +118,8 @@ const sales = (model, kho, c) => rowsOf(model, kho, c).reduce((s, r) => s + r.x,
 // Mã đặt hàng mặc định: ưu tiên mã nhận điều; nhiều mã thì lấy mã bán nhiều nhất trong các kho đang chọn
 export const defaultOrder = (model, kho, codes) => [...codes].sort((a, b) => (isJW(a) - isJW(b)) || (sales(model, kho, b) - sales(model, kho, a)) || a.localeCompare(b))[0]
 
-// Nhóm mã: app tự tìm mã trùng tên + ĐVT (trong các kho đang chọn) + nhóm anh gộp tay. settings: { kho, merge, manual }
+// Nhóm mã: nhóm anh gộp tay + app tự tìm mã trùng tên + ĐVT (trong các kho đang chọn). settings: { kho, merge, manual }
+// Nhóm gộp tay xét trước; nhóm tự tìm đã nằm trọn trong nhóm gộp tay (đang gộp) thì bỏ.
 export function groupsOf(model, settings) {
   const kho = new Set(settings.kho)
   const by = {}
@@ -128,7 +129,8 @@ export function groupsOf(model, settings) {
   }
   const auto = Object.entries(by).filter(([, v]) => v.length > 1).map(([key, codes]) => ({ key, codes: codes.sort(), auto: true }))
   const manual = (settings.manual || []).map(codes => ({ key: `manual:${codes.join(',')}`, codes: codes.filter(c => model.prod[c]), auto: false })).filter(g => g.codes.length > 1)
-  return [...auto, ...manual]
+  const covered = new Set(manual.filter(g => groupOn(settings, g)).flatMap(g => g.codes))
+  return [...manual, ...auto.filter(g => !g.codes.every(c => covered.has(c)))]
 }
 export const groupOn = (settings, g) => (settings.merge?.[g.key] || {}).on !== false
 export function groupOrder(model, settings, g) {
@@ -136,7 +138,45 @@ export function groupOrder(model, settings, g) {
   return g.codes.includes(m.order) ? m.order : defaultOrder(model, new Set(settings.kho), g.codes)
 }
 
+// ---------- Mã J / W đứng riêng: gợi ý mã nhận điều cùng sản phẩm ----------
+// Tên 2 mã thường ghi khác nhau ("Afenemi - H20 0.5ml" / "Afenemi - Hộp 4 vỉ x 5 ống 0.5ml") nên không tự gộp được.
+// App chỉ gợi ý: mã không J / W, cùng ĐVT, cùng chữ đầu của tên, giống nhau nhiều nhất (quy cách, số ống / hộp). Anh chọn mới gộp.
+const PACK_WORDS = new Set(['hop', 'vi', 'x', 'ong', 'lo', 'chai', 'goi', 'vien', 'tuyp', 'h', 'binh', 'tui', 'cai', 'kem', 'hang', 'km', 'khuyen', 'mai'])
+const tokenCache = new WeakMap()
+function nameTokens(model, ma) {
+  let cache = tokenCache.get(model)
+  if (!cache) tokenCache.set(model, cache = new Map())
+  if (cache.has(ma)) return cache.get(ma)
+  const s = normText(model.prod[ma].ten).replace(/(\d),(\d)/g, '$1.$2').replace(/(\d)\s+(ml|mg|mcg|g|kg|l|ui|iu|%)(?![a-z])/g, '$1$2')
+  const m = /\b(\d+)\s*vi\s*x\s*(\d+)/.exec(s)
+  const h = m ? null : /\bh\s*(\d+)\b/.exec(s) || /\bhop\s+(\d+)\s+(ong|lo|goi|vien|tuyp|chai|tui)\b/.exec(s)
+  const pack = m ? m[1] * m[2] : h ? Number(h[1]) : 0 // số đơn vị / hộp: "H20" = "4 vỉ x 5"
+  const words = s.split(/[^a-z0-9.%/]+/).filter(w => w && !PACK_WORDS.has(w))
+  const set = new Set(words.filter(w => !/^\d+$/.test(w)))
+  if (pack) set.add(`#${pack}`)
+  const t = { first: words[0] || '', set }
+  cache.set(ma, t)
+  return t
+}
+export function jwCandidates(model, settings, ma, limit = 3) {
+  if (!model.prod[ma]) return []
+  const kho = new Set(settings.kho)
+  const a = nameTokens(model, ma)
+  const dvt = normText(model.prod[ma].dvt)
+  const out = []
+  for (const q of Object.values(model.prod)) {
+    if (isJW(q.ma) || normText(q.dvt) !== dvt) continue
+    const b = nameTokens(model, q.ma)
+    if (!a.first || b.first !== a.first) continue
+    const same = [...a.set].filter(w => b.set.has(w)).length
+    const score = same / new Set([...a.set, ...b.set]).size
+    if (score >= 0.25) out.push({ ma: q.ma, score, x: sales(model, kho, q.ma) })
+  }
+  return out.sort((x, y) => y.score - x.score || y.x - x.x || x.ma.localeCompare(y.ma)).slice(0, limit)
+}
+
 // Các dòng dự trù: mỗi nhóm đang gộp 1 dòng (đặt bằng mã đặt hàng), các mã còn lại mỗi mã 1 dòng.
+// Mã J / W đứng riêng có gợi ý mã nhận điều thì kèm cands (trừ mã anh đã đánh dấu "không phải hàng 2 mã": settings.jwAlone).
 export function planItems(model, settings) {
   const kho = new Set(settings.kho)
   const used = new Set()
@@ -150,7 +190,13 @@ export function planItems(model, settings) {
     const order = codes.includes(want) ? want : defaultOrder(model, kho, codes)
     list.push({ id: order, order, codes })
   }
-  for (const p of Object.values(model.prod)) if (!used.has(p.ma) && rowsOf(model, kho, p.ma).length) list.push({ id: p.ma, order: p.ma, codes: [p.ma] })
+  const alone = new Set(settings.jwAlone || [])
+  for (const p of Object.values(model.prod)) {
+    if (used.has(p.ma) || !rowsOf(model, kho, p.ma).length) continue
+    const live = rowsOf(model, kho, p.ma).some(r => r.x > 0 || r.tc > 0) // mã không tồn, không xuất thì không cần quy
+    const cands = live && isJW(p.ma) && !alone.has(p.ma) ? jwCandidates(model, settings, p.ma) : []
+    list.push({ id: p.ma, order: p.ma, codes: [p.ma], ...(cands.length ? { cands } : {}) })
+  }
   return list
 }
 
@@ -192,6 +238,7 @@ export function analyseItem(model, settings, it, P) {
   const f1 = v => (Math.round(v * 10) / 10).toLocaleString('vi-VN')
   const f0 = v => Math.round(v).toLocaleString('vi-VN')
   const al = []
+  if (it.cands?.length) al.push({ lv: 'warn', k: 'jw', t: 'Chưa quy về mã nhận điều', d: `${it.order} là mã J / W, đang tính riêng. Có thể cùng hàng với ${it.cands.map(c => c.ma).join(', ')}.`, a: 'Bấm vào dòng, chọn mã nhận điều để gộp; không phải hàng 2 mã thì bấm "Không phải hàng 2 mã".' })
   if (TON <= 0 && X3 > 0) al.push({ lv: 'crit', k: 'out', t: 'Đang hết hàng', d: 'Tồn cuối = 0. Những ngày hết hàng không bán được nên bình quân có thể thấp hơn nhu cầu thật.', a: 'Đặt ngay; cân nhắc chốt cao hơn đề xuất.' })
   else if (rd > 0 && TON < rd * P.Ld) al.push({ lv: 'crit', k: 'risk', t: 'Hết hàng trước khi chuyến tới về', d: `Tồn ${f0(TON)} ${unit} chỉ đủ bán ${f1(TON / rd)} ngày, hàng về sau ${P.Ld} ngày.`, a: 'Đặt ngay trong đơn chính; nếu cần, xin điều chuyển từ kho khác.' })
   else if (rd > 0 && TON < rd * (P.Ld + P.ss)) al.push({ lv: 'warn', k: 'low', t: 'Dưới điểm đặt hàng', d: `Tồn ${f0(TON)} ${unit}, thấp hơn mức cần giữ tới lúc hàng về (${f0(rd * (P.Ld + P.ss))}).`, a: 'Ưu tiên duyệt mã này.' })
