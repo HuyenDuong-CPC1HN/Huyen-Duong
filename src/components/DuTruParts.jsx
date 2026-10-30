@@ -49,7 +49,7 @@ export function FileSlots({ files, slotMsg, onPick, onClear }) {
               {f && <span className="px-1.5 py-0.5 rounded-full text-[11px] bg-green-50 text-green-700 border border-green-200">Đã tải</span>}
             </div>
             <div className="text-xs text-gray-500 break-all">
-              {m.busy || (f ? <><b className="text-gray-700">{f.name}</b><br />Kỳ {fmtDmy(f.from)} – {fmtDmy(f.to)} · {f.days} ngày · {fmtN(f.nMa)} mã · {fmtN(f.data.length)} dòng</> : `Chưa tải · ${s.ex}`)}
+              {m.busy || (f ? <><b className="text-gray-700">{f.name}</b><br />Kỳ {fmtDmy(f.from)} – {fmtDmy(f.to)} · {f.days} ngày · {fmtN(f.nMa)} mã · {fmtN(f.savedRows ?? f.data.length)} dòng{f.savedAt && <><br /><span className="text-green-700">Đã lưu lúc {new Date(f.savedAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}</span></>}</> : `Chưa tải · ${s.ex}`)}
             </div>
             {warn && <div className="text-xs text-amber-700">⚠ {warn}</div>}
             {m.err && <div className="text-xs text-red-600">{m.err}</div>}

@@ -8,8 +8,15 @@ const store = vi.hoisted(() => {
   return { values, opsStore: { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, String(v)), removeItem: k => values.delete(k) } }
 })
 vi.mock('../../data/workspace', () => ({ opsStore: store.opsStore }))
+const blobs = vi.hoisted(() => new Map()) // giả lập Supabase Storage
+vi.mock('../../data/storageFiles', () => ({ createStorageFilesRepository: () => ({
+  writeJson: async (path, v) => { blobs.set(path, JSON.parse(JSON.stringify(v))); return path },
+  readJson: async path => { if (!blobs.has(path)) throw new Error('không tìm thấy tệp'); return blobs.get(path) },
+  remove: async path => { blobs.delete(path) },
+}) }))
+vi.mock('../../supabase', () => ({ supabase: {} }))
 
-beforeEach(() => store.values.clear())
+beforeEach(() => { store.values.clear(); blobs.clear() })
 afterEach(() => cleanup())
 
 // [mã, tên, mã kho, ĐVT, lô, hạn dùng, tồn đầu, nhập, xuất, tồn cuối] — số liệu giả lập
@@ -94,6 +101,20 @@ describe('Dự trù hàng (Kho C)', () => {
     expect(within(siro).getByLabelText('Chốt đặt B00002')).toHaveValue('40') // cần 33 → 2 kiện × 20
     expect(siro).toHaveTextContent('2 kiện')
     expect(Object.keys(JSON.parse(store.values.get('quycach_hang'))).sort()).toEqual(['A00003', 'B00002', 'J00602', 'Z00001'])
+  })
+
+  it('file đã tải được lưu lại: mở lại tab không phải tải lại; Bỏ file thì xoá', async () => {
+    await loadMain()
+    await waitFor(() => expect(screen.getByText(/Đã lưu lúc/)).toBeInTheDocument())
+    expect(Object.keys(JSON.parse(store.values.get('dutru_files_C')))).toEqual(['f3'])
+    cleanup()
+    render(<DuTruHangTab />)
+    const plan = await screen.findByRole('region', { name: 'Đơn chính' })
+    expect(planNames(plan)).toEqual(['Amoxicillin 500mg', 'Siro B - Hộp 1 lọ 100ml', 'Zinc - Hộp 10 vỉ'])
+    expect(screen.getByText(/Kỳ 01\/08\/2026 – 28\/10\/2026 · 89 ngày · 5 mã · 5 dòng/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ file' }))
+    await waitFor(() => expect(JSON.parse(store.values.get('dutru_files_C'))).toEqual({}))
+    expect(blobs.size).toBe(0)
   })
 
   it('bấm dòng mở chi tiết: tồn theo kho, cách tính; file sai mẫu thì báo lỗi ngay ở ô', async () => {

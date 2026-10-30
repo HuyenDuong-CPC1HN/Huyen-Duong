@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Copy, Search } from 'lucide-react'
 import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, groupOn, groupOrder, groupsOf, normText, parseNxtXml, weekKey } from '../utils/duTru'
 import { readDuTruOrder, readDuTruSettings, writeDuTruOrder, writeDuTruSettings } from '../data/duTruStore'
 import { addQuyCachProducts, readQuyCach } from '../data/quyCachStore'
+import { loadDuTruFiles, readDuTruFilesMeta, removeDuTruFile, saveDuTruFile } from '../data/duTruFiles'
 import { AlertTag, DetailPanel, FileSlots, KhoPicker, MergeGroups, NumInput } from './DuTruParts'
 
 // Tab "Dự trù hàng": mỗi kho (C / DTP / SO) dự trù riêng, quy tắc riêng. Hiện làm Kho C: tải file nhập – xuất – tồn
@@ -31,7 +32,17 @@ const Box = ({ title, sub, open = true, children }) => (
 
 function KhoC() {
   const [files, setFiles] = useState({})
-  const [slotMsg, setSlotMsg] = useState({})
+  const [slotMsg, setSlotMsg] = useState(() => Object.fromEntries(Object.keys(readDuTruFilesMeta('C')).map(k => [k, { busy: 'Đang mở số liệu đã lưu…' }])))
+  // Mở lại tab: lấy lại số liệu các file đã tải lần trước (không phải tải lại)
+  useEffect(() => {
+    let live = true
+    loadDuTruFiles('C').then(({ files: saved, errors }) => {
+      if (!live) return
+      setFiles(f => ({ ...saved, ...f }))
+      setSlotMsg(m => Object.fromEntries(Object.keys(m).map(k => [k, m[k].busy ? (errors[k] ? { err: `Không mở được số liệu đã lưu: ${errors[k]}. Anh tải lại file.` } : {}) : m[k]])))
+    }, err => { if (live) setSlotMsg(m => Object.fromEntries(Object.keys(m).map(k => [k, m[k].busy ? { err: `Không mở được số liệu đã lưu: ${err.message}` } : m[k]]))) })
+    return () => { live = false }
+  }, [])
   const [settings, setSettings] = useState(() => readDuTruSettings('C'))
   const [orders, setOrders] = useState({})
   const [filter, setFilter] = useState('all')
@@ -73,7 +84,10 @@ function KhoC() {
     await new Promise(r => setTimeout(r, 30)) // cho giao diện hiện "Đang đọc" trước khi đọc file lớn
     try {
       const parsed = parseNxtXml(await readText(file))
-      setFiles(f => ({ ...f, [k]: { ...parsed, name: file.name } }))
+      const f1 = { ...parsed, name: file.name }
+      setFiles(f => ({ ...f, [k]: f1 }))
+      saveDuTruFile(k, f1, 'C').then(at => setFiles(f => (f[k] === f1 ? { ...f, [k]: { ...f1, savedAt: at } } : f)),
+        err => setSlotMsg(m => ({ ...m, [k]: { err: `Đã đọc nhưng chưa lưu được lên máy chủ (${err.message}); mở lại tab sẽ phải tải lại.` } })))
       if (k === 'f3') { // thêm mã mới (các kho đang tính) vào danh sách Quy cách hàng hoá
         const kho = new Set(settings.kho)
         const seen = new Map()
@@ -86,7 +100,7 @@ function KhoC() {
       setSlotMsg(m => ({ ...m, [k]: { err: `Không đọc được ${file.name}: ${err.message}` } }))
     }
   }
-  const clear = k => { setFiles(f => { const n = { ...f }; delete n[k]; return n }); setSlotMsg(m => ({ ...m, [k]: {} })); setSel(null) }
+  const clear = k => { setFiles(f => { const n = { ...f }; delete n[k]; return n }); setSlotMsg(m => ({ ...m, [k]: {} })); setSel(null); removeDuTruFile(k, 'C').catch(() => {}) }
   const copy = (text, label) => {
     setCopyText('')
     const fallback = () => { setCopyText(text); setCopyMsg('Trình duyệt chặn chép tự động — bôi đen nội dung bên dưới để chép.') }
@@ -119,7 +133,7 @@ function KhoC() {
 
       <Box title="1 · Tải file nhập – xuất – tồn" sub={model ? `Kỳ chính ${fmtDmy(model.from)} – ${fmtDmy(model.to)} (${model.D3} ngày)` : 'Chưa tải file 3 tháng'}>
         <div className="flex flex-col gap-2.5">
-          <div className="text-xs text-gray-500">Xuất từ phần mềm mẫu <b>"Báo cáo tổng hợp nhập xuất tồn theo kho"</b> (file Excel dạng XML), chọn đúng khoảng ngày rồi tải vào ô tương ứng. App tự đọc kỳ báo cáo ở dòng "Từ ngày … đến ngày …". <b>File chỉ đọc trên trình duyệt, không lưu lên máy chủ</b>; mỗi lần dự trù tải file mới. Lựa chọn kho, gộp mã và số chốt thì được lưu.</div>
+          <div className="text-xs text-gray-500">Xuất từ phần mềm mẫu <b>"Báo cáo tổng hợp nhập xuất tồn theo kho"</b> (file Excel dạng XML), chọn đúng khoảng ngày rồi tải vào ô tương ứng. App tự đọc kỳ báo cáo ở dòng "Từ ngày … đến ngày …". <b>Số liệu file đã tải được lưu lại</b>: mở lại tab là có ngay, không phải tải lại. Tải file mới vào ô thì thay bản cũ; "Bỏ file" thì xoá. Lựa chọn kho, gộp mã và số chốt cũng được lưu.</div>
           <FileSlots files={files} slotMsg={slotMsg} onPick={pick} onClear={clear} />
         </div>
       </Box>
