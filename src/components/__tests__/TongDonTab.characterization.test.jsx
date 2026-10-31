@@ -109,22 +109,19 @@ describe('TongDonTab saved-report composition', () => {
     expect(screen.getByRole('button', { name: /Lưu báo cáo tuần này/i })).toBeInTheDocument()
   })
 
-  it('bật tạm class "tdr-export-cream" (nền/viền/chữ + khổ 1180px khớp mẫu) đúng lúc chụp ảnh, tắt lại ngay sau đó', async () => {
+  it('xuất ảnh PNG dùng bản gọn dựng tạm (không phải màn hình đầy đủ), chụp xong thì bỏ; màn hình web giữ nguyên', async () => {
     workspaceMocks.opsStore.setItem('tongdon_reports', JSON.stringify([report]))
-    let classDuringCapture = null
+    let captured = null
     toPngMock.mockImplementation((node) => {
-      // toPng "chụp" DOM ngay tại thời điểm gọi — đúng lúc này class kem PHẢI đang có mặt.
-      classDuringCapture = node.classList.contains('tdr-export-cream')
+      captured = { compact: node.classList.contains('tdx'), text: node.textContent }
       return Promise.resolve('data:image/png;base64,fake')
     })
-
-    // jsdom không tự chạy vòng lặp requestAnimationFrame — cho chạy callback ngay để await trong
-    // handleExportImage không treo mãi (bản thân component chỉ cần "đợi 1 frame" trước khi chụp).
+    // jsdom không tự chạy vòng lặp requestAnimationFrame — cho chạy callback ngay để await không treo.
     const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => { cb(); return 0 })
 
     render(<TongDonTab onNavigate={vi.fn()} />)
-    const node = document.querySelector('.tdr.is-active')
-    expect(node.classList.contains('tdr-export-cream')).toBe(false)
+    const screenNode = document.querySelector('.tdr.is-active')
+    expect(document.querySelector('.tdx')).toBeNull()
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Xuất ảnh PNG/i }))
@@ -133,9 +130,11 @@ describe('TongDonTab saved-report composition', () => {
     })
     rafSpy.mockRestore()
 
-    expect(toPngMock).toHaveBeenCalledWith(node, { backgroundColor: '#f5f4f0', pixelRatio: 1 })
-    expect(classDuringCapture).toBe(true)
-    // Sau khi xuất xong, màn hình đang xem phải trở lại đúng giao diện thường — không bị kẹt kiểu kem.
-    expect(node.classList.contains('tdr-export-cream')).toBe(false)
+    expect(toPngMock).toHaveBeenCalledWith(expect.any(HTMLElement), { backgroundColor: '#f5f4f0', pixelRatio: 1 })
+    expect(captured.compact).toBe(true)
+    expect(captured.text).toMatch(/Đơn sàn/)
+    expect(captured.text).toMatch(/Giải pháp tuần tới/)
+    expect(document.querySelector('.tdx')).toBeNull() // chụp xong bỏ bản gọn
+    expect(document.querySelector('.tdr.is-active')).toBe(screenNode) // màn hình đầy đủ không đổi
   })
 })

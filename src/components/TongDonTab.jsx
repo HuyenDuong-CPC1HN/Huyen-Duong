@@ -7,6 +7,7 @@ import { computeWeekReportFromUnifiedTrial, ngoaiSanForWeekIdUnifiedTrial } from
 import { buildDonSanNarrative, buildDonTruyenThongNarrative } from './tongDonNarrative'
 import TongDonReportDonSan from './TongDonReportDonSan'
 import TongDonReportDonTruyenThong from './TongDonReportDonTruyenThong'
+import { TongDonExportDonSan, TongDonExportDonTruyenThong } from './TongDonExportCompact'
 
 function readJSON(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback } catch { return fallback }
@@ -238,20 +239,19 @@ export default function TongDonTab({ onNavigate }) {
   const handleDonSanFieldChange = (key, value) => { donSanSetters[key]?.(value) }
   const handleTruyenThongFieldChange = (key, value) => { truyenThongSetters[key]?.(value) }
 
-  // Xuất báo cáo đang mở (Đơn sàn/Đơn truyền thống) thành 1 ảnh PNG để đính kèm/gửi báo cáo
-  const exportRefDonSan = useRef(null)
-  const exportRefTruyenThong = useRef(null)
+  // Xuất báo cáo đang mở (Đơn sàn/Đơn truyền thống) thành 1 ảnh PNG để đính kèm/gửi báo cáo.
+  // Ảnh dùng bản GỌN (TongDonExportCompact.jsx) — dựng tạm ngoài khung nhìn, chụp xong thì bỏ; màn hình
+  // web vẫn giữ nguyên bản đầy đủ.
+  const exportRef = useRef(null)
   const [exporting, setExporting] = useState(false)
+  const [exportView, setExportView] = useState(null)
   const handleExportImage = async () => {
-    const node = activeTab === 'donsan' ? exportRefDonSan.current : exportRefTruyenThong.current
-    if (!node) return
     setExporting(true)
-    // Bật tạm biến thể "kem" (nền/viền/chữ + khổ 1180px) đúng mẫu người dùng cung cấp — chỉ trong lúc chụp
-    // ảnh, không đổi màn hình đang xem; toPng chụp DOM tại đúng thời điểm gọi nên phải add class TRƯỚC,
-    // remove SAU khi đã lấy xong dataUrl (kể cả khi lỗi, để không bị kẹt lại kiểu kem trên màn hình).
-    node.classList.add('tdr-export-cream')
+    setExportView(activeTab)
     try {
-      await new Promise((resolve) => requestAnimationFrame(resolve))
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const node = exportRef.current
+      if (!node) throw new Error('no export node')
       const dataUrl = await toPng(node, { backgroundColor: '#f5f4f0', pixelRatio: 1 })
       const a = document.createElement('a')
       const suffix = activeTab === 'donsan' ? 'DonSan' : 'DonTruyenThong'
@@ -261,7 +261,7 @@ export default function TongDonTab({ onNavigate }) {
     } catch {
       window.alert('Không xuất được ảnh, vui lòng thử lại.')
     } finally {
-      node.classList.remove('tdr-export-cream')
+      setExportView(null)
       setExporting(false)
     }
   }
@@ -336,7 +336,6 @@ export default function TongDonTab({ onNavigate }) {
 
       <div className="tdr-page-wrap">
         <TongDonReportDonSan
-          ref={exportRefDonSan}
           active={activeTab === 'donsan'}
           isReadOnly={isReadOnly}
           currentPeriodLabel={currentPeriodLabel}
@@ -350,7 +349,6 @@ export default function TongDonTab({ onNavigate }) {
           onFieldChange={isReadOnly ? undefined : handleDonSanFieldChange}
         />
         <TongDonReportDonTruyenThong
-          ref={exportRefTruyenThong}
           active={activeTab === 'truyenthong'}
           isReadOnly={isReadOnly}
           currentPeriodLabel={currentPeriodLabel}
@@ -363,6 +361,17 @@ export default function TongDonTab({ onNavigate }) {
           onFieldChange={isReadOnly ? undefined : handleTruyenThongFieldChange}
         />
       </div>
+      {exportView && (
+        <div className="tdx-stage" aria-hidden="true">
+          {exportView === 'donsan' ? (
+            <TongDonExportDonSan ref={exportRef} isReadOnly={isReadOnly} currentPeriodLabel={currentPeriodLabel} previousPeriodLabel={previousPeriodLabel}
+              savedAtLabel={savedAtLabel} current={current} previous={previous} ngoaiSan={ngoaiSan} narrative={donSanAuto} fields={donSanFields} />
+          ) : (
+            <TongDonExportDonTruyenThong ref={exportRef} isReadOnly={isReadOnly} currentPeriodLabel={currentPeriodLabel} previousPeriodLabel={previousPeriodLabel}
+              savedAtLabel={savedAtLabel} current={current} previous={previous} narrative={truyenThongAuto} fields={truyenThongFields} />
+          )}
+        </div>
+      )}
     </div>
   )
 }

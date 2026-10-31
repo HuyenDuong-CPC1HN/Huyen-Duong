@@ -906,6 +906,74 @@ body {
   --text-primary: #1f2a26;
 }
 
+/* ---- Bản GỌN chỉ dùng để xuất ảnh PNG (TongDonExportCompact.jsx) — dựng tạm ngoài khung nhìn lúc bấm
+   "Xuất ảnh PNG" rồi bỏ đi; màn hình web vẫn là bản đầy đủ. Màu cố định sáng (ảnh xuất luôn giống nhau),
+   cùng bảng màu nhấn với .tdr. ---- */
+.tdx-stage { position: fixed; left: -20000px; top: 0; pointer-events: none; }
+.tdx {
+  --color-current: #1a9c6f; --color-previous: #e0a73c; --color-blue: #3c7fd9; --color-purple: #6b57c9;
+  --color-pink: #d65e86; --color-orange-2: #d98d1f; --color-red: #c24545; --color-navy: #3a4a66;
+  --x-bg: #f5f4f0; --x-card: #ffffff; --x-fg: #1f2a26; --x-mute: #737a76; --x-line: #e4e2d9;
+  --x-ok: #1a9c6f; --x-ok-text: #0e6e4e; --x-ok-bg: #dff3ea; --x-warn: #b7791f; --x-warn-bg: #fbf0d9; --x-bad: #c24545; --x-bad-bg: #fbe6e6;
+  width: 1180px; box-sizing: border-box; padding: 22px 26px 24px; background: var(--x-bg); color: var(--x-fg);
+  font-size: 13px; line-height: 1.45; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; gap: 12px;
+}
+.tdx h2, .tdx h3, .tdx h4, .tdx p, .tdx ul, .tdx ol { margin: 0; }
+.tdx-hd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding-bottom: 10px; border-bottom: 1px solid var(--x-line); }
+.tdx-hd h2 { font-size: 19px; font-weight: 800; }
+.tdx-pill { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #fff; border-radius: 999px; padding: 3px 10px; }
+.tdx-pill.g { background: #0f7a72; } .tdx-pill.n { background: #28324a; }
+.tdx-sub { color: var(--x-mute); font-size: 12px; }
+.tdx-saved { margin-left: auto; color: var(--x-mute); font-size: 11.5px; display: flex; align-items: center; gap: 6px; }
+.tdx-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--x-ok); display: inline-block; }
+.tdx-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.tdx-kpi { background: var(--x-card); border: 1px solid var(--x-line); border-radius: 10px; padding: 9px 13px; display: flex; flex-direction: column; gap: 1px; }
+.tdx-l { color: var(--x-mute); font-size: 11.5px; }
+.tdx-v { font-size: 22px; font-weight: 800; }
+.tdx-v small { font-size: 12.5px; font-weight: 500; color: var(--x-mute); }
+.tdx-up { color: var(--x-ok-text); font-weight: 700; font-size: 11.5px; }
+.tdx-dn { color: var(--x-bad); font-weight: 700; font-size: 11.5px; }
+.tdx-flat { color: var(--x-mute); font-weight: 600; font-size: 11.5px; }
+.tdx-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.tdx-card { background: var(--x-card); border: 1px solid var(--x-line); border-radius: 10px; padding: 11px 13px; display: flex; flex-direction: column; gap: 8px; }
+.tdx-ct { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--x-mute); display: flex; justify-content: space-between; gap: 10px; }
+.tdx-ct span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.tdx-sbar { display: grid; grid-template-columns: 74px minmax(0, 1fr) 62px; gap: 8px; align-items: center; font-size: 12px; }
+.tdx-n { text-align: right; color: var(--x-mute); }
+.tdx-bar { display: flex; height: 12px; border-radius: 4px; overflow: hidden; background: var(--x-line); min-width: 140px; }
+.tdx-bar i { display: block; height: 100%; }
+.tdx-legend { display: flex; flex-wrap: wrap; gap: 4px 11px; font-size: 10.5px; color: var(--x-mute); }
+.tdx-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.tdx-legend b { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.tdx-note { font-size: 12px; }
+.tdx-mute { color: var(--x-mute); font-size: 11.5px; }
+.tdx-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tdx-table th { text-align: right; font-weight: 600; color: var(--x-mute); font-size: 11px; padding: 4px 6px; border-bottom: 1px solid var(--x-line); }
+.tdx-table td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--x-line); }
+.tdx-table th:first-child, .tdx-table td:first-child { text-align: left; }
+.tdx-table tr:last-child td { border-bottom: 0; }
+.tdx-chan td:nth-child(2), .tdx-chan th:nth-child(2) { text-align: left; width: 42%; }
+.tdx-chan .tdx-bar { height: 10px; }
+.tdx-chip { display: inline-block; min-width: 36px; text-align: center; border-radius: 6px; padding: 1px 6px; font-weight: 700; }
+.tdx-chip.ok { background: var(--x-ok-bg); color: var(--x-ok-text); }
+.tdx-chip.warn { background: var(--x-warn-bg); color: var(--x-warn); }
+.tdx-chip.bad { background: var(--x-bad-bg); color: var(--x-bad); }
+.tdx-chip.z { color: var(--x-mute); font-weight: 400; }
+.tdx-split { display: flex; height: 17px; border-radius: 4px; overflow: hidden; font-size: 10.5px; color: #fff; font-weight: 700; }
+.tdx-split i { display: flex; align-items: center; justify-content: center; font-style: normal; white-space: nowrap; overflow: hidden; }
+.tdx-late { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; font-size: 12px; }
+.tdx-late h4 { font-size: 12px; margin-bottom: 2px; }
+.tdx-late ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.tdx-late li { display: flex; justify-content: space-between; gap: 6px; }
+.tdx-verdict { background: var(--x-card); border: 1px solid var(--x-line); border-left: 3px solid var(--x-ok); border-radius: 10px; padding: 11px 14px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; font-size: 12px; }
+.tdx-verdict h3 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--x-ok-text); margin-bottom: 5px; }
+.tdx-verdict ul, .tdx-verdict ol { padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+.tdx-verdict ul { list-style: disc; } .tdx-verdict ol { list-style: decimal; }
+.tdx-verdict p { margin-top: 6px; }
+.tdx-tag { font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; margin-left: 4px; white-space: nowrap; background: #ecebe6; color: var(--x-mute); }
+.tdx-tag.high { background: var(--x-bad-bg); color: var(--x-bad); }
+.tdx-tag.mid { background: var(--x-warn-bg); color: var(--x-warn); }
+
 .tdr-eyebrow {
   font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   color: var(--text-tertiary); margin-bottom: 10px;
