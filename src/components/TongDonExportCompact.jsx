@@ -175,7 +175,7 @@ export const TongDonExportDonTruyenThong = forwardRef(function TongDonExportDonT
           <tbody>{rows.map(r => (
             <tr key={r.k}>
               <td>{r.k}</td>
-              <td>{r.seg ? <Bar segments={r.seg} /> : <span className="tdx-mute">không theo dõi mốc giao</span>}</td>
+              <td>{r.seg && <Bar segments={r.seg} />}</td>
               <td>{fmtInt(r.cur)}</td>
               <td className={r.cur - r.prev >= 0 ? 'tdx-up' : 'tdx-dn'}>{r.cur - r.prev >= 0 ? '+' : '−'}{fmtInt(Math.abs(r.cur - r.prev))}</td>
               <td>{r.sla === null || !r.cur ? <span className="tdx-mute">—</span> : <span className={`tdx-chip ${slaTone(r.sla)}`}>{r.sla.toLocaleString('vi-VN')}%</span>}</td>
