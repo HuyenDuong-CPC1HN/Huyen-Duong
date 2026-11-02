@@ -18,6 +18,9 @@ import FlowV2BatchWorkspace from './FlowV2BatchWorkspace'
 import { Dots, ItemsEditor, KindTag } from './FlowV2Parts'
 
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase()
+// Tìm theo từng từ, không cần đúng thứ tự ("omega zentokid" vẫn ra "Zentokid omega3")
+const words = q => norm(q).split(/\s+/).filter(Boolean)
+const hitAll = (text, ws) => { const t = norm(text); return ws.every(w => t.includes(w)) }
 function Modal({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 z-30 bg-slate-900/35 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -146,7 +149,7 @@ function PsModal({ kho, onClose, onAdd }) {
 }
 
 // onSelect (cột Chờ ký): thẻ có ô tick để chọn nhiều hồ sơ chuyển bước 1 lần — ô tick nằm ngoài nút mở hồ sơ.
-function CaseCard({ c, batch, onOpen, selected = false, onSelect = null }) {
+function CaseCard({ c, batch, onOpen, selected = false, onSelect = null, q = '' }) {
   const flow = CASE_FLOWS[c.kind], s = stepOfCase(c), nxt = flow.steps[c.step + 1]
   const days = daysSince(c.stepAt)
   const card = (
@@ -154,6 +157,9 @@ function CaseCard({ c, batch, onOpen, selected = false, onSelect = null }) {
       <div className="flex flex-wrap items-center gap-1.5"><KindTag kind={c.kind} /><KhoTag kho={c.kho} />{days >= 3 && s.col < 4 && <span className="text-[11px] font-semibold text-red-600">{days} ngày</span>}</div>
       <div className="font-semibold text-sm mt-1">{c.khachHang || 'Khách hàng chưa ghi'}</div>
       <div className="text-xs text-gray-500">{c.soDon || 'chưa có số đơn'} · {c.items.filter(it => it.maHang || it.tenHang).length} mặt hàng</div>
+      {words(q).length > 0 && c.items.filter(it => hitAll([it.maHang, it.tenHang, it.soLo].join(' '), words(q))).slice(0, 3).map(it => (
+        <div key={it.rowId} className="text-xs text-[#1e3a5f] bg-blue-50 rounded px-1.5 py-0.5">{[it.maHang, it.tenHang].filter(Boolean).join(' · ')}{it.soLo ? ` · lô ${it.soLo}` : ''}</div>
+      ))}
       <Dots total={flow.steps.length} current={c.step} color={KIND_BORDER[c.kind]} />
       <div className="text-xs font-semibold text-[#1e3a5f] mt-1.5">{s.col === 4 ? `✓ ${s.t}` : `Đang ở: ${s.t}${s.k === 'dangHuy' && batch ? ` ${batch.no}` : ''}`}</div>
       {s.k === 'choHuy' ? <div className="text-xs text-gray-500">Đang ở khu Huỷ hàng, chờ gom đợt</div> : nxt && s.col < 4 && s.k !== 'dangHuy' && <div className="text-xs text-gray-500">Tiếp theo: {nxt.t}</div>}
@@ -274,7 +280,7 @@ export default function FlowV2Tab() {
   const saveBatch = b => save({ batches: data.batches.map(x => (x.id === b.id ? b : x)) })
 
   const visible = useMemo(() => data.cases.filter(c => (khoFilter === 'all' || c.kho === khoFilter) && (kindFilter === 'all' || c.kind === kindFilter)
-    && (!q.trim() || norm([c.khachHang, c.soDon, ...c.items.flatMap(it => [it.maHang, it.tenHang, it.soLo])].join(' ')).includes(norm(q.trim())))), [data.cases, khoFilter, kindFilter, q])
+    && (!q.trim() || hitAll([c.khachHang, c.soDon, ...c.items.flatMap(it => [it.maHang, it.tenHang, it.soLo])].join(' '), words(q)))), [data.cases, khoFilter, kindFilter, q])
   const batchById = id => data.batches.find(b => b.id === id)
 
   const caseObj = openCase && data.cases.find(c => c.id === openCase)
@@ -366,7 +372,7 @@ export default function FlowV2Tab() {
               <Seg value={kindFilter} onChange={setKindFilter} label="Loại" options={[['all', 'Mọi loại'], ['tra', 'Trả nguyên vẹn'], ['loi', 'Trả lỗi']]} />
               <div className="relative flex-1 min-w-48 max-w-xs">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm khách hàng, mã hàng, số đơn…" aria-label="Tìm hồ sơ" className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm khách hàng, tên sản phẩm, mã hàng, số lô, số đơn…" aria-label="Tìm hồ sơ" className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-sm" />
               </div>
             </div>
             {(late > 0 || atKt > 0) && (
@@ -407,7 +413,7 @@ export default function FlowV2Tab() {
                       <div className="flex flex-col gap-1.5 overflow-y-auto pr-0.5" style={{ maxHeight: '70vh' }}>
                         {[...list].sort((x, y) => String(y.stepAt).localeCompare(String(x.stepAt))).map(c => <DoneRow key={c.id} c={c} onOpen={() => setOpenCase(c.id)} />)}
                       </div>
-                    ) : list.map(c => <CaseCard key={c.id} c={c} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)}
+                    ) : list.map(c => <CaseCard key={c.id} c={c} q={q} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)}
                       {...(isSign ? { selected: signSel.includes(c.id), onSelect: on => setSignSel(sel0 => (on ? [...sel0, c.id] : sel0.filter(x => x !== c.id))) } : {})} />)}
                   </div>
                 )
