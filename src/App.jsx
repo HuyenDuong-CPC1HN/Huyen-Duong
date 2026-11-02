@@ -54,7 +54,7 @@ const NAV = [
     icon: PackagePlus,
     children: [
       { id: 'nhaphang', label: 'Nhập hàng', icon: PackagePlus },
-      { id: 'doisoatthucte', label: 'Đối soát Thực tế ↔ Hoá đơn', icon: ListChecks },
+      { id: 'doisoatthucte', label: 'Tool - Đối soát nhanh Web - TT', icon: ListChecks },
       { id: 'doichieusosach', label: 'Đối chiếu sổ sách (PXK)', icon: ClipboardCheck },
       { id: 'lichsunhaphang', label: 'Tra cứu lịch sử nhập hàng', icon: History },
     ],
@@ -90,7 +90,7 @@ const BREADCRUMB = {
   duTruHang: ['Trang chủ', 'Quản lý tồn kho', 'Dự trù hàng'],
   quyCachHang: ['Trang chủ', 'Quản lý tồn kho', 'Quy cách hàng hoá'],
   nhaphang: ['Trang chủ', 'Nhập hàng'],
-  doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Đối soát Thực tế ↔ Hoá đơn'],
+  doisoatthucte: ['Trang chủ', 'Nhập hàng', 'Tool - Đối soát nhanh Web - TT'],
   doichieusosach: ['Trang chủ', 'Nhập hàng', 'Đối chiếu sổ sách (PXK)'],
   lichsunhaphang: ['Trang chủ', 'Nhập hàng', 'Tra cứu lịch sử nhập hàng'],
   traHang:    ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi nhập trả lại'],
