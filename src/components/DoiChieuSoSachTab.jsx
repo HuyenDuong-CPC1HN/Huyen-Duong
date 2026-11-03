@@ -452,6 +452,7 @@ export default function DoiChieuSoSachTab() {
     const rs = reasons[`${key}:${r.key}`]
     return rs && rs.sig === tagSig(r.tags) && !r.tags.includes('ok') ? { ...r, tags: ['daKiem'], reason: rs } : r
   })]))
+  const dropOne = ph => upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (p.id === ph.id ? { ...p, excluded: true, excludedNote: `trùng số phiếu ${p.soPhieu} — anh đã bỏ bản này` } : p)) }))
   const keepOne = (group, keepId) => upd(cur => ({ ...cur, phieus: cur.phieus.map(p => (group.some(g => g.id === p.id)
     ? (p.id === keepId ? { ...p, excluded: false, keepDup: false, excludedNote: '' } : { ...p, excluded: true, excludedNote: `trùng số phiếu ${p.soPhieu} — anh đã chọn giữ bản khác` })
     : p)) }))
@@ -784,7 +785,21 @@ export default function DoiChieuSoSachTab() {
                   }
                   return (
                     <div key={p.id} className={`bg-white border rounded-lg px-2 py-1.5 text-xs flex flex-col gap-0.5 ${blocked.has(p.id) ? 'border-red-400 bg-red-50/40' : openId === p.id ? 'border-[#1e3a5f]' : 'border-gray-200'}`}>
-                      {blocked.has(p.id) && <div className="text-red-700 font-semibold">⚠ Trùng số phiếu — chờ anh chọn bản giữ (chưa tính đối chiếu)</div>}
+                      {blocked.has(p.id) && (() => {
+                        const group = dupGroups.find(g => g.some(x => x.id === p.id))
+                        const others = group.filter(x => x.id !== p.id)
+                        return (
+                          <div className="flex flex-col gap-1">
+                            <div className="text-red-700 font-semibold">⚠ Trùng số phiếu — chờ anh chọn bản giữ (chưa tính đối chiếu)</div>
+                            <div className="text-gray-600">Trùng với {others.map(x => `${x.name || x.soPhieu} (${PXK_KHO.find(k => k.key === x.kho)?.label || x.kho}, ${x.rows.filter(r => r.maHang).length} dòng)`).join('; ')}. So từng dòng ở khung đỏ phía trên.</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button type="button" onClick={() => keepOne(group, p.id)} className="sheet-tab-action is-primary" aria-label={`Giữ bản này ${p.name || p.soPhieu}`}>Giữ bản này, bỏ {others.length > 1 ? 'các bản kia' : 'bản kia'}</button>
+                              <button type="button" onClick={() => dropOne(p)} className="sheet-tab-action" aria-label={`Bỏ bản này ${p.name || p.soPhieu}`}>Bỏ bản này</button>
+                              <button type="button" onClick={() => keepAll(group)} className="sheet-tab-action">Giữ tất cả (phiếu khác nhau)</button>
+                            </div>
+                          </div>
+                        )
+                      })()}
                       <div className="flex items-center gap-1.5 min-w-0">
                         {p.kind === 'pdf' || p.files.length ? <FileText size={13} className="text-gray-400 shrink-0" /> : <ImageIcon size={13} className="text-gray-400 shrink-0" />}
                         <span className="font-mono font-semibold truncate" title={p.name}>{p.soPhieu || p.name || 'Phiếu chưa ghi số'}</span>

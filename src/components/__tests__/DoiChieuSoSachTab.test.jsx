@@ -253,6 +253,12 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     expect(within(result).getByText('Z00330')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Khôi phục' }))
     expect(await screen.findByRole('alert', { name: 'Phiếu trùng số' })).toBeInTheDocument()
+
+    // chọn ngay trên thẻ phiếu: bấm "Bỏ bản này" ở 1 thẻ thì thẻ còn lại được giữ
+    expect(screen.getAllByText(/Trùng với .*Kho DTP, 1 dòng/)).toHaveLength(2)
+    fireEvent.click(screen.getAllByRole('button', { name: /^Bỏ bản này/ })[0])
+    expect(screen.queryByRole('alert', { name: 'Phiếu trùng số' })).not.toBeInTheDocument()
+    expect(JSON.parse(store.values.get('pxk_doi_chieu')).b1.phieus.filter(p => p.excluded)).toHaveLength(1)
   })
 
   it('AI (Gemini) đọc PDF scan: tách phiếu, dòng khớp thực nhận tự xác nhận, không dùng bộ đọc chữ thường', async () => {
