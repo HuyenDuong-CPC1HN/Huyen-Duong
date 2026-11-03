@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeft, FileDown, Undo2 } from 'lucide-react'
 import { KE_TOAN_LIST } from '../utils/returnSlips'
-import { BATCH_STEPS, batchAsHuyPhieu, daysSince, fmtDateTimeVi, fmtDateVi } from '../utils/flowV2'
+import { BATCH_STEPS, batchAsHuyPhieu, daysSince, fmtDateTimeVi, fmtDateVi, toIsoDate } from '../utils/flowV2'
 import { exportHangHuyPhieu } from '../utils/exportDamagedGoods'
 import { uploadFlowFiles, getFlowFileUrl } from '../data/flowV2Files'
 import { KhoTag } from './HangHuyBadges'
@@ -9,13 +9,14 @@ import { XuLyPaper, XacMinhPaper } from './HangHuyPapers'
 import PreviewPrintPanel from './PreviewPrintPanel'
 import { Field } from './WorkspaceParts'
 import { handCls, presetCls, grid } from './workspaceStyles'
-import { ItemsEditor, KindTag, PhotoBox, StepList } from './FlowV2Parts'
+import { DoneDateInput, ItemsEditor, KindTag, PhotoBox, StepList } from './FlowV2Parts'
 
 // Màn làm việc của 1 đợt huỷ: gồm các mục đã gom (hàng lỗi khách trả + hàng phát sinh), điền 1 lần cho cả BB xác
 // minh huỷ + BB xử lý (dùng đúng mẫu biên bản của tab Theo dõi hàng huỷ), xem trước + in, xuất file khi cần.
-export default function FlowV2BatchWorkspace({ b, onSave, onAdvance, onBackStep, onDissolve, onClose, onOpenCase }) {
+export default function FlowV2BatchWorkspace({ b, onSave, onAdvance, onBackStep, onDissolve, onClose, onOpenCase, onSetDoneDate }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [doneDate, setDoneDate] = useState(() => toIsoDate())
   const s = BATCH_STEPS[b.step]
   const set = patch => onSave({ ...b, ...patch })
   const setForm = (k, v) => set({ form: { ...b.form, [k]: v }, ...(k === 'keToan' ? { keToan: v } : {}) })
@@ -91,13 +92,15 @@ export default function FlowV2BatchWorkspace({ b, onSave, onAdvance, onBackStep,
           </div>
           <div className="text-[11px] text-gray-400">Kế toán bấm "Đã xong" trên link riêng (nút "Link kế toán" ở bảng việc) thì app tự chuyển bước khi kho mở tab. Kế toán báo miệng thì kho bấm xác nhận bên dưới.</div>
         </div>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onAdvance({ ktBy: `Kho xác nhận (${b.keToan} báo)` })} className="sheet-tab-action is-primary">Kế toán đã xong → Huỷ xong</button>{back}</div>
+        <DoneDateInput label="Ngày kế toán xuất huỷ xong" value={doneDate} onChange={setDoneDate} />
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onAdvance({ ktBy: `Kho xác nhận (${b.keToan} báo)`, doneAt: doneDate })} className="sheet-tab-action is-primary">Kế toán đã xong → Huỷ xong</button>{back}</div>
       </>
     )
   } else {
     work = (
       <>
         <div className="rounded-lg bg-green-50 text-green-800 px-3 py-2 text-sm">✓ Huỷ xong{b.ktDone ? ` — ${b.ktDone.by} lúc ${fmtDateTimeVi(b.ktDone.at)}` : ''}</div>
+        {onSetDoneDate && <DoneDateInput label="Ngày huỷ xong (sửa nếu bấm muộn)" value={toIsoDate(new Date(b.stepAt))} onChange={onSetDoneDate} />}
         {entries}
         {(b.signedHuy || []).length > 0 && <PhotoBox title="Biên bản huỷ đã ký" files={b.signedHuy} getUrl={getFlowFileUrl} readOnly />}
         <div className="flex flex-wrap gap-2">{back}</div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link2, Plus, Search, X } from 'lucide-react'
 import {
-  BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, applyKtDone, backBatch, backCase, daysSince,
+  BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, applyKtDone, backBatch, backCase, daysSince, setDoneDate,
   dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, ktLinkUrl, ktPending, monthKey, makeBatch, newKtToken,
   toIsoDate, newCase, newItem, newPsEntry, stepOfCase,
 } from '../utils/flowV2'
@@ -289,6 +289,7 @@ export default function FlowV2Tab() {
       <FlowV2CaseWorkspace c={caseObj} batch={caseObj.batchId ? batchById(caseObj.batchId) : null}
         onSave={saveCase}
         onAdvance={opts => save(advanceCase(data, caseObj.id, opts))}
+        onSetDoneDate={ymd => save(setDoneDate(data, 'case', caseObj.id, ymd))}
         onBackStep={() => save(backCase(data, caseObj.id))}
         onClose={() => setOpenCase(null)}
         onOpenBatch={id => { setOpenCase(null); setOpenBatch(id) }}
@@ -302,6 +303,7 @@ export default function FlowV2Tab() {
       <FlowV2BatchWorkspace b={batchObj}
         onSave={saveBatch}
         onAdvance={opts => save(advanceBatch(data, batchObj.id, opts))}
+        onSetDoneDate={ymd => save(setDoneDate(data, 'batch', batchObj.id, ymd))}
         onBackStep={() => save(backBatch(data, batchObj.id))}
         onDissolve={() => { save(dissolveBatch(data, batchObj.id)); setOpenBatch(null); setView('huy') }}
         onClose={() => { setOpenBatch(null); setView('huy') }}

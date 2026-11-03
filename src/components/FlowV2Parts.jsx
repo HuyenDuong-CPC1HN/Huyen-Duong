@@ -169,3 +169,15 @@ export function ItemsEditor({ items, onChange, cols = ['maHang', 'tenHang', 'soL
     </div>
   )
 }
+
+// Ô chọn ngày việc xong thực tế (kho bấm Hoàn thành muộn hơn ngày kế toán làm xong): mặc định hôm nay, không chọn ngày tới.
+export function DoneDateInput({ label, value, onChange }) {
+  const today = new Date()
+  const max = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  return (
+    <label className="flex flex-wrap items-center gap-2 text-sm text-gray-700">{label}
+      <input type="date" value={value} max={max} onChange={e => { if (e.target.value && e.target.value <= max) onChange(e.target.value) }} aria-label={label}
+        className="border border-gray-200 rounded-lg px-2 py-1 text-sm" />
+    </label>
+  )
+}

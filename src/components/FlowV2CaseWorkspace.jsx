@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, FileDown, RefreshCw, Undo2 } from 'lucide-react'
 import { KE_TOAN_LIST } from '../utils/returnSlips'
-import { CASE_FLOWS, BATCH_STEPS, caseAsReturnSlip, applyParsedReturn, caseReturnSlip, daysSince, fmtDateTimeVi, newItem, newTraHang, stepOfCase } from '../utils/flowV2'
+import { CASE_FLOWS, BATCH_STEPS, caseAsReturnSlip, applyParsedReturn, caseReturnSlip, daysSince, fmtDateTimeVi, newItem, newTraHang, stepOfCase, toIsoDate } from '../utils/flowV2'
 import { exportReturnSlipDocs } from '../utils/exportReturnSlip'
 import { uploadFlowFiles, getFlowFileUrl, downloadFlowFile } from '../data/flowV2Files'
 import { readReturnPdf } from '../utils/flowV2Pdf'
@@ -11,7 +11,7 @@ import PreviewPrintPanel from './PreviewPrintPanel'
 import FlowV2TraHangPaper from './FlowV2TraHangPaper'
 import { Field } from './WorkspaceParts'
 import { handCls, presetCls, grid } from './workspaceStyles'
-import { ItemsEditor, KindTag, PhotoBox, StepList } from './FlowV2Parts'
+import { DoneDateInput, ItemsEditor, KindTag, PhotoBox, StepList } from './FlowV2Parts'
 
 const subLabel = c => (c.kind !== 'tra' ? '' : c.sub === 'tuChoi' ? 'Khách từ chối nhận — BB trả hàng nội bộ' : 'Khách đã nhận rồi trả — BB trả hàng có chữ ký khách')
 // 3 ô "Ý kiến" trong khung ký duyệt của BB xác minh (đúng thứ tự cột), mặc định như file Word mẫu.
@@ -20,9 +20,10 @@ const Y_KIEN_MAC_DINH = 'Nhập lại vào kho'
 
 // Màn làm việc của 1 hồ sơ khách trả: trái là các bước, giữa là việc của bước hiện tại, biên bản xác minh xem trước + in.
 // onSave(c) lưu hồ sơ · onAdvance(opts) sang bước kế · onBackStep() lùi 1 bước · onClose() về bảng việc.
-export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBackStep, onClose, onOpenBatch, onGoHuy, onDelete }) {
+export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBackStep, onClose, onOpenBatch, onGoHuy, onDelete, onSetDoneDate }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [doneDate, setDoneDate] = useState(() => toIsoDate())
   const flow = CASE_FLOWS[c.kind]
   const s = stepOfCase(c)
   const set = patch => onSave({ ...c, ...patch })
@@ -172,7 +173,8 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
             </div>
             <div className="text-[11px] text-gray-400">Kế toán bấm "Đã xong" trên link riêng (nút "Link kế toán" ở bảng việc) thì app tự chuyển bước khi kho mở tab. Kế toán báo miệng thì kho bấm xác nhận bên dưới.</div>
           </div>
-          {next('Kế toán đã xong → Hoàn thành', { ktBy: `Kho xác nhận (${c.keToan} báo)` })}
+          <DoneDateInput label="Ngày kế toán nhập xong" value={doneDate} onChange={setDoneDate} />
+          {next('Kế toán đã xong → Hoàn thành', { ktBy: `Kho xác nhận (${c.keToan} báo)`, doneAt: doneDate })}
         </>
       )
       break
@@ -222,6 +224,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
         <>
           <div className="rounded-lg bg-green-50 text-green-800 px-3 py-2 text-sm">✓ {s.t}</div>
           {c.ktDone && <div className="text-sm text-gray-600">Kế toán: {c.ktDone.by} lúc {fmtDateTimeVi(c.ktDone.at)}</div>}
+          {c.kind === 'tra' && onSetDoneDate && <DoneDateInput label="Ngày hoàn thành (sửa nếu bấm muộn)" value={toIsoDate(new Date(c.stepAt))} onChange={onSetDoneDate} />}
           {batch && <div className="text-sm text-gray-600">Đã huỷ trong đợt <button type="button" className="underline text-[#1e3a5f]" onClick={() => onOpenBatch(batch.id)}>{batch.no}</button>{batch.ktDone ? ` · ${batch.ktDone.by} xác nhận lúc ${fmtDateTimeVi(batch.ktDone.at)}` : ''}</div>}
           {c.kind === 'tra' && <button type="button" onClick={onBackStep} className="sheet-tab-action self-start"><Undo2 size={13} /> Lùi 1 bước</button>}
         </>

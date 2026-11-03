@@ -145,6 +145,41 @@ describe('Hàng trả & huỷ — cột Hoàn thành theo tháng', () => {
   })
 })
 
+describe('Hàng trả & huỷ — chọn ngày hoàn thành khi kho bấm muộn', () => {
+  it('bấm Hoàn thành kèm ngày kế toán làm xong: ghi đúng ngày đó (tháng cũ vẫn vào đúng tháng); không nhận ngày tương lai; sửa lại được sau', async () => {
+    const { dayAt, doneMonth, setDoneDate, toIsoDate } = await import('../flowV2')
+    const c = newCase({ kind: 'tra', sub: 'daNhan', kho: 'C' }, now)
+    let s = goTo(st({ cases: [c] }), c.id, 'ktNhap')
+    s = { ...s, ...advanceCase(s, c.id, { ktBy: 'Kho xác nhận', doneAt: '2026-09-30' }, now) }
+    const done = s.cases[0]
+    expect(stepOfCase(done).col).toBe(4) // cột Hoàn thành
+    expect(toIsoDate(new Date(done.stepAt))).toBe('2026-09-30')
+    expect(toIsoDate(new Date(done.ktDone.at))).toBe('2026-09-30')
+    expect(doneMonth(done)).toBe('2026-09')
+    expect(dayAt('2026-12-01', now)).toBe(now) // ngày tương lai: lấy lúc bấm
+    expect(dayAt('2026-10-14', now)).toBe(now) // hôm nay: lấy giờ bấm
+    s = { ...s, ...setDoneDate(s, 'case', c.id, '2026-10-02', now) }
+    expect(toIsoDate(new Date(s.cases[0].stepAt))).toBe('2026-10-02')
+    expect(setDoneDate(s, 'case', c.id, '2027-01-01', now)).toEqual({})
+  })
+
+  it('đợt huỷ: chọn ngày xuất huỷ xong thì đợt và các hồ sơ trong đợt cùng ngày đó', async () => {
+    const { setDoneDate, toIsoDate } = await import('../flowV2')
+    const c = newCase({ kind: 'loi', kho: 'C', khachHang: 'PK An Bình', items: [newItem({ maHang: 'A01264', tenHang: 'Ambroxen', soLuong: 5 })] }, now)
+    let s = goTo(st({ cases: [c] }), c.id, 'choHuy')
+    const r = makeBatch(s, 'C', s.pool.map(e => e.id), now)
+    s = { ...s, ...r }
+    s = { ...s, ...advanceBatch(s, r.batchId, {}, now) }
+    s = { ...s, ...advanceBatch(s, r.batchId, {}, now) }
+    s = { ...s, ...advanceBatch(s, r.batchId, { ktBy: 'Kho xác nhận', doneAt: '2026-10-05' }, now) }
+    expect(toIsoDate(new Date(s.batches[0].stepAt))).toBe('2026-10-05')
+    expect(toIsoDate(new Date(s.cases[0].stepAt))).toBe('2026-10-05')
+    s = { ...s, ...setDoneDate(s, 'batch', r.batchId, '2026-10-07', now) }
+    expect(toIsoDate(new Date(s.batches[0].stepAt))).toBe('2026-10-07')
+    expect(toIsoDate(new Date(s.cases[0].stepAt))).toBe('2026-10-07')
+  })
+})
+
 describe('Hàng trả & huỷ — link kế toán', () => {
   const traAtKt = (keToan = 'Trần Thị Ái Lâm') => {
     const c = { ...newCase({ kind: 'tra', sub: 'daNhan', kho: 'DTP', khachHang: 'Nhà thuốc Hải Phong', soDon: 'DU262/058586', items: [newItem({ maHang: 'TH0089', tenHang: 'Tobrameson', soLo: '021025', hanDung: '2027-10-19', soLuong: 20, dvt: 'LO' }), newItem()] }, now), keToan }

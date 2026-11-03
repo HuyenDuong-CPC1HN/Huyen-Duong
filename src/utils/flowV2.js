@@ -144,9 +144,20 @@ export function newPsEntry({ kho, loai = PS_LOAI[0], items = [], pxk = null }, n
   }
 }
 
-// Chuyển hồ sơ sang bước kế. Trả về { cases, pool } mới (không sửa mảng cũ). opts.ktBy: tên người xác nhận bước kế toán.
-export function advanceCase(state, caseId, { ktBy = null } = {}, now = new Date()) {
-  const iso = now.toISOString()
+// Ngày thực tế việc xong (kho chọn khi bấm muộn, dạng "2026-10-30") → mốc giờ: hôm nay thì lấy giờ bấm, ngày cũ lấy 12:00.
+// Không nhận ngày tương lai / ngày sai: trả về now.
+export function dayAt(ymd, now = new Date()) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || '')
+  if (!m) return now
+  const d = new Date(+m[1], m[2] - 1, +m[3], 12)
+  if (Number.isNaN(d.getTime()) || toIsoDate(d) > toIsoDate(now)) return now
+  return toIsoDate(d) === toIsoDate(now) ? now : d
+}
+
+// Chuyển hồ sơ sang bước kế. Trả về { cases, pool } mới (không sửa mảng cũ). opts.ktBy: tên người xác nhận bước kế toán;
+// opts.doneAt: ngày kế toán làm xong thực tế (kho bấm muộn) — ghi làm ngày hoàn thành thay cho lúc bấm.
+export function advanceCase(state, caseId, { ktBy = null, doneAt = null } = {}, now = new Date()) {
+  const iso = dayAt(doneAt, now).toISOString()
   let pool = state.pool
   const cases = state.cases.map(c => {
     if (c.id !== caseId) return c
@@ -207,9 +218,9 @@ export function makeBatch(state, kho, entryIds, now = new Date()) {
   }
 }
 
-// Đợt sang bước kế; xong đợt (bước cuối) thì mọi hồ sơ hàng lỗi trong đợt sang "Huỷ xong".
-export function advanceBatch(state, batchId, { ktBy = null } = {}, now = new Date()) {
-  const iso = now.toISOString()
+// Đợt sang bước kế; xong đợt (bước cuối) thì mọi hồ sơ hàng lỗi trong đợt sang "Huỷ xong". opts.doneAt như advanceCase.
+export function advanceBatch(state, batchId, { ktBy = null, doneAt = null } = {}, now = new Date()) {
+  const iso = dayAt(doneAt, now).toISOString()
   let doneIds = null
   const batches = state.batches.map(b => {
     if (b.id !== batchId || b.step >= BATCH_STEPS.length - 1) return b
@@ -221,6 +232,21 @@ export function advanceBatch(state, batchId, { ktBy = null } = {}, now = new Dat
   const xong = stepIndex('loi', 'xong')
   const cases = doneIds ? state.cases.map(c => (doneIds.has(c.id) ? { ...c, step: xong, stepAt: iso } : c)) : state.cases
   return { batches, cases }
+}
+
+// Sửa ngày hoàn thành của hồ sơ / đợt huỷ đã xong (kho bấm Hoàn thành muộn hơn ngày kế toán làm xong).
+// Đợt huỷ: đổi luôn ngày "Huỷ xong" của các hồ sơ trong đợt. Cột Hoàn thành xếp tháng theo ngày này.
+export function setDoneDate(state, kind, id, ymd, now = new Date()) {
+  const when = dayAt(ymd, now)
+  if (when === now && !(ymd && toIsoDate(now) === ymd)) return {}
+  const iso = when.toISOString()
+  const fix = x => ({ ...x, stepAt: iso, ...(x.ktDone ? { ktDone: { ...x.ktDone, at: iso } } : {}),
+    ...(x.history?.length ? { history: [...x.history.slice(0, -1), { ...x.history[x.history.length - 1], at: iso }] } : {}) })
+  if (kind === 'case') return { cases: state.cases.map(c => (c.id === id && isCaseDone(c) ? fix(c) : c)) }
+  const b = state.batches.find(x => x.id === id)
+  if (!b || b.step !== BATCH_STEPS.length - 1) return {}
+  const ids = new Set(b.entries.map(e => e.caseId).filter(Boolean))
+  return { batches: state.batches.map(x => (x.id === id ? fix(x) : x)), cases: state.cases.map(c => (ids.has(c.id) && isCaseDone(c) ? { ...c, stepAt: iso } : c)) }
 }
 
 export function backBatch(state, batchId, now = new Date()) {
