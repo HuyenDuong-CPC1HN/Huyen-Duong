@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Plus, Search, Trash2, X } from 'lucide-react'
 import {
   PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty, parseOcrQty,
-  alignOcrRows, fixAiThousandRows, batchMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
+  alignOcrRows, fixAiThousandRows, batchMaHang, khoMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
 } from '../utils/pxkReconcile'
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { downloadPxkFile, getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
@@ -439,9 +439,9 @@ export default function DoiChieuSoSachTab() {
   const dupGroups = pxkDuplicateGroups(session.phieus)
   const blocked = new Set(dupGroups.flat().map(p => p.id))
   const counted = p => !p.excluded && !blocked.has(p.id)
-  // File quét: bỏ mã hàng không có trong biên bản nhập hàng (phát sinh, gây nhiễu) — không tính đối chiếu.
+  // File quét: bỏ mã hàng không có trong danh sách thực nhận của kho đó (phát sinh lúc nhập kho, gây nhiễu) — không tính đối chiếu.
   const batchMa = batchMaHang(batch)
-  const scanSplit = Object.fromEntries(PXK_KHO.map(({ key }) => [key, session.scan[key]?.rows ? splitScanByBatch(session.scan[key].rows, batchMa) : null]))
+  const scanSplit = Object.fromEntries(PXK_KHO.map(({ key }) => [key, session.scan[key]?.rows ? splitScanByBatch(session.scan[key].rows, khoMaHang(batch, key)) : null]))
   // Dòng chưa khớp anh đã nhập + xác nhận lý do → "Đã kiểm lại" (vẫn là lệch, nhưng ra khỏi Báo đầu nguồn). Lý do chỉ áp
   // khi dòng vẫn lệch đúng như lúc xác nhận; dữ liệu đổi (lệch kiểu khác) thì dòng hiện lại để xem lại.
   const reasons = session.reasons || {}
@@ -843,7 +843,7 @@ export default function DoiChieuSoSachTab() {
                   : <div className="text-[11px] text-gray-400">Chưa có file quét {label}</div>}
                 {scanSplit[key]?.dropped.length > 0 && (
                   <div className="text-[11px] text-gray-500" title={scanSplit[key].dropped.join(', ')}>
-                    Bỏ qua {scanSplit[key].dropped.length} mã chỉ có trong file quét, không có trong biên bản nhập hàng (không tính đối chiếu): {scanSplit[key].dropped.slice(0, 6).join(', ')}{scanSplit[key].dropped.length > 6 ? '…' : ''}
+                    Bỏ qua {scanSplit[key].dropped.length} mã phát sinh trong file quét, không có trong danh sách {label} của biên bản nhập hàng (nhiễu, không tính đối chiếu): {scanSplit[key].dropped.slice(0, 6).join(', ')}{scanSplit[key].dropped.length > 6 ? '…' : ''}
                   </div>
                 )}
                 <label className={`sheet-tab-action cursor-pointer self-start ${busy === `scan-${key}` ? 'opacity-60 pointer-events-none' : ''}`}>+ Thêm file .xls

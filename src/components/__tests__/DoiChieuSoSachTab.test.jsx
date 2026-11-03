@@ -153,7 +153,7 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     ])
     render(<DoiChieuSoSachTab />)
     fireEvent.change(screen.getByLabelText('File quét Kho DTP'), { target: { files: [new File(['x'], 'quet_dtp.xls')] } })
-    expect(await screen.findByText(/Bỏ qua 1 mã chỉ có trong file quét, không có trong biên bản nhập hàng \(không tính đối chiếu\): X99999/)).toBeInTheDocument()
+    expect(await screen.findByText(/Bỏ qua 1 mã phát sinh trong file quét, không có trong danh sách Kho DTP của biên bản nhập hàng \(nhiễu, không tính đối chiếu\): X99999/)).toBeInTheDocument()
     const result = screen.getByRole('region', { name: 'Kết quả đối chiếu' })
     fireEvent.click(within(result).getByRole('button', { name: /Kho DTP/ }))
     expect(within(result).getByText('C02918')).toBeInTheDocument()

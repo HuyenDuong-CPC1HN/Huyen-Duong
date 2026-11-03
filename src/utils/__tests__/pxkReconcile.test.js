@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alignOcrRows, batchMaHang, buildNguonReport, fixAiThousandRows, isNguonRow, mergeAiChunks, normLot, splitScanByBatch, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
+import { alignOcrRows, batchMaHang, khoMaHang, buildNguonReport, fixAiThousandRows, isNguonRow, mergeAiChunks, normLot, splitScanByBatch, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
 
 const phieu = (soPhieu, rows) => ({ soPhieu, rows })
 
@@ -245,6 +245,15 @@ describe('File quét: bỏ mã không có trong biên bản nhập hàng', () =>
     expect(r.kept.map(x => x.maHang)).toEqual(['F00629', 'C02918'])
     expect(r.dropped).toEqual(['A00001', 'X99999'])
     expect(splitScanByBatch([{ maHang: 'X99999' }], new Set()).kept).toHaveLength(1)
+  })
+
+  it('lọc theo đúng danh sách của kho: mã phát sinh lúc nhập, không có trong danh sách Kho C thì là nhiễu của Kho C (dù kho khác có)', () => {
+    const batch = { khoC: [{ maHang: 'F00629', tenHang: 'Fogyma' }, { maHang: 'G01206', tenHang: 'Gabalix (SO)' }], khoLgt: [{ maHang: 'L01284', tenHang: 'Laforin baby' }] }
+    const scan = [{ maHang: 'F00629', soLuong: 1 }, { maHang: 'L01284', soLuong: 1 }, { maHang: 'G01206', soLuong: 2 }]
+    expect(splitScanByBatch(scan, khoMaHang(batch, 'C'))).toEqual({ kept: [scan[0]], dropped: ['G01206', 'L01284'] })
+    expect(splitScanByBatch(scan, khoMaHang(batch, 'SO')).kept.map(r => r.maHang)).toEqual(['G01206'])
+    expect(splitScanByBatch(scan, khoMaHang(batch, 'DTP')).kept.map(r => r.maHang)).toEqual(['L01284'])
+    expect(khoMaHang({ khoC: [], khoLgt: [{ maHang: 'L01284' }] }, 'C')).toEqual(new Set(['L01284'])) // kho không có dòng nào: lấy cả chuyến
   })
 })
 

@@ -537,7 +537,14 @@ export function batchMaHang(batch) {
   return new Set([...(batch?.khoC || []), ...(batch?.khoLgt || [])].map(r => maKey(r.maHang)).filter(Boolean))
 }
 
-// Dòng file quét có mã hàng hoàn toàn không có trong biên bản nhập hàng là phát sinh, gây nhiễu — bỏ, không tính đối
+// Mã hàng thực nhận của đúng 1 kho (Kho C / DTP / SO) trong biên bản nhập hàng — dùng lọc nhiễu file quét của kho đó.
+// Kho không có dòng nào thì lấy mọi mã của chuyến (như trước) để không bỏ nhầm cả file quét.
+export function khoMaHang(batch, kho) {
+  const own = new Set(receivedRowsOf(batch, kho).map(r => maKey(r.maHang)).filter(Boolean))
+  return own.size ? own : batchMaHang(batch)
+}
+
+// Dòng file quét có mã hàng không có trong danh sách thực nhận của kho đó là phát sinh, gây nhiễu — bỏ, không tính đối
 // chiếu. Trả về { kept: dòng giữ lại, dropped: [mã đã bỏ] }. Chuyến không có dòng nào thì giữ hết.
 export function splitScanByBatch(rows, maSet) {
   if (!maSet?.size) return { kept: rows || [], dropped: [] }
