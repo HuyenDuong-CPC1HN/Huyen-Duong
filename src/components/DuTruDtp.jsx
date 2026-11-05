@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Copy, Search } from 'lucide-react'
 import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, normText, parseNxtXml, weekKey } from '../utils/duTru'
-import { buildDtpCompare, parseMapCU, parseWebTon, ttByU } from '../utils/duTruDtp'
+import { buildDtpCompare, parseMapCU, parseWebTon, remapFile, soGroups, ttByU } from '../utils/duTruDtp'
 import { readDuTruOrder, readDuTruSettings, readMapCU, writeDuTruOrder, writeDuTruSettings, writeMapCU } from '../data/duTruStore'
 import { loadDuTruFiles, readDuTruFilesMeta, removeDuTruFile, saveDuTruFile } from '../data/duTruFiles'
 import { readQuyCach } from '../data/quyCachStore'
-import { AlertTag, NumInput } from './DuTruParts'
+import { AlertTag, JwPending, NumInput } from './DuTruParts'
 
 // Kho DTP / Kho SO (tab Dự trù hàng): so tồn sổ sách với tồn thực tế Web (cột Chênh lệch); dự trù lấy tốc độ bán từ
 // "Sl xuất" file sổ sách, tồn hiện có là tồn thực tế Web (sổ sách cuối ngày mới trừ phần đã xuất).
@@ -16,13 +16,7 @@ const CFG = {
   DTP: { br: 'DTP', name: 'Kho DTP', ss: 'Fast U', code: 'Mã U', useMap: true,
     intro: <>Hàng Kho DTP như Kho C nhưng quản lý 2 hệ thống: <b>Fast U</b> (mã U, tồn sổ sách — hàng xuất kho cuối ngày mới trừ) và <b>Web</b> (mã C, tồn thực tế — cập nhật tức thời). App quy đổi mã bằng bảng C ↔ U, so 2 tồn và <b>dự trù trên tồn thực tế</b>. Số liệu file đã tải được lưu lại.</> },
   SO: { br: 'SO', name: 'Kho SO', ss: 'phần mềm', code: 'Mã hàng', useMap: false,
-    intro: <>Kho SO bản chất là kho C nên cùng mã hàng C, không cần quy đổi. So <b>tồn sổ sách</b> (file nhập xuất tồn của phần mềm — hàng xuất kho cuối ngày mới trừ) với <b>tồn thực tế Web</b> (cập nhật tức thời) và <b>dự trù trên tồn thực tế</b>. Số liệu file đã tải được lưu lại.</> },
-}
-// Kho SO: không có bảng quy đổi → mỗi mã quy về chính nó.
-const identityMap = (fast, web) => {
-  const m = new Map()
-  for (const d of [...(fast?.data || []), ...(web?.data || [])]) if (!m.has(d.ma)) m.set(d.ma, { c: d.ma, ten: d.ten, dvt: d.dvt, k: 1, u: d.ma, dvtU: d.dvt })
-  return { rows: [...m.values()] }
+    intro: <>Kho SO bản chất là kho C nên cùng mã hàng C, không cần quy đổi (hàng 2 mã J / W ↔ mã nhận điều thì gom về 1 dòng). So <b>tồn sổ sách</b> (file nhập xuất tồn của phần mềm — hàng xuất kho cuối ngày mới trừ) với <b>tồn thực tế Web</b> (cập nhật tức thời) và <b>dự trù trên tồn thực tế</b>. Số liệu file đã tải được lưu lại.</> },
 }
 const readText = file => (file.text ? file.text() : new Promise((ok, fail) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => fail(fr.error); fr.readAsText(file) }))
 const readSheet = async file => {
@@ -102,14 +96,20 @@ function KhoSoSachThucTe({ cfg }) {
   const fastF = useMemo(() => (files.fast ? { ...files.fast, data: files.fast.data.filter(d => khoSel.includes(d.kho)) } : null), [files.fast, khoSel])
   // File Web lọc cùng mã kho; file Web không có mã kho nào trùng thì giữ nguyên (không bỏ hết)
   const webF = useMemo(() => (files.web && files.web.data.some(d => khoSel.includes(d.kho)) ? { ...files.web, data: files.web.data.filter(d => khoSel.includes(d.kho)) } : files.web || null), [files.web, khoSel])
-  const map = useMemo(() => (cfg.useMap ? mapSaved : fastF ? identityMap(fastF, webF) : null), [cfg.useMap, mapSaved, fastF, webF])
-  const cmp = useMemo(() => (fastF && map ? buildDtpCompare(fastF, webF, map.rows) : null), [fastF, webF, map])
+  // Kho SO: cùng hệ mã C nhưng 1 sản phẩm có thể mang 2 mã (sổ sách mã J / W, Web mã nhận điều) → gom nhóm trước khi so.
+  // Nhóm ghép tay: của Kho SO + các nhóm anh đã ghép ở Kho C.
+  const so = useMemo(() => (!cfg.useMap && fastF ? soGroups(fastF, webF, [...readDuTruSettings('C').manual, ...(settings.manual || [])], settings.jwAlone || []) : null),
+    [cfg.useMap, fastF, webF, settings.manual, settings.jwAlone])
+  const map = useMemo(() => (cfg.useMap ? mapSaved : so ? { rows: so.map } : null), [cfg.useMap, mapSaved, so])
+  // Kho SO: file sổ sách quy về mã đại diện của nhóm (Web quy qua bảng map như Kho DTP)
+  const fastG = useMemo(() => (so ? remapFile(fastF, so.rep, so.pool) : fastF), [so, fastF])
+  const cmp = useMemo(() => (fastG && map ? buildDtpCompare(fastG, webF, map.rows) : null), [fastG, webF, map])
   const model = useMemo(() => {
     if (!fastF) return null
-    const m = buildDuTruModel({ f3: fastF })
+    const m = buildDuTruModel({ f3: fastG })
     if (webF && cmp) m.tonOverride = ttByU(cmp)
     return m
-  }, [fastF, webF, cmp])
+  }, [fastF, fastG, webF, cmp])
   const P = useMemo(() => ({ Ld: settings.Ld, ss: settings.ss, useSea: false }), [settings.Ld, settings.ss])
   const week = model ? weekKey(model.to) : ''
   const order = useMemo(() => orders[week] || (week ? readDuTruOrder(week, BR) : EMPTY_ORDER), [orders, week, BR])
@@ -212,12 +212,20 @@ function KhoSoSachThucTe({ cfg }) {
             <section className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-2" aria-label={`Chênh lệch tồn ${cfg.name}`}>
               {!files.web ? <div className="text-sm text-gray-500">Tải file <b>Tồn thực tế Web</b> ở mục 1 để so với tồn sổ sách.</div> : (
                 <>
+                  {so && <JwPending rows={so.pending} model={so.pool}
+                    onLink={(jw, t) => save({ manual: [...(settings.manual || []), [t, jw]] })}
+                    onAlone={(ma, on) => save({ jwAlone: on ? [...new Set([...(settings.jwAlone || []), ma])] : (settings.jwAlone || []).filter(c => c !== ma) })} />}
+                  {so && (settings.manual || []).length > 0 && (
+                    <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5">Đã ghép ở {cfg.name}:
+                      {settings.manual.map(g => <button key={g.join(',')} type="button" title="Bỏ ghép" onClick={() => save({ manual: settings.manual.filter(x => x.join(',') !== g.join(',')) })} className="px-1.5 py-0.5 rounded-full border border-gray-200 bg-white font-mono">{g.join(' + ')} ×</button>)}
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center gap-1.5">
                     {DIFF_FILTERS.map(([k, l, f]) => (
                       <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)} className={`sheet-tab-action ${filter === k ? 'is-primary' : ''}`}>{l} ({fmtN((cmp?.rows || []).filter(f).length)})</button>
                     ))}
-                    <button type="button" className="sheet-tab-action ml-auto" onClick={() => copy([[cfg.code, ...(cfg.useMap ? ['Mã C'] : []), 'Tên hàng', 'ĐVT', `Tồn sổ sách (${cfg.ss})`, 'Tồn thực tế (Web)', 'Chênh lệch (TT − SS)'].join('\t'),
-                      ...diffRows.map(r => [r.u, ...(cfg.useMap ? [r.codesC.join(', ')] : []), r.ten, r.dvt, r.ss, r.tt, r.diff].join('\t'))].join('\n'), `Đã chép ${diffRows.length} dòng, dán vào Excel.`)}><Copy size={13} /> Chép bảng</button>
+                    <button type="button" className="sheet-tab-action ml-auto" onClick={() => copy([[cfg.code, cfg.useMap ? 'Mã C' : 'Các mã gộp', 'Tên hàng', 'ĐVT', `Tồn sổ sách (${cfg.ss})`, 'Tồn thực tế (Web)', 'Chênh lệch (TT − SS)'].join('\t'),
+                      ...diffRows.map(r => [r.u, ...(cfg.useMap ? [r.codesC.join(', ')] : [r.codesC.length > 1 ? r.codesC.join(', ') : '']), r.ten, r.dvt, r.ss, r.tt, r.diff].join('\t'))].join('\n'), `Đã chép ${diffRows.length} dòng, dán vào Excel.`)}><Copy size={13} /> Chép bảng</button>
                   </div>
                   <div className="text-xs text-gray-500">Chênh lệch = tồn thực tế Web − tồn sổ sách {cfg.ss}{cfg.useMap ? ', theo mã U (cộng các mã C cùng quy về 1 mã U)' : ', theo mã hàng'}. <span className="text-red-600 font-semibold">Âm</span>: thực tế ít hơn sổ sách — thường là hàng đã xuất kho, sổ sách cuối ngày mới trừ. Tổng chênh lệch {signN(sumDiff)}. Bấm vào dòng để xem theo lô.</div>
                   {cmp.webUnmapped.length > 0 && <div className="text-xs text-amber-700">⚠ {cmp.webUnmapped.length} mã trên Web chưa có trong bảng quy đổi (chưa tính): {cmp.webUnmapped.slice(0, 8).map(w => w.ma).join(', ')}{cmp.webUnmapped.length > 8 ? '…' : ''}. Bổ sung vào bảng quy đổi rồi tải lại.</div>}
@@ -256,7 +264,7 @@ function KhoSoSachThucTe({ cfg }) {
                     const ss = c.reduce((s, x) => s + x.ss, 0), tt = c.reduce((s, x) => s + x.tt, 0)
                     return (
                       <tr key={r.id} className="border-t border-gray-100 align-top">
-                        <td className="px-2 py-1.5 font-mono">{r.order}{cfg.useMap && <div className="text-[11px] text-gray-500">{c.flatMap(x => x.codesC).join(', ') || 'chưa có mã C'}</div>}</td>
+                        <td className="px-2 py-1.5 font-mono">{r.order}{cfg.useMap ? <div className="text-[11px] text-gray-500">{c.flatMap(x => x.codesC).join(', ') || 'chưa có mã C'}</div> : c.flatMap(x => x.codesC).length > 1 && <div className="text-[11px] font-sans text-slate-600">gộp {c.flatMap(x => x.codesC).join(', ')}</div>}</td>
                         <td className="px-2 py-1.5">{r.p0.ten}</td>
                         <td className="px-2 py-1.5 text-gray-600">{r.p0.dvt}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.X3)}</td>
@@ -285,7 +293,7 @@ function FragmentRows({ r, cfg, open, onToggle }) {
   return (
     <>
       <tr onClick={onToggle} className={`border-t border-gray-100 cursor-pointer ${open ? 'bg-slate-100' : 'hover:bg-slate-50'}`}>
-        <td className="px-2 py-1.5 font-mono">{r.u}</td>
+        <td className="px-2 py-1.5 font-mono">{r.u}{!cfg.useMap && r.codesC.length > 1 && <div className="text-[11px] font-sans text-slate-600">gộp {r.codesC.join(', ')}</div>}</td>
         {cfg.useMap && <td className="px-2 py-1.5 font-mono text-xs">{r.codesC.join(', ') || <span className="text-gray-400 font-sans">chưa có</span>}</td>}
         <td className="px-2 py-1.5">{r.ten}<span className="ml-1 text-xs text-gray-400">{r.dvt}</span>{!r.inWeb && <span className="ml-1 text-[11px] text-amber-700">không có trên Web</span>}{!r.inFast && <span className="ml-1 text-[11px] text-amber-700">không có trên {cfg.ss}</span>}</td>
         <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.ss)}</td>

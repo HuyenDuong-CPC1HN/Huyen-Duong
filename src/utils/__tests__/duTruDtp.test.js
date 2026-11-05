@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDtpCompare, parseMapCU, parseWebTon, ttByU } from '../duTruDtp'
+import { buildDtpCompare, parseMapCU, parseWebTon, remapFile, soGroups, ttByU } from '../duTruDtp'
 import { buildDuTruModel, computePlan, parseNxtXml } from '../duTru'
 import { nxtXml } from './nxtXmlFixture'
 
@@ -56,5 +56,35 @@ describe('Dự trù Kho DTP — tồn sổ sách Fast U ↔ tồn thực tế We
     expect(after.TON).toBe(150)
     expect(after.de).toBe(Math.ceil(1500 / 89 * 15 - 150))
     expect(after.de).toBeGreaterThan(before.de)
+  })
+})
+
+describe('Kho SO — 1 sản phẩm 2 mã (sổ sách mã J / W, Web mã nhận điều)', () => {
+  // số liệu giả lập
+  const fast = parseNxtXml(nxtXml('01/10/2026', '05/11/2026', [
+    ['J00001', 'Siro K - H20 10ml', '020105', 'TUI', 'L1', '2028-05-20', 500, 0, 100, 400],
+    ['W00002', 'Viên L - Lọ 30 viên', '020105', 'VIEN', 'V1', '2028-05-20', 90, 0, 0, 90],
+    ['B00003', 'Bột M', '020105', 'GOI', 'B1', '2028-05-20', 50, 0, 0, 50],
+  ]))
+  const web = parseWebTon([
+    ['STT', 'Mã BFO', 'Tên sản phẩm', 'Số lô', 'Hạn dùng', 'Kho', 'Lượng nhập', 'Lượng xuất', 'Lượng tồn', 'ĐVT'],
+    [1, 'S00001', 'Siro K - Hộp 20 gói 10ml', 'L1', '20/05/28', '020105', 400, 20, 380, 'TUI'],
+    [2, 'V00002', 'Viên L - Lọ 30 viên', 'V1', '20/05/28', '020105', 90, 0, 90, 'VIEN'],
+    [3, 'B00003', 'Bột M', 'B1', '20/05/28', '020105', 50, 0, 50, 'GOI'],
+  ])
+  const cmpOf = g => buildDtpCompare(remapFile(fast, g.rep, g.pool), web, g.map)
+
+  it('trùng tên + ĐVT thì tự gom về mã nhận điều; tên khác thì gợi ý, anh ghép mới gom; không ghép thì lệch giả', () => {
+    const g = soGroups(fast, web)
+    const c = cmpOf(g)
+    const v = c.rows.find(r => r.u === 'V00002')
+    expect([...v.codesC].sort()).toEqual(['V00002', 'W00002'])
+    expect(v).toMatchObject({ ss: 90, tt: 90, diff: 0 })
+    expect(c.rows.find(r => r.u === 'J00001').diff).toBe(-400) // chưa ghép: lệch giả
+    expect(g.pending.map(p => [p.order, p.cands[0].ma])).toEqual([['J00001', 'S00001']])
+    const g2 = soGroups(fast, web, [['S00001', 'J00001']])
+    expect(cmpOf(g2).rows.find(r => r.u === 'S00001')).toMatchObject({ ss: 400, tt: 380, diff: -20 })
+    expect(g2.pending).toEqual([])
+    expect(soGroups(fast, web, [], ['J00001']).pending).toEqual([]) // "không phải hàng 2 mã"
   })
 })

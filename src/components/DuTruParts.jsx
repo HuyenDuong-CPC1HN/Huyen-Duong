@@ -149,7 +149,7 @@ export function JwLinkBox({ r, model, settings, onLink, onAlone }) {
 }
 
 // Danh sách mã J / W đứng riêng có gợi ý (mục 3): duyệt nhanh cả loạt.
-function JwPending({ rows, model, onLink, onAlone }) {
+export function JwPending({ rows, model, onLink, onAlone }) {
   const [pick, setPick] = useState({})
   if (!rows.length) return null
   return (

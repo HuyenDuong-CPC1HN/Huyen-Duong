@@ -151,7 +151,8 @@ function nameTokens(model, ma) {
   const m = /\b(\d+)\s*vi\s*x\s*(\d+)/.exec(s)
   const h = m ? null : /\bh\s*(\d+)\b/.exec(s) || /\bhop\s+(\d+)\s+(ong|lo|goi|vien|tuyp|chai|tui)\b/.exec(s)
   const pack = m ? m[1] * m[2] : h ? Number(h[1]) : 0 // số đơn vị / hộp: "H20" = "4 vỉ x 5"
-  const words = s.split(/[^a-z0-9.%/]+/).filter(w => w && !PACK_WORDS.has(w))
+  // "Lọ 60 viên" ≠ "Lọ 30 viên": ghép số với đơn vị đếm thành 1 từ (không thì số trần bị bỏ, 2 quy cách thành giống nhau)
+  const words = s.replace(/\b(\d+)\s*(vien|goi|ong|lo|tuyp|chai|tui|cai|binh)\b/g, '$1$2').split(/[^a-z0-9.%/]+/).filter(w => w && !PACK_WORDS.has(w))
   const set = new Set(words.filter(w => !/^\d+$/.test(w)))
   if (pack) set.add(`#${pack}`)
   const t = { first: words[0] || '', set }

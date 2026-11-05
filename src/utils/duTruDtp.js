@@ -4,7 +4,7 @@
 // - File "Tồn thực tế Web" (.xlsx, mã C ở cột "Mã BFO") — tồn cập nhật tức thời.
 // - Bảng quy đổi mã C ↔ U (.xlsx): Mã SP C · Tên sản phẩm · Đơn vị · Số lượng · Quy đổi U · Mã SP U · Đơn vị U.
 // So 2 tồn theo mã U: chênh lệch = tồn thực tế − tồn sổ sách. Dự trù dùng tồn thực tế.
-import { normText } from './duTru'
+import { buildDuTruModel, isJW, jwCandidates, normText } from './duTru'
 
 const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(n) ? n : 0 }
 const up = v => String(v ?? '').trim().toUpperCase()
@@ -109,3 +109,43 @@ export function buildDtpCompare(fast, web, map) {
 
 // Tồn thực tế (Web) theo mã U để dự trù thay cho tồn sổ sách: Map mã U → tồn.
 export const ttByU = cmp => new Map(cmp.rows.filter(r => r.inWeb || r.inFast).map(r => [r.u, r.tt]))
+
+// Kho SO: sổ sách và Web cùng hệ mã C, nhưng 1 sản phẩm có thể mang 2 mã (sổ sách ghi mã J / W, Web ghi mã nhận điều).
+// Gom mã cùng sản phẩm: trùng tên + ĐVT (tự gom) + nhóm anh đã ghép (manual: [[mã…]], gồm cả nhóm ghép ở Kho C).
+// Mỗi nhóm quy về 1 mã đại diện (ưu tiên mã nhận điều, rồi mã có trên Web). Trả về:
+// { map: dạng parseMapCU (mã → mã đại diện), rep: Map mã → mã đại diện, pool: model chung 2 file (tên, ĐVT),
+//   pending: [{ order, p0, TON, X3, cands }] mã J / W chưa ghép có gợi ý mã nhận điều trên file }.
+export function soGroups(fast, web, manual = [], jwAlone = []) {
+  const pool = buildDuTruModel({ f3: { ...fast, data: [...(fast?.data || []), ...(web?.data || [])] } })
+  const codes = Object.keys(pool.prod)
+  const parent = new Map(codes.map(c => [c, c]))
+  const find = c => { let r = c; while (parent.get(r) !== r) r = parent.get(r); parent.set(c, r); return r }
+  const union = (a, b) => { if (parent.has(a) && parent.has(b)) parent.set(find(a), find(b)) }
+  const byName = new Map()
+  for (const p of Object.values(pool.prod)) {
+    const k = `${normText(p.ten)}|${normText(p.dvt)}`
+    if (byName.has(k)) union(p.ma, byName.get(k)); else byName.set(k, p.ma)
+  }
+  for (const g of manual) for (let i = 1; i < g.length; i++) union(g[0], g[i])
+  const members = new Map()
+  for (const c of codes) members.set(find(c), [...(members.get(find(c)) || []), c])
+  const onWeb = new Set((web?.data || []).map(d => d.ma))
+  const rep = new Map()
+  for (const list of members.values()) {
+    const r = [...list].sort((a, b) => (isJW(a) - isJW(b)) || (onWeb.has(b) - onWeb.has(a)) || a.localeCompare(b))[0]
+    for (const c of list) rep.set(c, r)
+  }
+  const map = codes.map(c => ({ c, ten: pool.prod[rep.get(c)].ten, dvt: pool.prod[rep.get(c)].dvt, k: 1, u: rep.get(c), dvtU: pool.prod[rep.get(c)].dvt }))
+  const alone = new Set(jwAlone)
+  const sum = (c, f) => (fast?.data || []).filter(d => d.ma === c).reduce((s, d) => s + d[f], 0)
+  const pending = []
+  for (const list of members.values()) {
+    if (list.length > 1 || !isJW(list[0]) || alone.has(list[0])) continue
+    const c = list[0]
+    const cands = jwCandidates(pool, { kho: pool.khoCodes }, c).filter(x => rep.get(x.ma) !== c)
+    if (cands.length) pending.push({ order: c, p0: pool.prod[c], TON: sum(c, 'tc'), X3: sum(c, 'x'), cands })
+  }
+  return { map, rep, pool, pending }
+}
+// File sổ sách quy về mã đại diện (để dự trù theo nhóm sản phẩm)
+export const remapFile = (f, rep, pool) => (f ? { ...f, data: f.data.map(d => { const r = rep.get(d.ma) || d.ma; return r === d.ma ? d : { ...d, ma: r, ten: pool.prod[r]?.ten || d.ten } }) } : f)
