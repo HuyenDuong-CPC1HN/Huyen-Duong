@@ -216,6 +216,11 @@ function KhoSoSachThucTe({ cfg }) {
                   {so && <JwPending rows={so.pending} model={so.pool}
                     onLink={(jw, t) => setMaGoc(writeMaGoc(linkMaGoc(readMaGoc(), jw, t)))}
                     onAlone={(ma, on) => save({ jwAlone: on ? [...new Set([...(settings.jwAlone || []), ma])] : (settings.jwAlone || []).filter(c => c !== ma) })} />}
+                  {so && (settings.jwAlone || []).length > 0 && (
+                    <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5">Đã đánh dấu không phải hàng 2 mã (bấm để bỏ đánh dấu):
+                      {settings.jwAlone.map(c => <button key={c} type="button" title="Bỏ đánh dấu" onClick={() => save({ jwAlone: settings.jwAlone.filter(x => x !== c) })} className="px-1.5 py-0.5 rounded-full border border-gray-200 bg-white font-mono">{c} ×</button>)}
+                    </div>
+                  )}
                   {so && <div className="text-xs text-gray-500">Mã đã ghép được lưu ở <b>Bảng mã quy đổi Kho C</b> (nút cùng hàng với Kho C / DTP / SO), dùng chung cho Kho C và Kho SO; sửa / bỏ ghép ở đó.</div>}
                   <div className="flex flex-wrap items-center gap-1.5">
                     {DIFF_FILTERS.map(([k, l, f]) => (
