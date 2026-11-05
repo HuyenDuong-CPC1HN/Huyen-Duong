@@ -211,16 +211,16 @@ function KhoC() {
                   <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm mã, tên hàng…" aria-label="Tìm mã, tên hàng" className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-sm" />
                 </div>
                 <button type="button" className="sheet-tab-action" onClick={() => copy([
-                  ['Mã đặt hàng', 'Các mã gộp', 'Tên hàng', 'ĐVT', 'Bán/tuần', '4 tuần gần nhất/tuần', 'Tồn hiện có', 'Đủ bán (tuần)', 'Cách đang làm', 'Đề xuất (chưa tròn)', 'SL 1 kiện', 'Đề xuất tròn kiện', 'Chốt đặt', 'Số kiện', 'Lưu ý'].join('\t'),
-                  ...shown.map(r => [r.order, r.codes.join(', '), r.p0.ten, r.p0.dvt, fmt1(r.rd * 7), r.r4 == null ? '' : fmt1(r.r4 * 7), Math.round(r.TON), Number.isFinite(r.weeks) ? fmt1(r.weeks) : '', r.old, r.de, r.kien || '', r.deK, chotOf(r), r.kien ? fmt1(chotOf(r) / r.kien) : '', r.alerts.map(a => a.t).join('; ')].join('\t')),
+                  ['Mã đặt hàng', 'Các mã gộp', 'Tên hàng', 'ĐVT', `Sl xuất ${model.D3} ngày`, 'Bán/tuần', '4 tuần gần nhất/tuần', 'Tồn hiện có', 'Đủ bán (tuần)', 'Cách đang làm', 'Đề xuất (chưa tròn)', 'SL 1 kiện', 'Đề xuất tròn kiện', 'Chốt đặt', 'Số kiện', 'Lưu ý'].join('\t'),
+                  ...shown.map(r => [r.order, r.codes.join(', '), r.p0.ten, r.p0.dvt, Math.round(r.X3), fmt1(r.rd * 7), r.r4 == null ? '' : fmt1(r.r4 * 7), Math.round(r.TON), Number.isFinite(r.weeks) ? fmt1(r.weeks) : '', r.old, r.de, r.kien || '', r.deK, chotOf(r), r.kien ? fmt1(chotOf(r) / r.kien) : '', r.alerts.map(a => a.t).join('; ')].join('\t')),
                 ].join('\n'), `Đã chép ${shown.length} dòng, dán vào Excel.`)}><Copy size={13} /> Chép bảng (dán vào Excel)</button>
                 {copyMsg && <span className="text-xs text-green-700" role="status">{copyMsg}</span>}
               </div>
               <div className="text-xs text-gray-500">{chip ? `Đang lọc: ${chip.l}. ` : ''}Hiện {fmtN(shown.length)}/{fmtN(rows.length)} mã, xếp theo tên vật tư A → Z. Bấm vào dòng để xem tồn theo kho, theo lô và cách tính. Cột "Cách đang làm" để so sánh, không dùng để đặt. Đề xuất đã làm tròn lên đủ kiện theo tab Quy cách hàng hoá{rows.some(r => r.de > 0 && !r.kien) ? <b className="text-amber-700"> · {rows.filter(r => r.de > 0 && !r.kien).length} mã cần đặt chưa có quy cách kiện</b> : ''}.</div>
               <div className="overflow-x-auto border border-gray-200 rounded-xl">
-                <table className="w-full text-sm border-collapse" style={{ minWidth: 1000 }}>
+                <table className="w-full text-sm border-collapse" style={{ minWidth: 1120 }}>
                   <thead className="bg-gray-50 text-gray-500 text-xs"><tr>
-                    <th className="px-2 py-2 text-left">Mã đặt hàng</th><th className="px-2 py-2 text-left">Tên hàng</th><th className="px-2 py-2 text-right">Bán/tuần</th><th className="px-2 py-2 text-right">4 tuần gần nhất</th>
+                    <th className="px-2 py-2 text-left">Mã đặt hàng</th><th className="px-2 py-2 text-left">Tên hàng</th><th className="px-2 py-2 text-left">ĐVT</th><th className="px-2 py-2 text-right">Sl xuất {model.D3} ngày</th><th className="px-2 py-2 text-right">Bán/tuần</th><th className="px-2 py-2 text-right">4 tuần gần nhất</th>
                     <th className="px-2 py-2 text-right">Tồn hiện có</th><th className="px-2 py-2 text-right">Đủ bán</th><th className="px-2 py-2 text-right">Cách đang làm</th><th className="px-2 py-2 text-right">Đề xuất</th><th className="px-2 py-2 text-right">Chốt đặt</th><th className="px-2 py-2 text-left">Lưu ý</th>
                   </tr></thead>
                   <tbody>{shown.map(r => {
@@ -231,6 +231,8 @@ function KhoC() {
                       <tr key={r.id} onClick={() => setSel(sel === r.id ? null : r.id)} className={`border-t border-gray-100 cursor-pointer align-top ${sel === r.id ? 'bg-slate-100' : 'hover:bg-slate-50'}`}>
                         <td className="px-2 py-1.5 font-mono">{r.order}{r.codes.length > 1 && <div className="text-[11px] font-sans text-slate-600">gộp {r.codes.length} mã</div>}{r.cands?.length > 0 && <div className="text-[11px] font-sans text-amber-700">mã J / W · có thể là {r.cands[0].ma}</div>}</td>
                         <td className="px-2 py-1.5">{r.p0.ten}</td>
+                        <td className="px-2 py-1.5 text-gray-600">{r.p0.dvt}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.X3)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmt1(r.rd * 7)}{r.sea !== 1 && <div className="text-[11px] text-gray-500">mùa vụ ×{fmt1(r.sea)}</div>}</td>
                         <td className={`px-2 py-1.5 text-right tabular-nums ${r4cls}`}>{r.r4 == null ? <span className="text-gray-300">—</span> : fmt1(r.r4 * 7)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.TON)}</td>
@@ -241,7 +243,7 @@ function KhoC() {
                         <td className="px-2 py-1.5"><div className="flex flex-wrap gap-1 min-w-44">{r.alerts.length ? [...r.alerts].sort((a, b) => LV_ORDER[a.lv] - LV_ORDER[b.lv]).slice(0, 3).map(a => <AlertTag key={a.k} a={a} />) : <span className="text-xs text-green-700">Ổn định</span>}</div></td>
                       </tr>
                     )
-                  })}{!shown.length && <tr><td colSpan={10} className="px-3 py-4 text-gray-400">Không có mã nào khớp. Kiểm tra kho đang chọn ở mục 2, bộ lọc hoặc từ khoá.</td></tr>}</tbody>
+                  })}{!shown.length && <tr><td colSpan={12} className="px-3 py-4 text-gray-400">Không có mã nào khớp. Kiểm tra kho đang chọn ở mục 2, bộ lọc hoặc từ khoá.</td></tr>}</tbody>
                 </table>
               </div>
             </section>

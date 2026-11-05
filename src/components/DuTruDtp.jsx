@@ -208,13 +208,13 @@ export default function KhoDTP() {
             <section className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-2" aria-label="Dự trù Kho DTP">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-xs text-gray-500 flex-1">Xếp theo tên A → Z. Đề xuất = bán/ngày × {7 + settings.Ld + settings.ss} ngày − tồn {files.web ? 'thực tế' : 'sổ sách'}, làm tròn lên đủ kiện (quy cách theo mã C ở tab Quy cách hàng hoá).</div>
-                <button type="button" className="sheet-tab-action" onClick={() => copy([['Mã U', 'Mã C', 'Tên hàng', 'ĐVT', 'Bán/tuần', 'Tồn sổ sách', 'Tồn thực tế', 'Chênh lệch', 'Đủ bán (tuần)', 'Đề xuất', 'Chốt đặt'].join('\t'),
-                  ...planRows.map(r => { const c = cmpBy.get(r.order); return [r.order, (c?.codesC || []).join(', '), r.p0.ten, r.p0.dvt, fmt1(r.rd * 7), c ? c.ss : '', c && files.web ? c.tt : '', c && files.web ? c.diff : '', Number.isFinite(r.weeks) ? fmt1(r.weeks) : '', r.deK, chotOf(r)].join('\t') })].join('\n'), `Đã chép ${planRows.length} dòng, dán vào Excel.`)}><Copy size={13} /> Chép bảng</button>
+                <button type="button" className="sheet-tab-action" onClick={() => copy([['Mã U', 'Mã C', 'Tên hàng', 'ĐVT', `Sl xuất ${model.D3} ngày`, 'Bán/tuần', 'Tồn sổ sách', 'Tồn thực tế', 'Chênh lệch', 'Đủ bán (tuần)', 'Đề xuất', 'Chốt đặt'].join('\t'),
+                  ...planRows.map(r => { const c = cmpBy.get(r.order); return [r.order, (c?.codesC || []).join(', '), r.p0.ten, r.p0.dvt, Math.round(r.X3), fmt1(r.rd * 7), c ? c.ss : '', c && files.web ? c.tt : '', c && files.web ? c.diff : '', Number.isFinite(r.weeks) ? fmt1(r.weeks) : '', r.deK, chotOf(r)].join('\t') })].join('\n'), `Đã chép ${planRows.length} dòng, dán vào Excel.`)}><Copy size={13} /> Chép bảng</button>
               </div>
               <div className="overflow-x-auto border border-gray-200 rounded-xl">
-                <table className="w-full text-sm border-collapse" style={{ minWidth: 1050 }}>
+                <table className="w-full text-sm border-collapse" style={{ minWidth: 1170 }}>
                   <thead className="bg-gray-50 text-gray-500 text-xs"><tr>
-                    <th className="px-2 py-2 text-left">Mã U · Mã C</th><th className="px-2 py-2 text-left">Tên hàng</th><th className="px-2 py-2 text-right">Bán/tuần</th>
+                    <th className="px-2 py-2 text-left">Mã U · Mã C</th><th className="px-2 py-2 text-left">Tên hàng</th><th className="px-2 py-2 text-left">ĐVT</th><th className="px-2 py-2 text-right">Sl xuất {model.D3} ngày</th><th className="px-2 py-2 text-right">Bán/tuần</th>
                     <th className="px-2 py-2 text-right">Tồn sổ sách</th><th className="px-2 py-2 text-right">Tồn thực tế</th><th className="px-2 py-2 text-right">Chênh lệch</th>
                     <th className="px-2 py-2 text-right">Đủ bán</th><th className="px-2 py-2 text-right">Đề xuất</th><th className="px-2 py-2 text-right">Chốt đặt</th><th className="px-2 py-2 text-left">Lưu ý</th>
                   </tr></thead>
@@ -225,6 +225,8 @@ export default function KhoDTP() {
                       <tr key={r.id} className="border-t border-gray-100 align-top">
                         <td className="px-2 py-1.5 font-mono">{r.order}<div className="text-[11px] text-gray-500">{c.flatMap(x => x.codesC).join(', ') || 'chưa có mã C'}</div></td>
                         <td className="px-2 py-1.5">{r.p0.ten}</td>
+                        <td className="px-2 py-1.5 text-gray-600">{r.p0.dvt}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.X3)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmt1(r.rd * 7)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{fmtN(ss)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums font-bold">{files.web ? fmtN(tt) : <span className="text-gray-300 font-normal">—</span>}</td>
@@ -235,7 +237,7 @@ export default function KhoDTP() {
                         <td className="px-2 py-1.5"><div className="flex flex-wrap gap-1 min-w-40">{r.alerts.length ? [...r.alerts].sort((a, b) => LV_ORDER[a.lv] - LV_ORDER[b.lv]).slice(0, 3).map(a => <AlertTag key={a.k} a={a} />) : <span className="text-xs text-green-700">Ổn định</span>}</div></td>
                       </tr>
                     )
-                  })}{!planRows.length && <tr><td colSpan={10} className="px-3 py-4 text-gray-400">Không có mã nào khớp.</td></tr>}</tbody>
+                  })}{!planRows.length && <tr><td colSpan={12} className="px-3 py-4 text-gray-400">Không có mã nào khớp.</td></tr>}</tbody>
                 </table>
               </div>
             </section>
