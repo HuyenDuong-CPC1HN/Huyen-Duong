@@ -216,7 +216,9 @@ export function analyseItem(model, settings, it, P) {
   const rows = it.codes.flatMap(c => rowsOf(model, kho, c))
   const p0 = model.prod[it.order]
   const sum = f => rows.reduce((s, r) => s + f(r), 0)
-  const X3 = sum(r => r.x), TON = sum(r => r.tc), TD = sum(r => r.td), NH = sum(r => r.nh)
+  const X3 = sum(r => r.x), TD = sum(r => r.td), NH = sum(r => r.nh)
+  // model.tonOverride (Map mã → tồn): Kho DTP dự trù trên tồn thực tế (Web) thay cho tồn cuối sổ sách của file
+  const TON = model.tonOverride ? it.codes.reduce((s, c) => s + (model.tonOverride.has(c) ? model.tonOverride.get(c) : rowsOf(model, kho, c).reduce((t, r) => t + r.tc, 0)), 0) : sum(r => r.tc)
   const X4 = model.has4 ? sum(r => r.x4 || 0) : null
   const XW = model.hasW ? sum(r => r.xw || 0) : null
   const rate = X3 / model.D3

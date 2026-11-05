@@ -129,3 +129,34 @@ describe('Dự trù hàng (Kho C)', () => {
     await waitFor(() => expect(screen.getByText(/Không đọc được sai.csv: File không đúng dạng/)).toBeInTheDocument())
   })
 })
+
+describe('Dự trù hàng (Kho DTP)', () => {
+  const XLSX_ROWS = {
+    map: [['Mã SP C', 'Tên sản phẩm', 'Đơn vị', 'Số lượng', 'Quy đổi U', 'Mã SP U', 'Đơn vị U'], ['A00001', 'Thuốc A', 'ONG', '1', '1', 'TH00001', 'Ống']],
+    web: [['STT', 'Mã BFO', 'Tên sản phẩm', 'Số lô', 'Hạn dùng', 'Kho', 'Lượng nhập', 'Lượng xuất', 'Lượng tồn', 'ĐVT'], [1, 'A00001', 'Thuốc A', 'L1', '11/07/28', '020105', 500, 380, 120, 'ONG']],
+  }
+  const xlsxFile = async (name, rows) => {
+    const XLSX = await import('xlsx')
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Sheet1')
+    return new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], name)
+  }
+
+  it('tải Fast U + bảng quy đổi + tồn Web: cột chênh lệch theo mã U (thực tế − sổ sách); bảng quy đổi được lưu', async () => {
+    render(<DuTruHangTab />)
+    fireEvent.click(screen.getByRole('tab', { name: /Kho DTP/ }))
+    fireEvent.change(await screen.findByLabelText('Tải file Tồn sổ sách Fast U'), { target: { files: [file('fast.xml', nxtXml('01/08/2026', '28/10/2026', [['TH00001', 'Thuốc A', '020105', 'Ống', 'L1', '2028-07-11', 1500, 200, 1500, 200]]))] } })
+    fireEvent.change(screen.getByLabelText('Tải file Bảng quy đổi mã C ↔ U'), { target: { files: [await xlsxFile('ma.xlsx', XLSX_ROWS.map)] } })
+    fireEvent.change(screen.getByLabelText('Tải file Tồn thực tế Web'), { target: { files: [await xlsxFile('web.xlsx', XLSX_ROWS.web)] } })
+    const diff = await screen.findByRole('region', { name: 'Chênh lệch tồn Kho DTP' })
+    const row = (await within(diff).findByText('TH00001')).closest('tr')
+    expect(row).toHaveTextContent('A00001')
+    expect(row).toHaveTextContent('200')
+    expect(row).toHaveTextContent('120')
+    expect(row).toHaveTextContent('−80')
+    expect(JSON.parse(store.values.get('dutru_map_cu')).rows).toEqual([['A00001', 'Thuốc A', 'ONG', 1, 'TH00001', 'Ống']])
+    fireEvent.click(screen.getByRole('tab', { name: 'Dự trù đặt hàng' }))
+    const plan = screen.getByRole('region', { name: 'Dự trù Kho DTP' })
+    expect(within(plan).getByLabelText('Chốt đặt TH00001')).toHaveValue(String(Math.ceil(1500 / 89 * 15 - 120)))
+  })
+})

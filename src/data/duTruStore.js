@@ -41,3 +41,16 @@ export function writeDuTruOrder(week, order, branch = 'C') {
   const keep = Object.keys(all).sort().slice(-KEEP_WEEKS)
   opsStore.setItem(ORDERS_KEY(branch), JSON.stringify(Object.fromEntries(keep.map(k => [k, all[k]]))))
 }
+
+// Bảng quy đổi mã C ↔ U của Kho DTP (tải file 1 lần, lưu lại; có mã mới thì tải bản mới thay).
+// { name, at, rows: [[mã C, tên, ĐVT C, hệ số, mã U, ĐVT U]] } — dạng mảng cho gọn.
+const MAP_KEY = 'dutru_map_cu'
+export function readMapCU() {
+  const v = readJson(MAP_KEY, null)
+  if (!v || !Array.isArray(v.rows)) return null
+  return { name: v.name || '', at: v.at || '', rows: v.rows.map(([c, ten, dvt, k, u, dvtU]) => ({ c, ten, dvt, k: Number(k) || 1, u, dvtU })) }
+}
+export function writeMapCU(name, rows, at = new Date().toISOString()) {
+  opsStore.setItem(MAP_KEY, JSON.stringify({ name, at, rows: rows.map(m => [m.c, m.ten, m.dvt, m.k, m.u, m.dvtU]) }))
+  return { name, at, rows }
+}

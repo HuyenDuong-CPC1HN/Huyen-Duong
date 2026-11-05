@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Copy, Search } from 'lucide-react'
 import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, groupOn, groupOrder, groupsOf, normText, parseNxtXml, weekKey } from '../utils/duTru'
 import { readDuTruOrder, readDuTruSettings, writeDuTruOrder, writeDuTruSettings } from '../data/duTruStore'
@@ -6,10 +6,11 @@ import { addQuyCachProducts, readQuyCach } from '../data/quyCachStore'
 import { loadDuTruFiles, readDuTruFilesMeta, removeDuTruFile, saveDuTruFile } from '../data/duTruFiles'
 import { AlertTag, DetailPanel, FileSlots, KhoPicker, MergeGroups, NumInput } from './DuTruParts'
 
+const KhoDTP = lazy(() => import('./DuTruDtp'))
 // Tab "Dự trù hàng": mỗi kho (C / DTP / SO) dự trù riêng, quy tắc riêng. Hiện làm Kho C: tải file nhập – xuất – tồn
 // (đọc ngay trên trình duyệt), cộng chung các mã kho được chọn, gộp mã cùng sản phẩm, đề xuất đơn chính thứ 4–5, đơn bổ
 // sung thứ 6, cảnh báo biến động, danh sách nhập lên web công ty. Chỉ lưu lựa chọn và số chốt, không lưu file.
-const BRANCHES = [['C', 'Kho C', 'Đang dùng'], ['DTP', 'Kho DTP', 'Chưa thiết kế'], ['SO', 'Kho SO', 'Chưa thiết kế']]
+const BRANCHES = [['C', 'Kho C', 'Đang dùng'], ['DTP', 'Kho DTP', 'Fast U ↔ Web'], ['SO', 'Kho SO', 'Chưa thiết kế']]
 const LV_ORDER = { crit: 0, warn: 1, season: 2, info: 3 }
 const CHIPS = [
   { k: 'order', l: 'Mã cần đặt tuần này', cls: 'border-l-[#1e3a5f]', f: r => r.de > 0 },
@@ -346,7 +347,7 @@ export default function DuTruHangTab() {
           </button>
         ))}
       </div>
-      {branch === 'C' ? <KhoC /> : (
+      {branch === 'C' ? <KhoC /> : branch === 'DTP' ? <Suspense fallback={<div className="text-sm text-gray-500">Đang mở Kho DTP…</div>}><KhoDTP /></Suspense> : (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm text-gray-600 flex flex-col gap-2">
           <b>{BRANCHES.find(b => b[0] === branch)[1]}: chưa thiết kế.</b>
           <div>Mỗi kho dự trù riêng, quy tắc riêng. Để làm kho này, anh gửi em file mẫu nhập – xuất – tồn của kho, lịch đặt hàng và quy tắc riêng của kho.</div>
