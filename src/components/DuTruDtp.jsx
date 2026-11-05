@@ -227,7 +227,7 @@ export default function KhoDTP() {
                         <td className="px-2 py-1.5">{r.p0.ten}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{fmt1(r.rd * 7)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{fmtN(ss)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{files.web ? fmtN(tt) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums font-bold">{files.web ? fmtN(tt) : <span className="text-gray-300 font-normal">—</span>}</td>
                         <td className={`px-2 py-1.5 text-right tabular-nums ${files.web ? tone(tt - ss) : ''}`}>{files.web ? signN(tt - ss) : <span className="text-gray-300">—</span>}</td>
                         <td className={`px-2 py-1.5 text-right tabular-nums ${r.weeks < settings.Ld / 7 ? 'text-red-600 font-semibold' : r.weeks > 8 ? 'text-amber-700 font-semibold' : ''}`}>{fmtW(r.weeks)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums"><b>{fmtN(r.deK)}</b>{r.kien && r.deK > 0 ? <div className="text-[11px] text-slate-600">{fmtN(r.deK / r.kien)} kiện</div> : null}</td>
@@ -254,7 +254,7 @@ function FragmentRows({ r, open, onToggle }) {
         <td className="px-2 py-1.5 font-mono text-xs">{r.codesC.join(', ') || <span className="text-gray-400 font-sans">chưa có</span>}</td>
         <td className="px-2 py-1.5">{r.ten}<span className="ml-1 text-xs text-gray-400">{r.dvt}</span>{!r.inWeb && <span className="ml-1 text-[11px] text-amber-700">không có trên Web</span>}{!r.inFast && <span className="ml-1 text-[11px] text-amber-700">không có trên Fast U</span>}</td>
         <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.ss)}</td>
-        <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.tt)}</td>
+        <td className="px-2 py-1.5 text-right tabular-nums font-bold">{fmtN(r.tt)}</td>
         <td className={`px-2 py-1.5 text-right tabular-nums ${tone(r.diff)}`}>{signN(r.diff)}</td>
       </tr>
       {open && (
@@ -263,7 +263,7 @@ function FragmentRows({ r, open, onToggle }) {
             <thead className="text-gray-500"><tr><th className="px-1.5 py-1 text-left">Lô</th><th className="px-1.5 py-1 text-left">Hạn dùng</th><th className="px-1.5 py-1 text-right">Sổ sách</th><th className="px-1.5 py-1 text-right">Thực tế</th><th className="px-1.5 py-1 text-right">Chênh lệch</th></tr></thead>
             <tbody>{r.lots.map(l => (
               <tr key={l.lo} className="border-t border-gray-200"><td className="px-1.5 py-1 font-mono">{l.lo || '—'}</td><td className="px-1.5 py-1">{l.hd ? String(l.hd).slice(0, 10).split('-').reverse().join('/') : ''}</td>
-                <td className="px-1.5 py-1 text-right tabular-nums">{fmtN(l.ss)}</td><td className="px-1.5 py-1 text-right tabular-nums">{fmtN(l.tt)}</td><td className={`px-1.5 py-1 text-right tabular-nums ${tone(l.tt - l.ss)}`}>{signN(l.tt - l.ss)}</td></tr>
+                <td className="px-1.5 py-1 text-right tabular-nums">{fmtN(l.ss)}</td><td className="px-1.5 py-1 text-right tabular-nums font-bold">{fmtN(l.tt)}</td><td className={`px-1.5 py-1 text-right tabular-nums ${tone(l.tt - l.ss)}`}>{signN(l.tt - l.ss)}</td></tr>
             ))}{!r.lots.length && <tr><td colSpan={5} className="px-1.5 py-1 text-gray-400">Hết hàng cả 2 bên.</td></tr>}</tbody>
           </table>
         </td></tr>
