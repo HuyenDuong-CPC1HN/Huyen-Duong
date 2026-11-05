@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import { Copy, Search } from 'lucide-react'
 import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, normText, parseNxtXml, weekKey } from '../utils/duTru'
 import { buildDtpCompare, parseMapCU, parseWebTon, remapFile, soGroups, ttByU } from '../utils/duTruDtp'
-import { readDuTruOrder, readDuTruSettings, readMapCU, writeDuTruOrder, writeDuTruSettings, writeMapCU } from '../data/duTruStore'
+import { linkMaGoc, maGocGroups, readDuTruOrder, readDuTruSettings, readMaGoc, readMapCU, writeDuTruOrder, writeDuTruSettings, writeMaGoc, writeMapCU } from '../data/duTruStore'
 import { loadDuTruFiles, readDuTruFilesMeta, removeDuTruFile, saveDuTruFile } from '../data/duTruFiles'
 import { readQuyCach } from '../data/quyCachStore'
 import { AlertTag, JwPending, NumInput } from './DuTruParts'
@@ -49,6 +49,7 @@ function KhoSoSachThucTe({ cfg }) {
   const [msg, setMsg] = useState(() => Object.fromEntries(Object.keys(readDuTruFilesMeta(BR)).map(k => [k, { busy: 'Đang mở số liệu đã lưu…' }])))
   const [mapSaved, setMap] = useState(() => (cfg.useMap ? readMapCU() : null))
   const [settings, setSettings] = useState(() => readDuTruSettings(BR))
+  const [maGoc, setMaGoc] = useState(() => readMaGoc())
   const [orders, setOrders] = useState({})
   const [view, setView] = useState('diff')
   const [filter, setFilter] = useState('lech')
@@ -98,8 +99,8 @@ function KhoSoSachThucTe({ cfg }) {
   const webF = useMemo(() => (files.web && files.web.data.some(d => khoSel.includes(d.kho)) ? { ...files.web, data: files.web.data.filter(d => khoSel.includes(d.kho)) } : files.web || null), [files.web, khoSel])
   // Kho SO: cùng hệ mã C nhưng 1 sản phẩm có thể mang 2 mã (sổ sách mã J / W, Web mã nhận điều) → gom nhóm trước khi so.
   // Nhóm ghép tay: của Kho SO + các nhóm anh đã ghép ở Kho C.
-  const so = useMemo(() => (!cfg.useMap && fastF ? soGroups(fastF, webF, [...readDuTruSettings('C').manual, ...(settings.manual || [])], settings.jwAlone || []) : null),
-    [cfg.useMap, fastF, webF, settings.manual, settings.jwAlone])
+  const so = useMemo(() => (!cfg.useMap && fastF ? soGroups(fastF, webF, [...readDuTruSettings('C').manual, ...maGocGroups(maGoc), ...(settings.manual || [])], settings.jwAlone || []) : null),
+    [cfg.useMap, fastF, webF, settings.manual, settings.jwAlone, maGoc])
   const map = useMemo(() => (cfg.useMap ? mapSaved : so ? { rows: so.map } : null), [cfg.useMap, mapSaved, so])
   // Kho SO: file sổ sách quy về mã đại diện của nhóm (Web quy qua bảng map như Kho DTP)
   const fastG = useMemo(() => (so ? remapFile(fastF, so.rep, so.pool) : fastF), [so, fastF])
@@ -213,13 +214,9 @@ function KhoSoSachThucTe({ cfg }) {
               {!files.web ? <div className="text-sm text-gray-500">Tải file <b>Tồn thực tế Web</b> ở mục 1 để so với tồn sổ sách.</div> : (
                 <>
                   {so && <JwPending rows={so.pending} model={so.pool}
-                    onLink={(jw, t) => save({ manual: [...(settings.manual || []), [t, jw]] })}
+                    onLink={(jw, t) => setMaGoc(writeMaGoc(linkMaGoc(readMaGoc(), jw, t)))}
                     onAlone={(ma, on) => save({ jwAlone: on ? [...new Set([...(settings.jwAlone || []), ma])] : (settings.jwAlone || []).filter(c => c !== ma) })} />}
-                  {so && (settings.manual || []).length > 0 && (
-                    <div className="text-xs text-gray-500 flex flex-wrap items-center gap-1.5">Đã ghép ở {cfg.name}:
-                      {settings.manual.map(g => <button key={g.join(',')} type="button" title="Bỏ ghép" onClick={() => save({ manual: settings.manual.filter(x => x.join(',') !== g.join(',')) })} className="px-1.5 py-0.5 rounded-full border border-gray-200 bg-white font-mono">{g.join(' + ')} ×</button>)}
-                    </div>
-                  )}
+                  {so && <div className="text-xs text-gray-500">Mã đã ghép được lưu ở <b>Bảng mã quy đổi Kho C</b> (nút cùng hàng với Kho C / DTP / SO), dùng chung cho Kho C và Kho SO; sửa / bỏ ghép ở đó.</div>}
                   <div className="flex flex-wrap items-center gap-1.5">
                     {DIFF_FILTERS.map(([k, l, f]) => (
                       <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)} className={`sheet-tab-action ${filter === k ? 'is-primary' : ''}`}>{l} ({fmtN((cmp?.rows || []).filter(f).length)})</button>

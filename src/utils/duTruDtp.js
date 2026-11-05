@@ -4,7 +4,7 @@
 // - File "Tồn thực tế Web" (.xlsx, mã C ở cột "Mã BFO") — tồn cập nhật tức thời.
 // - Bảng quy đổi mã C ↔ U (.xlsx): Mã SP C · Tên sản phẩm · Đơn vị · Số lượng · Quy đổi U · Mã SP U · Đơn vị U.
 // So 2 tồn theo mã U: chênh lệch = tồn thực tế − tồn sổ sách. Dự trù dùng tồn thực tế.
-import { buildDuTruModel, isJW, jwCandidates, normText } from './duTru'
+import { buildDuTruModel, isJW, jwCandidates, normDvt, normText } from './duTru'
 
 const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(n) ? n : 0 }
 const up = v => String(v ?? '').trim().toUpperCase()
@@ -123,7 +123,7 @@ export function soGroups(fast, web, manual = [], jwAlone = []) {
   const union = (a, b) => { if (parent.has(a) && parent.has(b)) parent.set(find(a), find(b)) }
   const byName = new Map()
   for (const p of Object.values(pool.prod)) {
-    const k = `${normText(p.ten)}|${normText(p.dvt)}`
+    const k = `${normText(p.ten)}|${normDvt(p.dvt)}`
     if (byName.has(k)) union(p.ma, byName.get(k)); else byName.set(k, p.ma)
   }
   for (const g of manual) for (let i = 1; i < g.length; i++) union(g[0], g[i])
@@ -149,3 +149,17 @@ export function soGroups(fast, web, manual = [], jwAlone = []) {
 }
 // File sổ sách quy về mã đại diện (để dự trù theo nhóm sản phẩm)
 export const remapFile = (f, rep, pool) => (f ? { ...f, data: f.data.map(d => { const r = rep.get(d.ma) || d.ma; return r === d.ma ? d : { ...d, ma: r, ten: pool.prod[r]?.ten || d.ten } }) } : f)
+
+// File: dòng tiêu đề có "Mã gốc" và "Mã phụ" (thứ tự bất kỳ); không có tiêu đề thì cột 1 = mã gốc, cột 2 = mã phụ.
+export function parseMaGocRows(rows) {
+  const hi = rows.findIndex(r => r.some(v => normText(v) === 'ma goc') && r.some(v => normText(v) === 'ma phu'))
+  const iG = hi >= 0 ? rows[hi].findIndex(v => normText(v) === 'ma goc') : 0
+  const iP = hi >= 0 ? rows[hi].findIndex(v => normText(v) === 'ma phu') : 1
+  const pairs = []
+  for (const r of rows.slice(hi + 1)) {
+    const goc = up(r[iG])
+    for (const phu of String(r[iP] ?? '').split(/[\s,;]+/).map(up).filter(Boolean)) if (goc && phu !== goc) pairs.push([phu, goc])
+  }
+  return pairs
+}
+

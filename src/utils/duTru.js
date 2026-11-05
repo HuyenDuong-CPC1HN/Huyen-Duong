@@ -9,6 +9,9 @@ export const SEA_MAX = 1.5
 const DAY = 86400000
 const MONTH_DAYS = 30.44
 
+// ĐVT cùng nghĩa ghi khác nhau giữa các mã (TUBE / TUYP) coi là 1 đơn vị khi so, gộp mã
+const DVT_ALIAS = { tube: 'tuyp' }
+export const normDvt = s => { const t = normText(s); return DVT_ALIAS[t] || t }
 export const normText = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/\s+/g, ' ').trim()
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 const pad2 = n => String(n).padStart(2, '0')
@@ -125,7 +128,7 @@ export function groupsOf(model, settings) {
   const by = {}
   for (const p of Object.values(model.prod)) {
     if (!rowsOf(model, kho, p.ma).length) continue
-    ;(by[`${normText(p.ten)}|${normText(p.dvt)}`] ||= []).push(p.ma)
+    ;(by[`${normText(p.ten)}|${normDvt(p.dvt)}`] ||= []).push(p.ma)
   }
   const auto = Object.entries(by).filter(([, v]) => v.length > 1).map(([key, codes]) => ({ key, codes: codes.sort(), auto: true }))
   const manual = (settings.manual || []).map(codes => ({ key: `manual:${codes.join(',')}`, codes: codes.filter(c => model.prod[c]), auto: false })).filter(g => g.codes.length > 1)
@@ -163,10 +166,10 @@ export function jwCandidates(model, settings, ma, limit = 3) {
   if (!model.prod[ma]) return []
   const kho = new Set(settings.kho)
   const a = nameTokens(model, ma)
-  const dvt = normText(model.prod[ma].dvt)
+  const dvt = normDvt(model.prod[ma].dvt)
   const out = []
   for (const q of Object.values(model.prod)) {
-    if (isJW(q.ma) || normText(q.dvt) !== dvt) continue
+    if (isJW(q.ma) || normDvt(q.dvt) !== dvt) continue
     const b = nameTokens(model, q.ma)
     if (!a.first || b.first !== a.first) continue
     const same = [...a.set].filter(w => b.set.has(w)).length

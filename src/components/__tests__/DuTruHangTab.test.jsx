@@ -182,3 +182,27 @@ describe('Dự trù hàng (Kho SO)', () => {
     expect(JSON.parse(store.values.get('dutru_settings_SO')).khoSel).toEqual(['020105'])
   })
 })
+
+describe('Bảng mã quy đổi Kho C', () => {
+  it('thêm tay mã phụ → mã gốc, bỏ được; lưu chung (Kho C / Kho SO đọc cùng bảng)', async () => {
+    render(<DuTruHangTab />)
+    fireEvent.click(screen.getByRole('tab', { name: /Bảng mã quy đổi Kho C/ }))
+    fireEvent.change(await screen.findByLabelText('Mã gốc'), { target: { value: 'z00314' } })
+    fireEvent.change(screen.getByLabelText('Mã phụ'), { target: { value: 'J00690, J00700' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm' }))
+    expect(JSON.parse(store.values.get('dutru_ma_goc')).map).toEqual({ J00690: 'Z00314', J00700: 'Z00314' })
+    const table = screen.getByRole('region', { name: 'Bảng mã quy đổi Kho C' })
+    expect(within(table).getByText('Z00314')).toBeInTheDocument()
+    fireEvent.click(within(table).getByLabelText('Bỏ quy đổi J00700'))
+    expect(JSON.parse(store.values.get('dutru_ma_goc')).map).toEqual({ J00690: 'Z00314' })
+  })
+
+  it('Kho C: cặp trong bảng quy đổi được gộp khi dự trù, đặt bằng mã gốc', async () => {
+    store.values.set('dutru_ma_goc', JSON.stringify({ map: { A00003: 'Z00001' } }))
+    const plan = await loadMain()
+    const z = within(plan).getByText('Zinc - Hộp 10 vỉ').closest('tr')
+    expect(z).toHaveTextContent('Z00001')
+    expect(z).toHaveTextContent('gộp 2 mã')
+    expect(within(plan).queryByText('Amoxicillin 500mg')).not.toBeInTheDocument() // A00003 đã gộp vào Z00001
+  })
+})

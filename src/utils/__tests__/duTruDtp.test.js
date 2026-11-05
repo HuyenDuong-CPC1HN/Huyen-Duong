@@ -88,3 +88,33 @@ describe('Kho SO — 1 sản phẩm 2 mã (sổ sách mã J / W, Web mã nhận 
     expect(soGroups(fast, web, [], ['J00001']).pending).toEqual([]) // "không phải hàng 2 mã"
   })
 })
+
+describe('Kho SO — ĐVT TUBE / TUYP là 1 đơn vị', () => {
+  it('cùng tên, 1 mã ghi TUBE 1 mã ghi TUYP vẫn tự gom; mã J / W tên khác gợi ý đúng nhóm', () => {
+    const fast = parseNxtXml(nxtXml('01/10/2026', '05/11/2026', [['J00744', 'Kem F - H1 tuýp 30g', '020105', 'TUBE', 'L1', '2028-05-20', 600, 0, 0, 600]]))
+    const web = parseWebTon([
+      ['STT', 'Mã BFO', 'Tên sản phẩm', 'Số lô', 'Hạn dùng', 'Kho', 'Lượng nhập', 'Lượng xuất', 'Lượng tồn', 'ĐVT'],
+      [1, 'A01706', 'Kem F - Hộp 1 tuýp 30g', 'L0', '20/05/28', '020105', 0, 8, -8, 'TUYP'],
+      [2, 'A01840', 'Kem F - Hộp 1 tuýp 30g', 'L1', '20/05/28', '020105', 600, 26, 574, 'TUBE'],
+    ])
+    const g = soGroups(fast, web)
+    expect(g.rep.get('A01706')).toBe(g.rep.get('A01840'))
+    expect(g.pending[0].cands.map(c => c.ma)).toContain(g.rep.get('A01840'))
+    const g2 = soGroups(fast, web, [[g.rep.get('A01840'), 'J00744']])
+    const row = buildDtpCompare(remapFile(fast, g2.rep, g2.pool), web, g2.map).rows
+    expect(row).toHaveLength(1)
+    expect(row[0]).toMatchObject({ ss: 600, tt: 566, diff: -34 })
+  })
+})
+
+describe('Bảng mã quy đổi Kho C (mã phụ → mã gốc)', () => {
+  it('đọc file 2 cột Mã gốc / Mã phụ (nhiều mã phụ 1 ô); thêm cặp nối tiếp về đúng mã gốc; ra nhóm để gộp', async () => {
+    const { parseMaGocRows } = await import('../duTruDtp')
+    const { linkMaGoc, maGocGroups } = await import('../../data/duTruStore')
+    expect(parseMaGocRows([['Mã phụ', 'Mã gốc'], ['J00690', 'Z00314'], ['J00745, J00746', 'K00140']])).toEqual([['J00690', 'Z00314'], ['J00745', 'K00140'], ['J00746', 'K00140']])
+    let m = linkMaGoc({}, 'J00690', 'Z00314')
+    m = linkMaGoc(m, 'W00001', 'J00690') // mã gốc khai là mã phụ → quy tiếp về Z00314
+    expect(m).toEqual({ J00690: 'Z00314', W00001: 'Z00314' })
+    expect(maGocGroups(m)).toEqual([['Z00314', 'J00690', 'W00001']])
+  })
+})

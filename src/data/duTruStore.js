@@ -54,3 +54,27 @@ export function writeMapCU(name, rows, at = new Date().toISOString()) {
   opsStore.setItem(MAP_KEY, JSON.stringify({ name, at, rows: rows.map(m => [m.c, m.ten, m.dvt, m.k, m.u, m.dvtU]) }))
   return { name, at, rows }
 }
+
+// Bảng mã quy đổi Kho C: 1 mặt hàng nhiều mã → { [mã phụ]: mã gốc } (mã gốc thường là mã A–Z, không bắt đầu J / W).
+// Dùng chung cho Kho C (gộp mã khi dự trù) và Kho SO (gom mã trước khi so tồn sổ sách / thực tế).
+const MA_GOC_KEY = 'dutru_ma_goc'
+export function readMaGoc() {
+  const v = readJson(MA_GOC_KEY, {})
+  return v.map && typeof v.map === 'object' ? v.map : {}
+}
+export function writeMaGoc(map) { opsStore.setItem(MA_GOC_KEY, JSON.stringify({ map, at: new Date().toISOString() })); return map }
+// Thêm 1 cặp: mã gốc đang là mã phụ của mã khác thì quy tiếp về mã gốc đó; các mã đang trỏ về mã phụ này cũng trỏ theo.
+export function linkMaGoc(map, phu, goc) {
+  const root = map[goc] || goc
+  if (!phu || !root || phu === root) return map
+  const next = { ...map, [phu]: root }
+  for (const [k, v] of Object.entries(next)) if (v === phu) next[k] = root
+  delete next[root]
+  return next
+}
+// Các nhóm [mã gốc, …mã phụ] để đưa vào gộp mã (dạng settings.manual)
+export function maGocGroups(map) {
+  const g = {}
+  for (const [phu, goc] of Object.entries(map || {})) (g[goc] ||= []).push(phu)
+  return Object.entries(g).map(([goc, phus]) => [goc, ...phus.sort()])
+}

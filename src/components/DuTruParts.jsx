@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
-import { analyseItem, fmt1, fmt2, fmtDmy, fmtN, groupOn, groupOrder, groupsOf, isJW, normText } from '../utils/duTru'
+import { analyseItem, fmt1, fmt2, fmtDmy, fmtN, groupOn, groupOrder, groupsOf, isJW, normDvt } from '../utils/duTru'
 
 // Các phần của tab "Dự trù hàng": ô tải file, chọn kho, mã cùng sản phẩm, chi tiết 1 mã.
 const fmtHd = s => (s ? String(s).slice(0, 10).split('-').reverse().join('/') : '')
@@ -116,7 +116,7 @@ export function JwLinkBox({ r, model, settings, onLink, onAlone }) {
     if (!t) { setMsg('Chọn hoặc gõ mã nhận điều.'); return }
     if (!model.prod[t]) { setMsg(`Không thấy mã ${t} trong file.`); return }
     if (isJW(t)) { setMsg(`${t} cũng là mã J / W; cần mã nhận điều.`); return }
-    if (normText(model.prod[t].dvt) !== normText(r.p0.dvt)) { setMsg(`Không gộp được: khác đơn vị tính (${r.p0.dvt} / ${model.prod[t].dvt}), cộng số lượng sẽ sai.`); return }
+    if (normDvt(model.prod[t].dvt) !== normDvt(r.p0.dvt)) { setMsg(`Không gộp được: khác đơn vị tính (${r.p0.dvt} / ${model.prod[t].dvt}), cộng số lượng sẽ sai.`); return }
     onLink(r.order, t)
   }
   return (
@@ -185,7 +185,7 @@ export function MergeGroups({ model, settings, P, jwRows, onSetMerge, onAddManua
     const bad = codes.filter(c => !model.prod[c])
     if (codes.length < 2) { setMsg('Nhập ít nhất 2 mã vật tư.'); return }
     if (bad.length) { setMsg(`Không thấy mã ${bad.join(', ')} trong file.`); return }
-    if (new Set(codes.map(c => (model.prod[c].dvt || '').toLowerCase())).size > 1) { setMsg(`Không gộp được: khác đơn vị tính (${codes.map(c => model.prod[c].dvt).join(' / ')}), cộng số lượng sẽ sai.`); return }
+    if (new Set(codes.map(c => normDvt(model.prod[c].dvt))).size > 1) { setMsg(`Không gộp được: khác đơn vị tính (${codes.map(c => model.prod[c].dvt).join(' / ')}), cộng số lượng sẽ sai.`); return }
     const taken = codes.filter(c => groups.some(g => groupOn(settings, g) && g.codes.includes(c)))
     if (taken.length) { setMsg(`Mã ${taken.join(', ')} đã nằm trong nhóm khác; bỏ gộp nhóm đó trước.`); return }
     onAddManual(codes); setText(''); setMsg(`Đã gộp ${codes.join(', ')}.`)

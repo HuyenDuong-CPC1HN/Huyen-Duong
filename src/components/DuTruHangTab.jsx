@@ -1,17 +1,18 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Copy, Search } from 'lucide-react'
 import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, groupOn, groupOrder, groupsOf, normText, parseNxtXml, weekKey } from '../utils/duTru'
-import { readDuTruOrder, readDuTruSettings, writeDuTruOrder, writeDuTruSettings } from '../data/duTruStore'
+import { linkMaGoc, maGocGroups, readDuTruOrder, readDuTruSettings, readMaGoc, writeDuTruOrder, writeDuTruSettings, writeMaGoc } from '../data/duTruStore'
 import { addQuyCachProducts, readQuyCach } from '../data/quyCachStore'
 import { loadDuTruFiles, readDuTruFilesMeta, removeDuTruFile, saveDuTruFile } from '../data/duTruFiles'
 import { AlertTag, DetailPanel, FileSlots, KhoPicker, MergeGroups, NumInput } from './DuTruParts'
 
 const KhoDTP = lazy(() => import('./DuTruDtp'))
+const DuTruMaGoc = lazy(() => import('./DuTruMaGoc'))
 const KhoSO = lazy(() => import('./DuTruDtp').then(m => ({ default: m.KhoSO })))
 // Tab "Dự trù hàng": mỗi kho (C / DTP / SO) dự trù riêng, quy tắc riêng. Hiện làm Kho C: tải file nhập – xuất – tồn
 // (đọc ngay trên trình duyệt), cộng chung các mã kho được chọn, gộp mã cùng sản phẩm, đề xuất đơn chính thứ 4–5, đơn bổ
 // sung thứ 6, cảnh báo biến động, danh sách nhập lên web công ty. Chỉ lưu lựa chọn và số chốt, không lưu file.
-const BRANCHES = [['C', 'Kho C', 'Đang dùng'], ['DTP', 'Kho DTP', 'Fast U ↔ Web'], ['SO', 'Kho SO', 'Sổ sách ↔ Web']]
+const BRANCHES = [['C', 'Kho C', 'Đang dùng'], ['DTP', 'Kho DTP', 'Fast U ↔ Web'], ['SO', 'Kho SO', 'Sổ sách ↔ Web'], ['MA', 'Bảng mã quy đổi Kho C', 'Mã phụ → mã gốc']]
 const LV_ORDER = { crit: 0, warn: 1, season: 2, info: 3 }
 const CHIPS = [
   { k: 'order', l: 'Mã cần đặt tuần này', cls: 'border-l-[#1e3a5f]', f: r => r.de > 0 },
@@ -45,7 +46,8 @@ function KhoC() {
     }, err => { if (live) setSlotMsg(m => Object.fromEntries(Object.keys(m).map(k => [k, m[k].busy ? { err: `Không mở được số liệu đã lưu: ${err.message}` } : m[k]]))) })
     return () => { live = false }
   }, [])
-  const [settings, setSettings] = useState(() => readDuTruSettings('C'))
+  const [settingsRaw, setSettings] = useState(() => readDuTruSettings('C'))
+  const [maGoc, setMaGoc] = useState(() => readMaGoc())
   const [orders, setOrders] = useState({})
   const [filter, setFilter] = useState('all')
   const [q, setQ] = useState('')
@@ -58,12 +60,22 @@ function KhoC() {
   const kien = useMemo(() => Object.fromEntries(Object.entries(quyCach).filter(([, v]) => v.kien > 0).map(([ma, v]) => [ma, v.kien])), [quyCach])
 
   const model = useMemo(() => buildDuTruModel(files), [files])
+  // Gộp mã: nhóm gộp tay của Kho C + Bảng mã quy đổi Kho C (dùng chung với Kho SO). Nhóm từ bảng quy đổi có mã nằm
+  // trong nhóm tự tìm (trùng tên + ĐVT) thì kéo cả nhóm đó vào; nhóm đã có trong gộp tay thì bỏ qua (không lặp).
+  const settings = useMemo(() => {
+    const extra = maGocGroups(maGoc)
+    if (!extra.length || !model) return settingsRaw
+    const auto = groupsOf(model, { ...settingsRaw, manual: [] })
+    const inManual = c => settingsRaw.manual.some(g => g.includes(c))
+    const add = extra.filter(g => !g.every(inManual)).map(g => [...new Set([...g, ...auto.filter(a => a.codes.some(c => g.includes(c))).flatMap(a => a.codes)])])
+    return add.length ? { ...settingsRaw, manual: [...settingsRaw.manual, ...add] } : settingsRaw
+  }, [settingsRaw, maGoc, model])
   const P = useMemo(() => ({ Ld: settings.Ld, ss: settings.ss, useSea: settings.useSea && !!model?.hasLY }), [settings.Ld, settings.ss, settings.useSea, model])
   const week = model ? weekKey(model.to) : ''
   const order = useMemo(() => orders[week] || (week ? readDuTruOrder(week, 'C') : EMPTY_ORDER), [orders, week])
   const rows = useMemo(() => (model ? computePlan(model, settings, P, order.chot, kien) : []), [model, settings, P, order.chot, kien])
 
-  const save = patch => { const next = { ...settings, ...patch }; setSettings(next); writeDuTruSettings(next, 'C') }
+  const save = patch => { const next = { ...settingsRaw, ...patch }; setSettings(next); writeDuTruSettings(next, 'C') }
   const saveOrder = patch => { const next = { ...order, ...patch }; setOrders(o => ({ ...o, [week]: next })); writeDuTruOrder(week, next, 'C') }
   // Quy mã J / W về mã nhận điều: gộp tay [mã nhận điều (+ các mã đang gộp cùng nó), mã J / W], đặt bằng mã nhận điều
   const linkJw = (jw, target) => {
@@ -71,12 +83,13 @@ function KhoC() {
     const codes = [...new Set([...(g ? g.codes : [target]), jw])].sort()
     const ord = g ? groupOrder(model, settings, g) : target
     save({
-      manual: [...settings.manual.filter(c => !g || `manual:${c.join(',')}` !== g.key), codes],
-      merge: { ...settings.merge, [`manual:${codes.join(',')}`]: { on: true, order: ord } },
+      manual: [...settingsRaw.manual.filter(c => !g || `manual:${c.join(',')}` !== g.key), codes],
+      merge: { ...settingsRaw.merge, [`manual:${codes.join(',')}`]: { on: true, order: ord } },
     })
+    setMaGoc(writeMaGoc(linkMaGoc(readMaGoc(), jw, ord))) // ghi vào Bảng mã quy đổi Kho C (Kho SO dùng chung)
     if (sel) setSel(ord)
   }
-  const setAlone = (ma, on) => save({ jwAlone: on ? [...new Set([...settings.jwAlone, ma])] : settings.jwAlone.filter(c => c !== ma) })
+  const setAlone = (ma, on) => save({ jwAlone: on ? [...new Set([...settingsRaw.jwAlone, ma])] : settingsRaw.jwAlone.filter(c => c !== ma) })
   const chotOf = r => order.chot[r.id] ?? r.deK
   const addOf = r => order.add[r.id] ?? r.addDeK
   const kienTxt = (r, n) => (r.kien && n > 0 ? `${fmt1(n / r.kien)} kiện` : '')
@@ -152,8 +165,12 @@ function KhoC() {
           <Box open={false} title="3 · Mã cùng sản phẩm" sub={<>{rows.filter(r => r.codes.length > 1).length} nhóm đang gộp{jwRows.length > 0 && <b className="ml-2 text-amber-700">· {jwRows.length} mã J / W chưa quy về mã nhận điều</b>}</>}>
             <MergeGroups model={model} settings={settings} P={P} jwRows={jwRows} onLinkJw={linkJw} onAlone={setAlone}
               onSetMerge={(key, patch) => save({ merge: { ...settings.merge, [key]: { ...(settings.merge[key] || {}), ...patch } } })}
-              onAddManual={codes => save({ manual: [...settings.manual, codes] })}
-              onDelManual={codes => save({ manual: settings.manual.filter(c => c.join(',') !== codes.join(',')) })} />
+              onAddManual={codes => save({ manual: [...settingsRaw.manual, codes] })}
+              onDelManual={codes => {
+                save({ manual: settingsRaw.manual.filter(c => c.join(',') !== codes.join(',')) })
+                const m = readMaGoc()
+                if (codes.some(c => m[c])) setMaGoc(writeMaGoc(Object.fromEntries(Object.entries(m).filter(([phu]) => !codes.includes(phu)))))
+              }} />
           </Box>
 
           <section className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-2" aria-label="Thông số dự trù">
@@ -351,7 +368,8 @@ export default function DuTruHangTab() {
         ))}
       </div>
       {branch === 'C' ? <KhoC /> : branch === 'DTP' ? <Suspense fallback={<div className="text-sm text-gray-500">Đang mở Kho DTP…</div>}><KhoDTP /></Suspense>
-        : branch === 'SO' ? <Suspense fallback={<div className="text-sm text-gray-500">Đang mở Kho SO…</div>}><KhoSO /></Suspense> : (
+        : branch === 'SO' ? <Suspense fallback={<div className="text-sm text-gray-500">Đang mở Kho SO…</div>}><KhoSO /></Suspense>
+        : branch === 'MA' ? <Suspense fallback={<div className="text-sm text-gray-500">Đang mở…</div>}><DuTruMaGoc /></Suspense> : (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm text-gray-600 flex flex-col gap-2">
           <b>{BRANCHES.find(b => b[0] === branch)[1]}: chưa thiết kế.</b>
           <div>Mỗi kho dự trù riêng, quy tắc riêng. Để làm kho này, anh gửi em file mẫu nhập – xuất – tồn của kho, lịch đặt hàng và quy tắc riêng của kho.</div>
