@@ -7,10 +7,11 @@ import { loadDuTruFiles, readDuTruFilesMeta, removeDuTruFile, saveDuTruFile } fr
 import { AlertTag, DetailPanel, FileSlots, KhoPicker, MergeGroups, NumInput } from './DuTruParts'
 
 const KhoDTP = lazy(() => import('./DuTruDtp'))
+const KhoSO = lazy(() => import('./DuTruDtp').then(m => ({ default: m.KhoSO })))
 // Tab "Dự trù hàng": mỗi kho (C / DTP / SO) dự trù riêng, quy tắc riêng. Hiện làm Kho C: tải file nhập – xuất – tồn
 // (đọc ngay trên trình duyệt), cộng chung các mã kho được chọn, gộp mã cùng sản phẩm, đề xuất đơn chính thứ 4–5, đơn bổ
 // sung thứ 6, cảnh báo biến động, danh sách nhập lên web công ty. Chỉ lưu lựa chọn và số chốt, không lưu file.
-const BRANCHES = [['C', 'Kho C', 'Đang dùng'], ['DTP', 'Kho DTP', 'Fast U ↔ Web'], ['SO', 'Kho SO', 'Chưa thiết kế']]
+const BRANCHES = [['C', 'Kho C', 'Đang dùng'], ['DTP', 'Kho DTP', 'Fast U ↔ Web'], ['SO', 'Kho SO', 'Sổ sách ↔ Web']]
 const LV_ORDER = { crit: 0, warn: 1, season: 2, info: 3 }
 const CHIPS = [
   { k: 'order', l: 'Mã cần đặt tuần này', cls: 'border-l-[#1e3a5f]', f: r => r.de > 0 },
@@ -349,7 +350,8 @@ export default function DuTruHangTab() {
           </button>
         ))}
       </div>
-      {branch === 'C' ? <KhoC /> : branch === 'DTP' ? <Suspense fallback={<div className="text-sm text-gray-500">Đang mở Kho DTP…</div>}><KhoDTP /></Suspense> : (
+      {branch === 'C' ? <KhoC /> : branch === 'DTP' ? <Suspense fallback={<div className="text-sm text-gray-500">Đang mở Kho DTP…</div>}><KhoDTP /></Suspense>
+        : branch === 'SO' ? <Suspense fallback={<div className="text-sm text-gray-500">Đang mở Kho SO…</div>}><KhoSO /></Suspense> : (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm text-gray-600 flex flex-col gap-2">
           <b>{BRANCHES.find(b => b[0] === branch)[1]}: chưa thiết kế.</b>
           <div>Mỗi kho dự trù riêng, quy tắc riêng. Để làm kho này, anh gửi em file mẫu nhập – xuất – tồn của kho, lịch đặt hàng và quy tắc riêng của kho.</div>

@@ -160,3 +160,25 @@ describe('Dự trù hàng (Kho DTP)', () => {
     expect(within(plan).getByLabelText('Chốt đặt TH00001')).toHaveValue(String(Math.ceil(1500 / 89 * 15 - 120)))
   })
 })
+
+describe('Dự trù hàng (Kho SO)', () => {
+  it('cùng mã C, không cần bảng quy đổi; chọn mã kho tính; chênh lệch = thực tế Web − sổ sách', async () => {
+    const XLSX = await import('xlsx')
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['STT', 'Mã BFO', 'Tên sản phẩm', 'Số lô', 'Hạn dùng', 'Kho', 'Lượng nhập', 'Lượng xuất', 'Lượng tồn', 'ĐVT'],
+      [1, 'Z00314', 'Zentokid omega3', 'L1', '20/05/28', '020105', 900, 600, 300, 'TUI'], [2, 'Z00314', 'Zentokid omega3', 'L1', '20/05/28', '020106', 100, 0, 100, 'TUI']]), 'Sheet1')
+    render(<DuTruHangTab />)
+    fireEvent.click(screen.getByRole('tab', { name: /Kho SO/ }))
+    expect(await screen.findByLabelText('Tải file Tồn sổ sách phần mềm')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Tải file Bảng quy đổi mã C ↔ U')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Tải file Tồn sổ sách phần mềm'), { target: { files: [file('so.xml', nxtXml('01/08/2026', '28/10/2026', [
+      ['Z00314', 'Zentokid omega3', '020105', 'TUI', 'L1', '2028-05-20', 1000, 0, 600, 400], ['Z00314', 'Zentokid omega3', '020106', 'TUI', 'L1', '2028-05-20', 100, 0, 0, 100],
+    ]))] } })
+    fireEvent.change(screen.getByLabelText('Tải file Tồn thực tế Web'), { target: { files: [new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], 'web.xlsx')] } })
+    const diff = await screen.findByRole('region', { name: 'Chênh lệch tồn Kho SO' })
+    expect((await within(diff).findByText('Z00314')).closest('tr')).toHaveTextContent('500400−100') // 2 kho: SS 500, TT 400
+    fireEvent.click(screen.getByLabelText('Tính kho 020106'))
+    expect(within(diff).getByText('Z00314').closest('tr')).toHaveTextContent('400300−100') // chỉ 020105
+    expect(JSON.parse(store.values.get('dutru_settings_SO')).khoSel).toEqual(['020105'])
+  })
+})
