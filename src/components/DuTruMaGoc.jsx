@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import { Copy, Search } from 'lucide-react'
 import { fmtN, isJW, normText } from '../utils/duTru'
 import { parseMaGocRows } from '../utils/duTruDtp'
-import { linkMaGoc, readMaGoc, writeMaGoc } from '../data/duTruStore'
+import { linkMaGoc, readMaGoc, readMaGocNames, writeMaGoc } from '../data/duTruStore'
 import { readQuyCach } from '../data/quyCachStore'
 
 // Bảng mã quy đổi Kho C: cùng 1 mặt hàng nhưng nhiều mã → quy mã phụ về mã gốc (mã gốc thường là mã A–Z, không
@@ -23,7 +23,8 @@ export default function DuTruMaGoc() {
   const [add, setAdd] = useState({ goc: '', phu: '' })
   const [msg, setMsg] = useState('')
   const save = next => setMap(writeMaGoc(next))
-  const ten = c => names[c]?.ten || ''
+  const [saved] = useState(() => readMaGocNames())
+  const ten = c => saved[c] || names[c]?.ten || ''
 
   const groups = {}
   for (const [phu, goc] of Object.entries(map)) (groups[goc] ||= []).push(phu)

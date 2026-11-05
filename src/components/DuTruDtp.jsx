@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import { Copy, Search } from 'lucide-react'
 import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, normText, parseNxtXml, weekKey } from '../utils/duTru'
 import { buildDtpCompare, parseMapCU, parseWebTon, remapFile, soGroups, ttByU } from '../utils/duTruDtp'
-import { linkMaGoc, maGocGroups, readDuTruOrder, readDuTruSettings, readMaGoc, readMapCU, writeDuTruOrder, writeDuTruSettings, writeMaGoc, writeMapCU } from '../data/duTruStore'
+import { fillMaGocNames, linkMaGoc, maGocGroups, readDuTruOrder, readDuTruSettings, readMaGoc, readMapCU, writeDuTruOrder, writeDuTruSettings, writeMaGoc, writeMapCU } from '../data/duTruStore'
 import { loadDuTruFiles, readDuTruFilesMeta, removeDuTruFile, saveDuTruFile } from '../data/duTruFiles'
 import { readQuyCach } from '../data/quyCachStore'
 import { AlertTag, JwPending, NumInput } from './DuTruParts'
@@ -102,6 +102,7 @@ function KhoSoSachThucTe({ cfg }) {
   const so = useMemo(() => (!cfg.useMap && fastF ? soGroups(fastF, webF, [...readDuTruSettings('C').manual, ...maGocGroups(maGoc), ...(settings.manual || [])], settings.jwAlone || []) : null),
     [cfg.useMap, fastF, webF, settings.manual, settings.jwAlone, maGoc])
   const map = useMemo(() => (cfg.useMap ? mapSaved : so ? { rows: so.map } : null), [cfg.useMap, mapSaved, so])
+  useEffect(() => { if (so) fillMaGocNames(c => so.pool.prod[c]?.ten) }, [so]) // tên hàng cho Bảng mã quy đổi
   // Kho SO: file sổ sách quy về mã đại diện của nhóm (Web quy qua bảng map như Kho DTP)
   const fastG = useMemo(() => (so ? remapFile(fastF, so.rep, so.pool) : fastF), [so, fastF])
   const cmp = useMemo(() => (fastG && map ? buildDtpCompare(fastG, webF, map.rows) : null), [fastG, webF, map])

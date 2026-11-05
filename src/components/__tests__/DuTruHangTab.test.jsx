@@ -204,5 +204,11 @@ describe('Bảng mã quy đổi Kho C', () => {
     expect(z).toHaveTextContent('Z00001')
     expect(z).toHaveTextContent('gộp 2 mã')
     expect(within(plan).queryByText('Amoxicillin 500mg')).not.toBeInTheDocument() // A00003 đã gộp vào Z00001
+    // bảng mã quy đổi tự lưu tên hàng lấy từ file đã tải
+    expect(JSON.parse(store.values.get('dutru_ma_goc')).names).toMatchObject({ Z00001: 'Zinc - Hộp 10 vỉ', A00003: 'Amoxicillin 500mg' })
+    cleanup()
+    render(<DuTruHangTab />)
+    fireEvent.click(screen.getByRole('tab', { name: /Bảng mã quy đổi Kho C/ }))
+    expect(await screen.findByText('Zinc - Hộp 10 vỉ')).toBeInTheDocument()
   })
 })

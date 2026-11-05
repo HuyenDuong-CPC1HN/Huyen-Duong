@@ -62,7 +62,26 @@ export function readMaGoc() {
   const v = readJson(MA_GOC_KEY, {})
   return v.map && typeof v.map === 'object' ? v.map : {}
 }
-export function writeMaGoc(map) { opsStore.setItem(MA_GOC_KEY, JSON.stringify({ map, at: new Date().toISOString() })); return map }
+export function writeMaGoc(map) { opsStore.setItem(MA_GOC_KEY, JSON.stringify({ map, names: readMaGocNames(), at: new Date().toISOString() })); return map }
+// Tên hàng của các mã trong bảng (lấy từ file đã tải lúc ghép / mở tab) — mã Kho SO / Web không có ở tab Quy cách hàng hoá.
+export function readMaGocNames() {
+  const v = readJson(MA_GOC_KEY, {})
+  return v.names && typeof v.names === 'object' ? v.names : {}
+}
+// Thêm tên cho các mã đang có trong bảng mà chưa có tên. byCode: (mã) → tên hoặc ''. Không có gì mới thì không ghi.
+export function fillMaGocNames(byCode) {
+  const v = readJson(MA_GOC_KEY, {})
+  const map = v.map || {}
+  const names = { ...(v.names || {}) }
+  let n = 0
+  for (const c of new Set([...Object.keys(map), ...Object.values(map)])) {
+    if (names[c]) continue
+    const t = byCode(c)
+    if (t) { names[c] = t; n++ }
+  }
+  if (n) opsStore.setItem(MA_GOC_KEY, JSON.stringify({ ...v, map, names }))
+  return n
+}
 // Thêm 1 cặp: mã gốc đang là mã phụ của mã khác thì quy tiếp về mã gốc đó; các mã đang trỏ về mã phụ này cũng trỏ theo.
 export function linkMaGoc(map, phu, goc) {
   const root = map[goc] || goc

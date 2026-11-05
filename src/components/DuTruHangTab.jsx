@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Copy, Search } from 'lucide-react'
 import { buildDuTruModel, computePlan, fmt1, fmtDmy, fmtN, fmtW, groupOn, groupOrder, groupsOf, normText, parseNxtXml, weekKey } from '../utils/duTru'
-import { linkMaGoc, maGocGroups, readDuTruOrder, readDuTruSettings, readMaGoc, writeDuTruOrder, writeDuTruSettings, writeMaGoc } from '../data/duTruStore'
+import { fillMaGocNames, linkMaGoc, maGocGroups, readDuTruOrder, readDuTruSettings, readMaGoc, writeDuTruOrder, writeDuTruSettings, writeMaGoc } from '../data/duTruStore'
 import { addQuyCachProducts, readQuyCach } from '../data/quyCachStore'
 import { loadDuTruFiles, readDuTruFilesMeta, removeDuTruFile, saveDuTruFile } from '../data/duTruFiles'
 import { AlertTag, DetailPanel, FileSlots, KhoPicker, MergeGroups, NumInput } from './DuTruParts'
@@ -60,6 +60,7 @@ function KhoC() {
   const kien = useMemo(() => Object.fromEntries(Object.entries(quyCach).filter(([, v]) => v.kien > 0).map(([ma, v]) => [ma, v.kien])), [quyCach])
 
   const model = useMemo(() => buildDuTruModel(files), [files])
+  useEffect(() => { if (model) fillMaGocNames(c => model.prod[c]?.ten) }, [model, maGoc]) // tên hàng cho Bảng mã quy đổi
   // Gộp mã: nhóm gộp tay của Kho C + Bảng mã quy đổi Kho C (dùng chung với Kho SO). Nhóm từ bảng quy đổi có mã nằm
   // trong nhóm tự tìm (trùng tên + ĐVT) thì kéo cả nhóm đó vào; nhóm đã có trong gộp tay thì bỏ qua (không lặp).
   const settings = useMemo(() => {
