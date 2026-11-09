@@ -2,6 +2,8 @@
 // "Đơn sàn" và "Đơn truyền thống" của tab Tổng Đơn. Người dùng vẫn sửa tay được toàn bộ chữ này ở UI
 // (xem useWeekField trong TongDonTab.jsx), các hàm ở đây chỉ tạo giá trị khởi tạo/gợi ý.
 
+import { analyzeLateDeliveries } from '../utils/lateDeliveryAnalysis'
+
 export function pct(part, total) { return total ? Math.round((part / total) * 100 * 10) / 10 : 0 }
 function fmtPctSigned(v) { return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` }
 
@@ -77,10 +79,11 @@ function layHangStatus(layChuaLay) {
   return 'đã lấy đủ'
 }
 
-function buildReconNote(reconStats) {
+// lateOk: số đơn quá 48h nhưng vẫn đạt SLA vùng (nội miền 72h, liên miền 96h) — tính là đúng hạn, không tính trễ.
+function buildReconNote(reconStats, lateOk = 0) {
   if (!reconStats) return 'Chưa đủ dữ liệu đối soát Ngoại sàn theo Mã đơn cho tuần này.'
   const layChuaLay = reconStats.layChuaLay || 0
-  const treHanGiao = reconStats.treHanGiao || 0
+  const treHanGiao = Math.max(0, (reconStats.treHanGiao || 0) - lateOk)
   const chuaGiaoQuaHan = reconStats.chuaGiaoQuaHan || 0
   const daXuLyGiaoTong = (reconStats.dungHanGiao || 0) + treHanGiao + chuaGiaoQuaHan
   const chuaGiaoQuaHanPct = pct(chuaGiaoQuaHan, daXuLyGiaoTong)
@@ -88,7 +91,7 @@ function buildReconNote(reconStats) {
   const dongKienOk = (reconStats.dungHanDongKien || 0) + (reconStats.treDongKien || 0)
   const dungHan = reconStats.dungHanDongKien || 0
   const totalKien = dongKienOk + (reconStats.quaHanChuaDongKien || 0)
-  return `Khâu đóng kiện tại kho ${dungHan}/${totalKien} đúng hạn 24h — ${dongKienStatus(reconStats)} Khâu SPX lấy hàng ${layHangStatus(layChuaLay)}. Điểm nghẽn chính nằm ở khâu giao hàng cuối: trong ${daXuLyGiaoTong} đơn đã đủ thời gian đánh giá mốc 48h, có tới ${chuaGiaoQuaHan} đơn (${chuaGiaoQuaHanPct}%) chưa giao và đã quá hạn — thêm ${treHanGiao} đơn (${treHanGiaoPct}%) giao trễ hạn — cho thấy vấn đề tồn đọng chủ yếu phát sinh sau khi SPX đã lấy hàng, không phải khâu đóng gói hay lấy hàng đầu vào.`
+  return `Khâu đóng kiện tại kho ${dungHan}/${totalKien} đúng hạn 24h — ${dongKienStatus(reconStats)} Khâu SPX lấy hàng ${layHangStatus(layChuaLay)}. Điểm nghẽn chính nằm ở khâu giao hàng cuối: trong ${daXuLyGiaoTong} đơn đã đủ thời gian đánh giá mốc 48h, có tới ${chuaGiaoQuaHan} đơn (${chuaGiaoQuaHanPct}%) chưa giao và đã quá hạn — thêm ${treHanGiao} đơn (${treHanGiaoPct}%) giao trễ ${lateOk ? 'so với SLA vùng' : 'hạn'} — cho thấy vấn đề tồn đọng chủ yếu phát sinh sau khi SPX đã lấy hàng, không phải khâu đóng gói hay lấy hàng đầu vào.`
 }
 
 function donSanDvcVerdict(dvcImproved, dvcPrevPct, dvcCurPct) {
@@ -228,7 +231,9 @@ export function buildDonSanNarrative(current, previous, ngoaiSan) {
     reconStats,
   )
 
-  const reconNote = buildReconNote(reconStats)
+  // Có file SPX (tỉnh gửi / nhận) thì tách đơn quá 48h vẫn đạt SLA vùng ra khỏi số trễ — khớp bảng đối soát trong ảnh xuất.
+  const late = ngoaiSan?.spxRows && ngoaiSan?.data?.rows ? analyzeLateDeliveries(ngoaiSan.data.rows, ngoaiSan.spxRows) : null
+  const reconNote = buildReconNote(reconStats, late?.ok || 0)
 
   const donSanTotalCur = current.totalTMDT + ngoaiSanCurTotal
   const donSanTotalPrev = previous.totalTMDT + ngoaiSanPrevTotal
