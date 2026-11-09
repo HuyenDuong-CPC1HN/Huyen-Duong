@@ -46,7 +46,19 @@ function Legend({ segments }) {
   return <div className="tdx-legend">{segments.map(s => <span key={s.label}><b style={{ background: s.color }} />{s.label}</span>)}</div>
 }
 
-const Chip = ({ n, tone }) => <span className={`tdx-chip ${n > 0 ? tone : 'z'}`}>{fmtInt(n)}</span>
+const pctTxt = (n, total) => `${(total ? Math.round(n / total * 1000) / 10 : 0).toLocaleString('vi-VN')}%`
+const PctChip = ({ n, total, tone }) => <span className={`tdx-chip ${n > 0 ? tone : 'z'}`}>{fmtInt(n)}{n > 0 && <small> · {pctTxt(n, total)}</small>}</span>
+// 3 khâu đối soát (tỷ lệ % trên tổng đơn của khâu). Giao thành công: đơn quá 48h nhưng vẫn đạt SLA vùng (nội miền 72h,
+// liên miền 96h) tính vào Đúng hạn; cột Trễ chỉ còn đơn trễ thật.
+function reconRows(r, late) {
+  const okVung = late?.ok || 0
+  const rows = [
+    { k: 'A · Đóng kiện (≤24h)', ok: r.dungHanDongKien || 0, tre: r.treDongKien || 0, chua: r.quaHanChuaDongKien || 0 },
+    { k: 'B · SPX lấy hàng (≤24h)', ok: r.layTrong24h || 0, tre: (r.layTrong48h || 0) + (r.layTrong72h || 0) + (r.layQua72h || 0), chua: r.layChuaLay || 0 },
+    { k: late ? 'C · Giao thành công (theo SLA vùng)' : 'C · Giao thành công (≤48h)', ok: (r.dungHanGiao || 0) + okVung, tre: Math.max(0, (r.treHanGiao || 0) - okVung), chua: r.chuaGiaoQuaHan || 0 },
+  ]
+  return rows.map(x => ({ ...x, total: x.ok + x.tre + x.chua }))
+}
 
 function Verdict({ insights, verdict, plans }) {
   return (
@@ -98,33 +110,24 @@ export const TongDonExportDonSan = forwardRef(function TongDonExportDonSan({
             <>
               <table className="tdx-table">
                 <thead><tr><th>Khâu</th><th>Đúng hạn</th><th>Trễ</th><th>Chưa xong</th></tr></thead>
-                <tbody>
-                  <tr><td>A · Đóng kiện (≤24h)</td><td><Chip n={recon.dungHanDongKien} tone="ok" /></td><td><Chip n={recon.treDongKien} tone="warn" /></td><td><Chip n={recon.quaHanChuaDongKien} tone="bad" /></td></tr>
-                  <tr><td>B · SPX lấy hàng (≤24h)</td><td><Chip n={recon.layTrong24h} tone="ok" /></td><td><Chip n={(recon.layTrong48h || 0) + (recon.layTrong72h || 0) + (recon.layQua72h || 0)} tone="warn" /></td><td><Chip n={recon.layChuaLay} tone="bad" /></td></tr>
-                  <tr><td>C · Giao thành công (≤48h)</td><td><Chip n={recon.dungHanGiao} tone="ok" /></td><td><Chip n={recon.treHanGiao} tone="warn" /></td><td><Chip n={recon.chuaGiaoQuaHan} tone="bad" /></td></tr>
-                </tbody>
+                <tbody>{reconRows(recon, late).map(r => (
+                  <tr key={r.k}><td>{r.k}</td><td><PctChip n={r.ok} total={r.total} tone="ok" /></td><td><PctChip n={r.tre} total={r.total} tone="warn" /></td><td><PctChip n={r.chua} total={r.total} tone="bad" /></td></tr>
+                ))}</tbody>
               </table>
               {recon.khongCoDuLieuDongKien > 0 && <div className="tdx-mute">{fmtInt(recon.khongCoDuLieuDongKien)} đơn chưa có dữ liệu đóng kiện.</div>}
-              {late && late.total > 0 && (
-                <>
-                  <div className="tdx-split" aria-label={`${late.total} đơn giao quá 48h`}>
-                    {late.late > 0 && <i style={{ flex: late.late, background: 'var(--x-bad)' }}>{late.late} trễ</i>}
-                    {late.ok > 0 && <i style={{ flex: late.ok, background: 'var(--x-ok)' }}>{late.ok} vẫn đạt SLA vùng</i>}
-                    {late.unknown > 0 && <i style={{ flex: late.unknown, background: 'var(--x-mute)' }}>{late.unknown} chưa rõ</i>}
-                  </div>
-                  <div className="tdx-late">
-                    <div><h4>{late.late} đơn trễ</h4><ul>
-                      <li>SPX vận chuyển<b>{late.byStage.spx}</b></li>
-                      <li>Kho bàn giao (&gt;8h)<b>{late.byStage.banGiao}</b></li>
-                      <li>Đóng kiện trễ<b>{late.byStage.dongKien}</b></li>
-                      <li>Nội tỉnh · Nội miền · Liên miền<b>{late.lateByZone.noiTinh} · {late.lateByZone.noiMien} · {late.lateByZone.lienMien}</b></li>
-                    </ul></div>
-                    <div><h4>{late.ok} đơn đạt SLA vùng</h4><ul>
-                      <li>Nội miền, giao trong 72h<b>{late.okByZone.noiMien}</b></li>
-                      <li>Liên miền, giao trong 96h<b>{late.okByZone.lienMien}</b></li>
-                    </ul></div>
-                  </div>
-                </>
+              {late && late.late > 0 && (
+                <div className="tdx-late">
+                  <div><h4 className="tdx-bad">{late.late} đơn trễ · theo chặng</h4><ul>
+                    <li>SPX vận chuyển<b>{late.byStage.spx} · {pctTxt(late.byStage.spx, late.late)}</b></li>
+                    <li>Kho bàn giao (&gt;8h)<b>{late.byStage.banGiao} · {pctTxt(late.byStage.banGiao, late.late)}</b></li>
+                    <li>Đóng kiện trễ<b>{late.byStage.dongKien} · {pctTxt(late.byStage.dongKien, late.late)}</b></li>
+                  </ul></div>
+                  <div><h4 className="tdx-bad">{late.late} đơn trễ · theo vùng</h4><ul>
+                    <li>Nội tỉnh<b>{late.lateByZone.noiTinh} · {pctTxt(late.lateByZone.noiTinh, late.late)}</b></li>
+                    <li>Nội miền (&gt;72 giờ)<b>{late.lateByZone.noiMien} · {pctTxt(late.lateByZone.noiMien, late.late)}</b></li>
+                    <li>Liên miền (&gt;96 giờ)<b>{late.lateByZone.lienMien} · {pctTxt(late.lateByZone.lienMien, late.late)}</b></li>
+                  </ul></div>
+                </div>
               )}
               {fields.reconNote && <div className="tdx-note"><b>Nhận xét:</b> {fields.reconNote}</div>}
             </>
