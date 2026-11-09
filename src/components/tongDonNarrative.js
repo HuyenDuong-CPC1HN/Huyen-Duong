@@ -91,7 +91,11 @@ function buildReconNote(reconStats, lateOk = 0) {
   const dongKienOk = (reconStats.dungHanDongKien || 0) + (reconStats.treDongKien || 0)
   const dungHan = reconStats.dungHanDongKien || 0
   const totalKien = dongKienOk + (reconStats.quaHanChuaDongKien || 0)
-  return `Khâu đóng kiện tại kho ${dungHan}/${totalKien} đúng hạn 24h — ${dongKienStatus(reconStats)} Khâu SPX lấy hàng ${layHangStatus(layChuaLay)}. Điểm nghẽn chính nằm ở khâu giao hàng cuối: trong ${daXuLyGiaoTong} đơn đã đủ thời gian đánh giá mốc 48h, có tới ${chuaGiaoQuaHan} đơn (${chuaGiaoQuaHanPct}%) chưa giao và đã quá hạn — thêm ${treHanGiao} đơn (${treHanGiaoPct}%) giao trễ ${lateOk ? 'so với SLA vùng' : 'hạn'} — cho thấy vấn đề tồn đọng chủ yếu phát sinh sau khi SPX đã lấy hàng, không phải khâu đóng gói hay lấy hàng đầu vào.`
+  const daGiao = daXuLyGiaoTong - chuaGiaoQuaHan
+  const treText = lateOk
+    ? `; trong ${daGiao} đơn đã giao, ${treHanGiao} đơn (${pct(treHanGiao, daGiao)}%) giao trễ so với SLA vùng, ${daGiao - treHanGiao} đơn (${pct(daGiao - treHanGiao, daGiao)}%) đúng hạn —`
+    : ` — thêm ${treHanGiao} đơn (${treHanGiaoPct}%) giao trễ hạn —`
+  return `Khâu đóng kiện tại kho ${dungHan}/${totalKien} đúng hạn 24h — ${dongKienStatus(reconStats)} Khâu SPX lấy hàng ${layHangStatus(layChuaLay)}. Điểm nghẽn chính nằm ở khâu giao hàng cuối: trong ${daXuLyGiaoTong} đơn đã đủ thời gian đánh giá mốc 48h, có tới ${chuaGiaoQuaHan} đơn (${chuaGiaoQuaHanPct}%) chưa giao và đã quá hạn${treText} cho thấy vấn đề tồn đọng chủ yếu phát sinh sau khi SPX đã lấy hàng, không phải khâu đóng gói hay lấy hàng đầu vào.`
 }
 
 function donSanDvcVerdict(dvcImproved, dvcPrevPct, dvcCurPct) {

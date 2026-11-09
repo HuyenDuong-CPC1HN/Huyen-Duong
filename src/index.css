@@ -960,6 +960,7 @@ body {
 .tdx-chip.bad { background: var(--x-bad-bg); color: var(--x-bad); }
 .tdx-chip.z { color: var(--x-mute); font-weight: 400; }
 .tdx-chip small { font-size: 10.5px; font-weight: 600; opacity: .85; }
+.tdx-foot { font-size: 10.5px; color: var(--x-mute); }
 .tdx-late h4.tdx-bad { color: var(--x-bad); }
 .tdx-split { display: flex; height: 17px; border-radius: 4px; overflow: hidden; font-size: 10.5px; color: #fff; font-weight: 700; }
 .tdx-split i { display: flex; align-items: center; justify-content: center; font-style: normal; white-space: nowrap; overflow: hidden; }

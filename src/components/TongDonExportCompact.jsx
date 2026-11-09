@@ -46,9 +46,10 @@ function Legend({ segments }) {
   return <div className="tdx-legend">{segments.map(s => <span key={s.label}><b style={{ background: s.color }} />{s.label}</span>)}</div>
 }
 
+const Chip = ({ n, tone }) => <span className={`tdx-chip ${n > 0 ? tone : 'z'}`}>{fmtInt(n)}</span>
 const pctTxt = (n, total) => `${(total ? Math.round(n / total * 1000) / 10 : 0).toLocaleString('vi-VN')}%`
 const PctChip = ({ n, total, tone }) => <span className={`tdx-chip ${n > 0 ? tone : 'z'}`}>{fmtInt(n)}{n > 0 && <small> · {pctTxt(n, total)}</small>}</span>
-// 3 khâu đối soát (tỷ lệ % trên tổng đơn của khâu). Giao thành công: đơn quá 48h nhưng vẫn đạt SLA vùng (nội miền 72h,
+// 3 khâu đối soát: % Đúng hạn / Trễ tính trên số đơn đã xong khâu đó (đúng hạn + trễ); Chưa xong chỉ ghi số đơn. Giao thành công: đơn quá 48h nhưng vẫn đạt SLA vùng (nội miền 72h,
 // liên miền 96h) tính vào Đúng hạn; cột Trễ chỉ còn đơn trễ thật.
 function reconRows(r, late) {
   const okVung = late?.ok || 0
@@ -57,7 +58,7 @@ function reconRows(r, late) {
     { k: 'B · SPX lấy hàng (≤24h)', ok: r.layTrong24h || 0, tre: (r.layTrong48h || 0) + (r.layTrong72h || 0) + (r.layQua72h || 0), chua: r.layChuaLay || 0 },
     { k: late ? 'C · Giao thành công (theo SLA vùng)' : 'C · Giao thành công (≤48h)', ok: (r.dungHanGiao || 0) + okVung, tre: Math.max(0, (r.treHanGiao || 0) - okVung), chua: r.chuaGiaoQuaHan || 0 },
   ]
-  return rows.map(x => ({ ...x, total: x.ok + x.tre + x.chua }))
+  return rows.map(x => ({ ...x, done: x.ok + x.tre }))
 }
 
 function Verdict({ insights, verdict, plans }) {
@@ -111,10 +112,10 @@ export const TongDonExportDonSan = forwardRef(function TongDonExportDonSan({
               <table className="tdx-table">
                 <thead><tr><th>Khâu</th><th>Đúng hạn</th><th>Trễ</th><th>Chưa xong</th></tr></thead>
                 <tbody>{reconRows(recon, late).map(r => (
-                  <tr key={r.k}><td>{r.k}</td><td><PctChip n={r.ok} total={r.total} tone="ok" /></td><td><PctChip n={r.tre} total={r.total} tone="warn" /></td><td><PctChip n={r.chua} total={r.total} tone="bad" /></td></tr>
+                  <tr key={r.k}><td>{r.k}</td><td><PctChip n={r.ok} total={r.done} tone="ok" /></td><td><PctChip n={r.tre} total={r.done} tone="warn" /></td><td><Chip n={r.chua} tone="bad" /></td></tr>
                 ))}</tbody>
               </table>
-              {recon.khongCoDuLieuDongKien > 0 && <div className="tdx-mute">{fmtInt(recon.khongCoDuLieuDongKien)} đơn chưa có dữ liệu đóng kiện.</div>}
+              <div className="tdx-foot">% Đúng hạn / Trễ tính trên số đơn đã xong từng khâu.{recon.khongCoDuLieuDongKien > 0 ? ` ${fmtInt(recon.khongCoDuLieuDongKien)} đơn chưa có dữ liệu đóng kiện (chưa tính vào bảng).` : ''}</div>
               {late && late.late > 0 && (
                 <div className="tdx-late">
                   <div><h4 className="tdx-bad">{late.late} đơn trễ · theo chặng</h4><ul>
