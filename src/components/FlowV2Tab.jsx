@@ -176,6 +176,63 @@ function CaseCard({ c, batch, onOpen, selected = false, onSelect = null, q = '' 
   )
 }
 
+// Danh sách đợt huỷ của 1 kho: "Đang làm" (thẻ có thanh bước có tên, 2 dòng hàng đầu, việc tiếp theo) và "Đã huỷ xong"
+// (mỗi đợt 1 dòng gọn, lọc theo tháng huỷ xong — luôn có tháng hiện tại).
+const BATCH_SHORT = ['Lập BB', 'Ký đủ BB', 'Kế toán xuất huỷ', 'Huỷ xong']
+const batchNext = b => [`Lập / in biên bản huỷ`, 'Ký đủ biên bản huỷ', `Chờ kế toán ${b.keToan || ''} xuất huỷ`.replace('  ', ' ')][b.step] || ''
+function BatchList({ bs, mon, onMon, onOpen }) {
+  const last = BATCH_STEPS.length - 1
+  const doing = bs.filter(b => b.step < last)
+  const done = bs.filter(b => b.step === last)
+  const months = [...new Set([monthKey(), ...done.map(b => monthKey(b.stepAt))])].sort().reverse()
+  const shown = done.filter(b => monthKey(b.stepAt) === mon)
+  const head = (t, n) => <span className="text-xs font-bold uppercase tracking-wide text-gray-400 flex items-center gap-1.5">{t}<span className="px-1.5 rounded-full border border-gray-200 bg-gray-50 normal-case tracking-normal font-semibold">{n}</span></span>
+  return (
+    <>
+      <div className="mt-1">{head('Đợt huỷ đang làm', doing.length)}</div>
+      {doing.length === 0 ? <div className="text-sm text-gray-400">Không có đợt nào đang làm.</div> : doing.map(b => {
+        const days = daysSince(b.stepAt)
+        const items = b.items || []
+        return (
+          <button key={b.id} type="button" onClick={() => onOpen(b.id)} aria-label={`Mở đợt ${b.no}`} className="text-left rounded-xl border border-gray-200 p-3 hover:shadow-sm flex flex-col gap-2.5" style={{ borderLeft: `4px solid ${KIND_BORDER.batch}` }}>
+            <div className="flex flex-wrap items-center gap-2"><b className="font-mono text-sm">{b.no}</b><span className="text-xs text-gray-400">tạo {fmtDateVi(b.createdAt)} · {b.entries.length} mục · {items.length} dòng hàng</span>
+              {days >= 3 && <span className="ml-auto text-[11px] font-bold text-red-600 bg-red-50 rounded-full px-2 py-0.5">{days} ngày</span>}</div>
+            {items.length > 0 && (
+              <div className="text-xs bg-slate-50 rounded-lg px-2 py-1.5 flex flex-col gap-0.5">
+                {items.slice(0, 2).map((it, i) => <div key={i} className="truncate">{it.tenHang || it.maHang}{it.soLo ? ` · lô ${it.soLo}` : ''} · <b>{it.soLuong ?? ''} {it.dvt}</b>{it.tinhTrang ? <span className="text-gray-500"> · {it.tinhTrang}</span> : null}</div>)}
+                {items.length > 2 && <div className="text-gray-500">+ {items.length - 2} dòng hàng khác</div>}
+              </div>
+            )}
+            <div className="grid grid-cols-4 gap-1" aria-label="Tiến độ đợt huỷ">
+              {BATCH_SHORT.map((t, i) => (
+                <div key={t} className={`flex flex-col gap-1 text-[11px] min-w-0 ${i === b.step ? 'font-bold' : i < b.step ? 'text-gray-700' : 'text-gray-400'}`} style={i === b.step ? { color: KIND_BORDER.batch } : undefined}>
+                  <i className="block h-1.5 rounded" style={{ background: i <= b.step ? KIND_BORDER.batch : '#e5e7eb', opacity: i === b.step ? 0.5 : 1 }} />
+                  <span className="truncate">{t}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">Việc tiếp theo: <b className="text-[#1e3a5f]">{batchNext(b)}</b><span className="ml-auto text-xs font-semibold text-white bg-[#1e3a5f] rounded-lg px-3 py-1">Mở đợt</span></div>
+          </button>
+        )
+      })}
+      <div className="mt-1 flex flex-wrap items-center gap-2">{head('Đã huỷ xong', shown.length)}
+        <select value={mon} onChange={e => onMon(e.target.value)} aria-label="Tháng huỷ xong" className="ml-auto border border-gray-200 rounded-lg px-2 py-1 text-xs">
+          {months.map(m => <option key={m} value={m}>{fmtMonthVi(m)}{m === monthKey() ? ' (tháng này)' : ''} · {done.filter(b => monthKey(b.stepAt) === m).length} đợt</option>)}
+        </select>
+      </div>
+      <div className="rounded-xl border border-gray-200 overflow-hidden">
+        {shown.length === 0 ? <div className="px-3 py-2 text-sm text-gray-400">Tháng này chưa có đợt nào huỷ xong.</div> : shown.map(b => (
+          <button key={b.id} type="button" onClick={() => onOpen(b.id)} aria-label={`Mở đợt ${b.no}`} className="w-full text-left grid items-center gap-2 px-3 py-2 border-t border-gray-100 first:border-t-0 hover:bg-slate-50 text-sm" style={{ gridTemplateColumns: 'minmax(0,1.2fr) minmax(0,1fr) auto' }}>
+            <b className="font-mono truncate">{b.no}</b>
+            <span className="text-xs text-gray-500 truncate">xong {fmtDateVi(b.stepAt)} · {(b.items || []).length} dòng hàng</span>
+            <span className="text-[11px] font-bold text-green-700 bg-green-50 rounded-full px-2 py-0.5 whitespace-nowrap">✓ Huỷ xong</span>
+          </button>
+        ))}
+      </div>
+    </>
+  )
+}
+
 // Cột Hoàn thành: mỗi hồ sơ 1 dòng gọn (khách hàng · kho / loại · số đơn · ngày xong) cho cột không dài ra.
 function DoneRow({ c, onOpen }) {
   return (
@@ -245,6 +302,7 @@ export default function FlowV2Tab() {
   const [openBatch, setOpenBatch] = useState(null)
   const [modal, setModal] = useState(null) // 'new' | 'kt' | { ps: 'C' | 'DTP' }
   const [sel, setSel] = useState({ C: [], DTP: [] })
+  const [batchMon, setBatchMon] = useState(() => ({ C: monthKey(), DTP: monthKey() }))
   const [ktMsg, setKtMsg] = useState('')
   const [signSel, setSignSel] = useState([]) // hồ sơ đang tick ở cột Chờ ký
   const [bulkMsg, setBulkMsg] = useState('')
@@ -455,18 +513,7 @@ export default function FlowV2Tab() {
                     )}
                   </div>
                   <div className="text-xs text-gray-400">Tick các mục muốn huỷ chung 1 bộ biên bản. Cần huỷ gấp thì tick 1 mục là đủ.</div>
-                  <span className="text-xs font-bold uppercase tracking-wide text-gray-400 mt-1">Đợt huỷ ({bs.length})</span>
-                  {bs.length === 0 ? <div className="text-sm text-gray-400">Chưa có đợt huỷ.</div> : bs.map(b => {
-                    const days = daysSince(b.stepAt)
-                    return (
-                      <button key={b.id} type="button" onClick={() => setOpenBatch(b.id)} className="text-left rounded-xl border border-gray-200 p-2.5 hover:shadow-sm" style={{ borderLeft: `4px solid ${KIND_BORDER.batch}` }}>
-                        <div className="flex flex-wrap items-center gap-2"><b className="font-mono text-sm">{b.no}</b><span className="text-xs text-gray-400">tạo {fmtDateVi(b.createdAt)} · {b.entries.length} mục · {b.items.length} dòng hàng</span>
-                          {b.step < BATCH_STEPS.length - 1 && days >= 3 && <span className="text-[11px] font-semibold text-red-600">{days} ngày</span>}</div>
-                        <Dots total={BATCH_STEPS.length} current={b.step} color={KIND_BORDER.batch} />
-                        <div className="text-xs font-semibold text-[#1e3a5f] mt-1.5">{b.step === BATCH_STEPS.length - 1 ? '✓ Huỷ xong' : `Đang ở: ${BATCH_STEPS[b.step].t}${BATCH_STEPS[b.step].kt ? ` — ${b.keToan}` : ''}`}</div>
-                      </button>
-                    )
-                  })}
+                  <BatchList bs={bs} mon={batchMon[kho]} onMon={m => setBatchMon(x => ({ ...x, [kho]: m }))} onOpen={setOpenBatch} />
                 </section>
               )
             })}

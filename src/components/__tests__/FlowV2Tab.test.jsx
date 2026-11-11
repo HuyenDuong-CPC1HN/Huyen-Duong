@@ -206,4 +206,25 @@ describe('Hàng trả & huỷ (Demo) — cột Chờ ký chọn hàng loạt', (
     fireEvent.change(screen.getByLabelText('Tìm hồ sơ'), { target: { value: 'nham quy cach' } })
     expect(screen.getByText('Nhà thuốc Minh An')).toBeInTheDocument()
   })
+
+  it('khung Đợt huỷ: tách Đang làm (bước có tên, hàng trong đợt, việc tiếp theo) và Đã huỷ xong (lọc theo tháng)', async () => {
+    const { makeBatch, advanceBatch, newPsEntry } = await import('../../utils/flowV2')
+    const now = new Date()
+    let s = { cases: [], pool: [newPsEntry({ kho: 'C', items: [{ maHang: 'A1', tenHang: 'Siro K', soLo: 'L1', soLuong: 5, dvt: 'LO' }] }, now), newPsEntry({ kho: 'C', items: [{ maHang: 'B1', tenHang: 'Viên M', soLo: 'L2', soLuong: 9, dvt: 'VIEN' }] }, now)], batches: [] }
+    const r1 = makeBatch(s, 'C', [s.pool[0].id], now); s = { ...s, ...r1 }
+    const r2 = makeBatch(s, 'C', [s.pool[0].id], now); s = { ...s, ...r2 }
+    for (let i = 0; i < 3; i++) s = { ...s, ...advanceBatch(s, r2.batchId, {}, now) } // đợt 2 huỷ xong
+    store.values.set('flowv2_batches', JSON.stringify(s.batches))
+    store.values.set('flowv2_pool', JSON.stringify(s.pool))
+    render(<FlowV2Tab />)
+    fireEvent.click(screen.getByRole('tab', { name: /Huỷ hàng/ }))
+    const kho = screen.getByRole('region', { name: 'Huỷ hàng Kho C' })
+    const doing = within(kho).getByRole('button', { name: `Mở đợt ${s.batches.find(b => b.id === r1.batchId).no}` })
+    expect(doing).toHaveTextContent('Siro K · lô L1 · 5 LO')
+    expect(doing).toHaveTextContent('Lập BBKý đủ BBKế toán xuất huỷHuỷ xong')
+    expect(doing).toHaveTextContent('Việc tiếp theo: Lập / in biên bản huỷ')
+    const done = within(kho).getByRole('button', { name: `Mở đợt ${s.batches.find(b => b.id === r2.batchId).no}` })
+    expect(done).toHaveTextContent('✓ Huỷ xong')
+    expect(within(kho).getByLabelText('Tháng huỷ xong')).toHaveDisplayValue(/tháng này\) · 1 đợt/)
+  })
 })
