@@ -406,7 +406,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
       count[ent] = rows.length
       entries.push(newPsEntry({ kho: ent === 'donDTP' ? 'DTP' : 'C', loai: 'Hàng cận date', items: rows.map(r => ({
         maHang: r.maVatTu, tenHang: r.tenVatTu, soLo: r.maLo || '', hanDung: r.hanDung || '', dvt: r.dvt || '', soLuong: r.tonCuoi,
-        tinhTrang: r.bucket === 'expired' ? 'Hết date' : 'Cận date', huyKey: huyKey(r),
+        tinhTrang: 'Hàng cận date', huyKey: huyKey(r),
       })) }, now))
     }
     writeFlowV2({ pool: [...entries, ...pool] })

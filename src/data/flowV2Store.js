@@ -13,9 +13,12 @@ function readList(key) {
   } catch { return [] }
 }
 
-// Hạn dùng lưu dạng yyyy-mm-dd. Mục đưa từ tab Hàng cận date trước bản sửa lỡ lưu dd/mm/yyyy → đọc lại đúng dạng.
-const fixHanDung = x => (x.items?.some(it => /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(it.hanDung || ''))
-  ? { ...x, items: x.items.map(it => (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(it.hanDung || '') ? { ...it, hanDung: parseDateText(it.hanDung) || it.hanDung } : it)) }
+// Mục đưa từ tab Hàng cận date trước bản sửa: hạn dùng lỡ lưu dd/mm/yyyy (cần yyyy-mm-dd), tình trạng lỡ ghi
+// "Hết date" / "Cận date" (cần "Hàng cận date") → đọc lại cho đúng.
+const badHd = it => /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(it.hanDung || '')
+const badTt = it => it.huyKey && (it.tinhTrang === 'Hết date' || it.tinhTrang === 'Cận date')
+const fixHanDung = x => (x.items?.some(it => badHd(it) || badTt(it))
+  ? { ...x, items: x.items.map(it => ({ ...it, ...(badHd(it) ? { hanDung: parseDateText(it.hanDung) || it.hanDung } : {}), ...(badTt(it) ? { tinhTrang: 'Hàng cận date' } : {}) })) }
   : x)
 
 export function readFlowV2() {
