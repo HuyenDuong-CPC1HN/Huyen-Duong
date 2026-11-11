@@ -75,6 +75,9 @@ describe('classifyExpiry + drugAgeMonths — mốc cận date và tuổi thuốc
 
   it('chia đúng nhóm: hết hạn, dưới 3 tháng, dưới 6 tháng, 6 đến dưới 12 tháng, an toàn', () => {
     expect(classifyExpiry('2026-06-01', today)).toBe('expired')
+    expect(classifyExpiry('2026-06-17', today)).toBe('expired') // còn 2 ngày, tuổi thuốc 0 → hết date
+    expect(classifyExpiry('2026-07-14', today)).toBe('expired') // tuổi thuốc 0
+    expect(classifyExpiry('2026-07-15', today)).toBe('near3') // tròn 1 tháng
     expect(classifyExpiry('2026-09-14', today)).toBe('near3')
     expect(classifyExpiry('2026-12-14', today)).toBe('near6')
     expect(classifyExpiry('2026-12-15', today)).toBe('near12')

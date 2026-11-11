@@ -158,14 +158,15 @@ export function parseExpiryStockWorkbook(arrayBuffer) {
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x }
 
-// Phân loại 1 hạn dùng (chuỗi ISO yyyy-mm-dd) theo mốc "hôm nay": hết hạn / cận dưới 3 tháng /
+// Phân loại 1 hạn dùng (chuỗi ISO yyyy-mm-dd) theo mốc "hôm nay": hết date (quá hạn hoặc tuổi thuốc 0) / cận dưới 3 tháng /
 // cận dưới 6 tháng / cận hạn 6 đến dưới 12 tháng (chỉ để cảnh báo luân chuyển, không vào sheet "Cận date"
 // của báo cáo) / an toàn (từ 12 tháng) / không rõ hạn (thiếu dữ liệu hạn dùng trên file).
 export function classifyExpiry(hanDung, referenceDate = new Date()) {
   if (!hanDung) return 'unknown'
   const today = startOfDay(referenceDate)
   const expiry = startOfDay(new Date(hanDung))
-  if (expiry < today) return 'expired'
+  // Hết date: đã quá hạn, hoặc tuổi thuốc = 0 (còn chưa đủ 1 tháng) — quy định kho: làm biên bản hết date luôn
+  if (expiry < today || drugAgeMonths(hanDung, referenceDate) <= 0) return 'expired'
   if (expiry < addMonths(today, 3)) return 'near3'
   if (expiry < addMonths(today, 6)) return 'near6'
   if (expiry < addMonths(today, 12)) return 'near12'

@@ -105,7 +105,7 @@ function removeMonthEntry(id) {
 }
 
 const CAN_DATE_CARDS = [
-  { key: 'expired', label: 'Hết hạn', icon: CircleAlert, cls: 'text-red-600', bg: 'bg-red-50 border-red-200', bgActive: 'bg-red-100 border-red-400' },
+  { key: 'expired', label: 'Hết date (tuổi thuốc 0 hoặc quá hạn)', icon: CircleAlert, cls: 'text-red-600', bg: 'bg-red-50 border-red-200', bgActive: 'bg-red-100 border-red-400' },
   { key: 'near3', label: 'Cận dưới 3 tháng', icon: AlertTriangle, cls: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', bgActive: 'bg-orange-100 border-orange-400' },
   { key: 'near6', label: 'Cận dưới 6 tháng', icon: Clock, cls: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', bgActive: 'bg-amber-100 border-amber-400' },
   { key: 'near12', label: 'Cận hạn 6–12 tháng (cảnh báo luân chuyển)', icon: CalendarRange, cls: 'text-sky-700', bg: 'bg-sky-50 border-sky-200', bgActive: 'bg-sky-100 border-sky-400' },
