@@ -2,7 +2,7 @@ import { opsStore } from './workspace'
 import { supabase } from '../supabase'
 import {
   FLOWV2_BATCHES_KEY, FLOWV2_CASES_KEY, FLOWV2_EVENT, FLOWV2_KT_LINKS_KEY, FLOWV2_KT_QUEUE_KEY, FLOWV2_POOL_KEY, KT_DONE_PREFIX,
-  ktQueue, migrateCase,
+  ktQueue, migrateCase, parseDateText,
 } from '../utils/flowV2'
 
 // Dữ liệu tab "Hàng trả & huỷ (Demo)" — lưu ở ops_settings (khoá flowv2_*), tách hẳn khỏi dữ liệu các tab cũ.
@@ -13,8 +13,13 @@ function readList(key) {
   } catch { return [] }
 }
 
+// Hạn dùng lưu dạng yyyy-mm-dd. Mục đưa từ tab Hàng cận date trước bản sửa lỡ lưu dd/mm/yyyy → đọc lại đúng dạng.
+const fixHanDung = x => (x.items?.some(it => /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(it.hanDung || ''))
+  ? { ...x, items: x.items.map(it => (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(it.hanDung || '') ? { ...it, hanDung: parseDateText(it.hanDung) || it.hanDung } : it)) }
+  : x)
+
 export function readFlowV2() {
-  return { cases: readList(FLOWV2_CASES_KEY).map(migrateCase), pool: readList(FLOWV2_POOL_KEY), batches: readList(FLOWV2_BATCHES_KEY) }
+  return { cases: readList(FLOWV2_CASES_KEY).map(migrateCase), pool: readList(FLOWV2_POOL_KEY).map(fixHanDung), batches: readList(FLOWV2_BATCHES_KEY).map(fixHanDung) }
 }
 
 // Dữ liệu 3 tab cũ (chỉ đọc) để lấy sang tab Demo — xem utils/flowV2Legacy.js.

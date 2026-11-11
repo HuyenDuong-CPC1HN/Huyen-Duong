@@ -228,3 +228,15 @@ describe('Hàng trả & huỷ — link kế toán', () => {
     expect(ktLinkUrl(a, 'https://app.vn')).toBe(`https://app.vn/#ketoan=${a}`)
   })
 })
+
+describe('Hàng trả & huỷ — hạn dùng lỡ lưu dd/mm/yyyy', () => {
+  it('đọc lại thành yyyy-mm-dd (mục Chờ huỷ và đợt huỷ)', async () => {
+    const { opsStore } = await import('../../data/workspace')
+    const { readFlowV2 } = await import('../../data/flowV2Store')
+    opsStore.setItem('flowv2_pool', JSON.stringify([{ id: 'p1', kho: 'C', items: [{ maHang: 'A1', hanDung: '13/11/2026' }, { maHang: 'A2', hanDung: '2027-01-02' }] }]))
+    opsStore.setItem('flowv2_batches', JSON.stringify([{ id: 'b1', kho: 'C', items: [{ maHang: 'A1', hanDung: '22/11/2026' }], entries: [] }]))
+    const { pool, batches } = readFlowV2()
+    expect(pool[0].items.map(it => it.hanDung)).toEqual(['2026-11-13', '2027-01-02'])
+    expect(batches[0].items[0].hanDung).toBe('2026-11-22')
+  })
+})

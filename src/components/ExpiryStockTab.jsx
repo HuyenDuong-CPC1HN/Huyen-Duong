@@ -112,7 +112,6 @@ const sentHuyKeys = () => {
   const { pool, batches } = readFlowV2()
   return new Set([...pool, ...batches].flatMap(x => x.items || []).map(it => it.huyKey).filter(Boolean))
 }
-const isoToVi = d => (/^\d{4}-\d{2}-\d{2}/.test(d || '') ? String(d).slice(0, 10).split('-').reverse().join('/') : d || '')
 
 const CAN_DATE_CARDS = [
   { key: 'expired', label: 'Hết date (tuổi thuốc 0 hoặc quá hạn)', icon: CircleAlert, cls: 'text-red-600', bg: 'bg-red-50 border-red-200', bgActive: 'bg-red-100 border-red-400' },
@@ -406,7 +405,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
       if (!rows.length) continue
       count[ent] = rows.length
       entries.push(newPsEntry({ kho: ent === 'donDTP' ? 'DTP' : 'C', loai: 'Hàng cận date', items: rows.map(r => ({
-        maHang: r.maVatTu, tenHang: r.tenVatTu, soLo: r.maLo || '', hanDung: isoToVi(r.hanDung), dvt: r.dvt || '', soLuong: r.tonCuoi,
+        maHang: r.maVatTu, tenHang: r.tenVatTu, soLo: r.maLo || '', hanDung: r.hanDung || '', dvt: r.dvt || '', soLuong: r.tonCuoi,
         tinhTrang: r.bucket === 'expired' ? 'Hết date' : 'Cận date', huyKey: huyKey(r),
       })) }, now))
     }

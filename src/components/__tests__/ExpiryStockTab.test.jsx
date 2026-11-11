@@ -334,7 +334,7 @@ describe('ExpiryStockTab — đưa hàng đã tích sang Chờ huỷ (Hàng tr�
     expect(pool.map(e => e.kho).sort()).toEqual(['C', 'DTP'])
     const dtp = pool.find(e => e.kho === 'DTP')
     expect(dtp.items).toEqual([expect.objectContaining({ maHang: 'TH00893', tenHang: 'Thuốc DTP hết date', soLo: 'D1', dvt: 'Ống', soLuong: 34, tinhTrang: 'Hết date' })])
-    expect(dtp.items[0].hanDung).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
+    expect(dtp.items[0].hanDung).toMatch(/^\d{4}-\d{2}-\d{2}$/) // dạng ngày chuẩn → màn biên bản hiện đúng dd/mm/yyyy
     expect(screen.getByText(/Đã đưa 1 hàng Kho C, 1 hàng Kho DTP vào Hàng trả & huỷ/)).toBeInTheDocument()
     expect(screen.getAllByText('đã vào Chờ huỷ')).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Đưa hàng đã tích vào Chờ huỷ (0)' })).toBeDisabled()
