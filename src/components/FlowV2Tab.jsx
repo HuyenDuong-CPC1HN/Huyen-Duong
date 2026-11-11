@@ -157,6 +157,7 @@ function CaseCard({ c, batch, onOpen, selected = false, onSelect = null, q = '' 
       <div className="flex flex-wrap items-center gap-1.5"><KindTag kind={c.kind} /><KhoTag kho={c.kho} />{days >= 3 && s.col < 4 && <span className="text-[11px] font-semibold text-red-600">{days} ngày</span>}</div>
       <div className="font-semibold text-sm mt-1">{c.khachHang || 'Khách hàng chưa ghi'}</div>
       <div className="text-xs text-gray-500">{c.soDon || 'chưa có số đơn'} · {c.items.filter(it => it.maHang || it.tenHang).length} mặt hàng</div>
+      {c.ghiChu && <div className="text-xs text-amber-800 bg-amber-50 rounded px-1.5 py-0.5 truncate" title={c.ghiChu}>Lý do: {c.ghiChu}</div>}
       {words(q).length > 0 && c.items.filter(it => hitAll([it.maHang, it.tenHang, it.soLo].join(' '), words(q))).slice(0, 3).map(it => (
         <div key={it.rowId} className="text-xs text-[#1e3a5f] bg-blue-50 rounded px-1.5 py-0.5">{[it.maHang, it.tenHang].filter(Boolean).join(' · ')}{it.soLo ? ` · lô ${it.soLo}` : ''}</div>
       ))}
@@ -280,7 +281,7 @@ export default function FlowV2Tab() {
   const saveBatch = b => save({ batches: data.batches.map(x => (x.id === b.id ? b : x)) })
 
   const visible = useMemo(() => data.cases.filter(c => (khoFilter === 'all' || c.kho === khoFilter) && (kindFilter === 'all' || c.kind === kindFilter)
-    && (!q.trim() || hitAll([c.khachHang, c.soDon, ...c.items.flatMap(it => [it.maHang, it.tenHang, it.soLo])].join(' '), words(q)))), [data.cases, khoFilter, kindFilter, q])
+    && (!q.trim() || hitAll([c.khachHang, c.soDon, c.ghiChu, ...c.items.flatMap(it => [it.maHang, it.tenHang, it.soLo])].join(' '), words(q)))), [data.cases, khoFilter, kindFilter, q])
   const batchById = id => data.batches.find(b => b.id === id)
 
   const caseObj = openCase && data.cases.find(c => c.id === openCase)

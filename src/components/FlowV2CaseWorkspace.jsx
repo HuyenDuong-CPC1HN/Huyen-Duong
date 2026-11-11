@@ -20,6 +20,19 @@ const Y_KIEN_MAC_DINH = 'Nhập lại vào kho'
 
 // Màn làm việc của 1 hồ sơ khách trả: trái là các bước, giữa là việc của bước hiện tại, biên bản xác minh xem trước + in.
 // onSave(c) lưu hồ sơ · onAdvance(opts) sang bước kế · onBackStep() lùi 1 bước · onClose() về bảng việc.
+// Ghi chú lý do khách trả (nội bộ, chỉ để theo dõi — không in vào biên bản nào). Lưu khi rời ô.
+function NoteBox({ value, onSave }) {
+  const [draft, setDraft] = useState(value)
+  return (
+    <label className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 flex flex-col gap-1.5 text-xs text-gray-600">
+      <span className="font-semibold text-gray-800">Ghi chú lý do trả lại</span>
+      <textarea rows={4} value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => { if (draft.trim() !== value.trim()) onSave(draft.trim()) }}
+        placeholder="VD: khách đặt nhầm quy cách, hàng giao trễ, khách hết nhu cầu…" aria-label="Ghi chú lý do trả lại" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" />
+      <span className="text-[11px] text-gray-400">Chỉ để anh theo dõi, không đưa vào biên bản.</span>
+    </label>
+  )
+}
+
 export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBackStep, onClose, onOpenBatch, onGoHuy, onDelete, onSetDoneDate }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -247,7 +260,10 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
         </header>
         {error && <p className="text-sm text-red-500">{error}</p>}
         <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(200px, 240px) minmax(0, 1fr)' }}>
-          <div className="rounded-xl border border-gray-200 bg-white p-3"><StepList steps={flow.steps} current={c.step} /></div>
+          <div className="flex flex-col gap-3 min-w-0">
+            <div className="rounded-xl border border-gray-200 bg-white p-3"><StepList steps={flow.steps} current={c.step} /></div>
+            <NoteBox key={c.id} value={c.ghiChu || ''} onSave={v => set({ ghiChu: v })} />
+          </div>
           <div className="grid gap-4 items-start min-w-0" style={{ gridTemplateColumns: showPaper ? 'repeat(auto-fit, minmax(380px, 1fr))' : '1fr' }}>
             <div className="flex flex-col gap-3 min-w-0">
               <div className="font-semibold text-gray-800">{s.t}</div>

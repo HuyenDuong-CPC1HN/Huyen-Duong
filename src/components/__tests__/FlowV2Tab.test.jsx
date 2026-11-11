@@ -190,4 +190,20 @@ describe('Hàng trả & huỷ (Demo) — cột Chờ ký chọn hàng loạt', (
     expect(screen.getByText(/Đã chuyển 2 hồ sơ đã ký đủ: 1 sang "Kế toán nhập trả lại \(phiếu \+ hoá đơn\)", 1 sang "Nhập lại kho \(phiếu nhập lại\)"/)).toBeInTheDocument()
     expect(screen.getByLabelText('Chọn Nhà thuốc Minh An')).not.toBeChecked()
   })
+
+  it('ghi chú lý do trả lại: lưu theo hồ sơ, hiện trên thẻ, tìm được; không in vào biên bản', () => {
+    const a = atSign('tra', 'Nhà thuốc Minh An')
+    store.values.set('flowv2_cases', JSON.stringify([a]))
+    render(<FlowV2Tab />)
+    fireEvent.click(screen.getByText('Nhà thuốc Minh An'))
+    const note = screen.getByLabelText('Ghi chú lý do trả lại')
+    fireEvent.change(note, { target: { value: 'Khách đặt nhầm quy cách' } })
+    fireEvent.blur(note)
+    expect(read('flowv2_cases')[0].ghiChu).toBe('Khách đặt nhầm quy cách')
+    expect(screen.getAllByText(/Khách đặt nhầm quy cách/)).toHaveLength(1) // chỉ ở ô ghi chú, không có trong biên bản xem trước
+    fireEvent.click(screen.getByRole('button', { name: /Bảng việc/ }))
+    expect(screen.getByText('Lý do: Khách đặt nhầm quy cách')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Tìm hồ sơ'), { target: { value: 'nham quy cach' } })
+    expect(screen.getByText('Nhà thuốc Minh An')).toBeInTheDocument()
+  })
 })
