@@ -6,6 +6,8 @@ import { ResizeHandle } from './DataTable'
 import { parseExpiryStockWorkbook, parseReportDateRange, detectExpiryEntity, filterByExpiryEntity, EXPIRY_ENTITIES, isSlowMoving, classifyExpiry, daysUntil, drugAgeMonths, CAN_DATE_BUCKETS } from '../utils/parseExpiryStock'
 import { exportExpiryDisposal } from '../utils/exportExpiryDisposal'
 import { exportStockReport } from '../utils/exportStockReport'
+import { readFlowV2, writeFlowV2 } from '../data/flowV2Store'
+import { newPsEntry } from '../utils/flowV2'
 
 // Menu "Quản lý tồn kho" có 2 tab con dùng chung component này và chung dữ liệu (1 file "Báo cáo tổng hợp
 // nhập xuất tồn theo kho" mỗi tháng, tải ở tab nào cũng được):
@@ -103,6 +105,14 @@ function removeMonthEntry(id) {
   }
   return months
 }
+
+// Lô hàng cận date đã đưa sang Chờ huỷ (tab Hàng trả & huỷ): khoá theo loại kho + mã + lô + mã kho.
+const huyKey = r => `${r.entity}|${r.maVatTu}|${r.maLo || ''}|${r.maKho || ''}`
+const sentHuyKeys = () => {
+  const { pool, batches } = readFlowV2()
+  return new Set([...pool, ...batches].flatMap(x => x.items || []).map(it => it.huyKey).filter(Boolean))
+}
+const isoToVi = d => (/^\d{4}-\d{2}-\d{2}/.test(d || '') ? String(d).slice(0, 10).split('-').reverse().join('/') : d || '')
 
 const CAN_DATE_CARDS = [
   { key: 'expired', label: 'Hết date (tuổi thuốc 0 hoặc quá hạn)', icon: CircleAlert, cls: 'text-red-600', bg: 'bg-red-50 border-red-200', bgActive: 'bg-red-100 border-red-400' },
@@ -380,6 +390,30 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
     [scoped, isClc],
   )
   const reportRows = useMemo(() => eligibleRows.filter(r => checkedKeys.has(r.rowKey)), [eligibleRows, checkedKeys])
+  // Đưa hàng đã tích sang tab "Hàng trả & huỷ (Demo)" → Huỷ hàng → Chờ huỷ (tách Kho C / Kho DTP), khỏi nhập tay lại.
+  // Mỗi lô chỉ đưa 1 lần: nhận ra lô đã đưa qua huyKey ghi trên dòng hàng (còn ở Chờ huỷ hoặc đã vào đợt huỷ).
+  const [huySent, setHuySent] = useState(() => sentHuyKeys())
+  const [huyMsg, setHuyMsg] = useState('')
+  const huyRows = reportRows.filter(r => !huySent.has(huyKey(r)))
+  const sendToHuy = () => {
+    if (!huyRows.length) return
+    const now = new Date()
+    const { pool } = readFlowV2()
+    const entries = []
+    const count = {}
+    for (const ent of Object.keys(EXPIRY_ENTITIES)) {
+      const rows = huyRows.filter(r => r.entity === ent)
+      if (!rows.length) continue
+      count[ent] = rows.length
+      entries.push(newPsEntry({ kho: ent === 'donDTP' ? 'DTP' : 'C', loai: 'Hàng cận date', items: rows.map(r => ({
+        maHang: r.maVatTu, tenHang: r.tenVatTu, soLo: r.maLo || '', hanDung: isoToVi(r.hanDung), dvt: r.dvt || '', soLuong: r.tonCuoi,
+        tinhTrang: r.bucket === 'expired' ? 'Hết date' : 'Cận date', huyKey: huyKey(r),
+      })) }, now))
+    }
+    writeFlowV2({ pool: [...entries, ...pool] })
+    setHuySent(sentHuyKeys())
+    setHuyMsg(`Đã đưa ${Object.entries(count).map(([e, n]) => `${n} hàng ${EXPIRY_ENTITIES[e].label}`).join(', ')} vào Hàng trả & huỷ (Demo) → Huỷ hàng → Chờ huỷ. Sang đó tích chọn rồi bấm Tạo đợt huỷ để in biên bản.`)
+  }
 
   const toggleRow = (rowKey) => {
     const next = new Set(checkedKeys)
@@ -727,7 +761,17 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
           <FileWarning size={14} />
           {exportingDisposal ? 'Đang tạo biên bản...' : `Xuất biên bản hàng cận date (${disposalRows.length})`}
         </button>}
+        {!isClc && <button
+          onClick={sendToHuy}
+          disabled={huyRows.length === 0}
+          title="Đưa các hàng đã tích (chưa đưa lần nào) sang tab Hàng trả & huỷ (Demo) → Huỷ hàng → Chờ huỷ, tự tách Kho C / Kho DTP"
+          className="flex items-center gap-1.5 px-3 py-2 bg-red-600 border border-red-600 rounded-lg text-sm text-white hover:bg-red-700 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <FileWarning size={14} />
+          {`Đưa hàng đã tích vào Chờ huỷ (${huyRows.length})`}
+        </button>}
       </div>
+      {huyMsg && <div className="rounded-lg border border-green-200 bg-green-50 text-green-800 text-xs px-3 py-2" role="status">{huyMsg}</div>}
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         {(() => {
@@ -804,6 +848,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
                     return (
                       <td key={c} className="px-2 py-2" style={stickyStyle(c, { rowBg })}>
                         <span className={`px-2 py-0.5 rounded border text-[11px] font-semibold ${ENTITY_BADGE[r.entity]}`}>{EXPIRY_ENTITIES[r.entity]?.label}</span>
+                        {huySent.has(huyKey(r)) && <div className="mt-0.5 text-[10px] font-semibold text-red-700 whitespace-nowrap">đã vào Chờ huỷ</div>}
                       </td>
                     )
                   }

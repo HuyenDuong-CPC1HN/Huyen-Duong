@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as XLSX from 'xlsx'
 import ExpiryStockTab from '../ExpiryStockTab'
 
 const store = vi.hoisted(() => {
   const values = new Map()
   return {
+    values,
     opsStore: {
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => { values.set(key, String(value)) },
@@ -304,6 +305,39 @@ describe('ExpiryStockTab', () => {
     const [{ rows, suffix }] = exportStockReportMock.mock.calls[0]
     expect(suffix).toBe('KhoDTP')
     expect(rows).toEqual([expect.objectContaining({ maVatTu: 'TH00893', huongXuLy: 'Xuất huỷ' })])
+  })
+})
+
+describe('ExpiryStockTab — đưa hàng đã tích sang Chờ huỷ (Hàng trả & huỷ)', () => {
+  beforeEach(() => store.values.clear())
+  it('tách Kho C / Kho DTP, đủ thông tin (mã, tên, lô, HSD, ĐVT, SL); mỗi lô chỉ đưa 1 lần', async () => {
+    const today = new Date()
+    const soon = new Date(today); soon.setDate(soon.getDate() + 10)
+    const aoa = [
+      ['Báo cáo tổng hợp nhập xuất tồn theo kho'],
+      ['Stt', 'Mã vật tư', 'Tên vật tư', 'Mã kho', 'Đvt', 'Mã lô ', 'Hạn dùng', 'Tồn đầu', 'Sl nhập', 'Sl xuất', 'Tồn cuối'],
+      [1, 'TH00893', 'Thuốc DTP hết date', '020105', 'Ống', 'D1', soon, 0, 0, 0, 34],
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1')
+    render(<ExpiryStockTab />)
+    fireEvent.change(screen.getByLabelText('Tải file Kho C'), { target: { files: [buildSampleFile()] } })
+    await waitFor(() => expect(screen.getByText('Hàng đã hết hạn')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Tải file Kho DTP'), { target: { files: [new File([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], 'dtp.xlsx')] } })
+    await waitFor(() => expect(screen.getByText('dtp.xlsx')).toBeInTheDocument())
+    expect(screen.getByText('Thuốc DTP hết date')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /X001/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /TH00893/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Đưa hàng đã tích vào Chờ huỷ (2)' }))
+    const pool = JSON.parse(store.opsStore.getItem('flowv2_pool'))
+    expect(pool.map(e => e.kho).sort()).toEqual(['C', 'DTP'])
+    const dtp = pool.find(e => e.kho === 'DTP')
+    expect(dtp.items).toEqual([expect.objectContaining({ maHang: 'TH00893', tenHang: 'Thuốc DTP hết date', soLo: 'D1', dvt: 'Ống', soLuong: 34, tinhTrang: 'Hết date' })])
+    expect(dtp.items[0].hanDung).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
+    expect(screen.getByText(/Đã đưa 1 hàng Kho C, 1 hàng Kho DTP vào Hàng trả & huỷ/)).toBeInTheDocument()
+    expect(screen.getAllByText('đã vào Chờ huỷ')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Đưa hàng đã tích vào Chờ huỷ (0)' })).toBeDisabled()
   })
 })
 
