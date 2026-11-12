@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, PackageX, Layers, ArrowLeftRight, Hourglass, Warehouse, History, Workflow, ClipboardCheck, GraduationCap, ShoppingCart, Package } from 'lucide-react'
+import { Home, Menu, X, ChevronRight, ChevronDown, FileBarChart2, LayoutGrid, Search, FolderOpen, RefreshCw, LogOut, PanelLeftClose, CalendarClock, PackagePlus, RotateCcw, ListChecks, Layers, Hourglass, Warehouse, History, Workflow, ClipboardCheck, GraduationCap, ShoppingCart, Package } from 'lucide-react'
 import { assertCloudAvailable, supabase, supabaseConfigReady, supabaseMissingEnv } from './supabase'
 import { loadWorkspace } from './data/workspace'
 import { getCachedActiveTab, setCachedActiveTab } from './utils/activeTabCache'
@@ -65,9 +65,7 @@ const NAV = [
     icon: RotateCcw,
     children: [
       { id: 'traCuuHang', label: 'Tra cứu hàng', icon: Search },
-      { id: 'traHang', label: 'Theo dõi nhập trả lại', icon: RotateCcw },
-      { id: 'hangHuyCD', label: 'Theo dõi hàng huỷ', icon: PackageX },
-      { id: 'doiTra', label: 'Đổi trả hàng', icon: ArrowLeftRight },
+      // 3 tab cũ (Theo dõi nhập trả lại · Theo dõi hàng huỷ · Đổi trả hàng) đã gỡ khỏi menu — dữ liệu đã sang Hàng trả & huỷ (Demo).
       { id: 'flowV2', label: 'Hàng trả & huỷ (Demo)', icon: Workflow },
     ],
   },
