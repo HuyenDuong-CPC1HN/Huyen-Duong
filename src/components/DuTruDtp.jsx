@@ -258,9 +258,9 @@ function KhoSoSachThucTe({ cfg }) {
               <div className="overflow-x-auto border border-gray-200 rounded-xl">
                 <table className="w-full text-sm border-collapse" style={{ minWidth: 1270 }}>
                   <thead className="bg-gray-50 text-gray-500 text-xs"><tr>
-                    <th className="px-2 py-2 text-left">{cfg.useMap ? 'Mã U · Mã C' : 'Mã hàng'}</th><th className="px-2 py-2 text-left">Tên hàng</th><th className="px-2 py-2 text-left">ĐVT</th><th className="px-2 py-2 text-right">Sl xuất {model.D3} ngày</th><th className="px-2 py-2 text-right">Bán/tuần</th>
-                    <th className="px-2 py-2 text-right">Tồn sổ sách</th><th className="px-2 py-2 text-right">Tồn thực tế</th><th className="px-2 py-2 text-right">Chênh lệch</th>
-                    <th className="px-2 py-2 text-left">Hạn dùng gần nhất</th><th className="px-2 py-2 text-right">Đủ bán</th><th className="px-2 py-2 text-right">Đề xuất</th><th className="px-2 py-2 text-right">Chốt đặt</th><th className="px-2 py-2 text-left">Lưu ý</th>
+                    <th className="px-2 py-2 text-left">{cfg.useMap ? 'Mã U · Mã C' : 'Mã hàng'}</th><th className="px-2 py-2 text-left">Tên hàng</th><th className="px-2 py-2 text-left">ĐVT</th><th className="px-2 py-2 text-right bg-sky-50 text-[#1e3a5f]">Sl xuất {model.D3} ngày</th><th className="px-2 py-2 text-right">Bán/tuần</th>
+                    <th className="px-2 py-2 text-right">Tồn sổ sách</th><th className="px-2 py-2 text-right bg-sky-50 text-[#1e3a5f]">Tồn thực tế</th><th className="px-2 py-2 text-right">Chênh lệch</th>
+                    <th className="px-2 py-2 text-left">Hạn dùng gần nhất</th><th className="px-2 py-2 text-right">Đủ bán</th><th className="px-2 py-2 text-right bg-sky-50 text-[#1e3a5f]">Đề xuất đặt</th><th className="px-2 py-2 text-right">Chốt đặt</th><th className="px-2 py-2 text-left">Lưu ý</th>
                   </tr></thead>
                   <tbody>{planRows.map(r => {
                     const c = r.codes.map(x => cmpBy.get(x)).filter(Boolean)
@@ -270,14 +270,15 @@ function KhoSoSachThucTe({ cfg }) {
                         <td className="px-2 py-1.5 font-mono">{r.order}{cfg.useMap ? <div className="text-[11px] text-gray-500">{c.flatMap(x => x.codesC).join(', ') || 'chưa có mã C'}</div> : c.flatMap(x => x.codesC).length > 1 && <div className="text-[11px] font-sans text-slate-600">gộp {c.flatMap(x => x.codesC).join(', ')}</div>}</td>
                         <td className="px-2 py-1.5">{r.p0.ten}</td>
                         <td className="px-2 py-1.5 text-gray-600">{r.p0.dvt}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{fmtN(r.X3)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{fmt1(r.rd * 7)}</td>
+                        {/* 3 cột cần quan tâm (xuất, tồn thực tế, cần đặt): nền xanh nhạt, chữ đậm; các cột khác chữ xám, không tô màu */}
+                        <td className={`px-2 py-1.5 text-right tabular-nums bg-sky-50/60 ${KEY(r.X3)}`}>{fmtN(r.X3)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{fmt1(r.rd * 7)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{fmtN(ss)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums font-bold">{files.web ? fmtN(tt) : <span className="text-gray-300 font-normal">—</span>}</td>
-                        <td className={`px-2 py-1.5 text-right tabular-nums ${files.web ? tone(tt - ss) : ''}`}>{files.web ? signN(tt - ss) : <span className="text-gray-300">—</span>}</td>
+                        <td className={`px-2 py-1.5 text-right tabular-nums bg-sky-50/60 ${files.web ? KEY(tt) : 'text-gray-300'}`}>{files.web ? fmtN(tt) : '—'}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{files.web ? signN(tt - ss) : <span className="text-gray-300">—</span>}</td>
                         <HdCell lots={c.flatMap(x => x.lots)} web={!!files.web} />
-                        <td className={`px-2 py-1.5 text-right tabular-nums ${r.weeks < settings.Ld / 7 ? 'text-red-600 font-semibold' : r.weeks > 8 ? 'text-amber-700 font-semibold' : ''}`}>{fmtW(r.weeks)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums"><b>{fmtN(r.deK)}</b>{r.kien && r.deK > 0 ? <div className="text-[11px] text-slate-600">{fmtN(r.deK / r.kien)} kiện</div> : null}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{fmtW(r.weeks)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums bg-sky-50/60">{r.deK > 0 ? <span className="inline-block rounded-md bg-[#1e3a5f] text-white font-bold px-2 py-0.5">{fmtN(r.deK)}</span> : <span className="text-gray-300">0</span>}{r.kien && r.deK > 0 ? <div className="text-[11px] text-slate-600">{fmtN(r.deK / r.kien)} kiện</div> : null}</td>
                         <td className="px-2 py-1.5 text-right"><NumInput value={chotOf(r)} label={`Chốt đặt ${r.order}`} onCommit={v => saveOrder({ chot: { ...order.chot, [r.id]: v } })} /></td>
                         <td className="px-2 py-1.5"><div className="flex flex-wrap gap-1 min-w-40">{r.alerts.length ? [...r.alerts].sort((a, b) => LV_ORDER[a.lv] - LV_ORDER[b.lv]).slice(0, 3).map(a => <AlertTag key={a.k} a={a} />) : <span className="text-xs text-green-700">Ổn định</span>}</div></td>
                       </tr>
@@ -299,11 +300,13 @@ function hdOf(lots, web) {
   const live = lots.filter(l => (web ? l.tt : l.ss) > 0 && l.hd).map(l => String(l.hd).slice(0, 10)).sort()
   return { first: live[0] || '', n: live.length }
 }
+// Số ở cột cần quan tâm: đậm, xanh đậm; 0 thì xám nhạt cho khỏi rối mắt
+const KEY = n => (n ? 'font-bold text-[#1e3a5f]' : 'text-gray-300')
 function HdCell({ lots, web }) {
   const { first, n } = hdOf(lots, web)
   if (!first) return <td className="px-2 py-1.5 text-gray-300">—</td>
   const months = (new Date(first) - new Date()) / (86400000 * 30.44)
-  const cls = months < 3 ? 'text-red-600 font-semibold' : months < 6 ? 'text-amber-700 font-semibold' : ''
+  const cls = months < 3 ? 'text-red-600 font-semibold' : 'text-gray-500'
   return <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${cls}`}>{viDate(first)}{n > 1 && <div className="text-[11px] font-normal text-gray-400">{n} lô còn tồn</div>}</td>
 }
 
