@@ -302,12 +302,32 @@ function hdOf(lots, web) {
 }
 // Số ở cột cần quan tâm: đậm, xanh đậm; 0 thì xám nhạt cho khỏi rối mắt
 const KEY = n => (n ? 'font-bold text-[#1e3a5f]' : 'text-gray-300')
+// Hàng nhiều lô còn tồn: mỗi lô 1 dòng (hạn dùng · lô · số lượng), lô cận hạn nhất lên đầu
+const hdCls = hd => ((new Date(hd) - new Date()) / (86400000 * 30.44) < 3 ? 'text-red-600 font-semibold' : 'text-gray-500')
 function HdCell({ lots, web }) {
   const { first, n } = hdOf(lots, web)
   if (!first) return <td className="px-2 py-1.5 text-gray-300">—</td>
-  const months = (new Date(first) - new Date()) / (86400000 * 30.44)
-  const cls = months < 3 ? 'text-red-600 font-semibold' : 'text-gray-500'
-  return <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${cls}`}>{viDate(first)}{n > 1 && <div className="text-[11px] font-normal text-gray-400">{n} lô còn tồn</div>}</td>
+  if (n < 2) return <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${hdCls(first)}`}>{viDate(first)}</td>
+  const by = new Map()
+  for (const l of lots) {
+    const q = web ? l.tt : l.ss
+    if (!(q > 0) || !l.hd) continue
+    const hd = String(l.hd).slice(0, 10), k = `${hd}|${String(l.lo).trim().toUpperCase()}`
+    const g = by.get(k) || { hd, lo: l.lo, q: 0 }
+    g.q += q
+    by.set(k, g)
+  }
+  const list = [...by.values()].sort((x, y) => x.hd.localeCompare(y.hd) || String(x.lo).localeCompare(String(y.lo)))
+  return (
+    <td className="px-2 py-1.5 tabular-nums whitespace-nowrap">
+      {list.map(l => (
+        <div key={`${l.hd}|${l.lo}`} className="leading-snug">
+          <span className={hdCls(l.hd)}>{viDate(l.hd)}</span>
+          <span className="text-[11px] text-gray-500"> · lô {l.lo || '—'} · <b className="text-gray-700">{fmtN(l.q)}</b></span>
+        </div>
+      ))}
+    </td>
+  )
 }
 
 function FragmentRows({ r, cfg, open, onToggle }) {
