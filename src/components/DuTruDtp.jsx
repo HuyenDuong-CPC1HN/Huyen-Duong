@@ -252,15 +252,15 @@ function KhoSoSachThucTe({ cfg }) {
             <section className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-2" aria-label={`Dự trù ${cfg.name}`}>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-xs text-gray-500 flex-1">Xếp theo tên A → Z. Đề xuất = bán/ngày × {7 + settings.Ld + settings.ss} ngày − tồn {files.web ? 'thực tế' : 'sổ sách'}, làm tròn lên đủ kiện (quy cách theo mã C ở tab Quy cách hàng hoá).</div>
-                <button type="button" className="sheet-tab-action" onClick={() => copy([[cfg.code, ...(cfg.useMap ? ['Mã C'] : []), 'Tên hàng', 'ĐVT', `Sl xuất ${model.D3} ngày`, 'Bán/tuần', 'Tồn sổ sách', 'Tồn thực tế', 'Chênh lệch', 'Đủ bán (tuần)', 'Đề xuất', 'Chốt đặt'].join('\t'),
-                  ...planRows.map(r => { const c = cmpBy.get(r.order); return [r.order, ...(cfg.useMap ? [(c?.codesC || []).join(', ')] : []), r.p0.ten, r.p0.dvt, Math.round(r.X3), fmt1(r.rd * 7), c ? c.ss : '', c && files.web ? c.tt : '', c && files.web ? c.diff : '', Number.isFinite(r.weeks) ? fmt1(r.weeks) : '', r.deK, chotOf(r)].join('\t') })].join('\n'), `Đã chép ${planRows.length} dòng, dán vào Excel.`)}><Copy size={13} /> Chép bảng</button>
+                <button type="button" className="sheet-tab-action" onClick={() => copy([[cfg.code, ...(cfg.useMap ? ['Mã C'] : []), 'Tên hàng', 'ĐVT', `Sl xuất ${model.D3} ngày`, 'Bán/tuần', 'Tồn sổ sách', 'Tồn thực tế', 'Chênh lệch', 'Hạn dùng gần nhất', 'Số lô còn tồn', 'Đủ bán (tuần)', 'Đề xuất', 'Chốt đặt'].join('\t'),
+                  ...planRows.map(r => { const c = cmpBy.get(r.order); return [r.order, ...(cfg.useMap ? [(c?.codesC || []).join(', ')] : []), r.p0.ten, r.p0.dvt, Math.round(r.X3), fmt1(r.rd * 7), c ? c.ss : '', c && files.web ? c.tt : '', c && files.web ? c.diff : '', ...(h => [h.first ? viDate(h.first) : '', h.n || ''])(hdOf(r.codes.map(x => cmpBy.get(x)).filter(Boolean).flatMap(x => x.lots), !!files.web)), Number.isFinite(r.weeks) ? fmt1(r.weeks) : '', r.deK, chotOf(r)].join('\t') })].join('\n'), `Đã chép ${planRows.length} dòng, dán vào Excel.`)}><Copy size={13} /> Chép bảng</button>
               </div>
               <div className="overflow-x-auto border border-gray-200 rounded-xl">
-                <table className="w-full text-sm border-collapse" style={{ minWidth: 1170 }}>
+                <table className="w-full text-sm border-collapse" style={{ minWidth: 1270 }}>
                   <thead className="bg-gray-50 text-gray-500 text-xs"><tr>
                     <th className="px-2 py-2 text-left">{cfg.useMap ? 'Mã U · Mã C' : 'Mã hàng'}</th><th className="px-2 py-2 text-left">Tên hàng</th><th className="px-2 py-2 text-left">ĐVT</th><th className="px-2 py-2 text-right">Sl xuất {model.D3} ngày</th><th className="px-2 py-2 text-right">Bán/tuần</th>
                     <th className="px-2 py-2 text-right">Tồn sổ sách</th><th className="px-2 py-2 text-right">Tồn thực tế</th><th className="px-2 py-2 text-right">Chênh lệch</th>
-                    <th className="px-2 py-2 text-right">Đủ bán</th><th className="px-2 py-2 text-right">Đề xuất</th><th className="px-2 py-2 text-right">Chốt đặt</th><th className="px-2 py-2 text-left">Lưu ý</th>
+                    <th className="px-2 py-2 text-left">Hạn dùng gần nhất</th><th className="px-2 py-2 text-right">Đủ bán</th><th className="px-2 py-2 text-right">Đề xuất</th><th className="px-2 py-2 text-right">Chốt đặt</th><th className="px-2 py-2 text-left">Lưu ý</th>
                   </tr></thead>
                   <tbody>{planRows.map(r => {
                     const c = r.codes.map(x => cmpBy.get(x)).filter(Boolean)
@@ -275,13 +275,14 @@ function KhoSoSachThucTe({ cfg }) {
                         <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{fmtN(ss)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums font-bold">{files.web ? fmtN(tt) : <span className="text-gray-300 font-normal">—</span>}</td>
                         <td className={`px-2 py-1.5 text-right tabular-nums ${files.web ? tone(tt - ss) : ''}`}>{files.web ? signN(tt - ss) : <span className="text-gray-300">—</span>}</td>
+                        <HdCell lots={c.flatMap(x => x.lots)} web={!!files.web} />
                         <td className={`px-2 py-1.5 text-right tabular-nums ${r.weeks < settings.Ld / 7 ? 'text-red-600 font-semibold' : r.weeks > 8 ? 'text-amber-700 font-semibold' : ''}`}>{fmtW(r.weeks)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums"><b>{fmtN(r.deK)}</b>{r.kien && r.deK > 0 ? <div className="text-[11px] text-slate-600">{fmtN(r.deK / r.kien)} kiện</div> : null}</td>
                         <td className="px-2 py-1.5 text-right"><NumInput value={chotOf(r)} label={`Chốt đặt ${r.order}`} onCommit={v => saveOrder({ chot: { ...order.chot, [r.id]: v } })} /></td>
                         <td className="px-2 py-1.5"><div className="flex flex-wrap gap-1 min-w-40">{r.alerts.length ? [...r.alerts].sort((a, b) => LV_ORDER[a.lv] - LV_ORDER[b.lv]).slice(0, 3).map(a => <AlertTag key={a.k} a={a} />) : <span className="text-xs text-green-700">Ổn định</span>}</div></td>
                       </tr>
                     )
-                  })}{!planRows.length && <tr><td colSpan={12} className="px-3 py-4 text-gray-400">Không có mã nào khớp.</td></tr>}</tbody>
+                  })}{!planRows.length && <tr><td colSpan={13} className="px-3 py-4 text-gray-400">Không có mã nào khớp.</td></tr>}</tbody>
                 </table>
               </div>
             </section>
@@ -290,6 +291,20 @@ function KhoSoSachThucTe({ cfg }) {
       )}
     </div>
   )
+}
+
+// Hạn dùng gần nhất trong các lô còn tồn (tồn thực tế Web nếu có, không thì tồn sổ sách) + số lô còn tồn.
+const viDate = iso => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '')
+function hdOf(lots, web) {
+  const live = lots.filter(l => (web ? l.tt : l.ss) > 0 && l.hd).map(l => String(l.hd).slice(0, 10)).sort()
+  return { first: live[0] || '', n: live.length }
+}
+function HdCell({ lots, web }) {
+  const { first, n } = hdOf(lots, web)
+  if (!first) return <td className="px-2 py-1.5 text-gray-300">—</td>
+  const months = (new Date(first) - new Date()) / (86400000 * 30.44)
+  const cls = months < 3 ? 'text-red-600 font-semibold' : months < 6 ? 'text-amber-700 font-semibold' : ''
+  return <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${cls}`}>{viDate(first)}{n > 1 && <div className="text-[11px] font-normal text-gray-400">{n} lô còn tồn</div>}</td>
 }
 
 function FragmentRows({ r, cfg, open, onToggle }) {
