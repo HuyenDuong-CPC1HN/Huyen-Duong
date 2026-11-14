@@ -53,10 +53,14 @@ function pickFieldColumns(headerRow) {
   return fieldByCol
 }
 
+// Số có thể kèm chữ đơn vị phía sau (file Kho LGT ghi "Đã lấy" dạng "240 LO", "272 TUBE") → lấy phần số.
 function toOptionalNumber(value) {
   if (value === null || value === undefined || value === '') return 0
-  const n = Number(String(value).replaceAll(',', ''))
-  return Number.isFinite(n) ? n : 0
+  const s = String(value).replaceAll(',', '').trim()
+  const n = Number(s)
+  if (Number.isFinite(n)) return n
+  const m = /^(-?\d*\.?\d+)\s*[^\d\s.]*$/u.exec(s)
+  return m ? Number(m[1]) : 0
 }
 
 function toIsoDate(value) {

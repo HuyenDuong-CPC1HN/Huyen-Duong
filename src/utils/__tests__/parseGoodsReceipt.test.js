@@ -144,6 +144,18 @@ describe('parseGoodsReceipt', () => {
     expect(rows.find(r => r.maHang === 'N00845')).toMatchObject({ slHoaDon: 5000, kienNguyen: 4, kienLe: 1 })
   })
 
+  it('file Kho LGT: "Đã lấy" ghi kèm đơn vị ("240 LO") vẫn đọc ra số — dòng đã lấy hàng không bị bỏ sót', () => {
+    const buffer = makeWorkbook([
+      { TT: 1, Mã: 'N01417', Tên: 'Hàng lấy lẻ', 'Số lô đề nghị': '011126', 'Lượng cần': 240, ĐVT: 'LO', 'Số kiện cần': 0, 'Số hộp cần': 0, 'Đã lấy': '240 LO' },
+      { TT: 2, Mã: 'A01840', Tên: 'Hàng có kiện', 'Số lô đề nghị': '614', 'Lượng cần': 272, ĐVT: 'TUBE', 'Số kiện cần': 1, 'Số hộp cần': 0, 'Đã lấy': '272 TUBE' },
+      { TT: 3, Mã: 'A01809', Tên: 'Hàng chưa lấy', 'Số lô đề nghị': '614', 'Lượng cần': 272, 'Số kiện cần': 0, 'Số hộp cần': 0, 'Đã lấy': '0 ' },
+      { TT: 4, Mã: 'N01414', Tên: 'Hàng hết tồn', 'Số lô đề nghị': 'Hết tồn', 'Lượng cần': 1, 'Số kiện cần': 0, 'Số hộp cần': 0, 'Đã lấy': '0 ' },
+    ])
+    const rows = readWarehouseExportRows(buffer)
+    expect(rows.map(r => r.maHang)).toEqual(['N01417', 'A01840'])
+    expect(rows[0]).toMatchObject({ slHoaDon: 240, dvt: 'LO', kienNguyen: 0 })
+  })
+
   it('"Số hộp cần" là số hộp lẻ, không phải số kiện — dù bao nhiêu hộp cũng chỉ tính thành 1 kiện lẻ', () => {
     const buffer = makeWorkbook([
       { Mã: 'G00898', Tên: 'Guacanyl', 'Số lô đề nghị': 'LOT1', 'Lượng cần': 3200, 'Số kiện cần': 2, 'Số hộp cần': 18, ĐVT: 'HOP' },
