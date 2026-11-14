@@ -15,6 +15,8 @@ export const NGUON = {
 // Nút lọc Nguồn: Khách trả (nhập trả lại + đổi trả) hoặc Phát sinh (hàng huỷ trong kho)
 export const NGUON_FILTER = [['khach', 'Khách trả'], ['kho', 'Phát sinh']]
 export const HUONG = { nhap: 'Nhập trả lại', huy: 'Xuất huỷ' }
+// Nhãn loại gộp Nguồn + Hướng xử lý (mỗi nguồn chỉ có 1 hướng)
+export const LOAI = { tra: 'Khách trả · nhập lại', doitra: 'Khách trả lỗi · huỷ', kho: 'Phát sinh · huỷ' }
 
 // stage của dòng: doing = đang làm / chờ ký · nhap = chờ nhập · gom = chờ gom huỷ · xuat = chờ xuất · done = hoàn thành
 export const STAGE_FILTER = {
@@ -150,11 +152,23 @@ export function summarizeLookup(rows) {
   const map = new Map()
   for (const r of rows) {
     const key = lotKey(r.ten, r.soLo)
-    const e = map.get(key) || { ma: r.ma, ten: r.ten, soLo: r.soLo, dvt: r.dvt, soLuong: 0, phieu: new Set(), nguon: new Set(), kho: new Set() }
-    e.soLuong += r.soLuong; e.phieu.add(`${r.nguon}:${r.ref}`); e.nguon.add(r.nguon); e.kho.add(r.kho)
+    const e = map.get(key) || { ma: r.ma, ten: r.ten, soLo: r.soLo, dvt: r.dvt, soLuong: 0, phieu: new Set(), nguon: new Set(), kho: new Set(), rows: [] }
+    e.soLuong += r.soLuong; e.rows.push(r); e.phieu.add(`${r.nguon}:${r.ref}`); e.nguon.add(r.nguon); e.kho.add(r.kho)
     map.set(key, e)
   }
   return [...map.values()].sort((a, b) => b.soLuong - a.soLuong)
+}
+
+// Gom dòng theo phiếu / hồ sơ / đợt (cùng nguồn + ref), phiếu mới nhất trước. { key, head: dòng đầu, rows }
+export function groupLookup(rows) {
+  const map = new Map()
+  for (const r of rows) {
+    const key = `${r.v2 || ''}:${r.nguon}:${r.ref}`
+    const g = map.get(key) || { key, head: r, rows: [] }
+    g.rows.push(r)
+    map.set(key, g)
+  }
+  return [...map.values()].sort((a, b) => b.head.date.localeCompare(a.head.date) || String(b.head.so).localeCompare(String(a.head.so)))
 }
 
 // Các dòng cùng hàng + số lô (chưa có số lô thì không nối được) theo ngày — để biết lô đó đã đi những đâu.

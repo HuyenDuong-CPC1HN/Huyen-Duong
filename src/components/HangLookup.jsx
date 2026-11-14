@@ -5,7 +5,7 @@ import { opsStore } from '../data/workspace'
 import { readSlips } from '../data/returnSlipsStore'
 import { readHuyPhieus } from '../data/hangHuyStore'
 import { readFlowV2 } from '../data/flowV2Store'
-import { HUONG, NGUON, NGUON_FILTER, STAGE_FILTER, filterLookup, keToanShortener, lookupRows, sameLot, stageLabel, summarizeLookup } from '../utils/hangLookup'
+import { HUONG, LOAI, NGUON, STAGE_FILTER, filterLookup, groupLookup, keToanShortener, lookupRows, sameLot, stageLabel, summarizeLookup } from '../utils/hangLookup'
 
 const fmtDate = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '—' }
 const readStored = (key) => {
@@ -16,45 +16,79 @@ const STAGE_CLS = { doing: 'bg-blue-50 text-blue-700', nhap: 'bg-purple-50 text-
 const khoTag = k => (k === 'C'
   ? <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold border border-red-200 bg-red-50 text-red-700">Kho C</span>
   : <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold border border-blue-200 bg-blue-50 text-blue-700">Kho DTP</span>)
-const nguonTag = n => <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap ${NGUON_CLS[n]}`}>{NGUON[n].label}</span>
+const loaiTag = n => <span className={`inline-block px-2 py-0.5 rounded-md text-[11.5px] font-semibold whitespace-nowrap ${NGUON_CLS[n]}`}>{LOAI[n]}</span>
 const stagePill = r => <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${STAGE_CLS[r.stage]}`}>{stageLabel(r)}</span>
+const PAGE_SIZES = [10, 20, 50]
 
-function Seg({ label, value, options, onChange }) {
+function Chips({ label, value, options, onChange }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
-      <div className="flex flex-wrap gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1" role="group" aria-label={label}>
-        {options.map(([k, l]) => (
-          <button key={k} type="button" aria-pressed={value === k} onClick={() => onChange(k)}
-            className={`px-2.5 py-1 rounded text-xs font-medium ${value === k ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>{l}</button>
-        ))}
-      </div>
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={label}>
+      {options.map(([k, l]) => (
+        <button key={k} type="button" aria-pressed={value === k} onClick={() => onChange(k)}
+          className={`px-3 py-1 rounded-full border text-[12.5px] ${value === k ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white font-semibold' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700'}`}>{l}</button>
+      ))}
     </div>
   )
 }
 
-// Tra cứu hàng đã xuất khỏi kho (nhập trả lại, đổi trả, hàng huỷ). onOpen(row) mở lại phiếu ở đúng tab.
+// Các số trang hiện: 1, trang cuối, trang hiện tại ± 1; 0 = dấu "…"
+function pageNums(cur, last) {
+  const set = [...new Set([1, last, cur - 1, cur, cur + 1])].filter(p => p >= 1 && p <= last).sort((a, b) => a - b)
+  return set.flatMap((p, i) => (i && p - set[i - 1] > 1 ? [0, p] : [p]))
+}
+function Pager({ total, unit, page, size, onPage, onSize }) {
+  if (total <= PAGE_SIZES[0]) return null
+  const last = Math.max(1, Math.ceil(total / size))
+  const btn = 'min-w-8 px-2 py-1 rounded-lg border text-[12.5px] tabular-nums'
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-t border-gray-200 bg-gray-50 text-[13px] text-gray-500">
+      <span>{(page - 1) * size + 1}–{Math.min(total, page * size)} / {total} {unit} · <label>Mỗi trang{' '}
+        <select value={size} onChange={e => onSize(Number(e.target.value))} aria-label={`Số ${unit} mỗi trang`} className="border border-gray-200 rounded-lg px-2 py-1 text-[13px] bg-white">
+          {PAGE_SIZES.map(v => <option key={v} value={v}>{v} {unit}</option>)}
+        </select></label></span>
+      <nav className="flex flex-wrap items-center gap-1" aria-label="Chuyển trang">
+        <button type="button" className={`${btn} bg-white border-gray-200 disabled:opacity-40`} disabled={page === 1} onClick={() => onPage(page - 1)} aria-label="Trang trước">‹</button>
+        {pageNums(page, last).map((p, i) => (p ? (
+          <button key={p} type="button" aria-current={p === page ? 'page' : undefined} onClick={() => onPage(p)}
+            className={`${btn} ${p === page ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white font-bold' : 'bg-white border-gray-200 text-gray-700'}`}>{p}</button>
+        ) : <span key={`g${i}`} className="px-0.5 text-gray-400">…</span>))}
+        <button type="button" className={`${btn} bg-white border-gray-200 disabled:opacity-40`} disabled={page === last} onClick={() => onPage(page + 1)} aria-label="Trang sau">›</button>
+      </nav>
+    </div>
+  )
+}
+
+// Tra cứu hàng đã xuất khỏi kho (nhập trả lại, đổi trả, hàng huỷ). Xem theo phiếu (đầu phiếu 1 dòng, hàng bên dưới)
+// hoặc theo hàng + lô; chia trang. onOpen(row) mở lại phiếu ở đúng tab.
 export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatches: batchesProp, flowV2: flowV2Prop }) {
   const [kho, setKho] = useState('all')
   const [nguon, setNguon] = useState('all')
-  const [huong, setHuong] = useState('all')
   const [month, setMonth] = useState('all')
   const [stage, setStage] = useState('all')
   const [q, setQ] = useState('')
-  const [view, setView] = useState('rows')
+  const [view, setView] = useState('slip')
+  const [page, setPage] = useState(1)
+  const [size, setSize] = useState(PAGE_SIZES[0])
   const [picked, setPicked] = useState(null)
+  // Đổi lọc / tìm / kiểu xem thì về trang 1
+  const reset = set => v => { set(v); setPage(1) }
 
   const all = useMemo(() => lookupRows({
     slips: readSlips(), phieus: readHuyPhieus(), swapRecords: recordsProp ?? readStored('swap_return_records'), swapBatches: batchesProp ?? readStored('swap_huy_batches'),
     flowV2: flowV2Prop ?? readFlowV2(),
   }), [recordsProp, batchesProp, flowV2Prop])
   const months = useMemo(() => [...new Set(all.map(r => r.date.slice(0, 7)).filter(Boolean))].sort().reverse(), [all])
-  const rows = useMemo(() => filterLookup(all, { kho, nguon, huong, month, stage, q }), [all, kho, nguon, huong, month, stage, q])
+  const rows = useMemo(() => filterLookup(all, { kho, nguon, month, stage, q }), [all, kho, nguon, month, stage, q])
+  const groups = useMemo(() => groupLookup(rows), [rows])
   const summary = useMemo(() => summarizeLookup(rows), [rows])
   const shortKeToan = useMemo(() => keToanShortener(all.map(r => r.keToan)), [all])
   const total = rows.reduce((s, r) => s + r.soLuong, 0)
   const pickedRow = picked ? all.find(r => r.id === picked) : null
   const lot = pickedRow ? sameLot(all, pickedRow) : []
+  const count = view === 'slip' ? groups.length : summary.length
+  const last = Math.max(1, Math.ceil(count / size))
+  const cur = Math.min(page, last)
+  const from = (cur - 1) * size
 
   const exportExcel = () => {
     const aoa = view === 'sum'
@@ -70,77 +104,95 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
     <div className="sheet-tab">
       <div className="sheet-tab-shell flex flex-col gap-3">
         <header className="sheet-tab-context"><span className="font-semibold">Tra cứu hàng đã xuất khỏi kho</span></header>
-        <div className="report-section">
-          <div className="report-section-trigger flex-col items-stretch gap-2" style={{ cursor: 'default', alignItems: 'stretch' }}>
+        <section className="bg-white border border-gray-200 rounded-2xl flex flex-col min-w-0" aria-label="Tra cứu hàng">
+          <div className="p-3.5 flex flex-col gap-2.5 border-b border-gray-200">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 min-w-56 max-w-md">
+              <div className="relative flex-1 min-w-56">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input value={q} onChange={e => setQ(e.target.value)} aria-label="Tìm kiếm" placeholder="Tìm tên hàng, mã hàng, số lô, khách hàng, số phiếu…" className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                <input value={q} onChange={e => reset(setQ)(e.target.value)} aria-label="Tìm kiếm" placeholder="Tìm tên hàng, mã hàng, số lô, khách hàng, số phiếu…" className="w-full pl-8 pr-2 py-2 border border-gray-200 rounded-lg text-sm" />
               </div>
-              <select value={month} onChange={e => setMonth(e.target.value)} aria-label="Tháng" className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+              <select value={month} onChange={e => reset(setMonth)(e.target.value)} aria-label="Tháng" className="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white">
                 <option value="all">Tất cả thời gian</option>
                 {months.map(m => <option key={m} value={m}>Tháng {m.slice(5)}/{m.slice(0, 4)}</option>)}
               </select>
-              <select value={stage} onChange={e => setStage(e.target.value)} aria-label="Trạng thái" className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+              <select value={stage} onChange={e => reset(setStage)(e.target.value)} aria-label="Trạng thái" className="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white">
                 <option value="all">Mọi trạng thái</option>
                 {Object.entries(STAGE_FILTER).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}
               </select>
-              <Seg label="Kiểu xem" value={view} onChange={setView} options={[['rows', 'Từng dòng'], ['sum', 'Tổng hợp theo hàng']]} />
-              <button type="button" onClick={exportExcel} disabled={rows.length === 0} className="sheet-tab-action ml-auto"><FileDown size={13} /> Xuất Excel</button>
+              <button type="button" onClick={exportExcel} disabled={rows.length === 0} className="sheet-tab-action"><FileDown size={13} /> Xuất Excel</button>
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <Seg label="Kho" value={kho} onChange={setKho} options={[['all', 'Tất cả'], ['C', 'Kho C'], ['DTP', 'Kho DTP']]} />
-              <Seg label="Nguồn" value={nguon} onChange={setNguon} options={[['all', 'Tất cả'], ...NGUON_FILTER]} />
-              <Seg label="Hướng xử lý" value={huong} onChange={setHuong} options={[['all', 'Tất cả'], ...Object.entries(HUONG)]} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Chips label="Kho" value={kho} onChange={reset(setKho)} options={[['all', 'Tất cả kho'], ['C', 'Kho C'], ['DTP', 'Kho DTP']]} />
+              <span className="w-px h-5 bg-gray-200" aria-hidden="true" />
+              <Chips label="Loại" value={nguon} onChange={reset(setNguon)} options={[['all', 'Tất cả loại'], ...Object.entries(LOAI)]} />
+              <div className="ml-auto inline-flex border border-gray-200 rounded-lg p-0.5 bg-gray-50" role="group" aria-label="Kiểu xem">
+                {[['slip', 'Theo phiếu'], ['sum', 'Theo hàng + lô']].map(([k, l]) => (
+                  <button key={k} type="button" aria-pressed={view === k} onClick={() => reset(setView)(k)}
+                    className={`px-2.5 py-1 rounded-md text-[12.5px] ${view === k ? 'bg-white shadow-sm text-gray-800 font-semibold' : 'text-gray-500'}`}>{l}</button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="report-section-content flex flex-col gap-3">
-            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-              {[[rows.length, 'dòng hàng'], [new Set(rows.map(r => `${r.nguon}:${r.ref}`)).size, 'phiếu / đợt'], [summary.length, 'hàng + lô khác nhau'], [total.toLocaleString('vi-VN'), 'tổng số lượng']].map(([n, l]) => (
-                <div key={l} className="rounded-lg border border-gray-200 bg-white px-3 py-2"><div className="text-xl font-bold tabular-nums text-gray-800">{n}</div><div className="text-xs text-gray-500">{l}</div></div>
-              ))}
+          <div className="flex flex-wrap gap-x-5 gap-y-1 px-3.5 py-2.5 text-[13px] text-gray-500 border-b border-gray-200 bg-gray-50">
+            {[[groups.length, 'phiếu / đợt'], [rows.length, 'dòng hàng'], [summary.length, 'hàng + lô'], [total.toLocaleString('vi-VN'), 'tổng số lượng']].map(([n, l]) => (
+              <span key={l}><b className="text-[15px] text-gray-800 tabular-nums mr-1">{n}</b>{l}</span>
+            ))}
+          </div>
+          {count === 0 ? <div className="py-8 text-center text-gray-400 text-sm">Không có hàng phù hợp. Thử bỏ bớt bộ lọc.</div> : view === 'slip' ? (
+            <div className="flex flex-col">
+              {groups.slice(from, from + size).map(g => {
+                const h = g.head
+                return (
+                  <article key={g.key} className="border-b border-gray-200 last:border-b-0">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[92px_minmax(0,1fr)_auto] gap-x-3 gap-y-1 items-center px-3.5 pt-2.5 pb-1.5">
+                      <div className="col-span-2 sm:col-span-1 flex sm:flex-col gap-2 sm:gap-0.5 text-[12.5px] text-gray-500 tabular-nums">{fmtDate(h.date)}
+                        <span className={`text-[11px] font-bold tracking-wide ${h.kho === 'C' ? 'text-red-700' : 'text-blue-700'}`}>KHO {h.kho}</span></div>
+                      <div className="min-w-0 flex flex-col">
+                        <span className="font-mono font-bold text-[13.5px]">{h.so || (h.v2 === 'pool' ? 'Chờ huỷ' : <span className="font-sans font-normal text-gray-400">chưa có số phiếu</span>)}</span>
+                        <span className="text-[12.5px] text-gray-500 truncate" title={h.who}>{h.who}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        {loaiTag(h.nguon)}
+                        {h.keToan && <span className="text-xs text-gray-400" title={h.keToan}>{shortKeToan(h.keToan)}</span>}
+                        {stagePill(h)}
+                      </div>
+                    </div>
+                    <div className="mx-3.5 mb-2.5 sm:ml-[118px] border border-gray-200 rounded-lg overflow-hidden">
+                      {g.rows.map(r => (
+                        <button key={r.id} type="button" onClick={() => setPicked(r.id)} aria-label={`Xem chi tiết ${r.ten}`}
+                          className="w-full text-left grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_120px_100px_minmax(0,160px)] gap-x-2.5 gap-y-0.5 items-baseline px-2.5 py-1.5 border-t border-gray-200 first:border-t-0 text-[13px] bg-white hover:bg-blue-50/40">
+                          <span>{r.ma && <span className="font-mono text-[11.5px] text-gray-400 mr-1.5">{r.ma}</span>}{r.ten}</span>
+                          <span className="font-mono text-xs text-gray-500 row-start-2 sm:row-start-auto">Lô {r.soLo || '—'}</span>
+                          <span className="text-right tabular-nums font-bold sm:col-start-3 row-start-1 col-start-2">{r.soLuong.toLocaleString('vi-VN')}<small className="font-normal text-gray-500 text-[11.5px] ml-1">{r.dvt}</small></span>
+                          <span className="text-xs text-gray-500 truncate col-span-2 sm:col-span-1" title={r.extra}>{r.extra || <span className="text-gray-400">chưa ghi</span>}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </article>
+                )
+              })}
             </div>
+          ) : (
             <div style={{ overflowX: 'auto' }}>
-              {view === 'sum' ? (
-                <table className="w-full text-xs">
-                  <thead><tr className="bg-gray-50 border-b border-gray-100">{['Tên hàng', 'Số lô', 'ĐVT', 'Tổng số lượng', 'Số phiếu', 'Nguồn', 'Kho'].map(h => <th key={h} className="px-2 py-2 text-left text-gray-500 font-semibold">{h}</th>)}</tr></thead>
-                  <tbody>
-                    {summary.length === 0 ? <tr><td colSpan={7} className="text-center py-10 text-gray-400 text-sm">Không có hàng phù hợp</td></tr> : summary.map(e => (
-                      <tr key={`${e.ten}|${e.soLo}`} className="border-b border-gray-50 align-top">
-                        <td className="px-2 py-2">{e.ma && <span className="font-mono text-gray-500">{e.ma} · </span>}{e.ten}</td>
-                        <td className="px-2 py-2 font-mono">{e.soLo || '—'}</td><td className="px-2 py-2">{e.dvt}</td>
-                        <td className="px-2 py-2 font-bold tabular-nums">{e.soLuong.toLocaleString('vi-VN')}</td><td className="px-2 py-2">{e.phieu.size}</td>
-                        <td className="px-2 py-2"><div className="flex flex-wrap gap-1">{[...e.nguon].map(n => <span key={n}>{nguonTag(n)}</span>)}</div></td>
-                        <td className="px-2 py-2"><div className="flex gap-1">{[...e.kho].map(k => <span key={k}>{khoTag(k)}</span>)}</div></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <table className="w-full text-xs">
-                  <thead><tr className="bg-gray-50 border-b border-gray-100">{['Tên hàng', 'Số lô', 'Số lượng', 'Nguồn', 'Hướng xử lý', 'Tình trạng', 'Số phiếu / khách', 'Ngày', 'Kho', 'Kế toán', 'Trạng thái'].map(h => <th key={h} className="px-2 py-2 text-left text-gray-500 font-semibold">{h}</th>)}</tr></thead>
-                  <tbody>
-                    {rows.length === 0 ? <tr><td colSpan={11} className="text-center py-10 text-gray-400 text-sm">Không có hàng phù hợp. Thử bỏ bớt bộ lọc.</td></tr> : rows.map(r => (
-                      <tr key={r.id} onClick={() => setPicked(r.id)} className="border-b border-gray-50 align-top cursor-pointer hover:bg-blue-50/40">
-                        <td className="px-2 py-2">{r.ma && <span className="font-mono text-gray-500">{r.ma} · </span>}{r.ten}</td>
-                        <td className="px-2 py-2 font-mono">{r.soLo || '—'}</td>
-                        <td className="px-2 py-2 whitespace-nowrap tabular-nums">{r.soLuong.toLocaleString('vi-VN')} {r.dvt}</td>
-                        <td className="px-2 py-2">{nguonTag(r.nguon)}</td>
-                        <td className="px-2 py-2 whitespace-nowrap text-gray-600">{HUONG[r.huong]}</td>
-                        <td className="px-2 py-2 max-w-56">{r.extra || <span className="text-gray-400">chưa ghi</span>}</td>
-                        <td className="px-2 py-2 max-w-64"><div className="font-mono">{r.so || '—'}</div><div className="text-gray-400 line-clamp-2" title={r.who}>{r.who}</div></td>
-                        <td className="px-2 py-2 whitespace-nowrap">{fmtDate(r.date)}</td>
-                        <td className="px-2 py-2">{khoTag(r.kho)}</td>
-                        <td className="px-2 py-2 whitespace-nowrap text-gray-600" title={r.keToan}>{shortKeToan(r.keToan) || <span className="text-gray-400">—</span>}</td>
-                        <td className="px-2 py-2">{stagePill(r)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              <table className="w-full text-[13px] border-collapse">
+                <thead><tr className="bg-gray-50 border-b border-gray-200 text-[11.5px] text-gray-500">
+                  <th className="px-3.5 py-2 text-left font-semibold">Hàng</th><th className="px-3.5 py-2 text-left font-semibold">Số lô</th><th className="px-3.5 py-2 text-right font-semibold">Tổng SL</th><th className="px-3.5 py-2 text-left font-semibold">Đã đi đâu</th>
+                </tr></thead>
+                <tbody>{summary.slice(from, from + size).map(e => (
+                  <tr key={`${e.ten}|${e.soLo}`} className="border-b border-gray-100 align-top">
+                    <td className="px-3.5 py-2">{e.ma && <span className="font-mono text-[11.5px] text-gray-400 mr-1.5">{e.ma}</span>}{e.ten}</td>
+                    <td className="px-3.5 py-2 font-mono text-xs">{e.soLo || '—'}</td>
+                    <td className="px-3.5 py-2 text-right tabular-nums font-bold whitespace-nowrap">{e.soLuong.toLocaleString('vi-VN')} <small className="font-normal text-gray-500">{e.dvt}</small></td>
+                    <td className="px-3.5 py-2 text-xs text-gray-500">{[...e.rows].sort((a, b) => a.date.localeCompare(b.date)).map(r => (
+                      <button key={r.id} type="button" onClick={() => setPicked(r.id)} className="block text-left hover:text-gray-800">{fmtDate(r.date)} · {LOAI[r.nguon]} · {r.soLuong.toLocaleString('vi-VN')}{r.so ? <span className="font-mono"> · {r.so}</span> : null}</button>
+                    ))}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
             </div>
-          </div>
-        </div>
+          )}
+          <Pager total={count} unit={view === 'slip' ? 'phiếu' : 'dòng'} page={cur} size={size} onPage={setPage} onSize={reset(setSize)} />
+        </section>
       </div>
 
       {pickedRow && (
@@ -149,7 +201,7 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
             <h2 className="font-semibold text-sm">{pickedRow.so || pickedRow.who}</h2>
             <button type="button" onClick={() => setPicked(null)} className="p-1.5 rounded hover:bg-gray-100" aria-label="Đóng"><X size={14} /></button>
           </div>
-          <div className="flex flex-wrap gap-1">{nguonTag(pickedRow.nguon)} {khoTag(pickedRow.kho)} {stagePill(pickedRow)}</div>
+          <div className="flex flex-wrap gap-1">{loaiTag(pickedRow.nguon)} {khoTag(pickedRow.kho)} {stagePill(pickedRow)}</div>
           <dl className="grid gap-x-3 gap-y-1.5 text-sm" style={{ gridTemplateColumns: '110px 1fr' }}>
             <dt className="text-gray-400">Hướng xử lý</dt><dd>{HUONG[pickedRow.huong]}</dd>
             <dt className="text-gray-400">Ngày</dt><dd>{fmtDate(pickedRow.date)}</dd>

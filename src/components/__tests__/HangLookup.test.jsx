@@ -17,19 +17,21 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('HangLookup — tra cứu chung', () => {
-  it('hiện cả 3 nguồn với cột Nguồn và Hướng xử lý; lọc theo nguồn và hướng', () => {
+  it('xem theo phiếu: hiện cả 3 loại, nhãn loại gộp; lọc theo loại', () => {
     render(<HangLookup onOpen={() => {}} />)
     expect(screen.getByText('Progermila')).toBeInTheDocument()
     expect(screen.getByText('Laci-eye')).toBeInTheDocument()
     expect(screen.getByText('Actiso Viet')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Khách trả' }))
+    expect(screen.getByText('DHC1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Khách trả lỗi · huỷ' }))
     expect(screen.queryByText('Progermila')).not.toBeInTheDocument()
+    expect(screen.queryByText('Actiso Viet')).not.toBeInTheDocument()
     expect(screen.getByText('Laci-eye')).toBeInTheDocument()
   })
 
-  it('lọc theo hướng xử lý: Nhập trả lại chỉ còn hàng khách trả nguyên vẹn', () => {
+  it('lọc loại Khách trả · nhập lại chỉ còn hàng khách trả nguyên vẹn', () => {
     render(<HangLookup onOpen={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập trả lại' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Khách trả · nhập lại' }))
     expect(screen.queryByText('Laci-eye')).not.toBeInTheDocument()
     expect(screen.queryByText('Progermila')).not.toBeInTheDocument()
     expect(screen.getByText('Actiso Viet')).toBeInTheDocument()
@@ -38,17 +40,32 @@ describe('HangLookup — tra cứu chung', () => {
   it('bấm dòng mở ngăn chi tiết (kèm phiếu cùng lô) và nút mở phiếu báo đúng nguồn', () => {
     const onOpen = vi.fn()
     render(<HangLookup onOpen={onOpen} />)
-    fireEvent.click(screen.getByText('Laci-eye'))
+    fireEvent.click(screen.getByRole('button', { name: 'Xem chi tiết Laci-eye' }))
     expect(screen.getByText(/Các phiếu cùng hàng và số lô/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Mở phiếu/ }))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ nguon: 'doitra', ref: 'r1' }))
   })
 
-  it('lọc kho và tổng hợp theo hàng', () => {
+  it('lọc kho và xem theo hàng + lô', () => {
     render(<HangLookup onOpen={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Kho DTP' }))
     expect(screen.queryByText('Laci-eye')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Tổng hợp theo hàng' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Theo hàng + lô' }))
+    expect(screen.getByRole('columnheader', { name: 'Đã đi đâu' })).toBeInTheDocument()
     expect(screen.getAllByText('100').length).toBeGreaterThan(0)
+  })
+
+  it('chia trang: 10 phiếu / trang, bấm trang 2 hiện phiếu còn lại', () => {
+    const slips = Array.from({ length: 13 }, (_, i) => ({ id: `t${i}`, maPhieu: `P${String(i).padStart(2, '0')}`, khachHang: 'Khách', createdAt: `2026-10-${String(i + 1).padStart(2, '0')}T08:00:00`, stage: 'done', form: { items: [{ soLo: 'L' }] }, pdf: { mau: 'CPC1HN', items: [{ ten: `Hàng ${i}`, dvt: 'Hộp', soLuong: 1 }] } }))
+    store.values.set('return_slips', JSON.stringify(slips))
+    render(<HangLookup onOpen={() => {}} />)
+    expect(screen.getByText('Hàng 12')).toBeInTheDocument() // mới nhất trước
+    expect(screen.queryByText('Hàng 0')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '2' }))
+    expect(screen.getByText('Hàng 0')).toBeInTheDocument()
+    expect(screen.queryByText('Hàng 12')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Số phiếu mỗi trang' }), { target: { value: '20' } })
+    expect(screen.getByText('Hàng 12')).toBeInTheDocument()
+    expect(screen.getByText('Hàng 0')).toBeInTheDocument()
   })
 })
