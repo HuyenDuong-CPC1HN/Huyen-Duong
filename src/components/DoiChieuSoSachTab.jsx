@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Plus, Search, Trash2, X } from 'lucide-react'
+import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import {
   PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty, parseOcrQty,
   alignOcrRows, fixAiThousandRows, batchMaHang, khoMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
@@ -33,6 +33,13 @@ const batchLabel = b => {
   const d = new Date(b.processedAt)
   const t = Number.isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   return `${b.pdfMetadata?.ngayNhap ? `Ngày nhập ${b.pdfMetadata.ngayNhap} · ` : ''}xử lý ${t}`
+}
+// Năm / tháng của chuyến: theo Ngày nhập trên phiếu (dd/mm/yyyy), không có thì theo lúc xử lý → { y: '2026', m: '11' }
+const batchYm = b => {
+  const m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(b.pdfMetadata?.ngayNhap || '')
+  if (m) return { y: m[3], m: m[2].padStart(2, '0') }
+  const d = new Date(b.processedAt)
+  return Number.isNaN(d.getTime()) ? { y: '', m: '' } : { y: String(d.getFullYear()), m: String(d.getMonth() + 1).padStart(2, '0') }
 }
 const matchFilter = (row, f) => f === 'all' || (f === 'nguon' ? isNguonRow(row) : row.tags.includes(f))
 
@@ -421,6 +428,13 @@ export default function DoiChieuSoSachTab() {
   const [copyMsg, setCopyMsg] = useState('')
   const [reasonFor, setReasonFor] = useState(null) // dòng đang nhập lý do ("kho:key")
   const [reasonText, setReasonText] = useState('')
+  const [nameEdit, setNameEdit] = useState(null) // tên chuyến đang sửa (null = không sửa)
+  const curBatch = batches.find(b => b.id === batchId)
+  const curYm = curBatch ? batchYm(curBatch) : { y: '', m: '' }
+  const years = [...new Set(batches.map(b => batchYm(b).y))].sort().reverse()
+  const months = [...new Set(batches.filter(b => batchYm(b).y === curYm.y).map(b => batchYm(b).m))].sort().reverse()
+  const inMonth = batches.filter(b => batchYm(b).y === curYm.y && batchYm(b).m === curYm.m)
+  const pickBatch = b => { if (b) { setBatchId(b.id); setOpenId(null) } }
   const reportRef = useRef(null)
 
   const batch = batches.find(b => b.id === batchId) || null
@@ -733,11 +747,33 @@ export default function DoiChieuSoSachTab() {
         Lệch giữa thực nhận và sổ sách gom vào phần <b>Báo đầu nguồn</b> để gửi Zalo.
       </div>
 
-      <label className="flex flex-col gap-1 text-xs text-gray-500 max-w-md">Chuyến nhập hàng
-        <select value={batchId} onChange={e => { setBatchId(e.target.value); setOpenId(null) }} aria-label="Chuyến nhập hàng" className="border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-900 bg-white">
-          {batches.map(b => <option key={b.id} value={b.id}>{batchLabel(b)}</option>)}
-        </select>
-      </label>
+      {/* Chọn chuyến theo Năm > Tháng > Chuyến trong tháng. Tên chuyến anh tự đặt lưu ở dữ liệu Đối chiếu sổ sách của
+          chuyến (session.ten), không sửa chuyến bên tab Nhập hàng. */}
+      <div className="flex flex-col gap-1 text-xs text-gray-500 max-w-3xl">
+        <span>Chuyến nhập hàng</span>
+        {nameEdit === null ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={curYm.y} onChange={e => pickBatch(batches.find(b => batchYm(b).y === e.target.value))} aria-label="Năm" className="border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-900 bg-white">
+              {years.map(y => <option key={y} value={y}>Năm {y || '—'}</option>)}
+            </select>
+            <select value={curYm.m} onChange={e => pickBatch(batches.find(b => batchYm(b).y === curYm.y && batchYm(b).m === e.target.value))} aria-label="Tháng" className="border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-900 bg-white">
+              {months.map(m => <option key={m} value={m}>Tháng {Number(m) || '—'} ({batches.filter(b => batchYm(b).y === curYm.y && batchYm(b).m === m).length} chuyến)</option>)}
+            </select>
+            <select value={batchId} onChange={e => pickBatch(batches.find(b => b.id === e.target.value))} aria-label="Chuyến nhập hàng" className="flex-1 min-w-56 border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-900 bg-white">
+              {inMonth.map((b, i) => { const ten = store[b.id]?.ten; return <option key={b.id} value={b.id}>{ten ? `${ten} — ${batchLabel(b)}` : `Chuyến ${inMonth.length - i} · ${batchLabel(b)}`}</option> })}
+            </select>
+            {batchId && <button type="button" className="sheet-tab-action" onClick={() => setNameEdit(session.ten || '')}><Pencil size={13} /> Đổi tên</button>}
+          </div>
+        ) : (
+          <form className="flex flex-wrap items-center gap-2" onSubmit={e => { e.preventDefault(); const ten = nameEdit.trim(); upd(cur => { const next = { ...cur }; if (ten) next.ten = ten; else delete next.ten; return next }); setNameEdit(null) }}>
+            <input autoFocus value={nameEdit} onChange={e => setNameEdit(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setNameEdit(null) }} aria-label="Tên chuyến nhập hàng"
+              placeholder="VD: Chuyến hàng Hà Nội tuần 46" className="flex-1 min-w-48 border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-900" />
+            <button type="submit" className="sheet-tab-action is-primary">Lưu tên</button>
+            <button type="button" className="sheet-tab-action" onClick={() => setNameEdit(null)}>Huỷ</button>
+            <span className="basis-full text-[11px] text-gray-400">{batchLabel(batches.find(b => b.id === batchId) || {})} · để trống rồi Lưu để về tên mặc định</span>
+          </form>
+        )}
+      </div>
 
       {error && <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs px-3 py-2">{error}</div>}
 

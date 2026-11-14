@@ -346,3 +346,36 @@ describe('Đối chiếu sổ sách (PXK)', () => {
     await vi.waitFor(() => expect(screen.queryByRole('button', { name: /AI đọc lại tất cả|AI đang đọc/ })).not.toBeInTheDocument())
   })
 })
+
+describe('Đối chiếu sổ sách (PXK) — chọn chuyến theo Năm > Tháng > Chuyến, đổi tên chuyến', () => {
+  const mk = (id, ngayNhap, processedAt) => ({ ...batch, id, processedAt, pdfMetadata: { ngayNhap } })
+  beforeEach(() => {
+    store.values.set('goods_receipt_batches', JSON.stringify([
+      mk('n1', '13/11/2026', '2026-11-14T06:44:00Z'), mk('n2', '06/11/2026', '2026-11-06T15:53:00Z'),
+      mk('o1', '29/10/2026', '2026-10-31T15:40:00Z'), mk('s1', '26/9/2026', '2026-09-26T07:09:00Z'),
+    ]))
+  })
+
+  it('lọc tháng chỉ hiện chuyến trong tháng; đổi tháng chọn chuyến mới nhất của tháng đó', () => {
+    render(<DoiChieuSoSachTab />)
+    const chuyen = screen.getByRole('combobox', { name: 'Chuyến nhập hàng' })
+    expect(within(chuyen).getAllByRole('option')).toHaveLength(2)
+    expect(within(chuyen).getAllByRole('option')[0].textContent).toMatch(/^Chuyến 2 · Ngày nhập 13\/11\/2026/)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tháng' }), { target: { value: '09' } })
+    expect(screen.getByRole('combobox', { name: 'Chuyến nhập hàng' })).toHaveValue('s1')
+    expect(within(screen.getByRole('combobox', { name: 'Tháng' })).getAllByRole('option').map(o => o.value)).toEqual(['11', '10', '09'])
+  })
+
+  it('đổi tên chuyến, lưu lại; để trống thì về tên mặc định', () => {
+    render(<DoiChieuSoSachTab />)
+    fireEvent.click(screen.getByRole('button', { name: 'Đổi tên' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Tên chuyến nhập hàng' }), { target: { value: 'Hàng Hà Nội tuần 46' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu tên' }))
+    expect(within(screen.getByRole('combobox', { name: 'Chuyến nhập hàng' })).getAllByRole('option')[0].textContent).toMatch(/^Hàng Hà Nội tuần 46 — Ngày nhập 13\/11\/2026/)
+    expect(JSON.parse(store.values.get('pxk_doi_chieu')).n1.ten).toBe('Hàng Hà Nội tuần 46')
+    fireEvent.click(screen.getByRole('button', { name: 'Đổi tên' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Tên chuyến nhập hàng' }), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu tên' }))
+    expect(within(screen.getByRole('combobox', { name: 'Chuyến nhập hàng' })).getAllByRole('option')[0].textContent).toMatch(/^Chuyến 2 · /)
+  })
+})
