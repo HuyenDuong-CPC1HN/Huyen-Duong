@@ -389,7 +389,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
     [scoped, isClc],
   )
   const reportRows = useMemo(() => eligibleRows.filter(r => checkedKeys.has(r.rowKey)), [eligibleRows, checkedKeys])
-  // Đưa hàng đã tích sang tab "Hàng trả & huỷ (Demo)" → Huỷ hàng → Chờ huỷ (tách Kho C / Kho DTP), khỏi nhập tay lại.
+  // Đưa hàng đã tích sang tab "Hàng trả & huỷ" → Huỷ hàng → Chờ huỷ (tách Kho C / Kho DTP), khỏi nhập tay lại.
   // Mỗi lô chỉ đưa 1 lần: nhận ra lô đã đưa qua huyKey ghi trên dòng hàng (còn ở Chờ huỷ hoặc đã vào đợt huỷ).
   const [huySent, setHuySent] = useState(() => sentHuyKeys())
   const [huyMsg, setHuyMsg] = useState('')
@@ -411,7 +411,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
     }
     writeFlowV2({ pool: [...entries, ...pool] })
     setHuySent(sentHuyKeys())
-    setHuyMsg(`Đã đưa ${Object.entries(count).map(([e, n]) => `${n} hàng ${EXPIRY_ENTITIES[e].label}`).join(', ')} vào Hàng trả & huỷ (Demo) → Huỷ hàng → Chờ huỷ. Sang đó tích chọn rồi bấm Tạo đợt huỷ để in biên bản.`)
+    setHuyMsg(`Đã đưa ${Object.entries(count).map(([e, n]) => `${n} hàng ${EXPIRY_ENTITIES[e].label}`).join(', ')} vào Hàng trả & huỷ → Huỷ hàng → Chờ huỷ. Sang đó tích chọn rồi bấm Tạo đợt huỷ để in biên bản.`)
   }
 
   const toggleRow = (rowKey) => {
@@ -763,7 +763,7 @@ export default function ExpiryStockTab({ mode = 'canDate' }) {
         {!isClc && <button
           onClick={sendToHuy}
           disabled={huyRows.length === 0}
-          title="Đưa các hàng đã tích (chưa đưa lần nào) sang tab Hàng trả & huỷ (Demo) → Huỷ hàng → Chờ huỷ, tự tách Kho C / Kho DTP"
+          title="Đưa các hàng đã tích (chưa đưa lần nào) sang tab Hàng trả & huỷ → Huỷ hàng → Chờ huỷ, tự tách Kho C / Kho DTP"
           className="flex items-center gap-1.5 px-3 py-2 bg-red-600 border border-red-600 rounded-lg text-sm text-white hover:bg-red-700 transition-colors disabled:opacity-40 disabled:pointer-events-none"
         >
           <FileWarning size={14} />

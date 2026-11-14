@@ -10,7 +10,6 @@ import NhapHangHistoryTab from './components/NhapHangHistoryTab'
 import ReturnSlipsTab from './components/ReturnSlipsTab'
 import HangHuyTab from './components/HangHuyTab'
 import HangLookup from './components/HangLookup'
-import ReturnReminderBell from './components/ReturnReminderBell'
 import DamagedGoodsTrackingTab from './components/DamagedGoodsTrackingTab'
 import SwapReturnHub from './components/SwapReturnHub'
 import Login from './components/Login'
@@ -65,8 +64,8 @@ const NAV = [
     icon: RotateCcw,
     children: [
       { id: 'traCuuHang', label: 'Tra cứu hàng', icon: Search },
-      // 3 tab cũ (Theo dõi nhập trả lại · Theo dõi hàng huỷ · Đổi trả hàng) đã gỡ khỏi menu — dữ liệu đã sang Hàng trả & huỷ (Demo).
-      { id: 'flowV2', label: 'Hàng trả & huỷ (Demo)', icon: Workflow },
+      // 3 tab cũ (Theo dõi nhập trả lại · Theo dõi hàng huỷ · Đổi trả hàng) đã gỡ khỏi menu — dữ liệu đã sang Hàng trả & huỷ.
+      { id: 'flowV2', label: 'Hàng trả & huỷ', icon: Workflow },
     ],
   },
   // Kho A không phải kho theo dõi hàng: mỗi tháng chỉ hoàn thiện hồ sơ huỷ cho kế toán, nên tách riêng khỏi nhóm trên.
@@ -96,7 +95,7 @@ const BREADCRUMB = {
   hangHuyCD:  ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Theo dõi hàng huỷ'],
   hangHuyA:   ['Trang chủ', 'Hồ sơ huỷ Kho A'],
   doiTra:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Đổi trả hàng'],
-  flowV2:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Hàng trả & huỷ (Demo)'],
+  flowV2:     ['Trang chủ', 'Quản lý hàng trả, đổi, huỷ', 'Hàng trả & huỷ'],
   loTrinhHoc: ['Trang chủ', 'Lộ trình học DA/DS'],
 }
 
@@ -483,7 +482,6 @@ function AppContent({ user }) {
               </nav>
               <h1>{pageTitle}</h1>
             </div>
-            <ReturnReminderBell onOpen={selectTab} />
           </div>
         </header>
 

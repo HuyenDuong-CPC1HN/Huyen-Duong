@@ -7,10 +7,6 @@ import {
 } from 'lucide-react'
 import { opsStore as localStorage } from '../data/workspace'
 import { readTrialReports } from '../utils/unifiedTrialReports'
-import { REMINDER_RULES } from '../utils/returnSlips'
-import { HUY_REMINDER_RULES } from '../utils/hangHuy'
-import { useReturnReminders } from './useReturnReminders'
-import { useHuyReminders } from './useHuyReminders'
 
 const STATUS = {
   ready: {
@@ -112,15 +108,6 @@ export default function HomeBrief({ onNavigate }) {
   const exceptions = channels.filter((channel) => channel.state !== 'ready')
   const nextAction = exceptions.find((channel) => channel.id !== 'tongdon') || exceptions[0]
   const hero = getHeroContent(channels, nextAction)
-  // Nhắc việc nhập trả lại — gộp theo từng mốc nhắc, mở tab Theo dõi nhập trả lại để xử lý.
-  const returnReminders = useReturnReminders()
-  const returnGroups = REMINDER_RULES
-    .map(rule => ({ rule, count: returnReminders.filter(r => r.kind === rule.kind).length }))
-    .filter(g => g.count > 0)
-  const huyReminders = useHuyReminders()
-  const huyGroups = HUY_REMINDER_RULES
-    .map(rule => ({ rule, count: huyReminders.filter(r => r.kind === rule.kind).length }))
-    .filter(g => g.count > 0)
   const HeroIcon = hero.icon
 
   return (
@@ -196,27 +183,13 @@ export default function HomeBrief({ onNavigate }) {
           <p>Chỉ phản ánh dữ liệu còn thiếu hoặc chưa được lưu.</p>
         </div>
 
-        {exceptions.length > 0 || returnGroups.length > 0 || huyGroups.length > 0 ? (
+        {exceptions.length > 0 ? (
           <ul className="home-exception-list">
             {exceptions.map((channel) => (
               <li key={channel.id}>
                 <span className="home-exception-icon"><CircleAlert size={17} aria-hidden="true" /></span>
                 <span>{getExceptionCopy(channel)}</span>
                 <button type="button" onClick={() => onNavigate(channel.id)}>Mở kênh</button>
-              </li>
-            ))}
-            {returnGroups.map(({ rule, count }) => (
-              <li key={`traHang-${rule.kind}`}>
-                <span className="home-exception-icon"><CircleAlert size={17} aria-hidden="true" /></span>
-                <span>Nhập trả lại: {count} phiếu {rule.title.charAt(0).toLowerCase() + rule.title.slice(1)}.</span>
-                <button type="button" onClick={() => onNavigate('traHang')}>Mở nhắc việc</button>
-              </li>
-            ))}
-            {huyGroups.map(({ rule, count }) => (
-              <li key={`hangHuy-${rule.kind}`}>
-                <span className="home-exception-icon"><CircleAlert size={17} aria-hidden="true" /></span>
-                <span>Hàng huỷ: {count} phiếu {rule.title.charAt(0).toLowerCase() + rule.title.slice(1)}.</span>
-                <button type="button" onClick={() => onNavigate('hangHuyCD')}>Mở nhắc việc</button>
               </li>
             ))}
           </ul>

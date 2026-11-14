@@ -289,7 +289,7 @@ function KtLinksModal({ data, onClose }) {
   )
 }
 
-// Tab "Hàng trả & huỷ (Demo)": bảng việc hồ sơ khách trả + khu Huỷ hàng (Chờ huỷ, đợt huỷ) cho Kho C / Kho DTP.
+// Tab "Hàng trả & huỷ": bảng việc hồ sơ khách trả + khu Huỷ hàng (Chờ huỷ, đợt huỷ) cho Kho C / Kho DTP.
 // initialOpen: { v2: 'case' | 'batch' | 'pool', id } — mở sẵn hồ sơ / đợt khi bấm từ Tra cứu hàng (mục Chờ huỷ: mở khu Huỷ hàng).
 export default function FlowV2Tab({ initialOpen = null } = {}) {
   const [data, setData] = useState(() => readFlowV2())
@@ -410,7 +410,7 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
     <div className="sheet-tab">
       <div className="sheet-tab-shell flex flex-col gap-3">
         <header className="sheet-tab-context flex-wrap gap-2">
-          <span className="font-semibold">Hàng trả &amp; huỷ (Demo)</span>
+          <span className="font-semibold">Hàng trả &amp; huỷ</span>
           <span className="text-xs text-gray-500">Bản dùng thử song song — dữ liệu riêng, không ảnh hưởng các tab cũ.</span>
           <button type="button" onClick={pullLegacy} className="sheet-tab-action ml-auto">Lấy dữ liệu từ tab cũ</button>
           <button type="button" onClick={() => setModal('kt')} className="sheet-tab-action"><Link2 size={13} /> Link kế toán</button>
