@@ -83,3 +83,39 @@ describe('cột Kế toán', () => {
     expect(short('')).toBe('')
   })
 })
+
+describe('lookupRows — dữ liệu tab Hàng trả & huỷ (Demo)', () => {
+  const flowV2 = {
+    cases: [
+      { id: 'c1', kind: 'tra', kho: 'C', khachHang: 'Nhà thuốc Mới', step: 2, createdAt: '2026-11-03T08:00:00', keToan: 'Lưu Thị Thuỳ', traHang: { form: { soHD: '00038621' } },
+        items: [{ maHang: 'A1', tenHang: 'Hàng A', soLo: 'LA', dvt: 'Hộp', soLuong: 5, tinhTrang: 'Hàng nguyên vẹn' }, { maHang: '', tenHang: '' }] },
+      { id: 'c2', kind: 'loi', kho: 'DTP', khachHang: 'Nhà thuốc Lỗi', step: 5, batchId: 'b9', createdAt: '2026-11-04T08:00:00',
+        items: [{ maHang: 'B1', tenHang: 'Hàng B', soLo: 'LB', dvt: 'Lọ', soLuong: 2, tinhTrang: 'Vỡ' }] },
+      { id: 'c3', legacyId: 'return_slips:s1', kind: 'tra', kho: 'C', step: 3, items: [{ tenHang: 'Đã có ở tab cũ' }] },
+    ],
+    pool: [{ id: 'p1', kho: 'C', src: 'ps', who: 'Hàng cận date', addedAt: '2026-11-05T08:00:00', items: [{ maHang: 'C1', tenHang: 'Hàng C', soLo: 'LC', dvt: 'Gói', soLuong: 30, tinhTrang: 'Hàng cận date' }] }],
+    batches: [
+      { id: 'b9', no: 'ĐH-DTP-1126-01', kho: 'DTP', step: 2, keToan: 'Lưu Thị Thuỳ',
+        entries: [{ id: 'e1', caseId: 'c2', items: [] }, { id: 'e2', caseId: null, who: 'Hàng lỗi trong kho', addedAt: '2026-11-06T08:00:00' }],
+        items: [{ entryId: 'e1', tenHang: 'Hàng B', soLuong: 2 }, { entryId: 'e2', maHang: 'D1', tenHang: 'Hàng D', soLo: 'LD', dvt: 'Ống', soLuong: 7, tinhTrang: 'Hàng lỗi trong kho' }] },
+      { id: 'b0', legacyId: 'huy_slips:h1', no: 'XT2621/00837', kho: 'C', step: 3, entries: [{ id: 'x', caseId: null }], items: [{ entryId: 'x', tenHang: 'Laci-eye' }] },
+    ],
+  }
+  const rows = lookupRows({ flowV2 })
+  const by = ten => rows.find(r => r.ten === ten)
+
+  it('lấy hồ sơ, Chờ huỷ, đợt huỷ; bỏ dòng trống và dữ liệu lấy từ tab cũ', () => {
+    expect(rows.map(r => r.ten).sort()).toEqual(['Hàng A', 'Hàng B', 'Hàng C', 'Hàng D'])
+  })
+  it('khách trả nguyên vẹn: nhập trả lại, số hoá đơn, chờ kế toán nhập', () => {
+    expect(by('Hàng A')).toMatchObject({ v2: 'case', ref: 'c1', nguon: 'tra', huong: 'nhap', so: '00038621', kho: 'C', stage: 'nhap', date: '2026-11-03', soLuong: 5 })
+  })
+  it('hàng lỗi khách trả trong đợt huỷ: 1 dòng theo hồ sơ, số đợt huỷ, chờ xuất', () => {
+    expect(rows.filter(r => r.ten === 'Hàng B')).toHaveLength(1)
+    expect(by('Hàng B')).toMatchObject({ v2: 'case', nguon: 'doitra', huong: 'huy', so: 'ĐH-DTP-1126-01', kho: 'DTP', stage: 'xuat', extra: 'Vỡ' })
+  })
+  it('hàng phát sinh: Chờ huỷ là chờ gom; trong đợt thì mở đợt', () => {
+    expect(by('Hàng C')).toMatchObject({ v2: 'pool', ref: 'p1', nguon: 'kho', stage: 'gom', who: 'Hàng cận date' })
+    expect(by('Hàng D')).toMatchObject({ v2: 'batch', ref: 'b9', nguon: 'kho', so: 'ĐH-DTP-1126-01', stage: 'xuat', soLuong: 7 })
+  })
+})

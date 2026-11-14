@@ -509,12 +509,12 @@ function AppContent({ user }) {
           {active === 'doisoatthucte' && <DoiSoatThucTeTab />}
           {active === 'doichieusosach' && <Suspense fallback={tabLoadingState}><DoiChieuSoSachTab /></Suspense>}
           {active === 'lichsunhaphang' && <NhapHangHistoryTab />}
-          {active === 'traCuuHang' && <HangLookup onOpen={(row) => { setOpenTarget(row.ref); setActive({ tra: 'traHang', doitra: 'doiTra', kho: 'hangHuyCD' }[row.nguon]) }} />}
+          {active === 'traCuuHang' && <HangLookup onOpen={(row) => { setOpenTarget(row.v2 ? { v2: row.v2, id: row.ref } : row.ref); setActive(row.v2 ? 'flowV2' : { tra: 'traHang', doitra: 'doiTra', kho: 'hangHuyCD' }[row.nguon]) }} />}
           {active === 'traHang' && <ReturnSlipsTab key={`tra-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyCD'  && <HangHuyTab key={`huy-${openTarget}`} initialOpenId={openTarget} />}
           {active === 'hangHuyA'   && <DamagedGoodsTrackingTab />}
           {active === 'doiTra'     && <SwapReturnHub key={`swap-${openTarget}`} initialOpenRecordId={openTarget} />}
-          {active === 'flowV2'     && <Suspense fallback={tabLoadingState}><FlowV2Tab /></Suspense>}
+          {active === 'flowV2'     && <Suspense fallback={tabLoadingState}><FlowV2Tab key={`v2-${openTarget?.id || ''}`} initialOpen={openTarget?.v2 ? openTarget : null} /></Suspense>}
           {active === 'loTrinhHoc' && <Suspense fallback={tabLoadingState}><LoTrinhHocTab /></Suspense>}
         </main>
       </div>

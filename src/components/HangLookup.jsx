@@ -4,6 +4,7 @@ import { Search, FileDown, X } from 'lucide-react'
 import { opsStore } from '../data/workspace'
 import { readSlips } from '../data/returnSlipsStore'
 import { readHuyPhieus } from '../data/hangHuyStore'
+import { readFlowV2 } from '../data/flowV2Store'
 import { HUONG, NGUON, NGUON_FILTER, STAGE_FILTER, filterLookup, keToanShortener, lookupRows, sameLot, stageLabel, summarizeLookup } from '../utils/hangLookup'
 
 const fmtDate = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : '—' }
@@ -33,7 +34,7 @@ function Seg({ label, value, options, onChange }) {
 }
 
 // Tra cứu hàng đã xuất khỏi kho (nhập trả lại, đổi trả, hàng huỷ). onOpen(row) mở lại phiếu ở đúng tab.
-export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatches: batchesProp }) {
+export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatches: batchesProp, flowV2: flowV2Prop }) {
   const [kho, setKho] = useState('all')
   const [nguon, setNguon] = useState('all')
   const [huong, setHuong] = useState('all')
@@ -45,7 +46,8 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
 
   const all = useMemo(() => lookupRows({
     slips: readSlips(), phieus: readHuyPhieus(), swapRecords: recordsProp ?? readStored('swap_return_records'), swapBatches: batchesProp ?? readStored('swap_huy_batches'),
-  }), [recordsProp, batchesProp])
+    flowV2: flowV2Prop ?? readFlowV2(),
+  }), [recordsProp, batchesProp, flowV2Prop])
   const months = useMemo(() => [...new Set(all.map(r => r.date.slice(0, 7)).filter(Boolean))].sort().reverse(), [all])
   const rows = useMemo(() => filterLookup(all, { kho, nguon, huong, month, stage, q }), [all, kho, nguon, huong, month, stage, q])
   const summary = useMemo(() => summarizeLookup(rows), [rows])

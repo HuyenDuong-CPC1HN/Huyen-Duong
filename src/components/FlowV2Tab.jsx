@@ -290,16 +290,17 @@ function KtLinksModal({ data, onClose }) {
 }
 
 // Tab "Hàng trả & huỷ (Demo)": bảng việc hồ sơ khách trả + khu Huỷ hàng (Chờ huỷ, đợt huỷ) cho Kho C / Kho DTP.
-export default function FlowV2Tab() {
+// initialOpen: { v2: 'case' | 'batch' | 'pool', id } — mở sẵn hồ sơ / đợt khi bấm từ Tra cứu hàng (mục Chờ huỷ: mở khu Huỷ hàng).
+export default function FlowV2Tab({ initialOpen = null } = {}) {
   const [data, setData] = useState(() => readFlowV2())
-  const [view, setView] = useState('board')
+  const [view, setView] = useState(initialOpen?.v2 === 'pool' ? 'huy' : 'board')
   const [khoFilter, setKhoFilter] = useState('all')
   const [kindFilter, setKindFilter] = useState('all')
   const [q, setQ] = useState('')
   const [doneMon, setDoneMon] = useState(() => monthKey())
   const [legacyMsg, setLegacyMsg] = useState('')
-  const [openCase, setOpenCase] = useState(null)
-  const [openBatch, setOpenBatch] = useState(null)
+  const [openCase, setOpenCase] = useState(initialOpen?.v2 === 'case' ? initialOpen.id : null)
+  const [openBatch, setOpenBatch] = useState(initialOpen?.v2 === 'batch' ? initialOpen.id : null)
   const [modal, setModal] = useState(null) // 'new' | 'kt' | { ps: 'C' | 'DTP' }
   const [sel, setSel] = useState({ C: [], DTP: [] })
   const [batchMon, setBatchMon] = useState(() => ({ C: monthKey(), DTP: monthKey() }))

@@ -1,8 +1,11 @@
 // Tra cứu hàng đã xuất khỏi kho: gộp các phiếu của Nhập trả lại, Đổi trả hàng (quy trình mới) và Hàng huỷ Kho C /
 // Kho DTP thành từng dòng hàng, mỗi dòng có Nguồn (hàng từ đâu ra) và Hướng xử lý (Nhập trả lại / Xuất huỷ).
 // Kho A (hồ sơ huỷ cho kế toán) và đợt đổi trả theo quy trình cũ không nằm trong tra cứu.
+// Thêm dữ liệu tab Hàng trả & huỷ (Demo): hồ sơ khách trả, Chờ huỷ, đợt huỷ — dòng có v2 ('case' | 'batch' | 'pool')
+// mở ở tab Demo. Hồ sơ / đợt lấy từ tab cũ sang (có legacyId) bỏ qua vì dòng của tab cũ đã có.
 import { slipLoai } from './returnSlips'
 import { isV2 } from './swapReturnBatch'
+import { CASE_FLOWS, DEFAULT_KE_TOAN, defaultTinhTrang } from './flowV2'
 
 export const NGUON = {
   tra: { label: 'Khách trả', huong: 'nhap', tab: 'traHang' }, // hàng nguyên vẹn, nhập lại kho
@@ -42,8 +45,48 @@ function recordStage(r, batch) {
   return batch.accountedAt ? 'done' : 'xuat'
 }
 
-export function lookupRows({ slips = [], phieus = [], swapRecords = [], swapBatches = [] } = {}) {
+// Bước hồ sơ tab Demo → stage tra cứu
+const CASE_STAGE = { xmNhap: 'doing', kyNhap: 'doing', ktNhap: 'nhap', banTiep: 'done', phieuNhap: 'nhap', doiHang: 'gom', choHuy: 'gom', dangHuy: 'xuat', xong: 'done' }
+const BATCH_STAGE = ['doing', 'doing', 'xuat', 'done']
+const hasRow = it => it && (it.maHang || it.tenHang)
+
+function flowV2Rows({ cases = [], pool = [], batches = [] }) {
   const rows = []
+  const batchOf = new Map(batches.map(b => [b.id, b]))
+  for (const c of cases) {
+    if (c.legacyId || !CASE_FLOWS[c.kind]) continue
+    const step = CASE_FLOWS[c.kind].steps[c.step] || CASE_FLOWS[c.kind].steps[0]
+    const b = c.batchId ? batchOf.get(c.batchId) : null
+    const tra = c.kind === 'tra'
+    c.items.filter(hasRow).forEach((it, i) => rows.push({
+      id: `v2case:${c.id}#${i}`, ref: c.id, v2: 'case', nguon: tra ? 'tra' : 'doitra', huong: tra ? 'nhap' : 'huy',
+      so: tra ? (c.traHang?.form?.soHD || c.phieuNhapLai || c.soDon || '') : (b?.no || ''), kho: c.kho === 'DTP' ? 'DTP' : 'C',
+      who: c.khachHang || '', date: isoDay(c.createdAt), stage: CASE_STAGE[step.k] || 'doing',
+      ma: it.maHang || '', ten: it.tenHang || '', soLo: it.soLo || '', soLuong: Number(it.soLuong) || 0, dvt: it.dvt || '',
+      extra: it.tinhTrang || defaultTinhTrang(c), huyPhieu: tra ? '' : (b?.no || ''), keToan: b?.keToan || c.keToan || c.form?.keToan || '',
+    }))
+  }
+  // Hàng phát sinh trong kho: đang Chờ huỷ hoặc đã vào đợt (hàng lỗi khách trả đã có dòng theo hồ sơ ở trên)
+  const ps = (e, it, i, b) => ({
+    id: b ? `v2batch:${b.id}#${e.id}#${i}` : `v2pool:${e.id}#${i}`, ref: b ? b.id : e.id, v2: b ? 'batch' : 'pool', nguon: 'kho', huong: 'huy',
+    so: b?.no || '', kho: (b || e).kho === 'DTP' ? 'DTP' : 'C', who: e.who || it.tinhTrang || '', date: isoDay(e.addedAt),
+    stage: b ? (BATCH_STAGE[b.step] || 'doing') : 'gom',
+    ma: it.maHang || '', ten: it.tenHang || '', soLo: it.soLo || '', soLuong: Number(it.soLuong) || 0, dvt: it.dvt || '',
+    extra: it.tinhTrang || '', huyPhieu: '', keToan: b?.keToan || DEFAULT_KE_TOAN,
+  })
+  for (const e of pool) if (e && !e.caseId) (e.items || []).filter(hasRow).forEach((it, i) => rows.push(ps(e, it, i, null)))
+  for (const b of batches) {
+    if (b.legacyId) continue
+    for (const e of b.entries || []) {
+      if (e.caseId) continue
+      ;(b.items || []).filter(it => it.entryId === e.id && hasRow(it)).forEach((it, i) => rows.push(ps(e, it, i, b)))
+    }
+  }
+  return rows
+}
+
+export function lookupRows({ slips = [], phieus = [], swapRecords = [], swapBatches = [], flowV2 = null } = {}) {
+  const rows = flowV2 ? flowV2Rows(flowV2) : []
   // Nhập trả lại: khách trả nguyên vẹn
   for (const s of slips) {
     if (!s?.pdf) continue
