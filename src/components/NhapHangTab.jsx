@@ -86,11 +86,6 @@ function monthKeyOf(processedAt) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function monthLabelOf(monthKey) {
-  const [y, m] = monthKey.split('-')
-  return `Tháng ${Number(m)}/${y}`
-}
-
 function batchLabelOf(processedAt) {
   return new Date(processedAt).toLocaleString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -663,6 +658,8 @@ export default function NhapHangTab() {
   // (vd sau khi xoá hết chuyến trong tháng đang xem tay thì quay lại bám theo active).
   const effectiveMonthKey = resolveEffectiveMonthKey(selectedMonthKey, active, monthGroups)
   const batchesInMonth = monthGroups.find(([key]) => key === effectiveMonthKey)?.[1] || []
+  const yearsOfBatches = [...new Set(monthGroups.map(([key]) => key.slice(0, 4)))]
+  const effectiveYear = (effectiveMonthKey || '').slice(0, 4)
 
   const canProcess = pendingFiles.khoC.some(isExcelFile)
 
@@ -1053,17 +1050,29 @@ export default function NhapHangTab() {
     <div className="space-y-4">
       {batches.length > 1 && (
         <div className="space-y-1.5">
-          <select
-            value={effectiveMonthKey || ''}
-            onChange={(e) => setSelectedMonthKey(e.target.value)}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:border-blue-300 focus:outline-none focus:border-blue-400"
-          >
-            {monthGroups.map(([key, group]) => (
-              <option key={key} value={key}>{monthLabelOf(key)} ({group.length} chuyến)</option>
-            ))}
-          </select>
-          <div className="flex flex-wrap gap-1.5">
-            {batchesInMonth.map(batch => (
+          {/* Năm > Tháng > Chuyến trong tháng (theo ngày xử lý, khớp thư mục Năm > Tháng trên Storage) */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              value={effectiveYear}
+              onChange={(e) => setSelectedMonthKey(monthGroups.find(([key]) => key.startsWith(`${e.target.value}-`))?.[0] || null)}
+              aria-label="Năm"
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:border-blue-300 focus:outline-none focus:border-blue-400"
+            >
+              {yearsOfBatches.map(y => <option key={y} value={y}>Năm {y}</option>)}
+            </select>
+            <select
+              value={effectiveMonthKey || ''}
+              onChange={(e) => setSelectedMonthKey(e.target.value)}
+              aria-label="Tháng"
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:border-blue-300 focus:outline-none focus:border-blue-400"
+            >
+              {monthGroups.filter(([key]) => key.startsWith(`${effectiveYear}-`)).map(([key, group]) => (
+                <option key={key} value={key}>Tháng {Number(key.slice(5))} ({group.length} chuyến)</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Chuyến trong tháng">
+            {batchesInMonth.map((batch, i) => (
               <button
                 key={batch.id}
                 type="button"
@@ -1072,7 +1081,8 @@ export default function NhapHangTab() {
                   batch.id === activeId ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
                 }`}
               >
-                {batchLabelOf(batch.processedAt)}
+                <b className="font-semibold">Chuyến {batchesInMonth.length - i}</b>
+                {batch.pdfMetadata?.ngayNhap ? ` · nhập ${batch.pdfMetadata.ngayNhap}` : ''} · xử lý {batchLabelOf(batch.processedAt)}
               </button>
             ))}
           </div>

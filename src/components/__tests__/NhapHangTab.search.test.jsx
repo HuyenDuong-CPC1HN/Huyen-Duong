@@ -38,3 +38,23 @@ describe('Nhập hàng — ô tìm nhanh trong bảng Kho C / Kho LGT', () => {
     expect(screen.getAllByText('2 dòng')).toHaveLength(2)
   })
 })
+
+describe('Nhập hàng — chọn chuyến theo Năm > Tháng > Chuyến trong tháng', () => {
+  it('năm, tháng chỉ hiện tháng của năm đó; chuyến đánh số trong tháng', () => {
+    const b = (id, processedAt, ngayNhap) => ({ id, processedAt, pdfMetadata: { ngayNhap }, khoC: [row(`${id}c`, 'A01338', 'Afenemi', 'L1')], khoLgt: [] })
+    store.opsStore.setItem('goods_receipt_batches', JSON.stringify([
+      b('n1', '2026-11-14T06:44:00.000Z', '13/11/2026'), b('n2', '2026-11-06T15:53:00.000Z', '06/11/2026'),
+      b('o1', '2026-10-31T15:40:00.000Z', '29/10/2026'), b('y1', '2025-12-20T03:00:00.000Z', '19/12/2025'),
+    ]))
+    render(<NhapHangTab />)
+    const months = () => [...screen.getByRole('combobox', { name: 'Tháng' }).options].map(o => o.textContent)
+    expect([...screen.getByRole('combobox', { name: 'Năm' }).options].map(o => o.value)).toEqual(['2026', '2025'])
+    expect(months()).toEqual(['Tháng 11 (2 chuyến)', 'Tháng 10 (1 chuyến)'])
+    const chuyen = screen.getByRole('group', { name: 'Chuyến trong tháng' })
+    expect(chuyen.textContent).toMatch(/Chuyến 2 · nhập 13\/11\/2026/)
+    expect(chuyen.textContent).toMatch(/Chuyến 1 · nhập 06\/11\/2026/)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Năm' }), { target: { value: '2025' } })
+    expect(months()).toEqual(['Tháng 12 (1 chuyến)'])
+    expect(screen.getByRole('group', { name: 'Chuyến trong tháng' }).textContent).toMatch(/Chuyến 1 · nhập 19\/12\/2025/)
+  })
+})
