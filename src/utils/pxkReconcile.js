@@ -73,10 +73,11 @@ export function readSoPhieu(pdfText) {
 }
 
 // Dòng thực nhận của 1 kho từ chuyến đã lưu ở tab Nhập hàng. Kho SO là phần hàng có "(SO)" trong tên của bảng Kho
-// C (giống trang Đối soát). Thực nhận = SL thực tế đã sửa khi kiểm, chưa sửa thì = SL trên biên bản.
-export function receivedRowsOf(batch, kho) {
+// C (giống trang Đối soát), cộng các mã trong soMa (hàng SO không ghi "(SO)" trong tên — xem soMaOf).
+// Thực nhận = SL thực tế đã sửa khi kiểm, chưa sửa thì = SL trên biên bản.
+export function receivedRowsOf(batch, kho, soMa = null) {
   if (!batch) return []
-  const isSo = r => /\(SO\)/i.test(r.tenHang || '')
+  const isSo = r => /\(SO\)/i.test(r.tenHang || '') || !!soMa?.has(String(r.maHang || '').trim().toUpperCase())
   const src = kho === 'DTP' ? (batch.khoLgt || []) : (batch.khoC || []).filter(r => (kho === 'SO' ? isSo(r) : !isSo(r)))
   return src.filter(r => r.maHang).map(r => {
     const tt = r.slThucTe === '' || r.slThucTe === null || r.slThucTe === undefined ? null : Number(r.slThucTe)
@@ -539,9 +540,21 @@ export function batchMaHang(batch) {
 
 // Mã hàng thực nhận của đúng 1 kho (Kho C / DTP / SO) trong biên bản nhập hàng — dùng lọc nhiễu file quét của kho đó.
 // Kho không có dòng nào thì lấy mọi mã của chuyến (như trước) để không bỏ nhầm cả file quét.
-export function khoMaHang(batch, kho) {
-  const own = new Set(receivedRowsOf(batch, kho).map(r => maKey(r.maHang)).filter(Boolean))
+export function khoMaHang(batch, kho, soMa = null) {
+  const own = new Set(receivedRowsOf(batch, kho, soMa).map(r => maKey(r.maHang)).filter(Boolean))
   return own.size ? own : batchMaHang(batch)
+}
+
+// Hàng SO mà tên ở biên bản nhập hàng thiếu "(SO)" (VD "Viên đặt pH.Balance … (NB)"): mã thuộc phần Kho C của chuyến
+// (tên không có "(SO)"), nằm trên phiếu xuất kho / file quét Kho SO, và không nằm trên phiếu / file quét Kho C.
+// Trang Đối chiếu dùng để cảnh báo anh sửa tên (không tự chuyển kho).
+// phieus: phiếu đang tính (có kho, rows) · scan: { C: rows | null, SO: rows | null }.
+export function soMaOf(batch, phieus = [], scan = {}) {
+  const codes = (kho, rows) => [...phieus.filter(p => p.kho === kho).flatMap(p => p.rows || []), ...(rows || [])].map(r => maKey(r.maHang)).filter(Boolean)
+  const inC = new Set(codes('C', scan.C))
+  const inSo = new Set(codes('SO', scan.SO))
+  const khoC = new Set((batch?.khoC || []).filter(r => !/\(SO\)/i.test(r.tenHang || '')).map(r => maKey(r.maHang)))
+  return new Set([...inSo].filter(m => khoC.has(m) && !inC.has(m)))
 }
 
 // Dòng file quét có mã hàng không có trong danh sách thực nhận của kho đó là phát sinh, gây nhiễu — bỏ, không tính đối

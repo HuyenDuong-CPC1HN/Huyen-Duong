@@ -379,3 +379,14 @@ describe('Đối chiếu sổ sách (PXK) — chọn chuyến theo Năm > Tháng
     expect(within(screen.getByRole('combobox', { name: 'Chuyến nhập hàng' })).getAllByRole('option')[0].textContent).toMatch(/^Chuyến 2 · /)
   })
 })
+
+describe('Đối chiếu sổ sách (PXK) — cảnh báo hàng SO thiếu "(SO)" trong tên', () => {
+  it('mã có trên phiếu Kho SO nhưng tên ở biên bản nhập hàng không có "(SO)" → báo lý do và cách sửa', () => {
+    const ph = newPxkPhieu({ kho: 'SO', soPhieu: 'XD2611/05444', rows: [newPxkRow({ maHang: 'F00629', tenHang: 'Falgankid', soLo: '13626G01', soLuong: '3300' })] })
+    store.values.set('pxk_doi_chieu', JSON.stringify({ b1: { phieus: [ph] } }))
+    render(<DoiChieuSoSachTab />)
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toMatch(/F00629 · Falgankid 25 mg\/ml/)
+    expect(alert.textContent).toMatch(/thêm "\(SO\)" vào tên hàng/)
+  })
+})

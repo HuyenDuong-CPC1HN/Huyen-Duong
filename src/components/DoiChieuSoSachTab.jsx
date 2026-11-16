@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, Copy, FileSpreadsheet, FileText, Image as ImageIcon, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import {
   PXK_KHO, PXK_TAGS, buildNguonReport, fmtHanDung, isNguonRow, newPxkPhieu, newPxkRow, normHanDung, parseQty, parseOcrQty,
-  alignOcrRows, fixAiThousandRows, batchMaHang, khoMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk,
+  alignOcrRows, fixAiThousandRows, batchMaHang, khoMaHang, groupScanPages, mergeAiChunks, splitScanByBatch, ocrRowNeedsCheck, pxkDuplicateGroups, pxkRowKey, parseOcrPxkText, readPxkPdfRows, readSoPhieu, receivedRowsOf, reconcilePxk, soMaOf,
 } from '../utils/pxkReconcile'
 import { emptyPxkSession, readGoodsBatches, readPxkStore, writePxkSession } from '../data/pxkStore'
 import { downloadPxkFile, getPxkFileUrl, uploadPxkFile } from '../data/pxkFiles'
@@ -439,6 +439,10 @@ export default function DoiChieuSoSachTab() {
 
   const batch = batches.find(b => b.id === batchId) || null
   const session = { ...emptyPxkSession(), ...(store[batchId] || {}) }
+  // Hàng có trên phiếu / file quét Kho SO nhưng tên ở biên bản nhập hàng thiếu "(SO)" → app vẫn tính vào Kho C (không tự
+  // chuyển), chỉ cảnh báo lý do để anh sửa tên ở tab Nhập hàng (xem soMaOf).
+  const soMiss = soMaOf(batch, session.phieus.filter(p => !p.excluded), { C: session.scan.C?.rows, SO: session.scan.SO?.rows })
+  const soMissRows = (batch?.khoC || []).filter((r, i, a) => soMiss.has(String(r.maHang || '').trim().toUpperCase()) && a.findIndex(x => x.maHang === r.maHang) === i)
   const upd = (fn, bid = batchId) => { if (bid) setStore(updateSessionOf(bid, fn)) }
   const patch = p => upd(cur => ({ ...cur, ...p }))
   const setPhieu = ph => upd(cur => ({ ...cur, phieus: cur.phieus.map(x => (x.id === ph.id ? ph : x)) }))
@@ -920,6 +924,13 @@ export default function DoiChieuSoSachTab() {
             )
           })}
         </div>
+        {soMissRows.length > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs px-3 py-2" role="alert">
+            ⚠ {soMissRows.length} mã có trên phiếu xuất kho / file quét <b>Kho SO</b> nhưng tên trong biên bản nhập hàng không có "(SO)", nên app đang tính vào <b>Kho C</b> (Kho SO báo "Có trên PXK, không nhận", Kho C báo lệch):
+            <ul className="m-0 mt-1 pl-4 list-disc">{soMissRows.map(r => <li key={r.maHang}><span className="font-mono">{r.maHang}</span> · {r.tenHang}</li>)}</ul>
+            <div className="mt-1">Cách sửa: sang tab <b>Nhập hàng</b>, mở chuyến này, thêm "(SO)" vào tên hàng rồi lưu; quay lại đây là bảng tự đúng.</div>
+          </div>
+        )}
         {dupGroups.length > 0 && <div className="rounded-lg border border-red-200 bg-red-50 text-red-800 text-xs px-3 py-2">⚠ Còn {dupGroups.length} số phiếu trùng chưa chọn bản giữ — các phiếu đó chưa tính vào bảng dưới. Chọn ở mục 1 phía trên.</div>}
         <div className="flex flex-wrap items-center gap-1.5">
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc kết luận">
@@ -973,6 +984,7 @@ export default function DoiChieuSoSachTab() {
                     <td className="px-2 py-1.5 text-right tabular-nums">{vn(r.c)}{r.c !== null && r.a !== r.c && <div className="text-red-700 font-semibold">{r.a > r.c ? 'thiếu' : 'thừa'} {vn(Math.abs(r.a - r.c))}</div>}</td>
                     <td className="px-2 py-1.5 border-l border-gray-100"><div className="flex flex-col items-start gap-1">
                       {r.tags.map(t => <span key={t} className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${TONE[PXK_TAGS[t].tone]}`}>{PXK_TAGS[t].label}</span>)}
+                      {soMiss.has(String(r.maHang || '').trim().toUpperCase()) && <div className="text-[11px] text-amber-800 max-w-56">Tên ở biên bản nhập hàng thiếu "(SO)" nên đang tính vào Kho C — sửa tên ở tab Nhập hàng.</div>}
                       {r.reason ? (
                         <div className="text-[11px] text-gray-600 max-w-56">
                           <span className="text-gray-400">{r.reason.was.map(t => PXK_TAGS[t]?.label).filter(Boolean).join(', ')} — lý do:</span> {r.reason.text}

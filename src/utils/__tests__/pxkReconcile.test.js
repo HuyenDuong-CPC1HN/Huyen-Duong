@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alignOcrRows, batchMaHang, khoMaHang, buildNguonReport, fixAiThousandRows, isNguonRow, mergeAiChunks, normLot, splitScanByBatch, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk } from '../pxkReconcile'
+import { alignOcrRows, batchMaHang, khoMaHang, buildNguonReport, fixAiThousandRows, isNguonRow, mergeAiChunks, normLot, splitScanByBatch, parseQty, readSoPhieu, receivedRowsOf, reconcilePxk, soMaOf } from '../pxkReconcile'
 
 const phieu = (soPhieu, rows) => ({ soPhieu, rows })
 
@@ -283,5 +283,29 @@ describe('AI đọc nhầm phần thập phân ("30,000" thành 30000)', () => {
     expect(row).toMatchObject({ soLuong: 30, ocrFixed: { soLuong: '30000' } })
     const [ocr] = alignOcrRows([{ maHang: 'T02722', soLo: '060726', soLuong: 30000, ocr: true }], received)
     expect(ocr.soLuong).toBe(30000) // bộ đọc chữ thường: không đụng số lượng
+  })
+})
+
+describe('soMaOf — hàng SO không ghi "(SO)" trong tên', () => {
+  const batch = { khoC: [
+    { maHang: 'V02604', tenHang: 'Viên đặt pH.Balance - Hộp 1 vỉ 7 viên (NB)', soLo: '0605', slHoaDon: 945 },
+    { maHang: 'H05035', tenHang: 'Hebay - Hộp 1 tuýp 15g (AG) (SO)', soLo: '08005', slHoaDon: 720 },
+    { maHang: 'F00629', tenHang: 'Falgankid', soLo: 'L1', slHoaDon: 10 },
+  ] }
+  const phieus = [
+    { kho: 'SO', rows: [{ maHang: 'V02604', soLo: '0605', soLuong: '945' }, { maHang: 'H05035', soLo: '08005', soLuong: '720' }] },
+    { kho: 'C', rows: [{ maHang: 'F00629', soLo: 'L1', soLuong: '10' }] },
+  ]
+  it('mã trên phiếu / file quét Kho SO mà tên thiếu "(SO)" bị phát hiện; truyền soMa thì tính vào Kho SO', () => {
+    const soMa = soMaOf(batch, phieus, { C: [{ maHang: 'F00629' }], SO: [{ maHang: 'V02604' }] })
+    expect([...soMa]).toEqual(['V02604']) // H05035 đã có "(SO)" trong tên — không báo
+    expect(receivedRowsOf(batch, 'SO', soMa).map(r => r.maHang)).toEqual(['V02604', 'H05035'])
+    expect(receivedRowsOf(batch, 'C', soMa).map(r => r.maHang)).toEqual(['F00629'])
+    expect(khoMaHang(batch, 'SO', soMa).has('V02604')).toBe(true)
+  })
+  it('mã có cả trên phiếu Kho C thì vẫn để Kho C', () => {
+    const soMa = soMaOf(batch, [...phieus, { kho: 'C', rows: [{ maHang: 'V02604' }] }], {})
+    expect(soMa.has('V02604')).toBe(false)
+    expect(receivedRowsOf(batch, 'C', soMa).map(r => r.maHang)).toContain('V02604')
   })
 })
