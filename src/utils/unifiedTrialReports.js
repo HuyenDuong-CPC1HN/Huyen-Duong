@@ -75,3 +75,23 @@ export function updateTrialReport(kind, id, patch) {
   localStorage.setItem(storageKey(kind), JSON.stringify(next))
   return next
 }
+
+// Ngày đại diện của 1 tuần đã lưu để xếp Năm > Tháng: đọc khoảng ngày trong tên tuần ("Tuần 07/11 - 13/11/2026",
+// "Tuần 12.09 - 18.09.2026") rồi lấy ngày giữa tuần (tuần vắt 2 tháng thì vào tháng có nhiều ngày hơn);
+// tên không có khoảng ngày thì lấy ngày upload (id) / ngày lưu.
+export function reportWeekDate(r) {
+  const m = /(\d{1,2})[/.](\d{1,2})(?:[/.](\d{4}))?\s*[-–]\s*(\d{1,2})[/.](\d{1,2})[/.](\d{4})/.exec(String(r?.label || ''))
+  if (m) {
+    const y2 = Number(m[6])
+    const y1 = m[3] ? Number(m[3]) : (Number(m[2]) > Number(m[5]) ? y2 - 1 : y2)
+    const from = new Date(y1, Number(m[2]) - 1, Number(m[1]))
+    const to = new Date(y2, Number(m[5]) - 1, Number(m[4]))
+    if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) return new Date((from.getTime() + to.getTime()) / 2)
+  }
+  for (const v of [r?.id, r?.createdAt]) {
+    const d = new Date(v)
+    if (v && !Number.isNaN(d.getTime())) return d
+  }
+  return new Date(0)
+}
+export const reportYm = r => { const d = reportWeekDate(r); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }

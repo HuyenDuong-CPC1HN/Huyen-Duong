@@ -10,7 +10,7 @@ import { splitDonSO, splitDonTruyenThong, splitTmdtByShop } from '../utils/unifi
 import { parseStaffRoster, splitByWarehouseStaff } from '../utils/warehouseStaffFilter'
 import { computeChannelSnapshot, unwrapSessionValue } from '../utils/unifiedTrialChannelStats'
 import { buildAutoSalesOrderLookup, buildAutoPackingLookup, lookupToJson, lookupFromJson } from '../utils/reconcileNgoaiSan'
-import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport, updateTrialReport } from '../utils/unifiedTrialReports'
+import { readTrialReports, saveTrialReport, renameTrialReport, removeTrialReport, updateTrialReport, reportWeekDate, reportYm } from '../utils/unifiedTrialReports'
 
 const NGOAI_SAN_CARRIER_KEY = 'unifiedTrial_donSO_spx'
 
@@ -243,10 +243,30 @@ function SavedWeekPicker({ reports, viewingId, onChange, onRename, onRemove, onU
   }
 
   const selectValue = viewingId || (hasLiveData ? '' : '__new__')
+  // Năm > Tháng > Tuần báo cáo: tháng theo tuần đang xem (chưa xem tuần nào thì tháng của tuần mới nhất).
+  // Đổi năm / tháng thì mở tuần mới nhất của tháng đó.
+  const byDate = [...reports].sort((a, b) => reportWeekDate(b) - reportWeekDate(a))
+  const curYm = viewingEntry ? reportYm(viewingEntry) : (byDate[0] ? reportYm(byDate[0]) : '')
+  const years = [...new Set(byDate.map(r => reportYm(r).slice(0, 4)))]
+  const monthsInYear = [...new Set(byDate.map(reportYm).filter(k => k.startsWith(`${curYm.slice(0, 4)}-`)))]
+  const weeksInMonth = byDate.filter(r => reportYm(r) === curYm)
+  const openFirst = pred => { const r = byDate.find(x => pred(reportYm(x))); if (r) onChange(r.id) }
+  const selCls = 'text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300'
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex flex-wrap items-center gap-1">
+      {reports.length > 0 && (
+        <>
+          <select value={curYm.slice(0, 4)} onChange={e => openFirst(k => k.startsWith(`${e.target.value}-`))} aria-label="Năm" className={selCls}>
+            {years.map(y => <option key={y} value={y}>Năm {y}</option>)}
+          </select>
+          <select value={curYm} onChange={e => openFirst(k => k === e.target.value)} aria-label="Tháng" className={selCls}>
+            {monthsInYear.map(k => <option key={k} value={k}>Tháng {Number(k.slice(5))} ({byDate.filter(r => reportYm(r) === k).length} tuần)</option>)}
+          </select>
+        </>
+      )}
       <select
+        aria-label="Tuần báo cáo"
         value={selectValue}
         onChange={e => {
           const v = e.target.value
@@ -257,7 +277,7 @@ function SavedWeekPicker({ reports, viewingId, onChange, onRename, onRemove, onU
       >
         <option value="__new__">Upload tuần mới</option>
         {hasLiveData && <option value="">— Xem trực tiếp (tuần hiện tại) —</option>}
-        {reports.map(r => (
+        {weeksInMonth.map(r => (
           <option key={r.id} value={r.id}>{r.label}</option>
         ))}
       </select>

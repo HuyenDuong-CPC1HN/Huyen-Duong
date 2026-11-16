@@ -42,7 +42,7 @@ describe('UnifiedTrialTab — SavedWeekPicker: nút "Xoá báo cáo tuần này"
 
     render(<UnifiedTrialTab />)
 
-    const select = await screen.findByRole('combobox')
+    const select = await screen.findByRole('combobox', { name: 'Tuần báo cáo' })
     fireEvent.change(select, { target: { value: 'r-old' } })
     await screen.findByText('Tuần lỗi cần xoá.xlsx')
 
@@ -65,7 +65,7 @@ describe('UnifiedTrialTab — SavedWeekPicker: nút "Xoá báo cáo tuần này"
 
     render(<UnifiedTrialTab />)
 
-    const select = await screen.findByRole('combobox')
+    const select = await screen.findByRole('combobox', { name: 'Tuần báo cáo' })
     fireEvent.change(select, { target: { value: 'r-old2' } })
     await screen.findByText('Tuần không muốn xoá.xlsx')
 
@@ -90,7 +90,7 @@ describe('UnifiedTrialTab — dropdown "Upload tuần mới" luôn là lựa ch�
   it('đang có dữ liệu chưa lưu -> option đầu luôn là "Upload tuần mới", "Xem trực tiếp" là option thứ 2', async () => {
     seedDonSOLive([])
     render(<UnifiedTrialTab />)
-    const select = await screen.findByRole('combobox')
+    const select = await screen.findByRole('combobox', { name: 'Tuần báo cáo' })
     const options = [...select.querySelectorAll('option')].map(o => o.textContent)
     expect(options[0]).toBe('Upload tuần mới')
     expect(options[1]).toBe('— Xem trực tiếp (tuần hiện tại) —')
@@ -101,7 +101,7 @@ describe('UnifiedTrialTab — dropdown "Upload tuần mới" luôn là lựa ch�
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<UnifiedTrialTab />)
 
-    const select = await screen.findByRole('combobox')
+    const select = await screen.findByRole('combobox', { name: 'Tuần báo cáo' })
     fireEvent.change(select, { target: { value: '__new__' } })
     expect(window.confirm).toHaveBeenCalled()
 
@@ -110,7 +110,7 @@ describe('UnifiedTrialTab — dropdown "Upload tuần mới" luôn là lựa ch�
       expect(store.opsStore.getItem('unified_trial_donSO_meta')).toBeNull()
     })
     // Không còn báo cáo nào đã lưu -> dropdown biến mất hẳn, chỉ còn khung upload trống.
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Tuần báo cáo' })).not.toBeInTheDocument()
   })
 
   it('chọn "Upload tuần mới" nhưng huỷ xác nhận -> dữ liệu đang xem vẫn còn nguyên', async () => {
@@ -118,7 +118,7 @@ describe('UnifiedTrialTab — dropdown "Upload tuần mới" luôn là lựa ch�
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(<UnifiedTrialTab />)
 
-    const select = await screen.findByRole('combobox')
+    const select = await screen.findByRole('combobox', { name: 'Tuần báo cáo' })
     fireEvent.change(select, { target: { value: '__new__' } })
     expect(store.opsStore.getItem('unified_trial_donSO_rows')).not.toBeNull()
   })
@@ -134,7 +134,7 @@ describe('UnifiedTrialTab — dropdown "Upload tuần mới" luôn là lựa ch�
     vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     render(<UnifiedTrialTab />)
-    const select = await screen.findByRole('combobox')
+    const select = await screen.findByRole('combobox', { name: 'Tuần báo cáo' })
     fireEvent.change(select, { target: { value: uploadedAt } })
     fireEvent.click(screen.getByTitle('Xoá báo cáo tuần này'))
 
@@ -230,7 +230,7 @@ describe('UnifiedTrialTab — tuần Đơn SO đã lưu vẫn có mục D) Phân
     }]))
 
     render(<UnifiedTrialTab />)
-    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'r-week' } })
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Tuần báo cáo' }), { target: { value: 'r-week' } })
     expect(await screen.findByText('D) Phân tích đơn giao trễ hạn 48h')).toBeInTheDocument()
     expect(screen.getByText(/1 đơn giao quá 48h\. Trong đó có/)).toBeInTheDocument()
   })
@@ -250,7 +250,7 @@ describe('UnifiedTrialTab — file SPX của tuần đã lưu không bị dọn 
     ]))
 
     render(<UnifiedTrialTab />)
-    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'r-missing' } })
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Tuần báo cáo' }), { target: { value: 'r-missing' } })
     expect(await screen.findByText(/đã gắn với tuần này không còn trên hệ thống/)).toBeInTheDocument()
 
     const ws = XLSX.utils.aoa_to_sheet([['Mã vận đơn', 'Mã khách hàng', 'Trạng thái hiện tại'], ['SPXVN9', 'ORD9', 'Đã giao hàng']])
@@ -280,5 +280,23 @@ describe('UnifiedTrialTab — file SPX của tuần đã lưu không bị dọn 
       expect(Object.keys(report.autoPackingLookup)).toEqual(['SPXVN9'])
     })
     expect(await screen.findByText(/1 đơn khớp Mã đơn/)).toBeInTheDocument()
+  })
+})
+
+describe('UnifiedTrialTab — tuần đã lưu chọn theo Năm > Tháng > Tuần báo cáo', () => {
+  it('chỉ hiện tuần của tháng đang chọn; đổi tháng mở tuần mới nhất của tháng đó', async () => {
+    const rep = (id, label) => ({ id, label, fileName: 'so.xlsx', createdAt: id, total: 0, tmdtCount: 0, ngoaiSanCount: 0, otherCount: 0, mismatchCount: 0, shops: [], spxWeekId: null, carrierLookup: {} })
+    store.opsStore.setItem('unified_trial_reports_donSO', JSON.stringify([
+      rep('2026-11-14T01:00:00.000Z', 'Đơn SO - Tuần 07/11 - 13/11/2026'),
+      rep('2026-11-07T01:00:00.000Z', 'Đơn SO - Tuần 31/10 - 06/11/2026'),
+      rep('2026-10-31T01:00:00.000Z', 'Đơn SO - Tuần 24/10 - 30/10/2026'),
+    ]))
+    render(<UnifiedTrialTab />)
+    const week = await screen.findByRole('combobox', { name: 'Tuần báo cáo' })
+    expect([...screen.getByRole('combobox', { name: 'Tháng' }).options].map(o => o.textContent)).toEqual(['Tháng 11 (2 tuần)', 'Tháng 10 (1 tuần)'])
+    expect([...week.options].map(o => o.textContent)).toEqual(['Upload tuần mới', 'Đơn SO - Tuần 07/11 - 13/11/2026', 'Đơn SO - Tuần 31/10 - 06/11/2026'])
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tháng' }), { target: { value: '2026-10' } })
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tuần báo cáo' })).toHaveValue('2026-10-31T01:00:00.000Z'))
+    expect([...screen.getByRole('combobox', { name: 'Tuần báo cáo' }).options].map(o => o.textContent)).toEqual(['Upload tuần mới', 'Đơn SO - Tuần 24/10 - 30/10/2026'])
   })
 })
