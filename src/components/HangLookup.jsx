@@ -149,7 +149,7 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
                         <span className={`text-[11px] font-bold tracking-wide ${h.kho === 'C' ? 'text-red-700' : 'text-blue-700'}`}>KHO {h.kho}</span></div>
                       <div className="min-w-0 flex flex-col">
                         <span className="font-mono font-bold text-[13.5px]">{h.so || (h.v2 === 'pool' ? 'Chờ huỷ' : <span className="font-sans font-normal text-gray-400">chưa có số phiếu</span>)}</span>
-                        <span className="text-[12.5px] text-gray-500 truncate" title={h.who}>{h.who}</span>
+                        {h.who && <span className="self-start max-w-full mt-0.5 px-2 py-0.5 rounded-md bg-sky-100 text-[#1e3a5f] text-[12.5px] font-semibold truncate" title={h.who}>{h.who}</span>}
                       </div>
                       <div className="flex flex-wrap items-center justify-end gap-1.5">
                         {loaiTag(h.nguon)}
