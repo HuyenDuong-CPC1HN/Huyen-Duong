@@ -3,7 +3,7 @@ import { Link2, Plus, Search, X } from 'lucide-react'
 import {
   BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, applyKtDone, backBatch, backCase, daysSince, setDoneDate,
   dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, ktLinkUrl, ktPending, monthKey, makeBatch, newKtToken,
-  toIsoDate, newCase, newItem, newPsEntry, stepOfCase,
+  toIsoDate, newCase, newItem, newPsEntry, stepOfCase, fmtDateTimeVi,
 } from '../utils/flowV2'
 import { fetchKtDone, readFlowV2, readKtLinks, readLegacySources, removeKtDone, syncKtQueue, writeFlowV2, writeKtLinks } from '../data/flowV2Store'
 import { KE_TOAN_LIST } from '../utils/returnSlips'
@@ -148,32 +148,60 @@ function PsModal({ kho, onClose, onAdd }) {
   )
 }
 
-// onSelect (cột Chờ ký): thẻ có ô tick để chọn nhiều hồ sơ chuyển bước 1 lần — ô tick nằm ngoài nút mở hồ sơ.
-function CaseCard({ c, batch, onOpen, selected = false, onSelect = null, q = '' }) {
+// Bảng việc: mỗi hồ sơ 1 dòng (loại · kho, khách, số đơn, bước hiện tại, tạo lúc, đứng bước, kế toán); › mở xem nhanh
+// các mặt hàng ngay dưới dòng. onSelect (tab Chờ ký): ô tick chọn nhiều hồ sơ chuyển bước 1 lần.
+function CaseRow({ c, stt, batch, onOpen, open, onToggle, selected = false, onSelect = null, q = '' }) {
   const flow = CASE_FLOWS[c.kind], s = stepOfCase(c), nxt = flow.steps[c.step + 1]
   const days = daysSince(c.stepAt)
-  const card = (
-    <button type="button" onClick={onOpen} className={`w-full text-left bg-white rounded-xl border p-2.5 hover:shadow-sm ${onSelect ? 'pr-9' : ''} ${selected ? 'border-[#1e3a5f] ring-1 ring-[#1e3a5f]' : 'border-gray-200'}`} style={{ borderLeft: `4px solid ${KIND_BORDER[c.kind]}` }}>
-      <div className="flex flex-wrap items-center gap-1.5"><KindTag kind={c.kind} /><KhoTag kho={c.kho} />{days >= 3 && s.col < 4 && <span className="text-[11px] font-semibold text-red-600">{days} ngày</span>}</div>
-      <div className="font-semibold text-sm mt-1">{c.khachHang || 'Khách hàng chưa ghi'}</div>
-      {c.tenKhac && <div className="text-xs font-semibold text-[#1e3a5f] bg-sky-100 rounded px-1.5 py-0.5 truncate w-fit max-w-full" title={c.tenKhac}>{c.tenKhac}</div>}
-      <div className="text-xs text-gray-500">{c.soDon || 'chưa có số đơn'} · {c.items.filter(it => it.maHang || it.tenHang).length} mặt hàng</div>
-      {c.ghiChu && <div className="text-xs text-amber-800 bg-amber-50 rounded px-1.5 py-0.5 truncate" title={c.ghiChu}>Lý do: {c.ghiChu}</div>}
-      {words(q).length > 0 && c.items.filter(it => hitAll([it.maHang, it.tenHang, it.soLo].join(' '), words(q))).slice(0, 3).map(it => (
-        <div key={it.rowId} className="text-xs text-[#1e3a5f] bg-blue-50 rounded px-1.5 py-0.5">{[it.maHang, it.tenHang].filter(Boolean).join(' · ')}{it.soLo ? ` · lô ${it.soLo}` : ''}</div>
-      ))}
-      <Dots total={flow.steps.length} current={c.step} color={KIND_BORDER[c.kind]} />
-      <div className="text-xs font-semibold text-[#1e3a5f] mt-1.5">{s.col === 4 ? `✓ ${s.t}` : `Đang ở: ${s.t}${s.k === 'dangHuy' && batch ? ` ${batch.no}` : ''}`}</div>
-      {s.k === 'choHuy' ? <div className="text-xs text-gray-500">Đang ở khu Huỷ hàng, chờ gom đợt</div> : nxt && s.col < 4 && s.k !== 'dangHuy' && <div className="text-xs text-gray-500">Tiếp theo: {nxt.t}</div>}
-    </button>
-  )
-  if (!onSelect) return card
+  const items = c.items.filter(it => it.maHang || it.tenHang)
+  const name = c.khachHang || 'Khách hàng chưa ghi'
+  const td = 'px-2.5 py-2.5 align-top border-t border-gray-100'
   return (
-    <div className="relative">
-      {card}
-      <input type="checkbox" checked={selected} onChange={e => onSelect(e.target.checked)} aria-label={`Chọn ${c.khachHang || c.soDon || 'hồ sơ'}`}
-        className="absolute top-2.5 right-2.5 w-4 h-4 cursor-pointer accent-[#1e3a5f]" />
-    </div>
+    <>
+      <tr className={selected ? 'bg-blue-50/70' : 'hover:bg-slate-50'}>
+        {onSelect && <td className={`${td} text-center`}><input type="checkbox" checked={selected} onChange={e => onSelect(e.target.checked)} aria-label={`Chọn ${c.khachHang || c.soDon || 'hồ sơ'}`} className="w-4 h-4 accent-[#1e3a5f]" /></td>}
+        <td className={td}><button type="button" onClick={onToggle} aria-expanded={open} aria-label={`Xem hàng trong hồ sơ ${name}`} className={`px-1 text-gray-400 hover:text-gray-700 transition-transform ${open ? 'rotate-90' : ''}`}>›</button></td>
+        <td className={`${td} text-center text-gray-400 tabular-nums`}>{stt}</td>
+        <td className={td}><div className="flex flex-col items-start gap-1"><KindTag kind={c.kind} /><KhoTag kho={c.kho} /></div></td>
+        <td className={`${td} max-w-80`}>
+          <button type="button" onClick={onOpen} className="text-left font-semibold text-[#1d6fd1] hover:underline">{name}</button>
+          {c.tenKhac && <div><span className="inline-block mt-1 text-xs font-semibold text-violet-800 bg-violet-100 rounded px-1.5 py-0.5" title="Tên khách (khác)">{c.tenKhac}</span></div>}
+          {c.ghiChu && <div className="text-xs text-amber-800 mt-1">Lý do: {c.ghiChu}</div>}
+          {words(q).length > 0 && items.filter(it => hitAll([it.maHang, it.tenHang, it.soLo].join(' '), words(q))).slice(0, 3).map(it => (
+            <div key={it.rowId} className="text-xs text-[#1e3a5f] bg-blue-50 rounded px-1.5 py-0.5 mt-1">{[it.maHang, it.tenHang].filter(Boolean).join(' · ')}{it.soLo ? ` · lô ${it.soLo}` : ''}</div>
+          ))}
+        </td>
+        <td className={td}><div className="font-mono text-xs font-bold">{c.soDon || <span className="font-sans font-normal text-gray-400">chưa có số đơn</span>}</div><div className="text-xs text-gray-500 mt-0.5">{items.length} mặt hàng</div></td>
+        <td className={`${td} min-w-52`}>
+          <div className="text-[13px] font-semibold text-gray-800">{s.col === 4 ? `✓ ${s.t}` : s.t}{s.k === 'dangHuy' && batch ? ` ${batch.no}` : ''}</div>
+          <Dots total={flow.steps.length} current={c.step} color={KIND_BORDER[c.kind]} />
+          {s.k === 'choHuy' ? <div className="text-xs text-gray-500 mt-1">Đang ở khu Huỷ hàng, chờ gom đợt</div> : nxt && s.col < 4 && s.k !== 'dangHuy' && <div className="text-xs text-gray-500 mt-1">Tiếp theo: {nxt.t}</div>}
+        </td>
+        <td className={`${td} text-xs text-gray-600 whitespace-nowrap tabular-nums`}>{fmtDateTimeVi(c.createdAt)}</td>
+        <td className={`${td} text-xs whitespace-nowrap tabular-nums`}>{s.col === 4
+          ? <span className="text-gray-500">xong {c.stepAt ? fmtDateVi(toIsoDate(new Date(c.stepAt))) : ''}</span>
+          : <span className={days >= 3 ? 'font-bold text-red-600' : 'text-gray-500'}>{days} ngày</span>}</td>
+        <td className={`${td} text-xs text-gray-600 whitespace-nowrap`}>{c.keToan || c.form?.keToan || '—'}</td>
+        <td className={td}><button type="button" onClick={onOpen} className="sheet-tab-action whitespace-nowrap">Mở hồ sơ</button></td>
+      </tr>
+      {open && (
+        <tr><td colSpan={onSelect ? 11 : 10} className="bg-slate-50 px-3 pb-3 pt-0 sm:pl-20">
+          {items.length === 0 ? <div className="text-xs text-gray-400 py-2">Hồ sơ chưa có dòng hàng.</div> : (
+            <table className="w-full text-xs bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <thead className="text-gray-500"><tr>{['Mã hàng', 'Tên hàng', 'Số lô', 'Hạn dùng', 'Số lượng', 'Tình trạng'].map(h => <th key={h} className={`px-2.5 py-1.5 font-semibold ${h === 'Số lượng' ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+              <tbody>{items.map(it => (
+                <tr key={it.rowId} className="border-t border-gray-100">
+                  <td className="px-2.5 py-1.5 font-mono text-gray-500">{it.maHang}</td><td className="px-2.5 py-1.5">{it.tenHang}</td>
+                  <td className="px-2.5 py-1.5 font-mono">{it.soLo || '—'}</td><td className="px-2.5 py-1.5 tabular-nums">{fmtDateVi(it.hanDung) || '—'}</td>
+                  <td className="px-2.5 py-1.5 text-right font-bold tabular-nums whitespace-nowrap">{it.soLuong ?? ''} <span className="font-normal text-gray-500">{it.dvt}</span></td>
+                  <td className="px-2.5 py-1.5 text-gray-600">{it.tinhTrang}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </td></tr>
+      )}
+    </>
   )
 }
 
@@ -231,16 +259,6 @@ function BatchList({ bs, mon, onMon, onOpen }) {
         ))}
       </div>
     </>
-  )
-}
-
-// Cột Hoàn thành: mỗi hồ sơ 1 dòng gọn (khách hàng · kho / loại · số đơn · ngày xong) cho cột không dài ra.
-function DoneRow({ c, onOpen }) {
-  return (
-    <button type="button" onClick={onOpen} className="w-full text-left bg-white rounded-lg border border-gray-200 px-2.5 py-1.5 hover:shadow-sm" style={{ borderLeft: `3px solid ${KIND_BORDER[c.kind]}` }}>
-      <div className="text-[13px] font-semibold truncate" title={[c.khachHang, c.tenKhac].filter(Boolean).join(' · ')}>{c.khachHang || 'Khách hàng chưa ghi'}{c.tenKhac && <span className="ml-1.5 px-1.5 rounded bg-sky-100 text-[#1e3a5f] text-[11px]">{c.tenKhac}</span>}</div>
-      <div className="text-[11px] text-gray-500 truncate">{CASE_FLOWS[c.kind].short} · Kho {c.kho}{c.soDon ? ` · ${c.soDon}` : ''} · xong {c.stepAt ? fmtDateVi(toIsoDate(new Date(c.stepAt))) : ''}</div>
-    </button>
   )
 }
 
@@ -308,6 +326,9 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
   const [ktMsg, setKtMsg] = useState('')
   const [signSel, setSignSel] = useState([]) // hồ sơ đang tick ở cột Chờ ký
   const [bulkMsg, setBulkMsg] = useState('')
+  const [tabSel, setTab] = useState(null) // tab bước đang xem (1–4); chưa chọn thì tab đầu còn hồ sơ
+  const [lateOnly, setLateOnly] = useState(false)
+  const [openRows, setOpenRows] = useState([]) // hồ sơ đang mở › xem hàng
 
   useEffect(() => {
     const reload = () => setData(readFlowV2())
@@ -406,6 +427,14 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
   const late = visible.filter(c => daysSince(c.stepAt) >= 3 && stepOfCase(c).col < 4).length
   const atKt = visible.filter(c => stepOfCase(c).kt).length
   const openBatches = data.batches.filter(b => b.step < BATCH_STEPS.length - 1).length
+  // Tab bước + danh sách của tab: Hoàn thành chỉ tháng đang chọn (đang tìm thì mọi tháng); "quá 3 ngày" lọc hồ sơ đứng lâu.
+  const shownCases = visible.filter(c => !lateOnly || (daysSince(c.stepAt) >= 3 && stepOfCase(c).col < 4))
+  const inTab = ci => shownCases.filter(c => stepOfCase(c).col === ci && (ci !== 4 || q.trim() || doneMonth(c) === doneMon))
+  const countOf = ci => inTab(ci).length
+  const tab = tabSel ?? ([1, 2, 3].find(ci => countOf(ci) > 0) || 1)
+  const isSign = tab === 2, isDone = tab === 4
+  const list = isDone ? [...inTab(4)].sort((x, y) => String(y.stepAt).localeCompare(String(x.stepAt))) : inTab(tab)
+  const picked = isSign ? list.map(c => c.id).filter(id => signSel.includes(id)) : [] // chỉ tính hồ sơ đang hiện (theo bộ lọc)
 
   return (
     <div className="sheet-tab">
@@ -429,61 +458,58 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
         </div>
 
         {view === 'board' ? (
-          <>
-            <div className="flex flex-wrap items-center gap-2">
-              <Seg value={khoFilter} onChange={setKhoFilter} label="Kho" options={[['all', 'Tất cả kho'], ['C', 'Kho C'], ['DTP', 'Kho DTP']]} />
-              <Seg value={kindFilter} onChange={setKindFilter} label="Loại" options={[['all', 'Mọi loại'], ['tra', 'Trả nguyên vẹn'], ['loi', 'Trả lỗi']]} />
-              <div className="relative flex-1 min-w-48 max-w-xs">
+          <section className="bg-white rounded-2xl border border-gray-200 flex flex-col min-w-0" aria-label="Bảng việc hồ sơ khách trả">
+            <div className="flex flex-wrap items-center gap-2 p-3">
+              <div className="relative flex-1 min-w-56">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm khách hàng, tên sản phẩm, mã hàng, số lô, số đơn…" aria-label="Tìm hồ sơ" className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm khách hàng, tên khác, sản phẩm, mã hàng, số lô, số đơn…" aria-label="Tìm hồ sơ" className="w-full pl-8 pr-2 py-2 border border-gray-200 rounded-lg text-sm" />
               </div>
+              <select value={khoFilter} onChange={e => setKhoFilter(e.target.value)} aria-label="Kho" className="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white">
+                <option value="all">Tất cả kho</option><option value="C">Kho C</option><option value="DTP">Kho DTP</option>
+              </select>
+              <select value={kindFilter} onChange={e => setKindFilter(e.target.value)} aria-label="Loại" className="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white">
+                <option value="all">Mọi loại</option><option value="tra">Trả nguyên vẹn</option><option value="loi">Trả lỗi · đổi hàng</option>
+              </select>
+              {late > 0 && <button type="button" onClick={() => setLateOnly(v => !v)} aria-pressed={lateOnly}
+                className={`px-2.5 py-1.5 rounded-full border text-xs font-semibold ${lateOnly ? 'bg-red-600 border-red-600 text-white' : 'border-red-300 text-red-700 bg-red-50'}`}>⚠ {late} hồ sơ đứng 1 bước quá 3 ngày</button>}
+              {atKt > 0 && <span className="px-2.5 py-1.5 rounded-full border border-gray-200 text-gray-500 text-xs">{atKt} hồ sơ đang chờ kế toán</span>}
             </div>
-            {(late > 0 || atKt > 0) && (
-              <div className="flex flex-wrap gap-2 text-xs">
-                {late > 0 && <span className="px-2.5 py-1 rounded-lg border border-red-200 text-red-700 bg-white">⚠ {late} hồ sơ đứng 1 bước quá 3 ngày</span>}
-                {atKt > 0 && <span className="px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 bg-white">{atKt} hồ sơ đang chờ kế toán</span>}
-              </div>
-            )}
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, minmax(230px, 1fr))', overflowX: 'auto' }}>
-              {BOARD_COLS.map(([ci, title, hint]) => {
-                const isDone = ci === 4
-                // Cột Hoàn thành chỉ hiện tháng đang chọn; đang tìm kiếm thì tìm trên mọi tháng. Các cột việc luôn hiện hết.
-                const list = visible.filter(c => stepOfCase(c).col === ci && (!isDone || q.trim() || doneMonth(c) === doneMon))
-                const isSign = ci === 2
-                const ids = list.map(c => c.id)
-                const picked = isSign ? ids.filter(id => signSel.includes(id)) : [] // chỉ tính hồ sơ đang hiện (theo bộ lọc)
-                return (
-                  <div key={title} className="bg-slate-100 rounded-2xl p-2.5 flex flex-col gap-2 min-h-60">
-                    <div><div className="flex items-center justify-between text-sm font-semibold">{title}<span className="text-xs bg-white rounded-full px-2 text-gray-500">{list.length}</span></div>
-                      <div className="text-[11px] text-gray-500">{isDone && q.trim() ? 'đang tìm trên mọi tháng' : hint}</div>
-                      {isDone && !q.trim() && (
-                        <select value={doneMon} onChange={e => setDoneMon(e.target.value)} aria-label="Tháng hoàn thành" className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs">
-                          {doneMonthOptions(data.cases).map(m => <option key={m} value={m}>{fmtMonthVi(m)}{m === monthKey() ? ' (tháng này)' : ''} · {data.cases.filter(c => doneMonth(c) === m).length} hồ sơ</option>)}
-                        </select>
-                      )}
-                      {isSign && list.length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-                            <input type="checkbox" checked={picked.length === ids.length} aria-label="Chọn tất cả hồ sơ chờ ký" className="w-4 h-4 accent-[#1e3a5f]"
-                              ref={el => { if (el) el.indeterminate = picked.length > 0 && picked.length < ids.length }}
-                              onChange={e => setSignSel(e.target.checked ? ids : [])} /> Chọn tất cả
-                          </label>
-                          {picked.length > 0 && <button type="button" onClick={() => signAll(picked)} className="sheet-tab-action is-primary">Đã ký đủ → chuyển tiếp ({picked.length})</button>}
-                          {picked.length > 0 && <div className="w-full text-[11px] text-gray-500">Trả nguyên vẹn sang kế toán nhập trả lại, trả lỗi sang nhập lại kho.</div>}
-                        </div>
-                      )}</div>
-                    {isDone ? (
-                      <div className="flex flex-col gap-1.5 overflow-y-auto pr-0.5" style={{ maxHeight: '70vh' }}>
-                        {[...list].sort((x, y) => String(y.stepAt).localeCompare(String(x.stepAt))).map(c => <DoneRow key={c.id} c={c} onOpen={() => setOpenCase(c.id)} />)}
-                      </div>
-                    ) : list.map(c => <CaseCard key={c.id} c={c} q={q} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)}
+            <div className="flex overflow-x-auto border-y border-gray-200 bg-slate-50" role="tablist" aria-label="Bước">
+              {BOARD_COLS.map(([ci, title]) => (
+                <button key={ci} type="button" role="tab" aria-selected={tab === ci} onClick={() => { setTab(ci); setSignSel([]) }}
+                  className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 ${tab === ci ? 'border-[#1d6fd1] text-[#1d6fd1] bg-white' : 'border-transparent text-gray-700 hover:text-gray-900'}`}>
+                  {title}<span className="px-1.5 rounded-md bg-blue-50 text-[#1d6fd1] text-xs tabular-nums">{countOf(ci)}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-gray-200 text-xs text-gray-500">
+              <span>{BOARD_COLS.find(([ci]) => ci === tab)?.[2]} · {list.length} hồ sơ</span>
+              {isSign && picked.length > 0 && <button type="button" onClick={() => signAll(picked)} className="sheet-tab-action is-primary">Đã ký đủ → chuyển tiếp ({picked.length})</button>}
+              {isSign && picked.length > 0 && <span>Trả nguyên vẹn sang kế toán nhập trả lại, trả lỗi sang nhập lại kho.</span>}
+              {isDone && (q.trim() ? <span>đang tìm trên mọi tháng</span> : (
+                <select value={doneMon} onChange={e => setDoneMon(e.target.value)} aria-label="Tháng hoàn thành" className="ml-auto rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs">
+                  {doneMonthOptions(data.cases).map(m => <option key={m} value={m}>{fmtMonthVi(m)}{m === monthKey() ? ' (tháng này)' : ''} · {data.cases.filter(c => doneMonth(c) === m).length} hồ sơ</option>)}
+                </select>
+              ))}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px] border-collapse" style={{ minWidth: 1040 }}>
+                <thead className="bg-slate-50 text-xs text-gray-500"><tr>
+                  {isSign && <th className="px-2.5 py-2 w-9 text-center"><input type="checkbox" checked={list.length > 0 && picked.length === list.length} aria-label="Chọn tất cả hồ sơ chờ ký" className="w-4 h-4 accent-[#1e3a5f]"
+                    ref={el => { if (el) el.indeterminate = picked.length > 0 && picked.length < list.length }}
+                    onChange={e => setSignSel(e.target.checked ? list.map(c => c.id) : [])} /></th>}
+                  <th className="w-7" /><th className="px-2.5 py-2 w-10 text-center font-semibold">STT</th>
+                  {['Loại · Kho', 'Khách hàng', 'Số đơn', 'Bước hiện tại', 'Tạo lúc', isDone ? 'Hoàn thành' : 'Đứng bước', 'Kế toán', ''].map((h, k) => <th key={k} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {list.length === 0 ? <tr><td colSpan={isSign ? 11 : 10} className="px-3 py-8 text-center text-gray-400">{data.cases.length === 0 ? 'Chưa có hồ sơ nào. Bấm "Tạo hồ sơ khách trả" để bắt đầu.' : 'Không có hồ sơ nào ở bước này.'}</td></tr>
+                    : list.map((c, k) => <CaseRow key={c.id} c={c} stt={k + 1} q={q} batch={c.batchId ? batchById(c.batchId) : null} onOpen={() => setOpenCase(c.id)}
+                      open={openRows.includes(c.id)} onToggle={() => setOpenRows(r => (r.includes(c.id) ? r.filter(x => x !== c.id) : [...r, c.id]))}
                       {...(isSign ? { selected: signSel.includes(c.id), onSelect: on => setSignSel(sel0 => (on ? [...sel0, c.id] : sel0.filter(x => x !== c.id))) } : {})} />)}
-                  </div>
-                )
-              })}
+                </tbody>
+              </table>
             </div>
-            {data.cases.length === 0 && <div className="text-sm text-gray-500">Chưa có hồ sơ nào. Bấm <b>"Tạo hồ sơ khách trả"</b> để bắt đầu.</div>}
-          </>
+          </section>
         ) : (
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))' }}>
             {['C', 'DTP'].map(kho => {

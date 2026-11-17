@@ -161,7 +161,8 @@ describe('Hàng trả & huỷ (Demo) — lấy dữ liệu từ tab cũ', () => 
     fireEvent.click(screen.getByRole('button', { name: 'Lấy dữ liệu từ tab cũ' }))
     expect(screen.getByText(/Đã lấy 1 hồ sơ khách trả và 1 đợt huỷ/)).toBeInTheDocument()
     expect(store.values.get('return_slips')).toBe(oldSlips)
-    expect(screen.queryByText('Nhà thuốc Cũ')).not.toBeInTheDocument() // tháng 8, cột Hoàn thành đang xem tháng này
+    fireEvent.click(screen.getByRole('tab', { name: /Hoàn thành/ }))
+    expect(screen.queryByText('Nhà thuốc Cũ')).not.toBeInTheDocument() // tháng 8, tab Hoàn thành đang xem tháng này
     fireEvent.change(screen.getByLabelText('Tháng hoàn thành'), { target: { value: '2026-08' } })
     expect(screen.getByText('Nhà thuốc Cũ')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Lấy dữ liệu từ tab cũ' }))
@@ -189,6 +190,19 @@ describe('Hàng trả & huỷ (Demo) — cột Chờ ký chọn hàng loạt', (
     expect(byName).toEqual({ 'Thanh Dũng': 2, 'Nhà thuốc Nhiplus': 2, 'Nhà thuốc Minh An': 1 })
     expect(screen.getByText(/Đã chuyển 2 hồ sơ đã ký đủ: 1 sang "Kế toán nhập trả lại \(phiếu \+ hoá đơn\)", 1 sang "Nhập lại kho \(phiếu nhập lại\)"/)).toBeInTheDocument()
     expect(screen.getByLabelText('Chọn Nhà thuốc Minh An')).not.toBeChecked()
+  })
+
+  it('bảng việc: tab bước có số đếm, › xem nhanh hàng trong hồ sơ', () => {
+    store.values.set('flowv2_cases', JSON.stringify([atSign('tra', 'Nhà thuốc Minh An'), { ...atSign('loi', 'Nhà thuốc Lỗi'), step: 2 }]))
+    render(<FlowV2Tab />)
+    expect(screen.getByRole('tab', { name: /Chờ ký\s*1/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /Nhập \/ đổi \/ chờ\s*1/ })).toBeInTheDocument()
+    expect(screen.queryByText('Nhà thuốc Lỗi')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Xem hàng trong hồ sơ Nhà thuốc Minh An' }))
+    expect(screen.getByRole('columnheader', { name: 'Tình trạng' })).toBeInTheDocument()
+    expect(screen.getByText('Hàng A')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Nhập \/ đổi \/ chờ/ }))
+    expect(screen.getByText('Nhà thuốc Lỗi')).toBeInTheDocument()
   })
 
   it('tên khách (khác): lưu theo hồ sơ, hiện trên thẻ + đầu hồ sơ, tìm được; không in vào biên bản', () => {
