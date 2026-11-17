@@ -63,7 +63,7 @@ function flowV2Rows({ cases = [], pool = [], batches = [] }) {
     c.items.filter(hasRow).forEach((it, i) => rows.push({
       id: `v2case:${c.id}#${i}`, ref: c.id, v2: 'case', nguon: tra ? 'tra' : 'doitra', huong: tra ? 'nhap' : 'huy',
       so: tra ? (c.traHang?.form?.soHD || c.phieuNhapLai || c.soDon || '') : (b?.no || ''), kho: c.kho === 'DTP' ? 'DTP' : 'C',
-      who: c.khachHang || '', date: isoDay(c.createdAt), stage: CASE_STAGE[step.k] || 'doing',
+      who: c.khachHang || '', who2: c.tenKhac || '', date: isoDay(c.createdAt), stage: CASE_STAGE[step.k] || 'doing',
       ma: it.maHang || '', ten: it.tenHang || '', soLo: it.soLo || '', soLuong: Number(it.soLuong) || 0, dvt: it.dvt || '',
       extra: it.tinhTrang || defaultTinhTrang(c), huyPhieu: tra ? '' : (b?.no || ''), keToan: b?.keToan || c.keToan || c.form?.keToan || '',
     }))
@@ -144,7 +144,7 @@ export function filterLookup(rows, { kho = 'all', nguon = 'all', huong = 'all', 
     && (huong === 'all' || r.huong === huong)
     && (month === 'all' || r.date.startsWith(month))
     && (!stages || stages.includes(r.stage))
-    && (!needle || [r.ma, r.ten, r.soLo, r.so, r.who, r.huyPhieu, r.keToan].some(v => normText(v).includes(needle))))
+    && (!needle || [r.ma, r.ten, r.soLo, r.so, r.who, r.who2, r.huyPhieu, r.keToan].some(v => normText(v).includes(needle))))
 }
 
 // Cộng số lượng theo hàng + lô (cùng tên và lô thì gộp), nhiều nhất trước.

@@ -191,6 +191,22 @@ describe('Hàng trả & huỷ (Demo) — cột Chờ ký chọn hàng loạt', (
     expect(screen.getByLabelText('Chọn Nhà thuốc Minh An')).not.toBeChecked()
   })
 
+  it('tên khách (khác): lưu theo hồ sơ, hiện trên thẻ + đầu hồ sơ, tìm được; không in vào biên bản', () => {
+    const a = atSign('tra', 'Bán cho người tiêu dùng - Khách lẻ')
+    store.values.set('flowv2_cases', JSON.stringify([a]))
+    render(<FlowV2Tab />)
+    fireEvent.click(screen.getByText('Bán cho người tiêu dùng - Khách lẻ'))
+    const box = screen.getByLabelText('Tên khách (khác)')
+    fireEvent.change(box, { target: { value: 'Chị Lan Hoa' } })
+    fireEvent.blur(box)
+    expect(read('flowv2_cases')[0].tenKhac).toBe('Chị Lan Hoa')
+    expect(screen.getAllByText('Chị Lan Hoa')).toHaveLength(1) // chỉ ở đầu hồ sơ, không có trong biên bản xem trước
+    fireEvent.click(screen.getByRole('button', { name: /Bảng việc/ }))
+    expect(screen.getByText('Chị Lan Hoa')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Tìm hồ sơ'), { target: { value: 'lan hoa' } })
+    expect(screen.getByText('Bán cho người tiêu dùng - Khách lẻ')).toBeInTheDocument()
+  })
+
   it('ghi chú lý do trả lại: lưu theo hồ sơ, hiện trên thẻ, tìm được; không in vào biên bản', () => {
     const a = atSign('tra', 'Nhà thuốc Minh An')
     store.values.set('flowv2_cases', JSON.stringify([a]))

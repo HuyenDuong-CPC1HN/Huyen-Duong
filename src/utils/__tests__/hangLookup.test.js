@@ -87,7 +87,7 @@ describe('cột Kế toán', () => {
 describe('lookupRows — dữ liệu tab Hàng trả & huỷ (Demo)', () => {
   const flowV2 = {
     cases: [
-      { id: 'c1', kind: 'tra', kho: 'C', khachHang: 'Nhà thuốc Mới', step: 2, createdAt: '2026-11-03T08:00:00', keToan: 'Lưu Thị Thuỳ', traHang: { form: { soHD: '00038621' } },
+      { id: 'c1', kind: 'tra', kho: 'C', khachHang: 'Nhà thuốc Mới', tenKhac: 'Chị Lan', step: 2, createdAt: '2026-11-03T08:00:00', keToan: 'Lưu Thị Thuỳ', traHang: { form: { soHD: '00038621' } },
         items: [{ maHang: 'A1', tenHang: 'Hàng A', soLo: 'LA', dvt: 'Hộp', soLuong: 5, tinhTrang: 'Hàng nguyên vẹn' }, { maHang: '', tenHang: '' }] },
       { id: 'c2', kind: 'loi', kho: 'DTP', khachHang: 'Nhà thuốc Lỗi', step: 5, batchId: 'b9', createdAt: '2026-11-04T08:00:00',
         items: [{ maHang: 'B1', tenHang: 'Hàng B', soLo: 'LB', dvt: 'Lọ', soLuong: 2, tinhTrang: 'Vỡ' }] },
@@ -108,7 +108,8 @@ describe('lookupRows — dữ liệu tab Hàng trả & huỷ (Demo)', () => {
     expect(rows.map(r => r.ten).sort()).toEqual(['Hàng A', 'Hàng B', 'Hàng C', 'Hàng D'])
   })
   it('khách trả nguyên vẹn: nhập trả lại, số hoá đơn, chờ kế toán nhập', () => {
-    expect(by('Hàng A')).toMatchObject({ v2: 'case', ref: 'c1', nguon: 'tra', huong: 'nhap', so: '00038621', kho: 'C', stage: 'nhap', date: '2026-11-03', soLuong: 5 })
+    expect(by('Hàng A')).toMatchObject({ v2: 'case', ref: 'c1', nguon: 'tra', huong: 'nhap', so: '00038621', kho: 'C', stage: 'nhap', date: '2026-11-03', soLuong: 5, who2: 'Chị Lan' })
+    expect(filterLookup(rows, { q: 'chi lan' }).map(r => r.ten)).toEqual(['Hàng A'])
   })
   it('hàng lỗi khách trả trong đợt huỷ: 1 dòng theo hồ sơ, số đợt huỷ, chờ xuất', () => {
     expect(rows.filter(r => r.ten === 'Hàng B')).toHaveLength(1)

@@ -33,6 +33,21 @@ function NoteBox({ value, onSave }) {
   )
 }
 
+// Tên khách khác (khách lẻ hay có thêm tên riêng: tên người nhận, nhà thuốc…) — chỉ để theo dõi / tìm kiếm,
+// không in vào biên bản. Lưu khi rời ô.
+function TenKhacBox({ value, onSave }) {
+  const [draft, setDraft] = useState(value)
+  return (
+    <label className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 flex flex-col gap-1.5 text-xs text-gray-600">
+      <span className="font-semibold text-gray-800">Tên khách (khác)</span>
+      <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => { if (draft.trim() !== value.trim()) onSave(draft.trim()) }}
+        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+        placeholder="VD: Chị Lan – Nhà thuốc Minh Châu" aria-label="Tên khách (khác)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" />
+      <span className="text-[11px] text-gray-400">Chỉ để anh theo dõi, tìm kiếm — không đưa vào biên bản.</span>
+    </label>
+  )
+}
+
 export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBackStep, onClose, onOpenBatch, onGoHuy, onDelete, onSetDoneDate }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -254,6 +269,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
           <button type="button" onClick={onClose} className="sheet-tab-action"><ArrowLeft size={13} /> Bảng việc</button>
           <KindTag kind={c.kind} /><KhoTag kho={c.kho} />
           <span className="font-semibold">{c.khachHang || 'Khách hàng chưa ghi'}</span>
+          {c.tenKhac && <span className="px-2 py-0.5 rounded-md bg-sky-100 text-[#1e3a5f] text-xs font-semibold">{c.tenKhac}</span>}
           {c.soDon && <span className="font-mono text-xs text-gray-500">{c.soDon}</span>}
           {c.kind === 'tra' && <span className="text-xs text-gray-500">{subLabel(c)}</span>}
           {c.step === 0 && onDelete && <button type="button" onClick={onDelete} className="sheet-tab-action ml-auto">Xoá hồ sơ</button>}
@@ -262,6 +278,7 @@ export default function FlowV2CaseWorkspace({ c, batch, onSave, onAdvance, onBac
         <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(200px, 240px) minmax(0, 1fr)' }}>
           <div className="flex flex-col gap-3 min-w-0">
             <div className="rounded-xl border border-gray-200 bg-white p-3"><StepList steps={flow.steps} current={c.step} /></div>
+            <TenKhacBox key={`tk-${c.id}`} value={c.tenKhac || ''} onSave={v => set({ tenKhac: v })} />
             <NoteBox key={c.id} value={c.ghiChu || ''} onSave={v => set({ ghiChu: v })} />
           </div>
           <div className="grid gap-4 items-start min-w-0" style={{ gridTemplateColumns: showPaper ? 'repeat(auto-fit, minmax(380px, 1fr))' : '1fr' }}>

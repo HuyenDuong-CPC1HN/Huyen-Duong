@@ -156,6 +156,7 @@ function CaseCard({ c, batch, onOpen, selected = false, onSelect = null, q = '' 
     <button type="button" onClick={onOpen} className={`w-full text-left bg-white rounded-xl border p-2.5 hover:shadow-sm ${onSelect ? 'pr-9' : ''} ${selected ? 'border-[#1e3a5f] ring-1 ring-[#1e3a5f]' : 'border-gray-200'}`} style={{ borderLeft: `4px solid ${KIND_BORDER[c.kind]}` }}>
       <div className="flex flex-wrap items-center gap-1.5"><KindTag kind={c.kind} /><KhoTag kho={c.kho} />{days >= 3 && s.col < 4 && <span className="text-[11px] font-semibold text-red-600">{days} ngày</span>}</div>
       <div className="font-semibold text-sm mt-1">{c.khachHang || 'Khách hàng chưa ghi'}</div>
+      {c.tenKhac && <div className="text-xs font-semibold text-[#1e3a5f] bg-sky-100 rounded px-1.5 py-0.5 truncate w-fit max-w-full" title={c.tenKhac}>{c.tenKhac}</div>}
       <div className="text-xs text-gray-500">{c.soDon || 'chưa có số đơn'} · {c.items.filter(it => it.maHang || it.tenHang).length} mặt hàng</div>
       {c.ghiChu && <div className="text-xs text-amber-800 bg-amber-50 rounded px-1.5 py-0.5 truncate" title={c.ghiChu}>Lý do: {c.ghiChu}</div>}
       {words(q).length > 0 && c.items.filter(it => hitAll([it.maHang, it.tenHang, it.soLo].join(' '), words(q))).slice(0, 3).map(it => (
@@ -237,7 +238,7 @@ function BatchList({ bs, mon, onMon, onOpen }) {
 function DoneRow({ c, onOpen }) {
   return (
     <button type="button" onClick={onOpen} className="w-full text-left bg-white rounded-lg border border-gray-200 px-2.5 py-1.5 hover:shadow-sm" style={{ borderLeft: `3px solid ${KIND_BORDER[c.kind]}` }}>
-      <div className="text-[13px] font-semibold truncate" title={c.khachHang}>{c.khachHang || 'Khách hàng chưa ghi'}</div>
+      <div className="text-[13px] font-semibold truncate" title={[c.khachHang, c.tenKhac].filter(Boolean).join(' · ')}>{c.khachHang || 'Khách hàng chưa ghi'}{c.tenKhac && <span className="ml-1.5 px-1.5 rounded bg-sky-100 text-[#1e3a5f] text-[11px]">{c.tenKhac}</span>}</div>
       <div className="text-[11px] text-gray-500 truncate">{CASE_FLOWS[c.kind].short} · Kho {c.kho}{c.soDon ? ` · ${c.soDon}` : ''} · xong {c.stepAt ? fmtDateVi(toIsoDate(new Date(c.stepAt))) : ''}</div>
     </button>
   )
@@ -340,7 +341,7 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
   const saveBatch = b => save({ batches: data.batches.map(x => (x.id === b.id ? b : x)) })
 
   const visible = useMemo(() => data.cases.filter(c => (khoFilter === 'all' || c.kho === khoFilter) && (kindFilter === 'all' || c.kind === kindFilter)
-    && (!q.trim() || hitAll([c.khachHang, c.soDon, c.ghiChu, ...c.items.flatMap(it => [it.maHang, it.tenHang, it.soLo])].join(' '), words(q)))), [data.cases, khoFilter, kindFilter, q])
+    && (!q.trim() || hitAll([c.khachHang, c.tenKhac, c.soDon, c.ghiChu, ...c.items.flatMap(it => [it.maHang, it.tenHang, it.soLo])].join(' '), words(q)))), [data.cases, khoFilter, kindFilter, q])
   const batchById = id => data.batches.find(b => b.id === id)
 
   const caseObj = openCase && data.cases.find(c => c.id === openCase)

@@ -94,7 +94,7 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
     const aoa = view === 'sum'
       ? [['Tên hàng', 'Số lô', 'ĐVT', 'Tổng số lượng', 'Số phiếu', 'Nguồn'], ...summary.map(e => [e.ten, e.soLo, e.dvt, e.soLuong, e.phieu.size, [...e.nguon].map(n => NGUON[n].label).join(', ')])]
       : [['Mã hàng', 'Tên hàng', 'Số lô', 'Số lượng', 'ĐVT', 'Nguồn', 'Hướng xử lý', 'Tình trạng', 'Số phiếu xuất huỷ', 'Khách hàng / lý do', 'Ngày', 'Kho', 'Kế toán', 'Trạng thái'],
-        ...rows.map(r => [r.ma, r.ten, r.soLo, r.soLuong, r.dvt, NGUON[r.nguon].label, HUONG[r.huong], r.extra, r.so, r.who, fmtDate(r.date), r.kho === 'C' ? 'Kho C' : 'Kho DTP', r.keToan, stageLabel(r)])]
+        ...rows.map(r => [r.ma, r.ten, r.soLo, r.soLuong, r.dvt, NGUON[r.nguon].label, HUONG[r.huong], r.extra, r.so, r.who2 ? `${r.who} · ${r.who2}` : r.who, fmtDate(r.date), r.kho === 'C' ? 'Kho C' : 'Kho DTP', r.keToan, stageLabel(r)])]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'TraCuu')
     XLSX.writeFile(wb, `TraCuuHang_${view === 'sum' ? 'TongHop' : 'ChiTiet'}.xlsx`)
@@ -149,7 +149,10 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
                         <span className={`text-[11px] font-bold tracking-wide ${h.kho === 'C' ? 'text-red-700' : 'text-blue-700'}`}>KHO {h.kho}</span></div>
                       <div className="min-w-0 flex flex-col">
                         <span className="font-mono font-bold text-[13.5px]">{h.so || (h.v2 === 'pool' ? 'Chờ huỷ' : <span className="font-sans font-normal text-gray-400">chưa có số phiếu</span>)}</span>
-                        {h.who && <span className="self-start max-w-full mt-0.5 px-2 py-0.5 rounded-md bg-sky-100 text-[#1e3a5f] text-[12.5px] font-semibold truncate" title={h.who}>{h.who}</span>}
+                        <div className="flex flex-wrap gap-1 mt-0.5 min-w-0">
+                          {h.who && <span className={`max-w-full px-2 py-0.5 rounded-md text-[12.5px] font-semibold truncate ${h.kho === 'C' ? 'bg-red-100 text-red-800' : 'bg-sky-100 text-[#1e3a5f]'}`} title={h.who}>{h.who}</span>}
+                          {h.who2 && <span className="max-w-full px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 text-[12.5px] font-semibold truncate" title={`Tên khách (khác): ${h.who2}`}>{h.who2}</span>}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-end gap-1.5">
                         {loaiTag(h.nguon)}
@@ -207,7 +210,7 @@ export default function HangLookup({ onOpen, swapRecords: recordsProp, swapBatch
             <dt className="text-gray-400">Ngày</dt><dd>{fmtDate(pickedRow.date)}</dd>
             {pickedRow.huyPhieu && <><dt className="text-gray-400">Phiếu xuất huỷ</dt><dd className="font-mono">{pickedRow.huyPhieu}<div className="text-xs text-gray-400 font-sans">cùng dòng này, không hiện dòng riêng</div></dd></>}
             <dt className="text-gray-400">Kế toán</dt><dd>{pickedRow.keToan || '—'}</dd>
-            <dt className="text-gray-400">Khách / lý do</dt><dd>{pickedRow.who || '—'}</dd>
+            <dt className="text-gray-400">Khách / lý do</dt><dd>{pickedRow.who || '—'}{pickedRow.who2 && <div className="text-xs text-violet-800">Tên khác: {pickedRow.who2}</div>}</dd>
             <dt className="text-gray-400">Hàng</dt><dd>{pickedRow.ten}<div className="text-xs text-gray-400">Lô {pickedRow.soLo || '—'} · {pickedRow.soLuong} {pickedRow.dvt}</div></dd>
           </dl>
           <b className="text-sm">Các phiếu cùng hàng và số lô{pickedRow.soLo ? '' : ' (chưa có số lô nên không nối được)'}</b>
