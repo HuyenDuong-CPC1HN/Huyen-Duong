@@ -952,13 +952,14 @@ export default function DoiChieuSoSachTab() {
           <table className="w-full text-xs border-collapse" style={{ minWidth: 980 }}>
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                {['Mã VT', 'Tên vật tư', 'ĐVT', 'Lô', 'Hạn dùng'].map(h => <th key={h} className="px-2 py-2 text-left font-semibold">{h}</th>)}
-                <th className="px-2 py-2 text-right font-semibold border-l border-gray-200">Thực nhận</th>
-                <th className="px-2 py-2 text-right font-semibold border-l border-gray-200">Đã quét</th>
-                <th className="px-2 py-2 text-left font-semibold border-l border-gray-200">Số phiếu</th>
-                <th className="px-2 py-2 text-left font-semibold">Lô · HD trên phiếu</th>
-                <th className="px-2 py-2 text-right font-semibold">SL sổ sách</th>
-                <th className="px-2 py-2 text-left font-semibold border-l border-gray-200">Kết luận</th>
+                {/* Canh giữa mọi cột trừ Mã VT, Tên vật tư */}
+                {['Mã VT', 'Tên vật tư', 'ĐVT', 'Lô', 'Hạn dùng'].map((h, i) => <th key={h} className={`px-2 py-2 font-semibold ${i < 2 ? 'text-left' : 'text-center'}`}>{h}</th>)}
+                <th className="px-2 py-2 text-center font-semibold border-l border-gray-200">Thực nhận</th>
+                <th className="px-2 py-2 text-center font-semibold border-l border-gray-200">Đã quét</th>
+                <th className="px-2 py-2 text-center font-semibold border-l border-gray-200">Số phiếu</th>
+                <th className="px-2 py-2 text-center font-semibold">Lô · HD trên phiếu</th>
+                <th className="px-2 py-2 text-center font-semibold">SL sổ sách</th>
+                <th className="px-2 py-2 text-center font-semibold border-l border-gray-200">Kết luận</th>
                 <th className="px-2 py-2 text-center font-semibold">Đã kiểm</th>
               </tr>
             </thead>
@@ -973,16 +974,16 @@ export default function DoiChieuSoSachTab() {
                   <tr key={r.key} className={`border-t border-gray-100 align-top ${done ? 'opacity-50' : ''}`}>
                     <td className="px-2 py-1.5 font-mono">{r.maHang}</td>
                     <td className="px-2 py-1.5">{r.tenHang}</td>
-                    <td className="px-2 py-1.5">{r.dvt}</td>
-                    <td className="px-2 py-1.5 font-mono">{r.soLo || '—'}</td>
-                    <td className="px-2 py-1.5 font-mono">{fmtHanDung(r.hanDung) || '—'}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums border-l border-gray-100">{vn(r.a)}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums border-l border-gray-100">{vn(r.b)}{r.b !== null && r.b !== r.a && <div className="text-amber-700 font-semibold">{r.b - r.a > 0 ? '+' : ''}{vn(r.b - r.a)}</div>}</td>
-                    <td className="px-2 py-1.5 font-mono border-l border-gray-100">{r.phieus.join(', ') || '—'}</td>
-                    <td className="px-2 py-1.5 font-mono">{r.c === null ? <span className="text-gray-400 font-sans">không có dòng nào</span>
+                    <td className="px-2 py-1.5 text-center">{r.dvt}</td>
+                    <td className="px-2 py-1.5 font-mono text-center">{r.soLo || '—'}</td>
+                    <td className="px-2 py-1.5 font-mono text-center">{fmtHanDung(r.hanDung) || '—'}</td>
+                    <td className="px-2 py-1.5 text-center tabular-nums border-l border-gray-100">{vn(r.a)}</td>
+                    <td className="px-2 py-1.5 text-center tabular-nums border-l border-gray-100">{vn(r.b)}{r.b !== null && r.b !== r.a && <div className="text-amber-700 font-semibold">{r.b - r.a > 0 ? '+' : ''}{vn(r.b - r.a)}</div>}</td>
+                    <td className="px-2 py-1.5 font-mono text-center border-l border-gray-100">{r.phieus.join(', ') || '—'}</td>
+                    <td className="px-2 py-1.5 font-mono text-center">{r.c === null ? <span className="text-gray-400 font-sans">không có dòng nào</span>
                       : <><span className={lotBad ? 'text-violet-700 font-bold' : ''}>{r.pLo || '—'}</span> · <span className={hdBad ? 'text-violet-700 font-bold' : ''}>{fmtHanDung(r.pHd) || '—'}</span></>}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{vn(r.c)}{r.c !== null && r.a !== r.c && <div className="text-red-700 font-semibold">{r.a > r.c ? 'thiếu' : 'thừa'} {vn(Math.abs(r.a - r.c))}</div>}</td>
-                    <td className="px-2 py-1.5 border-l border-gray-100"><div className="flex flex-col items-start gap-1">
+                    <td className="px-2 py-1.5 text-center tabular-nums">{vn(r.c)}{r.c !== null && r.a !== r.c && <div className="text-red-700 font-semibold">{r.a > r.c ? 'thiếu' : 'thừa'} {vn(Math.abs(r.a - r.c))}</div>}</td>
+                    <td className="px-2 py-1.5 border-l border-gray-100"><div className="flex flex-col items-center text-center gap-1">
                       {r.tags.map(t => <span key={t} className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${TONE[PXK_TAGS[t].tone]}`}>{PXK_TAGS[t].label}</span>)}
                       {soMiss.has(String(r.maHang || '').trim().toUpperCase()) && <div className="text-[11px] text-amber-800 max-w-56">Tên ở biên bản nhập hàng thiếu "(SO)" nên đang tính vào Kho C — sửa tên ở tab Nhập hàng.</div>}
                       {r.reason ? (
