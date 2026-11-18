@@ -144,13 +144,13 @@ export function newPsEntry({ kho, loai = PS_LOAI[0], items = [], pxk = null }, n
   }
 }
 
-// Ngày thực tế việc xong (kho chọn khi bấm muộn, dạng "2026-10-30") → mốc giờ: hôm nay thì lấy giờ bấm, ngày cũ lấy 12:00.
-// Không nhận ngày tương lai / ngày sai: trả về now.
+// Ngày thực tế việc xong (kho chọn tự do, dạng "2026-10-30") → mốc giờ: hôm nay thì lấy giờ bấm, ngày khác (trước hoặc
+// sau hôm nay) lấy 12:00. Ngày sai: trả về now.
 export function dayAt(ymd, now = new Date()) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || '')
   if (!m) return now
   const d = new Date(+m[1], m[2] - 1, +m[3], 12)
-  if (Number.isNaN(d.getTime()) || toIsoDate(d) > toIsoDate(now)) return now
+  if (Number.isNaN(d.getTime())) return now
   return toIsoDate(d) === toIsoDate(now) ? now : d
 }
 

@@ -146,7 +146,7 @@ describe('Hàng trả & huỷ — cột Hoàn thành theo tháng', () => {
 })
 
 describe('Hàng trả & huỷ — chọn ngày hoàn thành khi kho bấm muộn', () => {
-  it('bấm Hoàn thành kèm ngày kế toán làm xong: ghi đúng ngày đó (tháng cũ vẫn vào đúng tháng); không nhận ngày tương lai; sửa lại được sau', async () => {
+  it('bấm Hoàn thành kèm ngày kế toán làm xong: ghi đúng ngày đó (tháng cũ vẫn vào đúng tháng); chọn ngày tự do kể cả ngày sau; sửa lại được sau', async () => {
     const { dayAt, doneMonth, setDoneDate, toIsoDate } = await import('../flowV2')
     const c = newCase({ kind: 'tra', sub: 'daNhan', kho: 'C' }, now)
     let s = goTo(st({ cases: [c] }), c.id, 'ktNhap')
@@ -156,11 +156,13 @@ describe('Hàng trả & huỷ — chọn ngày hoàn thành khi kho bấm muộn
     expect(toIsoDate(new Date(done.stepAt))).toBe('2026-09-30')
     expect(toIsoDate(new Date(done.ktDone.at))).toBe('2026-09-30')
     expect(doneMonth(done)).toBe('2026-09')
-    expect(dayAt('2026-12-01', now)).toBe(now) // ngày tương lai: lấy lúc bấm
+    expect(toIsoDate(dayAt('2026-12-01', now))).toBe('2026-12-01') // ngày sau hôm nay: chọn tự do
+    expect(dayAt('2026-13-45x', now)).toBe(now) // ngày sai: lấy lúc bấm
     expect(dayAt('2026-10-14', now)).toBe(now) // hôm nay: lấy giờ bấm
     s = { ...s, ...setDoneDate(s, 'case', c.id, '2026-10-02', now) }
     expect(toIsoDate(new Date(s.cases[0].stepAt))).toBe('2026-10-02')
-    expect(setDoneDate(s, 'case', c.id, '2027-01-01', now)).toEqual({})
+    expect(toIsoDate(new Date(setDoneDate(s, 'case', c.id, '2027-01-01', now).cases[0].stepAt))).toBe('2027-01-01')
+    expect(setDoneDate(s, 'case', c.id, 'sai', now)).toEqual({})
   })
 
   it('đợt huỷ: chọn ngày xuất huỷ xong thì đợt và các hồ sơ trong đợt cùng ngày đó', async () => {
