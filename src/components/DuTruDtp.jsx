@@ -73,7 +73,7 @@ function KhoSoSachThucTe({ cfg }) {
     await new Promise(r => setTimeout(r, 30))
     try {
       if (k === 'map') {
-        const rows = parseMapCU(await readSheet(file))
+        const rows = parseMapCU(await readSheet(file), mapSaved?.rows || [])
         setMap(writeMapCU(file.name, rows))
         setMsg(m => ({ ...m, map: {} }))
         return

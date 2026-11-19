@@ -25,21 +25,32 @@ function isoDate(v) {
   return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
 }
 
-const MAP_COLS = { 'ma sp c': 'c', 'ten san pham': 'ten', 'don vi': 'dvt', 'so luong': 'sl', 'quy doi u': 'qd', 'ma sp u': 'u', 'don vi u': 'dvtU' }
-// rows: mảng 2 chiều đọc từ sheet. Trả về [{ c, ten, dvt, k, u, dvtU }] — k: 1 đơn vị C = k đơn vị U.
-export function parseMapCU(rows) {
-  const hi = findHeader(rows, 'ma sp c')
-  if (hi < 0) throw new Error('File quy đổi cần cột "Mã SP C" và "Mã SP U".')
+// 2 mẫu file: "Mã SP C · Tên sản phẩm · Đơn vị · Số lượng · Quy đổi U · Mã SP U · Đơn vị U" (có hệ số quy đổi) hoặc
+// "Mã hàng U · Mã C · Tên hàng · Đơn vị …" (không có hệ số — giữ hệ số của bảng đang lưu cho cặp mã đó, chưa có thì 1).
+const MAP_COLS = { 'ma sp c': 'c', 'ma c': 'c', 'ten san pham': 'ten', 'ten hang': 'ten', 'don vi': 'dvt', 'so luong': 'sl', 'quy doi u': 'qd',
+  'ma sp u': 'u', 'ma hang u': 'u', 'don vi u': 'dvtU' }
+// rows: mảng 2 chiều đọc từ sheet; prev: bảng đang lưu (để giữ hệ số). Trả về [{ c, ten, dvt, k, u, dvtU }] — k: 1 đơn vị C = k đơn vị U.
+export function parseMapCU(rows, prev = []) {
+  const hi = rows.findIndex(r => (r || []).some(v => ['ma sp c', 'ma c'].includes(normText(v))))
+  if (hi < 0) throw new Error('File quy đổi cần cột "Mã SP C" (hoặc "Mã C") và "Mã SP U" (hoặc "Mã hàng U").')
   const col = colsOf(rows[hi], MAP_COLS)
-  if (col.u === undefined) throw new Error('File quy đổi thiếu cột "Mã SP U".')
+  if (col.u === undefined) throw new Error('File quy đổi thiếu cột "Mã SP U" (hoặc "Mã hàng U").')
+  const hasK = col.sl !== undefined || col.qd !== undefined
+  const prevOf = new Map((prev || []).map(m => [`${m.c}|${m.u}`, m]))
   const out = []
   for (const r of rows.slice(hi + 1)) {
     const c = up(r[col.c])
     const u = up(r[col.u])
     if (!c || !u) continue
-    const sl = num(r[col.sl]) || 1
-    const qd = num(r[col.qd]) || sl
-    out.push({ c, ten: String(r[col.ten] ?? '').trim(), dvt: String(r[col.dvt] ?? '').trim(), k: qd / sl, u, dvtU: String(r[col.dvtU] ?? '').trim() })
+    const dvt = String(r[col.dvt] ?? '').trim()
+    if (hasK) {
+      const sl = num(r[col.sl]) || 1
+      const qd = num(r[col.qd]) || sl
+      out.push({ c, ten: String(r[col.ten] ?? '').trim(), dvt, k: qd / sl, u, dvtU: String(r[col.dvtU] ?? '').trim() })
+    } else {
+      const old = prevOf.get(`${c}|${u}`)
+      out.push({ c, ten: String(r[col.ten] ?? '').trim(), dvt, k: old?.k || 1, u, dvtU: col.dvtU !== undefined ? String(r[col.dvtU] ?? '').trim() : (old?.dvtU || dvt) })
+    }
   }
   if (!out.length) throw new Error('File quy đổi không có dòng mã nào.')
   return out

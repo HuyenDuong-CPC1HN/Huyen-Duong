@@ -36,6 +36,16 @@ describe('Dự trù Kho DTP — tồn sổ sách Fast U ↔ tồn thực tế We
     expect(() => parseWebTon([['a', 'b']])).toThrow(/Mã BFO/)
   })
 
+  it('đọc được mẫu "Mã hàng U · Mã C · Tên hàng · đơn vị" (không có hệ số): giữ hệ số của bảng đang lưu, chưa có thì 1', () => {
+    const rows = [['', '', ''], ['Mã hàng U', 'Mã C', 'Mã hàng U', 'Tên hàng', 'đơn vị', 'VAT', 'Ngày cập nhật'],
+      ['TH00001', 'A00001', 'TH00001', 'Thuốc A', 'Ống', '05', ''], ['TH00009', 'Z00009', 'TH00009', 'Thuốc Z', 'Lọ', '08', ''], ['', '', '', '', '', '', '']]
+    const m = parseMapCU(rows, [{ c: 'A00001', u: 'TH00001', k: 5, dvtU: 'Ống' }])
+    expect(m).toEqual([
+      { c: 'A00001', ten: 'Thuốc A', dvt: 'Ống', k: 5, u: 'TH00001', dvtU: 'Ống' },
+      { c: 'Z00009', ten: 'Thuốc Z', dvt: 'Lọ', k: 1, u: 'TH00009', dvtU: 'Lọ' },
+    ])
+  })
+
   it('so theo mã U, cộng các mã C cùng quy về 1 mã U; chênh lệch = thực tế − sổ sách; báo mã Web chưa có quy đổi', () => {
     const cmp = buildDtpCompare(fast, web, map)
     const a = cmp.rows.find(r => r.u === 'TH00001')
