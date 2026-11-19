@@ -159,6 +159,7 @@ describe('Dự trù hàng (Kho DTP)', () => {
     const plan = screen.getByRole('region', { name: 'Dự trù Kho DTP' })
     expect(within(plan).getByLabelText('Chốt đặt TH00001')).toHaveValue(String(Math.ceil(1500 / 89 * 15 - 120)))
     expect(within(plan).getByLabelText('Chốt đặt TH00001').closest('tr')).toHaveTextContent('11/07/2028') // hạn dùng gần nhất (lô còn tồn thực tế)
+    expect(within(plan).getByLabelText('Chốt đặt TH00001').closest('tr')).toHaveTextContent('lô L1 · Fast 200 · TT 120 (−80)') // lô lệch: ghi cả tồn Fast và thực tế
   })
 })
 

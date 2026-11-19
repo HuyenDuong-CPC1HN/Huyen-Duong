@@ -276,7 +276,7 @@ function KhoSoSachThucTe({ cfg }) {
                         <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{fmtN(ss)}</td>
                         <td className={`px-2 py-1.5 text-right tabular-nums bg-sky-50/60 ${files.web ? KEY(tt) : 'text-gray-300'}`}>{files.web ? fmtN(tt) : '—'}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{files.web ? signN(tt - ss) : <span className="text-gray-300">—</span>}</td>
-                        <HdCell lots={c.flatMap(x => x.lots)} web={!!files.web} />
+                        <HdCell lots={c.flatMap(x => x.lots)} web={!!files.web} ssLabel={cfg.useMap ? 'Fast' : 'SS'} />
                         <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{fmtW(r.weeks)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums bg-sky-50/60">{r.deK > 0 ? <span className="inline-block rounded-md bg-[#1e3a5f] text-white font-bold px-2 py-0.5">{fmtN(r.deK)}</span> : <span className="text-gray-300">0</span>}{r.kien && r.deK > 0 ? <div className="text-[11px] text-slate-600">{fmtN(r.deK / r.kien)} kiện</div> : null}</td>
                         <td className="px-2 py-1.5 text-right"><NumInput value={chotOf(r)} label={`Chốt đặt ${r.order}`} onCommit={v => saveOrder({ chot: { ...order.chot, [r.id]: v } })} /></td>
@@ -304,26 +304,34 @@ function hdOf(lots, web) {
 const KEY = n => (n ? 'font-bold text-[#1e3a5f]' : 'text-gray-300')
 // Hàng nhiều lô còn tồn: mỗi lô 1 dòng (hạn dùng · lô · số lượng), lô cận hạn nhất lên đầu
 const hdCls = hd => ((new Date(hd) - new Date()) / (86400000 * 30.44) < 3 ? 'text-red-600 font-semibold' : 'text-gray-500')
-function HdCell({ lots, web }) {
-  const { first, n } = hdOf(lots, web)
-  if (!first) return <td className="px-2 py-1.5 text-gray-300">—</td>
-  if (n < 2) return <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${hdCls(first)}`}>{viDate(first)}</td>
+// Mỗi lô 1 dòng (hạn dùng · lô · tồn), lô cận hạn nhất lên đầu. Đã tải file Web thì ghi cả tồn Fast / sổ sách và
+// tồn thực tế (TT) của lô, lô lệch tô đỏ; hàng 1 lô không lệch thì chỉ hiện ngày cho gọn.
+function HdCell({ lots, web, ssLabel = 'Fast' }) {
+  const { first } = hdOf(lots, web)
   const by = new Map()
   for (const l of lots) {
-    const q = web ? l.tt : l.ss
-    if (!(q > 0) || !l.hd) continue
-    const hd = String(l.hd).slice(0, 10), k = `${hd}|${String(l.lo).trim().toUpperCase()}`
-    const g = by.get(k) || { hd, lo: l.lo, q: 0 }
-    g.q += q
+    if (!(l.ss > 0) && !(l.tt > 0)) continue
+    const k = String(l.lo || '').trim().toUpperCase()
+    const g = by.get(k) || { hd: '', lo: l.lo, ss: 0, tt: 0 }
+    if (!g.hd && l.hd) g.hd = String(l.hd).slice(0, 10)
+    g.ss += l.ss || 0
+    g.tt += l.tt || 0
     by.set(k, g)
   }
-  const list = [...by.values()].sort((x, y) => x.hd.localeCompare(y.hd) || String(x.lo).localeCompare(String(y.lo)))
+  const list = [...by.values()].filter(l => (web ? l.ss > 0 || l.tt > 0 : l.ss > 0))
+    .sort((x, y) => (x.hd || '9').localeCompare(y.hd || '9') || String(x.lo).localeCompare(String(y.lo)))
+  const lech = l => web && Math.round(l.ss - l.tt) !== 0
+  if (!list.length) return <td className="px-2 py-1.5 text-gray-300">—</td>
+  if (list.length < 2 && !list.some(lech)) return <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${first ? hdCls(first) : 'text-gray-300'}`}>{first ? viDate(first) : '—'}</td>
   return (
     <td className="px-2 py-1.5 tabular-nums whitespace-nowrap">
       {list.map(l => (
-        <div key={`${l.hd}|${l.lo}`} className="leading-snug">
-          <span className={hdCls(l.hd)}>{viDate(l.hd)}</span>
-          <span className="text-[11px] text-gray-500"> · lô {l.lo || '—'} · <b className="text-gray-700">{fmtN(l.q)}</b></span>
+        <div key={l.lo || '—'} className={`leading-snug ${lech(l) ? 'bg-red-50 rounded px-1 -mx-1' : ''}`}>
+          {l.hd ? <span className={hdCls(l.hd)}>{viDate(l.hd)}</span> : <span className="text-gray-400">—</span>}
+          <span className="text-[11px] text-gray-500"> · lô {l.lo || '—'} · </span>
+          {web ? (
+            <span className={`text-[11px] ${lech(l) ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>{ssLabel} <b>{fmtN(l.ss)}</b> · TT <b>{fmtN(l.tt)}</b>{lech(l) ? ` (${signN(l.tt - l.ss)})` : ''}</span>
+          ) : <b className="text-[11px] text-gray-700">{fmtN(l.ss)}</b>}
         </div>
       ))}
     </td>
