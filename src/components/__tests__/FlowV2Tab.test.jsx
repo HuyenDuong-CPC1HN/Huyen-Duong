@@ -205,6 +205,24 @@ describe('Hàng trả & huỷ (Demo) — cột Chờ ký chọn hàng loạt', (
     expect(screen.getByText('Nhà thuốc Lỗi')).toBeInTheDocument()
   })
 
+  it('lọc từ ngày đến ngày theo ngày hoá đơn (chưa có ngày hoá đơn thì theo ngày tạo)', () => {
+    const a = { ...atSign('tra', 'Nhà thuốc Có HĐ'), traHang: { form: { soHD: '00038621', ngayHD: '2026-08-24' }, pdf: {} } }
+    const b = { ...atSign('tra', 'Nhà thuốc Chưa HĐ'), createdAt: '2026-11-10T03:00:00.000Z' }
+    store.values.set('flowv2_cases', JSON.stringify([a, b]))
+    render(<FlowV2Tab />)
+    expect(screen.getByText('HĐ 00038621 · 24/08/2026')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Từ ngày'), { target: { value: '2026-08-01' } })
+    fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-08-31' } })
+    expect(screen.getByText('Nhà thuốc Có HĐ')).toBeInTheDocument()
+    expect(screen.queryByText('Nhà thuốc Chưa HĐ')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Từ ngày'), { target: { value: '2026-11-01' } })
+    fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-11-30' } })
+    expect(screen.getByText('Nhà thuốc Chưa HĐ')).toBeInTheDocument()
+    expect(screen.queryByText('Nhà thuốc Có HĐ')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Bỏ lọc ngày'))
+    expect(screen.getByText('Nhà thuốc Có HĐ')).toBeInTheDocument()
+  })
+
   it('tên khách (khác): lưu theo hồ sơ, hiện trên thẻ + đầu hồ sơ, tìm được; không in vào biên bản', () => {
     const a = atSign('tra', 'Bán cho người tiêu dùng - Khách lẻ')
     store.values.set('flowv2_cases', JSON.stringify([a]))

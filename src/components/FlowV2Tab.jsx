@@ -171,7 +171,7 @@ function CaseRow({ c, stt, batch, onOpen, open, onToggle, selected = false, onSe
             <div key={it.rowId} className="text-xs text-[#1e3a5f] bg-blue-50 rounded px-1.5 py-0.5 mt-1">{[it.maHang, it.tenHang].filter(Boolean).join(' · ')}{it.soLo ? ` · lô ${it.soLo}` : ''}</div>
           ))}
         </td>
-        <td className={td}><div className="font-mono text-xs font-bold">{c.soDon || <span className="font-sans font-normal text-gray-400">chưa có số đơn</span>}</div><div className="text-xs text-gray-500 mt-0.5">{items.length} mặt hàng</div></td>
+        <td className={td}><div className="font-mono text-xs font-bold">{c.soDon || <span className="font-sans font-normal text-gray-400">chưa có số đơn</span>}</div>{(c.traHang?.form?.soHD || c.traHang?.form?.ngayHD) && <div className="text-xs text-gray-600 mt-0.5 whitespace-nowrap">HĐ {c.traHang.form.soHD || '—'}{c.traHang.form.ngayHD ? ` · ${fmtDateVi(c.traHang.form.ngayHD)}` : ''}</div>}<div className="text-xs text-gray-500 mt-0.5">{items.length} mặt hàng</div></td>
         <td className={`${td} min-w-52`}>
           <div className="text-[13px] font-semibold text-gray-800">{s.col === 4 ? `✓ ${s.t}` : s.t}{s.k === 'dangHuy' && batch ? ` ${batch.no}` : ''}</div>
           <Dots total={flow.steps.length} current={c.step} color={KIND_BORDER[c.kind]} />
@@ -328,6 +328,7 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
   const [bulkMsg, setBulkMsg] = useState('')
   const [tabSel, setTab] = useState(null) // tab bước đang xem (1–4); chưa chọn thì tab đầu còn hồ sơ
   const [lateOnly, setLateOnly] = useState(false)
+  const [range, setRange] = useState({ from: '', to: '' }) // lọc theo ngày hoá đơn (yyyy-mm-dd)
   const [openRows, setOpenRows] = useState([]) // hồ sơ đang mở › xem hàng
 
   useEffect(() => {
@@ -428,8 +429,13 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
   const atKt = visible.filter(c => stepOfCase(c).kt).length
   const openBatches = data.batches.filter(b => b.step < BATCH_STEPS.length - 1).length
   // Tab bước + danh sách của tab: Hoàn thành chỉ tháng đang chọn (đang tìm thì mọi tháng); "quá 3 ngày" lọc hồ sơ đứng lâu.
-  const shownCases = visible.filter(c => !lateOnly || (daysSince(c.stepAt) >= 3 && stepOfCase(c).col < 4))
-  const inTab = ci => shownCases.filter(c => stepOfCase(c).col === ci && (ci !== 4 || q.trim() || doneMonth(c) === doneMon))
+  // Ngày hoá đơn: hồ sơ khách từ chối nhận có ngày hoá đơn ở Biên bản trả hàng; hồ sơ chưa có thì tính theo ngày tạo.
+  const hdDay = c => c.traHang?.form?.ngayHD || (c.createdAt ? toIsoDate(new Date(c.createdAt)) : '')
+  const hasRange = !!(range.from || range.to)
+  const inRange = c => !hasRange || ((!range.from || hdDay(c) >= range.from) && (!range.to || hdDay(c) <= range.to))
+  const shownCases = visible.filter(c => inRange(c) && (!lateOnly || (daysSince(c.stepAt) >= 3 && stepOfCase(c).col < 4)))
+  // Hoàn thành: đang tìm hoặc đang lọc khoảng ngày thì bỏ lọc tháng
+  const inTab = ci => shownCases.filter(c => stepOfCase(c).col === ci && (ci !== 4 || q.trim() || hasRange || doneMonth(c) === doneMon))
   const countOf = ci => inTab(ci).length
   const tab = tabSel ?? ([1, 2, 3].find(ci => countOf(ci) > 0) || 1)
   const isSign = tab === 2, isDone = tab === 4
@@ -470,6 +476,12 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
               <select value={kindFilter} onChange={e => setKindFilter(e.target.value)} aria-label="Loại" className="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white">
                 <option value="all">Mọi loại</option><option value="tra">Trả nguyên vẹn</option><option value="loi">Trả lỗi · đổi hàng</option>
               </select>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500" title="Hồ sơ chưa ghi ngày hoá đơn thì lọc theo ngày tạo hồ sơ">Ngày hoá đơn từ
+                <input type="date" value={range.from} max={range.to || undefined} onChange={e => setRange(v => ({ ...v, from: e.target.value }))} aria-label="Từ ngày" className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-800" />
+                đến
+                <input type="date" value={range.to} min={range.from || undefined} onChange={e => setRange(v => ({ ...v, to: e.target.value }))} aria-label="Đến ngày" className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-800" />
+                {hasRange && <button type="button" onClick={() => setRange({ from: '', to: '' })} className="px-1.5 text-gray-400 hover:text-gray-700" aria-label="Bỏ lọc ngày"><X size={14} /></button>}
+              </div>
               {late > 0 && <button type="button" onClick={() => setLateOnly(v => !v)} aria-pressed={lateOnly}
                 className={`px-2.5 py-1.5 rounded-full border text-xs font-semibold ${lateOnly ? 'bg-red-600 border-red-600 text-white' : 'border-red-300 text-red-700 bg-red-50'}`}>⚠ {late} hồ sơ đứng 1 bước quá 3 ngày</button>}
               {atKt > 0 && <span className="px-2.5 py-1.5 rounded-full border border-gray-200 text-gray-500 text-xs">{atKt} hồ sơ đang chờ kế toán</span>}
@@ -486,7 +498,7 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
               <span>{BOARD_COLS.find(([ci]) => ci === tab)?.[2]} · {list.length} hồ sơ</span>
               {isSign && picked.length > 0 && <button type="button" onClick={() => signAll(picked)} className="sheet-tab-action is-primary">Đã ký đủ → chuyển tiếp ({picked.length})</button>}
               {isSign && picked.length > 0 && <span>Trả nguyên vẹn sang kế toán nhập trả lại, trả lỗi sang nhập lại kho.</span>}
-              {isDone && (q.trim() ? <span>đang tìm trên mọi tháng</span> : (
+              {isDone && (q.trim() || hasRange ? <span>{hasRange ? 'đang lọc theo ngày hoá đơn, mọi tháng' : 'đang tìm trên mọi tháng'}</span> : (
                 <select value={doneMon} onChange={e => setDoneMon(e.target.value)} aria-label="Tháng hoàn thành" className="ml-auto rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs">
                   {doneMonthOptions(data.cases).map(m => <option key={m} value={m}>{fmtMonthVi(m)}{m === monthKey() ? ' (tháng này)' : ''} · {data.cases.filter(c => doneMonth(c) === m).length} hồ sơ</option>)}
                 </select>
@@ -499,7 +511,7 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
                     ref={el => { if (el) el.indeterminate = picked.length > 0 && picked.length < list.length }}
                     onChange={e => setSignSel(e.target.checked ? list.map(c => c.id) : [])} /></th>}
                   <th className="w-7" /><th className="px-2.5 py-2 w-10 text-center font-semibold">STT</th>
-                  {['Loại · Kho', 'Khách hàng', 'Số đơn', 'Bước hiện tại', 'Tạo lúc', isDone ? 'Hoàn thành' : 'Đứng bước', 'Kế toán', ''].map((h, k) => <th key={k} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}
+                  {['Loại · Kho', 'Khách hàng', 'Số đơn · HĐ', 'Bước hiện tại', 'Tạo lúc', isDone ? 'Hoàn thành' : 'Đứng bước', 'Kế toán', ''].map((h, k) => <th key={k} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {list.length === 0 ? <tr><td colSpan={isSign ? 11 : 10} className="px-3 py-8 text-center text-gray-400">{data.cases.length === 0 ? 'Chưa có hồ sơ nào. Bấm "Tạo hồ sơ khách trả" để bắt đầu.' : 'Không có hồ sơ nào ở bước này.'}</td></tr>
