@@ -98,6 +98,13 @@ describe('Hàng trả & huỷ (Demo)', () => {
     fireEvent.change(within(dlg).getByLabelText('SL dòng 1'), { target: { value: '670' } })
     fireEvent.click(within(dlg).getByRole('button', { name: 'Thêm vào Chờ huỷ' }))
     expect(read('flowv2_pool')).toHaveLength(2)
+    // Sửa mục Chờ huỷ: đổi số lượng
+    fireEvent.click(within(screen.getByRole('region', { name: 'Huỷ hàng Kho C' })).getByRole('button', { name: 'Sửa Hàng cận date' }))
+    const edit = screen.getByRole('dialog')
+    fireEvent.change(within(edit).getByLabelText('SL dòng 1'), { target: { value: '600' } })
+    fireEvent.click(within(edit).getByRole('button', { name: 'Lưu thay đổi' }))
+    expect(read('flowv2_pool').find(e => e.src === 'ps').items[0].soLuong).toBe(600)
+    expect(read('flowv2_pool')).toHaveLength(2)
 
     const pane = screen.getByRole('region', { name: 'Huỷ hàng Kho C' })
     fireEvent.click(within(pane).getByRole('button', { name: 'Chọn hết' }))

@@ -218,6 +218,26 @@ export function makeBatch(state, kho, entryIds, now = new Date()) {
   }
 }
 
+// Thêm các mục Chờ huỷ (cùng kho) vào 1 đợt huỷ đã tạo, còn ở bước lập biên bản (chưa in / ký): rút khỏi Chờ huỷ,
+// thêm dòng hàng vào đợt, hồ sơ hàng lỗi liên quan sang "Đang huỷ trong đợt". Đợt đã qua bước lập biên bản thì không đổi.
+export function addToBatch(state, batchId, entryIds, now = new Date()) {
+  const b = state.batches.find(x => x.id === batchId)
+  if (!b || b.step !== 0) return state
+  const entries = state.pool.filter(e => entryIds.includes(e.id) && e.kho === b.kho)
+  if (!entries.length) return state
+  const ids = new Set(entries.map(e => e.id))
+  const caseIds = new Set(entries.map(e => e.caseId).filter(Boolean))
+  const dangHuy = stepIndex('loi', 'dangHuy')
+  const iso = now.toISOString()
+  const next = { ...b, entries: [...b.entries, ...entries], items: [...b.items, ...entries.flatMap(e => e.items.map(it => ({ ...it, rowId: rid('r'), entryId: e.id })))] }
+  return {
+    pool: state.pool.filter(e => !ids.has(e.id)),
+    batches: state.batches.map(x => (x.id === batchId ? next : x)),
+    cases: state.cases.map(c => (caseIds.has(c.id) ? { ...c, step: dangHuy, stepAt: iso, batchId } : c)),
+    batchId,
+  }
+}
+
 // Đợt sang bước kế; xong đợt (bước cuối) thì mọi hồ sơ hàng lỗi trong đợt sang "Huỷ xong". opts.doneAt như advanceCase.
 export function advanceBatch(state, batchId, { ktBy = null, doneAt = null } = {}, now = new Date()) {
   const iso = dayAt(doneAt, now).toISOString()

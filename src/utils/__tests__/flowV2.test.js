@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  advanceBatch, advanceCase, applyKtDone, backBatch, backCase, batchAsHuyPhieu, caseAsReturnSlip, dissolveBatch, ktLinkUrl, ktPending,
+  addToBatch, advanceBatch, advanceCase, applyKtDone, backBatch, backCase, batchAsHuyPhieu, caseAsReturnSlip, dissolveBatch, ktLinkUrl, ktPending,
   ktQueue, makeBatch, newCase, newItem, newKtToken, newPsEntry, nextBatchNo, parseDateText, stepIndex, stepOfCase,
 } from '../flowV2'
 
@@ -241,5 +241,26 @@ describe('Hàng trả & huỷ — hạn dùng lỡ lưu dd/mm/yyyy', () => {
     expect(pool[0].items.map(it => it.hanDung)).toEqual(['2026-11-13', '2027-01-02'])
     expect(batches[0].items[0].hanDung).toBe('2026-11-22')
     expect(batches[0].items[0].tinhTrang).toBe('Hàng cận date')
+  })
+})
+
+describe('addToBatch — thêm mục Chờ huỷ vào đợt đang lập biên bản', () => {
+  it('rút mục khỏi Chờ huỷ, thêm dòng hàng vào đợt, hồ sơ hàng lỗi sang Đang huỷ; đợt đã qua bước lập BB thì không đổi', () => {
+    const c = newCase({ kind: 'loi', kho: 'C', khachHang: 'NT An', items: [newItem({ maHang: 'A1', tenHang: 'Hàng A', soLuong: 2 })] }, now)
+    let s = goTo(st({ cases: [c] }), c.id, 'choHuy')
+    const ps = newPsEntry({ kho: 'C', items: [newItem({ maHang: 'B1', tenHang: 'Hàng B', soLuong: 5 })] }, now)
+    const other = newPsEntry({ kho: 'DTP', items: [newItem({ maHang: 'D1', tenHang: 'Hàng D', soLuong: 1 })] }, now)
+    s = { ...s, pool: [ps, other, ...s.pool] }
+    const r1 = makeBatch(s, 'C', [ps.id], now)
+    s = { ...s, ...r1 }
+    const loiEntry = s.pool.find(e => e.caseId === c.id)
+    const r2 = addToBatch(s, r1.batchId, [loiEntry.id, other.id], now)
+    expect(r2.pool.map(e => e.id)).toEqual([other.id]) // mục khác kho giữ nguyên ở Chờ huỷ
+    expect(r2.batches[0].items.map(it => it.maHang)).toEqual(['B1', 'A1'])
+    expect(r2.batches[0].entries).toHaveLength(2)
+    expect(stepOfCase(r2.cases[0]).k).toBe('dangHuy')
+    expect(r2.cases[0].batchId).toBe(r1.batchId)
+    const signed = { ...s, batches: s.batches.map(b => ({ ...b, step: 1 })) }
+    expect(addToBatch(signed, r1.batchId, [loiEntry.id], now)).toBe(signed)
   })
 })

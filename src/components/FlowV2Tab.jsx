@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link2, Plus, Search, X } from 'lucide-react'
 import {
   BATCH_STEPS, BOARD_COLS, CASE_FLOWS, FLOWV2_EVENT, PS_LOAI, advanceBatch, advanceCase, applyKtDone, backBatch, backCase, daysSince, setDoneDate,
-  dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, ktLinkUrl, ktPending, monthKey, makeBatch, newKtToken,
+  addToBatch, dissolveBatch, doneMonth, doneMonthOptions, fmtDateVi, fmtMonthVi, KIND_BORDER, ktLinkUrl, ktPending, monthKey, makeBatch, newKtToken,
   toIsoDate, newCase, newItem, newPsEntry, stepOfCase, fmtDateTimeVi,
 } from '../utils/flowV2'
 import { fetchKtDone, readFlowV2, readKtLinks, readLegacySources, removeKtDone, syncKtQueue, writeFlowV2, writeKtLinks } from '../data/flowV2Store'
@@ -110,10 +110,12 @@ function NewCaseModal({ onClose, onCreate }) {
   )
 }
 
-function PsModal({ kho, onClose, onAdd }) {
-  const [loai, setLoai] = useState(PS_LOAI[0])
-  const [items, setItems] = useState(() => [newItem({ tinhTrang: PS_LOAI[0] })])
-  const [pxk, setPxk] = useState(null)
+// entry: mục Chờ huỷ đang có → mở để sửa (loại, dòng hàng, PXK); không có thì thêm mục phát sinh mới.
+function PsModal({ kho, entry = null, onClose, onAdd }) {
+  const isPs = !entry || entry.src !== 'loi' // mục hàng lỗi khách trả: không đổi loại (tên là khách hàng)
+  const [loai, setLoai] = useState(() => (entry && PS_LOAI.includes(entry.who) ? entry.who : PS_LOAI[0]))
+  const [items, setItems] = useState(() => (entry?.items?.length ? entry.items : [newItem({ tinhTrang: PS_LOAI[0] })]))
+  const [pxk, setPxk] = useState(entry?.pxk || null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const pickLoai = l => { setItems(list => list.map(it => (!it.tinhTrang || it.tinhTrang === loai ? { ...it, tinhTrang: l } : it))); setLoai(l) }
@@ -130,9 +132,9 @@ function PsModal({ kho, onClose, onAdd }) {
   }
   const ok = items.some(it => it.maHang || it.tenHang)
   return (
-    <Modal title={`Thêm hàng phát sinh vào Chờ huỷ — Kho ${kho}`} onClose={onClose}>
-      <div className="text-xs text-gray-500">Hàng cận date / lỗi chưa ra khỏi kho. Gõ tay từng dòng; có PXK thì tải lên (không bắt buộc) — app đọc và điền sẵn.</div>
-      <Seg value={loai} onChange={pickLoai} label="Loại" options={PS_LOAI.map(l => [l, l])} />
+    <Modal title={entry ? `Sửa mục Chờ huỷ — ${entry.who} (Kho ${kho})` : `Thêm hàng phát sinh vào Chờ huỷ — Kho ${kho}`} onClose={onClose}>
+      <div className="text-xs text-gray-500">{entry ? 'Sửa lại dòng hàng của mục này trước khi đưa vào đợt huỷ.' : 'Hàng cận date / lỗi chưa ra khỏi kho. Gõ tay từng dòng; có PXK thì tải lên (không bắt buộc) — app đọc và điền sẵn.'}</div>
+      {isPs && <Seg value={loai} onChange={pickLoai} label="Loại" options={PS_LOAI.map(l => [l, l])} />}
       <ItemsEditor items={items} onChange={setItems} cols={['maHang', 'tenHang', 'soLo', 'hanDung', 'soLuong', 'dvt', 'tinhTrang']}
         onAdd={() => setItems(l => [...l, newItem({ tinhTrang: loai })])} onRemove={i => setItems(l => (l.length > 1 ? l.filter((_, idx) => idx !== i) : [newItem({ tinhTrang: loai })]))} />
       <div className="flex flex-wrap items-center gap-2">
@@ -141,7 +143,9 @@ function PsModal({ kho, onClose, onAdd }) {
         {pxk && <span className="px-2 py-1 rounded-lg border border-green-200 bg-green-50 text-xs text-green-800">✓ {pxk.name}</span>}
       </div>
       {error && <p className="text-sm text-amber-700">{error}</p>}
-      <div className="flex gap-2"><button type="button" disabled={!ok} onClick={() => onAdd(newPsEntry({ kho, loai, items, pxk }))} className="sheet-tab-action is-primary">Thêm vào Chờ huỷ</button>
+      <div className="flex gap-2"><button type="button" disabled={!ok} onClick={() => onAdd(entry
+        ? { ...entry, ...(isPs ? { who: loai } : {}), pxk, items: items.filter(it => it.maHang || it.tenHang) }
+        : newPsEntry({ kho, loai, items, pxk }))} className="sheet-tab-action is-primary">{entry ? 'Lưu thay đổi' : 'Thêm vào Chờ huỷ'}</button>
         <button type="button" onClick={onClose} className="sheet-tab-action">Huỷ</button></div>
       {!ok && <div className="text-xs text-gray-400">Gõ ít nhất 1 dòng hàng (mã hoặc tên).</div>}
     </Modal>
@@ -326,6 +330,7 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
   const [ktMsg, setKtMsg] = useState('')
   const [signSel, setSignSel] = useState([]) // hồ sơ đang tick ở cột Chờ ký
   const [bulkMsg, setBulkMsg] = useState('')
+  const [addTo, setAddTo] = useState({}) // kho → đợt đang chọn để thêm mục Chờ huỷ vào
   const [tabSel, setTab] = useState(null) // tab bước đang xem (1–4); chưa chọn thì tab đầu còn hồ sơ
   const [lateOnly, setLateOnly] = useState(false)
   const [range, setRange] = useState({ from: '', to: '' }) // lọc theo ngày hoá đơn (yyyy-mm-dd)
@@ -401,6 +406,14 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
     save({ cases: r.cases, pool: r.pool, batches: r.batches })
     setSel(s => ({ ...s, [kho]: [] }))
     setOpenBatch(r.batchId)
+  }
+  // Thêm mục Chờ huỷ đã tick vào đợt đang lập biên bản rồi mở đợt để chỉnh sửa
+  const addIntoBatch = (kho, batchId) => {
+    const r = addToBatch(data, batchId, sel[kho])
+    if (r === data) return
+    save({ cases: r.cases, pool: r.pool, batches: r.batches })
+    setSel(s => ({ ...s, [kho]: [] }))
+    setOpenBatch(batchId)
   }
   const pullLegacy = () => {
     const r = importLegacy(data, readLegacySources())
@@ -528,6 +541,7 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
               const items = data.pool.filter(e => e.kho === kho)
               const picked = sel[kho]
               const bs = data.batches.filter(b => b.kho === kho)
+              const drafts = bs.filter(b => b.step === 0) // đợt còn ở bước lập biên bản: thêm mục được
               const toggle = id => setSel(s => ({ ...s, [kho]: s[kho].includes(id) ? s[kho].filter(x => x !== id) : [...s[kho], id] }))
               return (
                 <section key={kho} className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3 min-w-0" aria-label={`Huỷ hàng Kho ${kho}`}>
@@ -540,19 +554,28 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
                     <label key={e.id} className={`grid gap-2 rounded-xl border p-2.5 cursor-pointer ${picked.includes(e.id) ? 'border-[#1e3a5f] bg-slate-50' : 'border-gray-200'}`} style={{ gridTemplateColumns: '20px minmax(0,1fr)' }}>
                       <input type="checkbox" checked={picked.includes(e.id)} onChange={() => toggle(e.id)} aria-label={`Chọn ${e.who}`} className="mt-1" />
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5"><KindTag kind={e.src === 'loi' ? 'loi' : 'ps'} /><b className="text-sm">{e.who}</b><span className="text-xs text-gray-400">vào {fmtDateVi(e.addedAt)}{e.pxk ? ` · PXK ${e.pxk.name}` : ''}</span></div>
+                        <div className="flex flex-wrap items-center gap-1.5"><KindTag kind={e.src === 'loi' ? 'loi' : 'ps'} /><b className="text-sm">{e.who}</b><span className="text-xs text-gray-400">vào {fmtDateVi(e.addedAt)}{e.pxk ? ` · PXK ${e.pxk.name}` : ''}</span>
+                          <button type="button" onClick={ev => { ev.preventDefault(); ev.stopPropagation(); setModal({ ps: kho, entry: e }) }} aria-label={`Sửa ${e.who}`} className="ml-auto text-xs font-semibold text-[#1d6fd1] hover:underline">Sửa</button></div>
                         <div className="text-xs text-gray-500">{e.items.map(it => `${it.maHang} ${it.tenHang} · lô ${it.soLo || '—'} · ${it.soLuong ?? ''} ${it.dvt} · ${it.tinhTrang}`).map((t, i) => <div key={i}>{t}</div>)}</div>
                       </div>
                     </label>
                   ))}
                   <div className="flex flex-wrap gap-2">
                     <button type="button" disabled={!picked.length} onClick={() => createBatch(kho)} className="sheet-tab-action is-primary">Tạo đợt huỷ{picked.length ? ` (${picked.length} mục)` : ''}</button>
+                    {picked.length > 0 && drafts.length > 0 && (
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <select value={addTo[kho] || drafts[0].id} onChange={ev => setAddTo(x => ({ ...x, [kho]: ev.target.value }))} aria-label={`Đợt huỷ để thêm vào (Kho ${kho})`} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+                          {drafts.map(b => <option key={b.id} value={b.id}>{b.no} · {(b.items || []).length} dòng hàng</option>)}
+                        </select>
+                        <button type="button" onClick={() => addIntoBatch(kho, addTo[kho] || drafts[0].id)} className="sheet-tab-action">Thêm vào đợt ({picked.length} mục)</button>
+                      </span>
+                    )}
                     {items.length > 0 && <button type="button" onClick={() => setSel(s => ({ ...s, [kho]: picked.length === items.length ? [] : items.map(e => e.id) }))} className="sheet-tab-action">{picked.length === items.length ? 'Bỏ chọn hết' : 'Chọn hết'}</button>}
                     {items.some(e => e.src === 'ps') && picked.length === 1 && items.find(e => e.id === picked[0])?.src === 'ps' && (
                       <button type="button" onClick={() => { save({ pool: data.pool.filter(e => e.id !== picked[0]) }); setSel(s => ({ ...s, [kho]: [] })) }} className="sheet-tab-action">Xoá mục phát sinh đã chọn</button>
                     )}
                   </div>
-                  <div className="text-xs text-gray-400">Tick các mục muốn huỷ chung 1 bộ biên bản. Cần huỷ gấp thì tick 1 mục là đủ.</div>
+                  <div className="text-xs text-gray-400">Tick các mục muốn huỷ chung 1 bộ biên bản. Cần huỷ gấp thì tick 1 mục là đủ.{drafts.length > 0 ? ' Đợt chưa in / ký (còn ở bước lập biên bản) thì thêm mục vào được.' : ''}</div>
                   <BatchList bs={bs} mon={batchMon[kho]} onMon={m => setBatchMon(x => ({ ...x, [kho]: m }))} onOpen={setOpenBatch} />
                 </section>
               )
@@ -562,7 +585,8 @@ export default function FlowV2Tab({ initialOpen = null } = {}) {
       </div>
       {modal === 'kt' && <KtLinksModal data={data} onClose={() => setModal(null)} />}
       {modal === 'new' && <NewCaseModal onClose={() => setModal(null)} onCreate={createCase} />}
-      {modal?.ps && <PsModal kho={modal.ps} onClose={() => setModal(null)} onAdd={entry => { save({ pool: [entry, ...data.pool] }); setModal(null) }} />}
+      {modal?.ps && <PsModal key={modal.entry?.id || 'new'} kho={modal.ps} entry={modal.entry || null} onClose={() => setModal(null)}
+        onAdd={entry => { save({ pool: modal.entry ? data.pool.map(e => (e.id === entry.id ? entry : e)) : [entry, ...data.pool] }); setModal(null) }} />}
     </div>
   )
 }
